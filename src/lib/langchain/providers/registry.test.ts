@@ -26,11 +26,11 @@ function makeConfig(service: Record<string, unknown>): Config {
 }
 
 describe('provider registry', () => {
-  it('registers the built-in providers', () => {
+  it('registers the built-in providers', async () => {
     expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'azure', 'bedrock', 'gemini', 'mistral', 'ollama', 'openai'])
   })
 
-  it('exposes per-provider auth requirements', () => {
+  it('exposes per-provider auth requirements', async () => {
     expect(providerRequiresAuth('openai')).toBe(true)
     expect(providerRequiresAuth('anthropic')).toBe(true)
     expect(providerRequiresAuth('gemini')).toBe(true)
@@ -41,21 +41,21 @@ describe('provider registry', () => {
     expect(providerRequiresAuth('nope')).toBe(false)
   })
 
-  it('finds definitions by id and returns undefined for unknown', () => {
+  it('finds definitions by id and returns undefined for unknown', async () => {
     expect(findProviderDefinition('openai')?.id).toBe('openai')
     expect(findProviderDefinition('mystery')).toBeUndefined()
   })
 })
 
 describe('getLlm via registry', () => {
-  it('builds an OpenAI model and records provider metadata', () => {
-    const llm = getLlm('openai', 'gpt-5.4-mini' as LLMModel, makeConfig({ provider: 'openai', model: 'gpt-5.4-mini' }))
+  it('builds an OpenAI model and records provider metadata', async () => {
+    const llm = await getLlm('openai', 'gpt-5.4-mini' as LLMModel, makeConfig({ provider: 'openai', model: 'gpt-5.4-mini' }))
     expect(llm).toBeInstanceOf(ChatOpenAI)
     expect(getLlmMetadata(llm).provider).toBe('openai')
   })
 
-  it('threads service.maxConcurrent into the OpenAI client (#1629)', () => {
-    const llm = getLlm(
+  it('threads service.maxConcurrent into the OpenAI client (#1629)', async () => {
+    const llm = await getLlm(
       'openai',
       'gpt-5.4-mini' as LLMModel,
       makeConfig({ provider: 'openai', model: 'gpt-5.4-mini', maxConcurrent: 3 })
@@ -63,8 +63,8 @@ describe('getLlm via registry', () => {
     expect((llm as unknown as { caller: { maxConcurrency: number } }).caller.maxConcurrency).toBe(3)
   })
 
-  it('builds an Anthropic model and records provider metadata', () => {
-    const llm = getLlm(
+  it('builds an Anthropic model and records provider metadata', async () => {
+    const llm = await getLlm(
       'anthropic',
       'claude-sonnet-4-6' as LLMModel,
       makeConfig({ provider: 'anthropic', model: 'claude-sonnet-4-6' })
@@ -73,8 +73,8 @@ describe('getLlm via registry', () => {
     expect(getLlmMetadata(llm).provider).toBe('anthropic')
   })
 
-  it('builds a Gemini model and records provider metadata', () => {
-    const llm = getLlm(
+  it('builds a Gemini model and records provider metadata', async () => {
+    const llm = await getLlm(
       'gemini',
       'gemini-2.5-flash' as LLMModel,
       makeConfig({ provider: 'gemini', model: 'gemini-2.5-flash' })
@@ -83,8 +83,8 @@ describe('getLlm via registry', () => {
     expect(getLlmMetadata(llm).provider).toBe('gemini')
   })
 
-  it('builds a Mistral model and records provider metadata', () => {
-    const llm = getLlm(
+  it('builds a Mistral model and records provider metadata', async () => {
+    const llm = await getLlm(
       'mistral',
       'mistral-small-latest' as LLMModel,
       makeConfig({ provider: 'mistral', model: 'mistral-small-latest' })
@@ -93,8 +93,8 @@ describe('getLlm via registry', () => {
     expect(getLlmMetadata(llm).provider).toBe('mistral')
   })
 
-  it('builds an Azure OpenAI model and records provider metadata', () => {
-    const llm = getLlm(
+  it('builds an Azure OpenAI model and records provider metadata', async () => {
+    const llm = await getLlm(
       'azure',
       'gpt-5.4-mini' as LLMModel,
       makeConfig({
@@ -109,14 +109,14 @@ describe('getLlm via registry', () => {
     expect(getLlmMetadata(llm).provider).toBe('azure')
   })
 
-  it('builds a Bedrock model (no auth) and records provider metadata', () => {
+  it('builds a Bedrock model (no auth) and records provider metadata', async () => {
     // Bedrock authenticates via the AWS credential chain, not a coco-managed
     // API key — `requiresAuth` is false. The ChatBedrockConverse constructor
     // resolves AWS credentials lazily (on first invoke), so it instantiates
     // fine in the test env without any AWS creds present.
     expect(findProviderDefinition('bedrock')?.requiresAuth).toBe(false)
 
-    const llm = getLlm(
+    const llm = await getLlm(
       'bedrock',
       'anthropic.claude-sonnet-4-6' as LLMModel,
       makeConfig({
@@ -130,8 +130,8 @@ describe('getLlm via registry', () => {
     expect(getLlmMetadata(llm).provider).toBe('bedrock')
   })
 
-  it('builds an Ollama model (no auth) and records the endpoint', () => {
-    const llm = getLlm(
+  it('builds an Ollama model (no auth) and records the endpoint', async () => {
+    const llm = await getLlm(
       'ollama',
       'llama3' as LLMModel,
       makeConfig({
@@ -147,8 +147,8 @@ describe('getLlm via registry', () => {
     expect(meta.endpoint).toBe('http://localhost:11434')
   })
 
-  it('defaults numPredict and lets service.fields override it for Ollama', () => {
-    const llm = getLlm(
+  it('defaults numPredict and lets service.fields override it for Ollama', async () => {
+    const llm = await getLlm(
       'ollama',
       'llama3' as LLMModel,
       makeConfig({
@@ -160,7 +160,7 @@ describe('getLlm via registry', () => {
     )
     expect((llm as { numPredict?: number }).numPredict).toBe(DEFAULT_MAX_OUTPUT_TOKENS)
 
-    const overridden = getLlm(
+    const overridden = await getLlm(
       'ollama',
       'llama3' as LLMModel,
       makeConfig({
@@ -177,8 +177,8 @@ describe('getLlm via registry', () => {
   // Regression (#1631): `createOllamaLlm` never forwarded `temperature`, so
   // both the 0.4 service default and any user-configured value were ignored
   // — generation ran at the Ollama daemon's own default instead.
-  it('defaults temperature to 0.4 and respects an explicit value, including 0', () => {
-    const llm = getLlm(
+  it('defaults temperature to 0.4 and respects an explicit value, including 0', async () => {
+    const llm = await getLlm(
       'ollama',
       'llama3' as LLMModel,
       makeConfig({
@@ -190,7 +190,7 @@ describe('getLlm via registry', () => {
     )
     expect((llm as { temperature?: number }).temperature).toBe(0.4)
 
-    const deterministic = getLlm(
+    const deterministic = await getLlm(
       'ollama',
       'llama3' as LLMModel,
       makeConfig({
@@ -203,7 +203,7 @@ describe('getLlm via registry', () => {
     )
     expect((deterministic as { temperature?: number }).temperature).toBe(0)
 
-    const hot = getLlm(
+    const hot = await getLlm(
       'ollama',
       'llama3' as LLMModel,
       makeConfig({
@@ -217,8 +217,8 @@ describe('getLlm via registry', () => {
     expect((hot as { temperature?: number }).temperature).toBe(0.9)
   })
 
-  it('lets service.fields override the Ollama temperature', () => {
-    const llm = getLlm(
+  it('lets service.fields override the Ollama temperature', async () => {
+    const llm = await getLlm(
       'ollama',
       'llama3' as LLMModel,
       makeConfig({

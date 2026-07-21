@@ -1,9 +1,9 @@
-import { ChatMistralAI } from '@langchain/mistralai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
-function createMistralLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
+async function createMistralLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
+  const { ChatMistralAI } = await import('@langchain/mistralai')
   const mistralConfig: ConstructorParameters<typeof ChatMistralAI>[0] = {
     apiKey,
     model,

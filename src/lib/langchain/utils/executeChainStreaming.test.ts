@@ -114,8 +114,8 @@ function chunkRecorder(): {
  * type-system convenience for tests; the runtime behaviour is the same
  * polymorphic Runnable dispatch.
  */
-function asLlm(model: FakeListChatModel): ReturnType<typeof getLlm> {
-  return model as unknown as ReturnType<typeof getLlm>
+function asLlm(model: FakeListChatModel): Awaited<ReturnType<typeof getLlm>> {
+  return model as unknown as Awaited<ReturnType<typeof getLlm>>
 }
 
 describe('executeChainStreaming', () => {

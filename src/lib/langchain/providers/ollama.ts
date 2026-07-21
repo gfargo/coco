@@ -1,4 +1,3 @@
-import { ChatOllama } from '@langchain/ollama'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { Config } from '../../../commands/types'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
@@ -14,7 +13,8 @@ function resolveOllamaEndpoint(config: Config): string {
     : DEFAULT_OLLAMA_ENDPOINT
 }
 
-function createOllamaLlm({ model, config }: CreateLlmArgs): BaseChatModel {
+async function createOllamaLlm({ model, config }: CreateLlmArgs): Promise<BaseChatModel> {
+  const { ChatOllama } = await import('@langchain/ollama')
   const ollamaConfig: ConstructorParameters<typeof ChatOllama>[0] = {
     baseUrl: resolveOllamaEndpoint(config),
     maxConcurrency: config.service.maxConcurrent,

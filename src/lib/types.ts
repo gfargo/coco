@@ -49,7 +49,7 @@ export interface DirectoryDiff {
 
 export interface BaseParserOptions {
   tokenizer: TokenCounter
-  llm: ReturnType<typeof getLlm>
+  llm: Awaited<ReturnType<typeof getLlm>>
   git: SimpleGit
   logger: Logger
   maxTokens?: number

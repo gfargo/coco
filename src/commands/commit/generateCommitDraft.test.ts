@@ -112,7 +112,7 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
       ...(config.service as Record<string, unknown>),
       model: task === 'commit' ? 'commit-model' : 'summarize-model',
     }) as ReturnType<typeof resolveDynamicService>)
-    mockGetLlm.mockReturnValue({} as ReturnType<typeof getLlm>)
+    mockGetLlm.mockResolvedValue({} as Awaited<ReturnType<typeof getLlm>>)
     mockGetTokenCounterForProvider.mockResolvedValue(charTokenizer)
     mockGetChanges.mockResolvedValue({
       staged: [{ filePath: 'src/index.ts', status: 'modified', summary: 'changed' }],
@@ -216,7 +216,7 @@ describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)
       ...(config.service as Record<string, unknown>),
       model: task === 'commit' ? 'commit-model' : 'summarize-model',
     }) as ReturnType<typeof resolveDynamicService>)
-    mockGetLlm.mockReturnValue({} as ReturnType<typeof getLlm>)
+    mockGetLlm.mockResolvedValue({} as Awaited<ReturnType<typeof getLlm>>)
     mockGetTokenCounterForProvider.mockResolvedValue(charTokenizer)
     mockGetChanges.mockResolvedValue({
       staged: [{ filePath: 'src/index.ts', status: 'modified', summary: 'changed' }],

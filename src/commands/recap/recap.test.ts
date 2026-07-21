@@ -112,7 +112,7 @@ describe('recap command', () => {
       provider: 'openai',
       model: 'gpt-4o',
     })
-    mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
+    mockGetLlm.mockResolvedValue({} as unknown as Awaited<ReturnType<typeof getLlm>>)
     mockGetTokenCounterForProvider.mockResolvedValue((text: string) => text.length)
     // Non-empty by default so the 'current' timeframe reaches the LLM path
     // (matching every other test's expectation below) instead of hitting

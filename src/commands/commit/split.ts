@@ -743,14 +743,14 @@ export async function prepareCommitSplitPlan({
    * LLM for the diff-summary pre-pass. Typically the regular commit
    * or summarize model.
    */
-  llm: ReturnType<typeof getLlm>
+  llm: Awaited<ReturnType<typeof getLlm>>
   /**
    * Optional dedicated LLM for the structured plan-generation step.
    * Defaults to `llm` when omitted. Wired by `handleCommitSplit` so
    * the `commitSplit` dynamic-model task can floor the planner at a
    * stronger model than the diff summarizer.
    */
-  planLlm?: ReturnType<typeof getLlm>
+  planLlm?: Awaited<ReturnType<typeof getLlm>>
   /** Service descriptor matching `planLlm` (for telemetry metadata). */
   planService?: LLMService
   /**
@@ -921,8 +921,8 @@ export async function handleCommitSplit({
   git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>
   logger: Logger
   tokenizer: TokenCounter
-  llm: ReturnType<typeof getLlm>
-  planLlm?: ReturnType<typeof getLlm>
+  llm: Awaited<ReturnType<typeof getLlm>>
+  planLlm?: Awaited<ReturnType<typeof getLlm>>
   planService?: LLMService
   /**
    * Whether the CLI is running with an interactive prompt UI (matches
