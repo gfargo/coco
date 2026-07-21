@@ -32,9 +32,9 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   const provider = overview.repository.provider
   const nouns = forgeNouns(provider)
 
-  if (provider !== 'github' && provider !== 'gitlab' && provider !== 'bitbucket') {
+  if (provider !== 'github' && provider !== 'gitlab' && provider !== 'bitbucket' && provider !== 'gitea') {
     logger.error(
-      overview.repository.message || 'No supported remote (GitHub, GitLab, or Bitbucket) detected.',
+      overview.repository.message || 'No supported remote (GitHub, GitLab, Bitbucket, or Gitea) detected.',
       { color: 'red' }
     )
     commandExit(1)
@@ -159,6 +159,8 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
     gitlabPath: repoPath,
     gitlabHost: overview.repository.host,
     bitbucketPath: repoPath,
+    giteaPath: repoPath,
+    giteaHost: overview.repository.host,
   })
 
   const result = await forge.createPullRequest(input)

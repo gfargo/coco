@@ -104,6 +104,34 @@ import {
   reopenBitbucketIssue,
 } from './bitbucketIssueActions'
 
+// Gitea / Forgejo implementations.
+import { getGiteaPullRequestList, getGiteaIssueList, getGiteaPullRequestOverview } from './giteaListData'
+import { getGiteaPullRequestDetail, getGiteaIssueDetail, getGiteaPullRequestDiff } from './giteaDetailData'
+import {
+  createGiteaPullRequest,
+  openGiteaPullRequest,
+  mergeGiteaPullRequestByNumber,
+  approveGiteaPullRequestByNumber,
+  closeGiteaPullRequestByNumber,
+  commentGiteaPullRequestByNumber,
+  requestChangesGiteaPullRequestByNumber,
+  addGiteaPullRequestLabel,
+  addGiteaPullRequestReviewer,
+  mergeGiteaPullRequest,
+  closeGiteaPullRequest,
+  approveGiteaPullRequest,
+  commentGiteaPullRequest,
+  requestChangesGiteaPullRequest,
+} from './giteaPullRequestActions'
+import {
+  commentGiteaIssue,
+  addGiteaIssueLabel,
+  addGiteaIssueAssignee,
+  closeGiteaIssue,
+  reopenGiteaIssue,
+} from './giteaIssueActions'
+import { makeGiteaRunner } from './giteaCli'
+
 /**
  * Provider-agnostic forge facade. The workstation runtime dispatches every
  * pull-request / issue load and mutation through this interface, so the
@@ -276,13 +304,76 @@ function bitbucketActions(
 }
 
 /**
+ * Gitea/Forgejo facade. `path` is `owner/repo`; `host` is the repo's remote
+ * hostname (a self-hosted install or `codeberg.org`) — unlike Bitbucket's
+ * fixed API base, Gitea's REST API lives at `https://<host>/api/v1`, so the
+ * facade builds one host-bound runner up front (`makeGiteaRunner`) and passes
+ * it to every by-number / current-branch action. `currentBranch` is the
+ * checked-out branch, needed for current-branch mutations.
+ */
+function giteaActions(
+  path: string | undefined,
+  host: string | undefined,
+  currentBranch?: string
+): ForgeActions {
+  const runner = makeGiteaRunner(host ?? '')
+
+  return {
+    getPullRequestList: (git, filter) => getGiteaPullRequestList(git, filter),
+    getIssueList: (git, filter) => getGiteaIssueList(git, filter),
+    getPullRequestDetail: (n) =>
+      path
+        ? getGiteaPullRequestDetail(path, n, runner)
+        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
+    getIssueDetail: (n) =>
+      path
+        ? getGiteaIssueDetail(path, n, runner)
+        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
+    getPullRequestDiffByNumber: (n) =>
+      path
+        ? getGiteaPullRequestDiff(path, n, runner)
+        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
+    commentPullRequestByNumber: (n, body) => commentGiteaPullRequestByNumber(path ?? '', n, body, runner),
+    addPullRequestLabel: (n, label) => addGiteaPullRequestLabel(path ?? '', n, label, runner),
+    addPullRequestAssignee: (n, assignee) => addGiteaPullRequestReviewer(path ?? '', n, assignee, runner),
+    mergePullRequestByNumber: (n, strategy) => mergeGiteaPullRequestByNumber(path ?? '', n, strategy, runner),
+    closePullRequestByNumber: (n) => closeGiteaPullRequestByNumber(path ?? '', n, runner),
+    approvePullRequestByNumber: (n) => approveGiteaPullRequestByNumber(path ?? '', n, runner),
+    requestChangesPullRequestByNumber: (n, body) =>
+      requestChangesGiteaPullRequestByNumber(path ?? '', n, body, runner),
+    // Gitea has no CLI/API-friendly single-call checkout — surface the gap as
+    // a graceful failure so the diff surface / status line explain it instead
+    // of dead-ending (mirrors the Bitbucket facade, #1363).
+    checkoutPullRequestByNumber: () =>
+      Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Gitea yet.' }),
+    mergePullRequest: (strategy) => mergeGiteaPullRequest(path, currentBranch, strategy, runner),
+    closePullRequest: () => closeGiteaPullRequest(path, currentBranch, runner),
+    approvePullRequest: () => approveGiteaPullRequest(path, currentBranch, runner),
+    commentPullRequest: (body) => commentGiteaPullRequest(path, currentBranch, body, runner),
+    requestChangesPullRequest: (body) => requestChangesGiteaPullRequest(path, currentBranch, body, runner),
+    createPullRequest: (input) =>
+      path
+        ? createGiteaPullRequest(path, input, runner)
+        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
+    openPullRequest: (url) => Promise.resolve(openGiteaPullRequest(url)),
+    commentIssue: (n, body) => commentGiteaIssue(path ?? '', n, body, runner),
+    addIssueLabel: (n, label) => addGiteaIssueLabel(path ?? '', n, label, runner),
+    addIssueAssignee: (n, assignee) => addGiteaIssueAssignee(path ?? '', n, assignee, runner),
+    closeIssue: (n) => closeGiteaIssue(path ?? '', n, runner),
+    reopenIssue: (n) => reopenGiteaIssue(path ?? '', n, runner),
+  }
+}
+
+/**
  * Select the forge facade for the detected provider. Anything other than
- * `gitlab` or `bitbucket` (github, GitHub Enterprise, unsupported) keeps the
- * GitHub `gh` implementations, preserving existing behavior. For GitLab, pass
- * the project path (`owner/name`) and remote host so error-path auth re-probes
- * hit the right instance. For Bitbucket, pass the workspace/repo path and
- * current branch (needed for current-branch mutations that can't infer the
- * branch from a CLI binary).
+ * `gitlab`, `bitbucket`, or `gitea` (github, GitHub Enterprise, unsupported)
+ * keeps the GitHub `gh` implementations, preserving existing behavior. For
+ * GitLab, pass the project path (`owner/name`) and remote host so error-path
+ * auth re-probes hit the right instance. For Bitbucket, pass the
+ * workspace/repo path and current branch (needed for current-branch
+ * mutations that can't infer the branch from a CLI binary). For Gitea, pass
+ * the project path, remote host (the REST API base is per-host), and current
+ * branch.
  */
 export function getForgeActions(
   provider: GitProviderType | undefined,
@@ -290,12 +381,15 @@ export function getForgeActions(
     gitlabPath?: string
     gitlabHost?: string
     bitbucketPath?: string
-    /** Current checked-out branch, required for Bitbucket current-branch PR mutations. */
+    giteaPath?: string
+    giteaHost?: string
+    /** Current checked-out branch, required for Bitbucket/Gitea current-branch PR mutations. */
     currentBranch?: string
   } = {}
 ): ForgeActions {
   if (provider === 'gitlab') return gitlabActions(options.gitlabPath, options.gitlabHost)
   if (provider === 'bitbucket') return bitbucketActions(options.bitbucketPath, options.currentBranch)
+  if (provider === 'gitea') return giteaActions(options.giteaPath, options.giteaHost, options.currentBranch)
   return githubActions
 }
 
@@ -309,5 +403,6 @@ export async function getForgePullRequestOverview(git: SimpleGit): Promise<PullR
   const repo = await getProviderRepositoryForGit(git)
   if (repo?.provider === 'gitlab') return getMergeRequestOverview(git)
   if (repo?.provider === 'bitbucket') return getBitbucketPullRequestOverview(git)
+  if (repo?.provider === 'gitea') return getGiteaPullRequestOverview(git)
   return getPullRequestOverview(git)
 }
