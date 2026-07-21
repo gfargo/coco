@@ -1,10 +1,10 @@
-import { AzureChatOpenAI } from '@langchain/openai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { AzureLLMService } from '../types'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
-function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
+async function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
+  const { AzureChatOpenAI } = await import('@langchain/openai')
   const svc = config.service as AzureLLMService
 
   const azureConfig: ConstructorParameters<typeof AzureChatOpenAI>[0] = {

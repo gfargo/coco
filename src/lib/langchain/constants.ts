@@ -1,4 +1,4 @@
-import { TiktokenModel } from '@langchain/openai'
+import type { TiktokenModel } from '@langchain/openai'
 import { AnthropicModel, BedrockModel, GeminiModel, MistralModel } from './types'
 
 // gpt-4o and the gpt-4.1 family retired from the API in early 2026 (see

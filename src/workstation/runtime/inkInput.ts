@@ -20,6 +20,9 @@ import {
 } from './inkWorkflows'
 import { sidebarTabHasSelectableItems } from '../chrome/sidebarSelection'
 import { handleBisectInput } from '../surfaces/bisect/input'
+import { handleChangelogInput } from '../surfaces/changelog/input'
+import { handleConflictsInput } from '../surfaces/conflicts/input'
+import { handleRebaseInput } from '../surfaces/rebase/input'
 import { handleOverlayInput } from './overlayInput'
 
 export type LogInkInputKey = {
@@ -1749,50 +1752,13 @@ export function getLogInkInputEvents(
     return [action({ type: 'setDiffLineSelectAnchor', value: undefined })]
   }
 
-  // AI conflict-resolution session (#1369). While proposals are open
-  // on the conflicts view they own the review keys: j/k walk regions,
-  // y/e/n act on the cursored one, Y accepts everything pending, Esc
-  // dismisses. The file is untouched until an explicit accept. Sits
-  // ABOVE the global Esc-pop and single-letter fallbacks (`n` = move,
-  // `y` = yank) so the review keys can't leak into navigation.
-  if (state.activeView === 'conflicts' && state.conflictResolution) {
-    const session = state.conflictResolution
-    if (session.status === 'ready' && session.proposals.length > 0) {
-      if (key.downArrow || inputValue === 'j') {
-        return [action({ type: 'moveConflictProposal', delta: 1 })]
-      }
-      if (key.upArrow || inputValue === 'k') {
-        return [action({ type: 'moveConflictProposal', delta: -1 })]
-      }
-      if (inputValue === 'y' && !key.ctrl && !key.meta) {
-        return [{ type: 'acceptConflictProposal' }]
-      }
-      if (inputValue === 'Y' && !key.ctrl && !key.meta) {
-        return [{ type: 'acceptAllConflictProposals' }]
-      }
-      if (inputValue === 'e' && !key.ctrl && !key.meta) {
-        return [{ type: 'editConflictProposal' }]
-      }
-      if (inputValue === 'n' && !key.ctrl && !key.meta) {
-        const proposal = session.proposals[session.selectedIndex]
-        return proposal && proposal.status === 'pending'
-          ? [action({
-            type: 'setConflictProposalStatus',
-            regionIndex: proposal.regionIndex,
-            status: 'rejected',
-          })]
-          : []
-      }
-      if (key.escape) {
-        return [
-          action({ type: 'clearConflictResolution' }),
-          action({ type: 'setStatus', value: 'Proposals dismissed — file untouched.' }),
-        ]
-      }
-    }
-    if (session.status === 'error' && key.escape) {
-      return [action({ type: 'clearConflictResolution' })]
-    }
+  // AI conflict-resolution session (#1369), extracted to
+  // `surfaces/conflicts/input.ts` (#COCO-1064). Sits ABOVE the global
+  // Esc-pop and single-letter fallbacks (`n` = move, `y` = yank) so the
+  // review keys can't leak into navigation.
+  const conflictsSessionEvents = handleConflictsInput(state, inputValue, key, context, 'session')
+  if (conflictsSessionEvents) {
+    return conflictsSessionEvents
   }
 
   if (key.escape && state.bisectPickMode) {
@@ -1857,14 +1823,11 @@ export function getLogInkInputEvents(
     ]
   }
 
-  // #1446 — rebase-plan discard guard. A fully retagged/reordered
-  // rebase plan is expensive to recreate; Esc-ing away should confirm
-  // before silently dropping it, matching the compose-draft pattern.
-  // The confirm is only raised when Esc WOULD pop away from the rebase
-  // view (viewStack > 1) — otherwise there's nowhere to go and Esc
-  // is a no-op anyway.
-  if (key.escape && state.activeView === 'rebase' && state.rebasePlan && state.viewStack.length > 1) {
-    return [action({ type: 'setPendingConfirmation', value: 'discard-rebase-plan' })]
+  // #1359 / #1446 — in-TUI interactive rebase surface, extracted to
+  // `surfaces/rebase/input.ts` (#1625 second surface).
+  const rebaseEvents = handleRebaseInput(state, inputValue, key, context)
+  if (rebaseEvents) {
+    return rebaseEvents
   }
 
   if (key.escape && state.viewStack.length > 1) {
@@ -2142,55 +2105,14 @@ export function getLogInkInputEvents(
     return bisectEvents
   }
 
-  // Changelog view local keymap. Scoped to `activeView === 'changelog'`
-  // so the letters stay free everywhere else. Bindings:
-  //
-  //   j / k          → scroll line down / up (1 line)
-  //   pgdn / pgup    → scroll page down / up (10 lines)
-  //   y              → yank text to clipboard
-  //   E              → open in $EDITOR (companion to compose's `E` from #913)
-  //   c              → create-PR seeded with this changelog
-  //   r              → regenerate (skip cache, re-run LLM)
-  //
-  // Back-out is `<` / Esc handled by the global pop-view path lower
-  // down. The view only renders when `state.changelogView.status`
-  // is 'ready' — scroll keystrokes early-return when changelogLineCount
-  // is missing so they no-op gracefully during loading / error states.
-  if (state.activeView === 'changelog') {
-    // Arrows are synonyms for j/k here like on every other surface —
-    // they used to be swallowed by the loading-state guard below even
-    // when the view was ready, leaving ↓/↑ silently dead.
-    if ((inputValue === 'j' || key.downArrow) && context.changelogLineCount) {
-      return [action({ type: 'pageChangelog', delta: 1, lineCount: context.changelogLineCount })]
-    }
-    if ((inputValue === 'k' || key.upArrow) && context.changelogLineCount) {
-      return [action({ type: 'pageChangelog', delta: -1, lineCount: context.changelogLineCount })]
-    }
-    if (key.pageDown && context.changelogLineCount) {
-      return [action({ type: 'pageChangelog', delta: 10, lineCount: context.changelogLineCount })]
-    }
-    if (key.pageUp && context.changelogLineCount) {
-      return [action({ type: 'pageChangelog', delta: -10, lineCount: context.changelogLineCount })]
-    }
-    if (inputValue === 'y') {
-      return [{ type: 'yankChangelog' }]
-    }
-    if (inputValue === 'E') {
-      return [{ type: 'openChangelogInEditor' }]
-    }
-    if (inputValue === 'c') {
-      return [{ type: 'startCreatePullRequest' }]
-    }
-    if (inputValue === 'r') {
-      return [{ type: 'regenerateChangelog' }]
-    }
-    // While loading / errored there's no line count yet — swallow the
-    // scroll keys instead of letting them fall through to the global
-    // move handler, which used to scroll the HISTORY cursor invisibly
-    // beneath this surface (#1348).
-    if (inputValue === 'j' || inputValue === 'k' || key.upArrow || key.downArrow || key.pageUp || key.pageDown) {
-      return []
-    }
+  // Changelog view local keymap, extracted to
+  // `surfaces/changelog/input.ts` (mirrors #1625 bisect surface). Note:
+  // this surface's `gg`/`G` top/bottom jumps are intentionally NOT part
+  // of this delegation — they remain below, nested inside the shared
+  // moveToTop/moveToBottom chord handlers alongside blame/file-history.
+  const changelogEvents = handleChangelogInput(state, inputValue, key, context)
+  if (changelogEvents) {
+    return changelogEvents
   }
 
   if (inputValue === 'g') {
@@ -2235,48 +2157,6 @@ export function getLogInkInputEvents(
     }
 
     return [action({ type: 'setPendingKey', value: 'g' })]
-  }
-
-  // ── In-TUI interactive rebase surface (#1359) ───────────────────────
-  // The plan claims its keys while the view is active: j/k cursor, J/K
-  // reorder, p/s/f/d/e retag, r reword (prompt), Enter executes (behind
-  // a y-confirm), Esc pops (which clears the plan). Placed before every
-  // other single-letter handler so the rebase letters can't leak into
-  // sort/fixup/diff-toggle semantics.
-  if (state.activeView === 'rebase' && state.rebasePlan) {
-    if (inputValue === 'J') {
-      return [action({ type: 'moveRebaseRow', delta: 1 })]
-    }
-    if (inputValue === 'K') {
-      return [action({ type: 'moveRebaseRow', delta: -1 })]
-    }
-    if (inputValue === 'p') {
-      return [action({ type: 'setRebaseAction', action: 'pick' })]
-    }
-    if (inputValue === 's') {
-      return [action({ type: 'setRebaseAction', action: 'squash' })]
-    }
-    if (inputValue === 'f') {
-      return [action({ type: 'setRebaseAction', action: 'fixup' })]
-    }
-    if (inputValue === 'd') {
-      return [action({ type: 'setRebaseAction', action: 'drop' })]
-    }
-    if (inputValue === 'e') {
-      return [action({ type: 'setRebaseAction', action: 'edit' })]
-    }
-    if (inputValue === 'r') {
-      const row = state.rebasePlan.rows[state.rebasePlan.selectedIndex]
-      return [action({
-        type: 'openInputPrompt',
-        kind: 'rebase-reword',
-        label: `New message for ${row?.shortSha ?? 'commit'}`,
-        initial: row?.newMessage ?? row?.subject ?? '',
-      })]
-    }
-    if (key.return) {
-      return [action({ type: 'setPendingConfirmation', value: 'execute-rebase-plan' })]
-    }
   }
 
   // `d` on the diff view toggles between unified and side-by-side split
@@ -2652,10 +2532,6 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'rebase' && state.rebasePlan) {
-      return [action({ type: 'moveRebaseCursor', delta: -1 })]
-    }
-
     // Worktree (staging) diff: ↑/↓ scroll lines — consistent with the
     // commit / stash diffs (#1185). `[`/`]` jump between hunks (the
     // staging unit), and the current hunk is derived from the scroll
@@ -2791,8 +2667,10 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'conflicts' && context.conflictFileCount) {
-      return [action({ type: 'moveConflictFile', delta: -1, count: context.conflictFileCount })]
+    // Extracted to `surfaces/conflicts/input.ts` (#COCO-1064).
+    const conflictsUpEvents = handleConflictsInput(state, inputValue, key, context, 'move')
+    if (conflictsUpEvents) {
+      return conflictsUpEvents
     }
 
     if (
@@ -2846,10 +2724,6 @@ export function getLogInkInputEvents(
         delta: 1,
         fileCount: context.worktreeFileCount,
       })]
-    }
-
-    if (state.activeView === 'rebase' && state.rebasePlan) {
-      return [action({ type: 'moveRebaseCursor', delta: 1 })]
     }
 
     // Worktree (staging) diff: ↓ scrolls lines (see the ↑ handler) —
@@ -2968,8 +2842,10 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'conflicts' && context.conflictFileCount) {
-      return [action({ type: 'moveConflictFile', delta: 1, count: context.conflictFileCount })]
+    // Extracted to `surfaces/conflicts/input.ts` (#COCO-1064).
+    const conflictsDownEvents = handleConflictsInput(state, inputValue, key, context, 'move')
+    if (conflictsDownEvents) {
+      return conflictsDownEvents
     }
 
     return [
@@ -3368,9 +3244,11 @@ export function getLogInkInputEvents(
   }
 
   // Enter on a conflict file opens the worktree diff for that file so
-  // the user can inspect the conflict markers in context.
-  if (key.return && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-open-diff', payload: context.conflictSelectedPath }]
+  // the user can inspect the conflict markers in context. Extracted to
+  // `surfaces/conflicts/input.ts` (#COCO-1064).
+  const conflictsEnterEvents = handleConflictsInput(state, inputValue, key, context, 'enter')
+  if (conflictsEnterEvents) {
+    return conflictsEnterEvents
   }
 
   // Enter on a branch row checks the branch out. Non-destructive workflow
@@ -3836,30 +3714,11 @@ export function getLogInkInputEvents(
   }
 
   // --- Conflicts view per-row handlers ---
-  // `o` opens the conflicted file in $EDITOR for manual resolution.
-  if (inputValue === 'o' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'openFileInEditor', path: context.conflictSelectedPath }]
-  }
-  // `s` stages the conflicted file (marks it resolved).
-  if (inputValue === 's' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-stage', payload: context.conflictSelectedPath }]
-  }
-  // `u` resolves by keeping theirs (incoming changes).
-  if (inputValue === 'u' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-theirs', payload: context.conflictSelectedPath }]
-  }
-  // `U` resolves by keeping ours (current branch).
-  if (inputValue === 'U' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-ours', payload: context.conflictSelectedPath }]
-  }
-  // `C` continues the in-progress operation (available when no conflicts remain).
-  if (inputValue === 'C' && state.activeView === 'conflicts' && context.conflictFileCount === 0) {
-    return [{ type: 'runWorkflowAction', id: 'continue-operation' }]
-  }
-  // Always intercept `C` on the conflicts view to prevent fallthrough to
-  // the global `C` (Create PR) binding when conflicts remain.
-  if (inputValue === 'C' && state.activeView === 'conflicts') {
-    return [action({ type: 'setStatus', value: 'Resolve all conflicts before continuing', kind: 'warning' })]
+  // `o`/`s`/`u`/`U`/`C` row actions, extracted to
+  // `surfaces/conflicts/input.ts` (#COCO-1064).
+  const conflictsRowActionEvents = handleConflictsInput(state, inputValue, key, context, 'row-action')
+  if (conflictsRowActionEvents) {
+    return conflictsRowActionEvents
   }
   // Global `C` — create a pull request from the current branch. The
   // runtime callback handles pre-flight (current branch resolution,

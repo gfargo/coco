@@ -2,16 +2,24 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { GhRunner, defaultGhRunner } from './pullRequestData'
-import { resolveGhActionError } from './githubCli'
+import { runGhAction } from './githubCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 
-export type PullRequestActionResult = {
+/**
+ * Shared result shape for every forge action (gh/glab/Bitbucket, PR/issue
+ * verbs alike). `url` is only ever populated by PR/MR-returning actions;
+ * issue actions simply never set it.
+ */
+export type ForgeActionResult = {
   ok: boolean
   message: string
   url?: string
-  /** Bounded extra lines from a compacted gh error, when present. */
+  /** Bounded extra lines from a compacted forge-CLI/API error, when present. */
   details?: string[]
 }
+
+/** @deprecated use ForgeActionResult */
+export type PullRequestActionResult = ForgeActionResult
 
 export type CreatePullRequestInput = {
   base: string
@@ -26,23 +34,6 @@ function parseCreatedPullRequestUrl(output: string): string | undefined {
     .split('\n')
     .map((line) => line.trim())
     .find((line) => line.startsWith('https://'))
-}
-
-async function runGhAction(
-  runner: GhRunner,
-  args: string[],
-  successMessage: (output: string) => PullRequestActionResult
-): Promise<PullRequestActionResult> {
-  try {
-    return successMessage(await runner(args))
-  } catch (error) {
-    const { message, details } = await resolveGhActionError(error, runner)
-    return {
-      ok: false,
-      message,
-      ...(details && details.length ? { details } : {}),
-    }
-  }
 }
 
 export function buildCreatePullRequestArgs(

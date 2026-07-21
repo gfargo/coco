@@ -79,6 +79,53 @@ describe('commandExecutor — global --quiet wiring', () => {
     expect(process.exitCode).toBe(1)
   })
 
+  // Providers reuse HTTP 429 for `insufficient_quota` (billing exhausted).
+  // This exercises the full pipeline: a raw provider-shaped quota error
+  // classified by handleLangChainError, then rendered with billing-oriented
+  // guidance instead of the rate-limit "wait and retry" remedy.
+  it('renders billing guidance (not the rate-limit remedy) for an insufficient_quota 429', async () => {
+    const handler: CommandHandler<never> = async () => {
+      handleLangChainError(
+        {
+          status: 429,
+          code: 'insufficient_quota',
+          message: 'You exceeded your current quota, please check your plan and billing details.',
+        },
+        'executeChain: Chain execution failed',
+        { provider: 'openai' }
+      )
+    }
+    await commandExecutor(handler)({ quiet: true } as never)
+
+    const written = stderrSpy.mock.calls.map((call) => String(call[0])).join('')
+    expect(written).toContain('quota exhausted (billing)')
+    expect(written).toContain('credit balance')
+    expect(written).toContain('budget caps')
+    // The provider's own message renders without --verbose
+    expect(written).toContain('You exceeded your current quota')
+    // The rate-limit remedy must not render — retrying can't fix billing
+    expect(written).not.toContain('Wait a bit and retry')
+    expect(written).not.toContain('service.maxConcurrent')
+    expect(process.exitCode).toBe(1)
+  })
+
+  it('includes the provider message in rate-limit output without --verbose', async () => {
+    const handler: CommandHandler<never> = async () => {
+      handleLangChainError(
+        { status: 429, message: 'Rate limit reached for gpt-4o: try again in 20s' },
+        'executeChain: Chain execution failed',
+        { provider: 'openai' }
+      )
+    }
+    await commandExecutor(handler)({ quiet: true } as never)
+
+    const written = stderrSpy.mock.calls.map((call) => String(call[0])).join('')
+    expect(written).toContain('Rate limited by openai')
+    expect(written).toContain('Rate limit reached for gpt-4o: try again in 20s')
+    expect(written).toContain('Wait a bit and retry')
+    expect(process.exitCode).toBe(1)
+  })
+
   it('emits network error to stderr even when --quiet is set', async () => {
     const handler: CommandHandler<never> = async () => {
       throw new LangChainNetworkError('connection refused', 'https://api.openai.com', 'openai')

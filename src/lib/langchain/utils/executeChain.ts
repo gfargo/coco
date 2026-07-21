@@ -20,7 +20,7 @@ import { estimatePromptTokens, LlmCallMetadata, logLlmCall } from './observabili
 type ExecuteChainInput<T> = {
   variables: Record<string, unknown>
   prompt: PromptTemplate
-  llm: ReturnType<typeof getLlm>
+  llm: Awaited<ReturnType<typeof getLlm>>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   parser: Runnable<any, T>
   /** Optional provider name for better error messages */

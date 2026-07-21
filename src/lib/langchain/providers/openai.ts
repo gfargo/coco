@@ -1,9 +1,9 @@
-import { ChatOpenAI } from '@langchain/openai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
-function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
+async function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
+  const { ChatOpenAI } = await import('@langchain/openai')
   const openaiConfig: Partial<ConstructorParameters<typeof ChatOpenAI>[0]> = {
     apiKey,
     maxConcurrency: config.service.maxConcurrent,
