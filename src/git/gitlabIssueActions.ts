@@ -1,4 +1,4 @@
-import { defaultGlabRunner, resolveGlabActionError, type GlabRunner } from './glabCli'
+import { defaultGlabRunner, runGlabAction, type GlabRunner } from './glabCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { IssueActionResult } from './issueActions'
 
@@ -10,20 +10,6 @@ import type { IssueActionResult } from './issueActions'
  * contract-locked by the arg-builder tests; smoke-test against a live GitLab
  * before relying on them.
  */
-
-async function runGlabAction(
-  runner: GlabRunner,
-  args: string[],
-  onSuccess: (output: string) => IssueActionResult,
-  hostname?: string
-): Promise<IssueActionResult> {
-  try {
-    return onSuccess(await runner(args))
-  } catch (error) {
-    const { message, details } = await resolveGlabActionError(error, runner, hostname)
-    return { ok: false, message, ...(details && details.length ? { details } : {}) }
-  }
-}
 
 export function commentGitLabIssue(
   issueNumber: number,

@@ -1,9 +1,9 @@
-import { ChatGoogleGenerativeAI } from '@langchain/google-genai'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
-function createGeminiLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
+async function createGeminiLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
+  const { ChatGoogleGenerativeAI } = await import('@langchain/google-genai')
   const geminiConfig: ConstructorParameters<typeof ChatGoogleGenerativeAI>[0] = {
     apiKey,
     model,

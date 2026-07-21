@@ -28,8 +28,13 @@ export type ProviderDefinition = {
    * Bedrock) set this false.
    */
   requiresAuth: boolean
-  /** Instantiate the chat model for this provider. */
-  createLlm: (args: CreateLlmArgs) => BaseChatModel
+  /**
+   * Instantiate the chat model for this provider. Async so implementations
+   * can `await import()` their SDK on first use — the provider SDKs dominate
+   * CLI startup time (~2.5s of require cost across all of them, 1.2s for
+   * Mistral alone), so none of them may be imported at module scope.
+   */
+  createLlm: (args: CreateLlmArgs) => Promise<BaseChatModel>
   /**
    * Resolve the effective endpoint for observability / network-error
    * messages, when the provider has a meaningful one (e.g. Ollama's base

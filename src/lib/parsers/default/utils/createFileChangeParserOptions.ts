@@ -37,7 +37,7 @@ export type FileChangeParserServiceBudget = {
 export type CreateFileChangeParserOptionsInput = {
   command: string
   git: SimpleGit
-  llm: ReturnType<typeof getLlm>
+  llm: Awaited<ReturnType<typeof getLlm>>
   logger: Logger
   model: string
   provider: LLMProvider | string

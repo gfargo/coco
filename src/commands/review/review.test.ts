@@ -119,7 +119,7 @@ describe('review command', () => {
       provider: 'openai',
       model: 'gpt-4o',
     })
-    mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
+    mockGetLlm.mockResolvedValue({} as unknown as Awaited<ReturnType<typeof getLlm>>)
     mockGetTokenCounterForProvider.mockResolvedValue((text: string) => text.length)
     mockGetChanges.mockResolvedValue({
       staged: [{ filePath: 'src/file.ts', status: 'modified', summary: 'changed file' }],
