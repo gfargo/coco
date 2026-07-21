@@ -28,6 +28,7 @@ import {
 import { sidebarTabHasSelectableItems } from '../chrome/sidebarSelection'
 import { handleBisectInput } from '../surfaces/bisect/input'
 import { handleConflictsInput } from '../surfaces/conflicts/input'
+import { handleRebaseInput } from '../surfaces/rebase/input'
 
 export type LogInkInputKey = {
   backspace?: boolean
@@ -2043,14 +2044,11 @@ export function getLogInkInputEvents(
     ]
   }
 
-  // #1446 — rebase-plan discard guard. A fully retagged/reordered
-  // rebase plan is expensive to recreate; Esc-ing away should confirm
-  // before silently dropping it, matching the compose-draft pattern.
-  // The confirm is only raised when Esc WOULD pop away from the rebase
-  // view (viewStack > 1) — otherwise there's nowhere to go and Esc
-  // is a no-op anyway.
-  if (key.escape && state.activeView === 'rebase' && state.rebasePlan && state.viewStack.length > 1) {
-    return [action({ type: 'setPendingConfirmation', value: 'discard-rebase-plan' })]
+  // #1359 / #1446 — in-TUI interactive rebase surface, extracted to
+  // `surfaces/rebase/input.ts` (#1625 second surface).
+  const rebaseEvents = handleRebaseInput(state, inputValue, key, context)
+  if (rebaseEvents) {
+    return rebaseEvents
   }
 
   if (key.escape && state.viewStack.length > 1) {
@@ -2421,48 +2419,6 @@ export function getLogInkInputEvents(
     }
 
     return [action({ type: 'setPendingKey', value: 'g' })]
-  }
-
-  // ── In-TUI interactive rebase surface (#1359) ───────────────────────
-  // The plan claims its keys while the view is active: j/k cursor, J/K
-  // reorder, p/s/f/d/e retag, r reword (prompt), Enter executes (behind
-  // a y-confirm), Esc pops (which clears the plan). Placed before every
-  // other single-letter handler so the rebase letters can't leak into
-  // sort/fixup/diff-toggle semantics.
-  if (state.activeView === 'rebase' && state.rebasePlan) {
-    if (inputValue === 'J') {
-      return [action({ type: 'moveRebaseRow', delta: 1 })]
-    }
-    if (inputValue === 'K') {
-      return [action({ type: 'moveRebaseRow', delta: -1 })]
-    }
-    if (inputValue === 'p') {
-      return [action({ type: 'setRebaseAction', action: 'pick' })]
-    }
-    if (inputValue === 's') {
-      return [action({ type: 'setRebaseAction', action: 'squash' })]
-    }
-    if (inputValue === 'f') {
-      return [action({ type: 'setRebaseAction', action: 'fixup' })]
-    }
-    if (inputValue === 'd') {
-      return [action({ type: 'setRebaseAction', action: 'drop' })]
-    }
-    if (inputValue === 'e') {
-      return [action({ type: 'setRebaseAction', action: 'edit' })]
-    }
-    if (inputValue === 'r') {
-      const row = state.rebasePlan.rows[state.rebasePlan.selectedIndex]
-      return [action({
-        type: 'openInputPrompt',
-        kind: 'rebase-reword',
-        label: `New message for ${row?.shortSha ?? 'commit'}`,
-        initial: row?.newMessage ?? row?.subject ?? '',
-      })]
-    }
-    if (key.return) {
-      return [action({ type: 'setPendingConfirmation', value: 'execute-rebase-plan' })]
-    }
   }
 
   // `d` on the diff view toggles between unified and side-by-side split
@@ -2838,10 +2794,6 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'rebase' && state.rebasePlan) {
-      return [action({ type: 'moveRebaseCursor', delta: -1 })]
-    }
-
     // Worktree (staging) diff: ↑/↓ scroll lines — consistent with the
     // commit / stash diffs (#1185). `[`/`]` jump between hunks (the
     // staging unit), and the current hunk is derived from the scroll
@@ -3034,10 +2986,6 @@ export function getLogInkInputEvents(
         delta: 1,
         fileCount: context.worktreeFileCount,
       })]
-    }
-
-    if (state.activeView === 'rebase' && state.rebasePlan) {
-      return [action({ type: 'moveRebaseCursor', delta: 1 })]
     }
 
     // Worktree (staging) diff: ↓ scrolls lines (see the ↑ handler) —
