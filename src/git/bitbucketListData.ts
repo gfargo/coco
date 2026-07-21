@@ -292,6 +292,9 @@ function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
     q.push('(status = "resolved" OR status = "closed" OR status = "invalid" OR status = "wontfix" OR status = "duplicate")')
   }
 
+  // '@me' is resolved to a real nickname by the caller before this runs;
+  // the guards keep a literal '@me' (a nickname Bitbucket doesn't know)
+  // out of the query if this is ever called without that resolution.
   if (filter.assignee && filter.assignee !== '@me') {
     q.push(`assignee.nickname = "${bbqlQuote(filter.assignee)}"`)
   }
@@ -325,15 +328,12 @@ export async function getBitbucketIssueList(
     filter,
     fetch: async (project) => {
       const want = filter.limit ?? 30
-      const raw = await fetchAllPages<RawBitbucketIssue>(
-        runner,
-        buildIssueEndpoint(project.path, filter),
-        'issues',
-        want
-      )
 
-      let issues = raw.map(mapIssueItem)
-
+      // Resolve '@me' BEFORE building the endpoint so the nickname lands in
+      // the BBQL query and Bitbucket filters server-side. Filtering after
+      // the fetch (the old approach) ran against only the first `want`
+      // issues of the unfiltered list, so a user whose issues sat past that
+      // window saw them silently dropped.
       const wantsMe = filter.author === '@me' || filter.assignee === '@me'
       const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
       if (wantsMe && !me) {
@@ -341,16 +341,22 @@ export async function getBitbucketIssueList(
           'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
         )
       }
+      const effectiveFilter: IssueListFilter = wantsMe
+        ? {
+            ...filter,
+            author: filter.author === '@me' ? me : filter.author,
+            assignee: filter.assignee === '@me' ? me : filter.assignee,
+          }
+        : filter
 
-      if (filter.author === '@me') {
-        issues = issues.filter((issue) => issue.author === me)
-      }
+      const raw = await fetchAllPages<RawBitbucketIssue>(
+        runner,
+        buildIssueEndpoint(project.path, effectiveFilter),
+        'issues',
+        want
+      )
 
-      if (filter.assignee === '@me') {
-        issues = issues.filter((issue) => issue.assignees?.includes(me as string))
-      }
-
-      return { issues: issues.map(sanitizeIssueListItem) }
+      return { issues: raw.map(mapIssueItem).map(sanitizeIssueListItem) }
     },
     fetchErrorMessage: 'Failed to fetch issue list.',
   })
