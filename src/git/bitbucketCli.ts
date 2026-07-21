@@ -5,6 +5,7 @@ import {
   type GhActionError,
   type GhStatus,
 } from './githubCli'
+import type { ForgeActionResult } from './pullRequestActions'
 import { compactCliError, resolveForgeActionError } from './forgeErrors'
 
 /**
@@ -172,4 +173,28 @@ export async function resolveBitbucketActionError(
     describe: describeBitbucketStatus,
     fallback: 'Bitbucket API call failed.',
   })
+}
+
+/**
+ * Shared try/run/resolve-error wrapper for every Bitbucket REST mutating
+ * action (PR and issue actions alike), mirroring `runGhAction` /
+ * `runGlabAction`.
+ */
+export async function runBitbucketAction(
+  runner: BitbucketRunner,
+  endpoint: string,
+  method: string,
+  body: Record<string, unknown> | undefined,
+  onSuccess: (output: string) => ForgeActionResult
+): Promise<ForgeActionResult> {
+  try {
+    const out = await runner(endpoint, {
+      method,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    })
+    return onSuccess(out)
+  } catch (error) {
+    const { message, details } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
 }

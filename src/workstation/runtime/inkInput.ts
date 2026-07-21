@@ -28,6 +28,7 @@ import {
 import { sidebarTabHasSelectableItems } from '../chrome/sidebarSelection'
 import { handleBisectInput } from '../surfaces/bisect/input'
 import { handleChangelogInput } from '../surfaces/changelog/input'
+import { handleConflictsInput } from '../surfaces/conflicts/input'
 
 export type LogInkInputKey = {
   backspace?: boolean
@@ -1972,50 +1973,13 @@ export function getLogInkInputEvents(
     return [action({ type: 'setDiffLineSelectAnchor', value: undefined })]
   }
 
-  // AI conflict-resolution session (#1369). While proposals are open
-  // on the conflicts view they own the review keys: j/k walk regions,
-  // y/e/n act on the cursored one, Y accepts everything pending, Esc
-  // dismisses. The file is untouched until an explicit accept. Sits
-  // ABOVE the global Esc-pop and single-letter fallbacks (`n` = move,
-  // `y` = yank) so the review keys can't leak into navigation.
-  if (state.activeView === 'conflicts' && state.conflictResolution) {
-    const session = state.conflictResolution
-    if (session.status === 'ready' && session.proposals.length > 0) {
-      if (key.downArrow || inputValue === 'j') {
-        return [action({ type: 'moveConflictProposal', delta: 1 })]
-      }
-      if (key.upArrow || inputValue === 'k') {
-        return [action({ type: 'moveConflictProposal', delta: -1 })]
-      }
-      if (inputValue === 'y' && !key.ctrl && !key.meta) {
-        return [{ type: 'acceptConflictProposal' }]
-      }
-      if (inputValue === 'Y' && !key.ctrl && !key.meta) {
-        return [{ type: 'acceptAllConflictProposals' }]
-      }
-      if (inputValue === 'e' && !key.ctrl && !key.meta) {
-        return [{ type: 'editConflictProposal' }]
-      }
-      if (inputValue === 'n' && !key.ctrl && !key.meta) {
-        const proposal = session.proposals[session.selectedIndex]
-        return proposal && proposal.status === 'pending'
-          ? [action({
-            type: 'setConflictProposalStatus',
-            regionIndex: proposal.regionIndex,
-            status: 'rejected',
-          })]
-          : []
-      }
-      if (key.escape) {
-        return [
-          action({ type: 'clearConflictResolution' }),
-          action({ type: 'setStatus', value: 'Proposals dismissed — file untouched.' }),
-        ]
-      }
-    }
-    if (session.status === 'error' && key.escape) {
-      return [action({ type: 'clearConflictResolution' })]
-    }
+  // AI conflict-resolution session (#1369), extracted to
+  // `surfaces/conflicts/input.ts` (#COCO-1064). Sits ABOVE the global
+  // Esc-pop and single-letter fallbacks (`n` = move, `y` = yank) so the
+  // review keys can't leak into navigation.
+  const conflictsSessionEvents = handleConflictsInput(state, inputValue, key, context, 'session')
+  if (conflictsSessionEvents) {
+    return conflictsSessionEvents
   }
 
   if (key.escape && state.bisectPickMode) {
@@ -2973,8 +2937,10 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'conflicts' && context.conflictFileCount) {
-      return [action({ type: 'moveConflictFile', delta: -1, count: context.conflictFileCount })]
+    // Extracted to `surfaces/conflicts/input.ts` (#COCO-1064).
+    const conflictsUpEvents = handleConflictsInput(state, inputValue, key, context, 'move')
+    if (conflictsUpEvents) {
+      return conflictsUpEvents
     }
 
     if (
@@ -3150,8 +3116,10 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'conflicts' && context.conflictFileCount) {
-      return [action({ type: 'moveConflictFile', delta: 1, count: context.conflictFileCount })]
+    // Extracted to `surfaces/conflicts/input.ts` (#COCO-1064).
+    const conflictsDownEvents = handleConflictsInput(state, inputValue, key, context, 'move')
+    if (conflictsDownEvents) {
+      return conflictsDownEvents
     }
 
     return [
@@ -3550,9 +3518,11 @@ export function getLogInkInputEvents(
   }
 
   // Enter on a conflict file opens the worktree diff for that file so
-  // the user can inspect the conflict markers in context.
-  if (key.return && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-open-diff', payload: context.conflictSelectedPath }]
+  // the user can inspect the conflict markers in context. Extracted to
+  // `surfaces/conflicts/input.ts` (#COCO-1064).
+  const conflictsEnterEvents = handleConflictsInput(state, inputValue, key, context, 'enter')
+  if (conflictsEnterEvents) {
+    return conflictsEnterEvents
   }
 
   // Enter on a branch row checks the branch out. Non-destructive workflow
@@ -4018,30 +3988,11 @@ export function getLogInkInputEvents(
   }
 
   // --- Conflicts view per-row handlers ---
-  // `o` opens the conflicted file in $EDITOR for manual resolution.
-  if (inputValue === 'o' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'openFileInEditor', path: context.conflictSelectedPath }]
-  }
-  // `s` stages the conflicted file (marks it resolved).
-  if (inputValue === 's' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-stage', payload: context.conflictSelectedPath }]
-  }
-  // `u` resolves by keeping theirs (incoming changes).
-  if (inputValue === 'u' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-theirs', payload: context.conflictSelectedPath }]
-  }
-  // `U` resolves by keeping ours (current branch).
-  if (inputValue === 'U' && state.activeView === 'conflicts' && context.conflictFileCount && context.conflictSelectedPath) {
-    return [{ type: 'runWorkflowAction', id: 'resolve-conflict-ours', payload: context.conflictSelectedPath }]
-  }
-  // `C` continues the in-progress operation (available when no conflicts remain).
-  if (inputValue === 'C' && state.activeView === 'conflicts' && context.conflictFileCount === 0) {
-    return [{ type: 'runWorkflowAction', id: 'continue-operation' }]
-  }
-  // Always intercept `C` on the conflicts view to prevent fallthrough to
-  // the global `C` (Create PR) binding when conflicts remain.
-  if (inputValue === 'C' && state.activeView === 'conflicts') {
-    return [action({ type: 'setStatus', value: 'Resolve all conflicts before continuing', kind: 'warning' })]
+  // `o`/`s`/`u`/`U`/`C` row actions, extracted to
+  // `surfaces/conflicts/input.ts` (#COCO-1064).
+  const conflictsRowActionEvents = handleConflictsInput(state, inputValue, key, context, 'row-action')
+  if (conflictsRowActionEvents) {
+    return conflictsRowActionEvents
   }
   // Global `C` — create a pull request from the current branch. The
   // runtime callback handles pre-flight (current branch resolution,
