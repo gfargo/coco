@@ -41,7 +41,7 @@ export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
  */
 export async function executeChainWithSchema<T>(
   schema: z.ZodSchema<T>,
-  llm: ReturnType<typeof getLlm>,
+  llm: Awaited<ReturnType<typeof getLlm>>,
   prompt: PromptTemplate,
   variables: Record<string, unknown>,
   options: ExecuteChainWithSchemaOptions<T> = {}

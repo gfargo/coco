@@ -11,32 +11,11 @@
  * mutations, all gated through the y-confirm path.
  */
 
-import { defaultGhRunner, resolveGhActionError, type GhRunner } from './githubCli'
+import { defaultGhRunner, runGhAction, type GhRunner } from './githubCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
+import type { ForgeActionResult } from './pullRequestActions'
 
-export type IssueActionResult = {
-  ok: boolean
-  message: string
-  /** Bounded extra lines from a compacted gh error, when present. */
-  details?: string[]
-}
-
-async function runGhAction(
-  runner: GhRunner,
-  args: string[],
-  successMessage: (output: string) => IssueActionResult
-): Promise<IssueActionResult> {
-  try {
-    return successMessage(await runner(args))
-  } catch (error) {
-    const { message, details } = await resolveGhActionError(error, runner)
-    return {
-      ok: false,
-      message,
-      ...(details && details.length ? { details } : {}),
-    }
-  }
-}
+export type IssueActionResult = ForgeActionResult
 
 export function commentIssue(
   issueNumber: number,

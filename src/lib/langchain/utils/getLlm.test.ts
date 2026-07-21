@@ -16,8 +16,8 @@ function makeAnthropicConfig(service: Record<string, unknown> = {}): Config {
 }
 
 describe('getLlm — Anthropic field forwarding', () => {
-  it('forwards temperature and maxTokens from service.fields', () => {
-    const llm = getLlm(
+  it('forwards temperature and maxTokens from service.fields', async () => {
+    const llm = await getLlm(
       'anthropic',
       'claude-sonnet-4-6' as LLMModel,
       makeAnthropicConfig({ fields: { temperature: 0.7, maxTokens: 1234 } })
@@ -29,8 +29,8 @@ describe('getLlm — Anthropic field forwarding', () => {
     expect(anthropic.maxTokens).toBe(1234)
   })
 
-  it('forwards a custom baseURL as the Anthropic API URL', () => {
-    const llm = getLlm(
+  it('forwards a custom baseURL as the Anthropic API URL', async () => {
+    const llm = await getLlm(
       'anthropic',
       'claude-sonnet-4-6' as LLMModel,
       makeAnthropicConfig({ baseURL: 'https://proxy.example.com' })
@@ -40,8 +40,8 @@ describe('getLlm — Anthropic field forwarding', () => {
     expect(anthropic.apiUrl).toBe('https://proxy.example.com')
   })
 
-  it('applies the base service temperature when no field override is present', () => {
-    const llm = getLlm(
+  it('applies the base service temperature when no field override is present', async () => {
+    const llm = await getLlm(
       'anthropic',
       'claude-sonnet-4-6' as LLMModel,
       makeAnthropicConfig({ temperature: 0.4 })

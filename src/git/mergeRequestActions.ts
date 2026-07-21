@@ -1,4 +1,4 @@
-import { defaultGlabRunner, resolveGlabActionError, type GlabRunner } from './glabCli'
+import { defaultGlabRunner, resolveGlabActionError, runGlabAction, type GlabRunner } from './glabCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { PullRequestActionResult } from './pullRequestActions'
 import { parsePullRequestDiffLines, type PullRequestDiffResult } from './pullRequestDiffData'
@@ -24,20 +24,6 @@ function parseCreatedMergeRequestUrl(output: string): string | undefined {
     .split('\n')
     .map((line) => line.trim())
     .find((line) => line.startsWith('https://'))
-}
-
-async function runGlabAction(
-  runner: GlabRunner,
-  args: string[],
-  onSuccess: (output: string) => PullRequestActionResult,
-  hostname?: string
-): Promise<PullRequestActionResult> {
-  try {
-    return onSuccess(await runner(args))
-  } catch (error) {
-    const { message, details } = await resolveGlabActionError(error, runner, hostname)
-    return { ok: false, message, ...(details && details.length ? { details } : {}) }
-  }
 }
 
 export function buildCreateMergeRequestArgs(input: CreateMergeRequestInput): string[] {
