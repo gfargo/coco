@@ -106,6 +106,8 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
           gitlabPath: repoPath,
           gitlabHost: overview.repository.host,
           bitbucketPath: repoPath,
+          giteaPath: repoPath,
+          giteaHost: overview.repository.host,
         })
       })()
     : undefined

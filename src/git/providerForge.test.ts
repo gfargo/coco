@@ -1,6 +1,8 @@
 import { SimpleGit } from 'simple-git'
 import { detectProvider, getProviderOverview, setForgeHostOverrides } from './providerData'
 import { getMergeRequestOverview } from './gitlabListData'
+import { getGiteaPullRequestOverview } from './giteaListData'
+import type { GiteaRunner } from './giteaCli'
 
 describe('detectProvider + forgeHosts overrides (#0.70)', () => {
   afterEach(() => setForgeHostOverrides(undefined))
@@ -13,12 +15,25 @@ describe('detectProvider + forgeHosts overrides (#0.70)', () => {
     expect(detectProvider('git.acme.com')).toBe('unsupported') // vanity host
   })
 
+  it('detects codeberg.org and self-hosted gitea/forgejo hosts', () => {
+    expect(detectProvider('codeberg.org')).toBe('gitea')
+    expect(detectProvider('gitea.acme.com')).toBe('gitea')
+    expect(detectProvider('forgejo.acme.com')).toBe('gitea')
+    expect(detectProvider('my.codeberg.mirror.com')).toBe('gitea')
+  })
+
   it('honors config overrides (case-insensitive) and clears them', () => {
     setForgeHostOverrides({ 'git.acme.com': 'gitlab', 'Code.Internal': 'github' })
     expect(detectProvider('git.acme.com')).toBe('gitlab')
     expect(detectProvider('CODE.internal')).toBe('github')
     setForgeHostOverrides(undefined)
     expect(detectProvider('git.acme.com')).toBe('unsupported')
+  })
+
+  it('honors a gitea override for a vanity host', () => {
+    setForgeHostOverrides({ 'git.acme.com': 'gitea' })
+    expect(detectProvider('git.acme.com')).toBe('gitea')
+    setForgeHostOverrides(undefined)
   })
 })
 
@@ -177,5 +192,91 @@ describe('getMergeRequestOverview (#0.70)', () => {
     const overview = await getMergeRequestOverview(gitlabGit(), glab)
     expect(overview.currentPullRequest).toBeUndefined()
     expect(overview.message).toContain('No merge request found')
+  })
+})
+
+function giteaGit(currentBranch = 'feature/x'): SimpleGit {
+  return {
+    getRemotes: async () => [{ name: 'origin', refs: { fetch: 'git@codeberg.org:owner/repo.git' } }],
+    raw: async (args: string[]) => {
+      if (args[0] === 'branch') return `${currentBranch}\n`
+      throw new Error('no symbolic-ref / rev-parse in test')
+    },
+  } as unknown as SimpleGit
+}
+
+describe('getProviderOverview — Gitea/Codeberg branch (#826)', () => {
+  afterEach(() => {
+    delete process.env.GITEA_TOKEN
+  })
+
+  it('uses the Gitea REST API for auth, default branch, and current PR', async () => {
+    process.env.GITEA_TOKEN = 'test-token'
+    const giteaRunnerFactory = (): GiteaRunner => async (endpoint: string) => {
+      if (endpoint === 'user') return '{}'
+      if (endpoint === 'repos/owner/repo') return JSON.stringify({ default_branch: 'main' })
+      return JSON.stringify([{ number: 9, title: 'PR', state: 'open', merged: false, head: { ref: 'feature/x' } }])
+    }
+    const gh = async (): Promise<string> => {
+      throw new Error('gh must not be called for a gitea repo')
+    }
+    const overview = await getProviderOverview(giteaGit(), gh, undefined, undefined, giteaRunnerFactory)
+    expect(overview.repository.provider).toBe('gitea')
+    expect(overview.authenticated).toBe(true)
+    expect(overview.repository.defaultBranch).toBe('main')
+    expect(overview.currentPullRequest).toMatchObject({ number: 9, state: 'OPEN' })
+  })
+
+  it('reports not-authenticated when GITEA_TOKEN is unset', async () => {
+    delete process.env.GITEA_TOKEN
+    const overview = await getProviderOverview(giteaGit(), async () => '')
+    expect(overview.repository.provider).toBe('gitea')
+    expect(overview.authenticated).toBe(false)
+    expect(overview.message).toContain('GITEA_TOKEN')
+  })
+})
+
+describe('getGiteaPullRequestOverview (#826)', () => {
+  beforeEach(() => {
+    process.env.GITEA_TOKEN = 'test-token'
+  })
+  afterEach(() => {
+    delete process.env.GITEA_TOKEN
+  })
+
+  it('maps the current-branch PR to the shared overview shape', async () => {
+    const factory = (): GiteaRunner => async (endpoint: string) => {
+      if (endpoint === 'user') return '{}'
+      return JSON.stringify([
+        {
+          number: 9,
+          title: 'PR',
+          html_url: 'https://codeberg.org/owner/repo/pulls/9',
+          state: 'open',
+          draft: true,
+          head: { ref: 'feature/x' },
+          base: { ref: 'main' },
+          body: 'body text',
+          user: { login: 'alice' },
+        },
+      ])
+    }
+    const overview = await getGiteaPullRequestOverview(giteaGit(), factory)
+    expect(overview.authenticated).toBe(true)
+    expect(overview.currentPullRequest).toMatchObject({
+      number: 9,
+      isDraft: true,
+      headRefName: 'feature/x',
+      baseRefName: 'main',
+      body: 'body text',
+      author: 'alice',
+    })
+  })
+
+  it('reports no PR when none is open for the branch', async () => {
+    const factory = (): GiteaRunner => async (endpoint: string) => (endpoint === 'user' ? '{}' : '[]')
+    const overview = await getGiteaPullRequestOverview(giteaGit(), factory)
+    expect(overview.currentPullRequest).toBeUndefined()
+    expect(overview.message).toContain('No pull request found')
   })
 })
