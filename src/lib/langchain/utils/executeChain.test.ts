@@ -44,10 +44,10 @@ function silentLogger(): Logger {
 /**
  * See executeChainStreaming.test.ts for why this cast exists: FakeListChatModel
  * implements the same Runnable surface the helper exercises but isn't a
- * member of the narrow `ReturnType<typeof getLlm>` union.
+ * member of the narrow `Awaited<ReturnType<typeof getLlm>>` union.
  */
-function asLlm(model: FakeListChatModel): ReturnType<typeof getLlm> {
-  return model as unknown as ReturnType<typeof getLlm>
+function asLlm(model: FakeListChatModel): Awaited<ReturnType<typeof getLlm>> {
+  return model as unknown as Awaited<ReturnType<typeof getLlm>>
 }
 
 describe('executeChain', () => {

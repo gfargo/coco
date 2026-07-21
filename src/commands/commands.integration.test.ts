@@ -148,7 +148,7 @@ describe('command integration with temp git repos', () => {
       return true
     })
 
-    mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
+    mockGetLlm.mockResolvedValue({} as unknown as Awaited<ReturnType<typeof getLlm>>)
     mockGetTokenCounterForProvider.mockResolvedValue((text: string) => Math.ceil(text.length / 4))
     mockExecuteChain.mockResolvedValue({
       title: 'Generated changelog',

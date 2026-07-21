@@ -123,7 +123,7 @@ describe('changelog command', () => {
       provider: 'openai',
       model: 'gpt-4o',
     })
-    mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
+    mockGetLlm.mockResolvedValue({} as unknown as Awaited<ReturnType<typeof getLlm>>)
     mockGetTokenCounterForProvider.mockResolvedValue((text: string) => text.length)
     mockGetCommitLogCurrentBranch.mockResolvedValue([
       {
