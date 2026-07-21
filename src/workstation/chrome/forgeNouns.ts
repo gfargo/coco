@@ -19,6 +19,12 @@ export type ForgeNouns = {
   cli: string
   /** Human display name of the forge ("GitHub" / "GitLab"). */
   name: string
+  /**
+   * Override for forges with no CLI binary to install (Gitea/Forgejo
+   * authenticate via a `GITEA_TOKEN` env var) — see
+   * `formatLogInkForgeUnauthenticated`'s `authHint`.
+   */
+  authHint?: string
 }
 
 export function forgeNouns(provider: GitProviderType | undefined): ForgeNouns {
@@ -42,6 +48,19 @@ export function forgeNouns(provider: GitProviderType | undefined): ForgeNouns {
       pluralLower: 'pull requests',
       cli: 'bb',
       name: 'Bitbucket',
+    }
+  }
+  if (provider === 'gitea') {
+    return {
+      abbrev: 'PR',
+      singular: 'Pull request',
+      plural: 'Pull requests',
+      singularLower: 'pull request',
+      pluralLower: 'pull requests',
+      // No CLI dependency — Gitea/Forgejo auth is a GITEA_TOKEN env var, not a binary.
+      cli: 'gitea',
+      name: 'Gitea',
+      authHint: 'Set the GITEA_TOKEN environment variable to enable triage.',
     }
   }
   return {

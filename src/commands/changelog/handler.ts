@@ -123,8 +123,8 @@ export async function generateChangelogResult(
     logger.setConfig({ silent: true })
   }
 
-  const llm = getLlm(provider, model as LLMModel, { ...config, service: changelogService })
-  const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
+  const llm = await getLlm(provider, model as LLMModel, { ...config, service: changelogService })
+  const summaryLlm = await getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
   const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
   let structured: ChangelogResponse | undefined

@@ -154,7 +154,7 @@ describe('buildIssueEndpoint (1238)', () => {
     expect(decodeURIComponent(e)).toContain('title ~ "login bug"')
   })
 
-  it('does not add assignee filter for @me (handled client-side)', () => {
+  it('does not add a raw assignee.nickname clause for a literal @me (resolved to a nickname before this is called)', () => {
     const e = buildIssueEndpoint('ws/repo', { assignee: '@me' })
     expect(e).not.toContain('assignee.nickname')
   })
@@ -429,21 +429,60 @@ describe('getBitbucketIssueList (1238)', () => {
     expect(overview.message).toContain('BITBUCKET_ACCESS_TOKEN')
   }))
 
-  it('resolves assignee=@me to the authenticated nickname and filters by it', withCredentials(async () => {
-    const payload = JSON.stringify({
-      values: [
-        makeIssue({ id: 1, assignee: { nickname: 'erin' } }),
-        makeIssue({ id: 2, assignee: { nickname: 'frank' } }),
-      ],
-      pagelen: 50,
-      page: 1,
-    })
+  it('resolves @me assignee to the current user nickname and scopes the query server-side', withCredentials(async () => {
+    const payload = JSON.stringify({ values: [makeIssue()], pagelen: 50, page: 1 })
+    const seenEndpoints: string[] = []
     const runner = async (endpoint: string) => {
+      seenEndpoints.push(endpoint)
       if (endpoint === 'user') return JSON.stringify({ nickname: 'erin' })
       return payload
     }
     const overview = await getBitbucketIssueList(fakeGit(), { assignee: '@me' }, runner)
+    expect(overview).toMatchObject({ available: true, authenticated: true })
     expect(overview.issues).toHaveLength(1)
-    expect(overview.issues?.[0]?.number).toBe(1)
+    const issuesEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
+    expect(issuesEndpoint).toBeDefined()
+    expect(decodeURIComponent(issuesEndpoint as string)).toContain('assignee.nickname = "erin"')
+  }))
+
+  it('resolves @me author to the current user nickname via reporter.nickname', withCredentials(async () => {
+    const payload = JSON.stringify({ values: [makeIssue()], pagelen: 50, page: 1 })
+    const seenEndpoints: string[] = []
+    const runner = async (endpoint: string) => {
+      seenEndpoints.push(endpoint)
+      if (endpoint === 'user') return JSON.stringify({ nickname: 'erin' })
+      return payload
+    }
+    const overview = await getBitbucketIssueList(fakeGit(), { author: '@me' }, runner)
+    expect(overview).toMatchObject({ available: true, authenticated: true })
+    const issuesEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
+    expect(issuesEndpoint).toBeDefined()
+    expect(decodeURIComponent(issuesEndpoint as string)).toContain('reporter.nickname = "erin"')
+  }))
+
+  it('surfaces an error when @me cannot be resolved, matching the PR-list path', withCredentials(async () => {
+    const runner = async (endpoint: string) => {
+      if (endpoint === 'user') return '{}'
+      return JSON.stringify({ values: [makeIssue()], pagelen: 50, page: 1 })
+    }
+    const overview = await getBitbucketIssueList(fakeGit(), { assignee: '@me' }, runner)
+    expect(overview.message).toContain('Could not resolve "@me"')
+    expect(overview.issues).toBeUndefined()
+  }))
+
+  it('does not resolve @me for a named assignee (only the auth probe hits /user)', withCredentials(async () => {
+    const payload = JSON.stringify({ values: [makeIssue()], pagelen: 50, page: 1 })
+    const seenEndpoints: string[] = []
+    const runner = async (endpoint: string) => {
+      seenEndpoints.push(endpoint)
+      if (endpoint === 'user') return JSON.stringify({ nickname: 'erin' })
+      return payload
+    }
+    const overview = await getBitbucketIssueList(fakeGit(), { assignee: 'alice' }, runner)
+    expect(overview.issues).toHaveLength(1)
+    const issuesEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
+    expect(decodeURIComponent(issuesEndpoint as string)).toContain('assignee.nickname = "alice"')
+    // 'user' is hit once for the loadForgeList auth probe, never again for a named (non-@me) filter.
+    expect(seenEndpoints.filter((e) => e === 'user')).toHaveLength(1)
   }))
 })

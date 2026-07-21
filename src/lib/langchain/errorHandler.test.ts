@@ -3,6 +3,7 @@ import {
   LangChainNetworkError,
   LangChainExecutionError,
   LangChainAuthenticationError,
+  LangChainQuotaExceededError,
   LangChainRateLimitError,
 } from './errors'
 
@@ -231,6 +232,81 @@ describe('handleLangChainError', () => {
       } catch (e) {
         expect(e).toBeInstanceOf(LangChainRateLimitError)
         expect((e as LangChainRateLimitError).provider).toBe('anthropic')
+      }
+    })
+
+    it('does not classify a plain 429 as quota exhaustion', () => {
+      const error = { status: 429, message: 'Rate limit reached for gpt-4o' }
+
+      try {
+        handleLangChainError(error, 'test context', { provider: 'openai' })
+      } catch (e) {
+        expect(e).toBeInstanceOf(LangChainRateLimitError)
+        expect(e).not.toBeInstanceOf(LangChainQuotaExceededError)
+      }
+    })
+  })
+
+  // Providers reuse HTTP 429 for `insufficient_quota` (billing/budget
+  // exhausted). Classified separately from rate limits because the
+  // rate-limit remedy ("wait and retry") can never fix a dead balance.
+  describe('quota exhaustion on 429s (insufficient_quota)', () => {
+    it('throws LangChainQuotaExceededError for a 429 with an insufficient_quota code', () => {
+      const error = { status: 429, code: 'insufficient_quota', message: 'You exceeded your current quota' }
+
+      expect(() => {
+        handleLangChainError(error, 'test context', { provider: 'openai' })
+      }).toThrow(LangChainQuotaExceededError)
+    })
+
+    it('throws LangChainQuotaExceededError for a nested error.type of insufficient_quota', () => {
+      const error = {
+        status: 429,
+        message: 'You exceeded your current quota, please check your plan and billing details.',
+        error: { type: 'insufficient_quota', code: 'insufficient_quota' },
+      }
+
+      expect(() => {
+        handleLangChainError(error, 'test context', { provider: 'openai' })
+      }).toThrow(LangChainQuotaExceededError)
+    })
+
+    it('detects quota exhaustion from the message when no code is present', () => {
+      const error = { status: 429, message: 'You exceeded your current quota, please check your plan and billing details.' }
+
+      expect(() => {
+        handleLangChainError(error, 'test context')
+      }).toThrow(LangChainQuotaExceededError)
+    })
+
+    it("detects Anthropic's low-credit-balance message", () => {
+      const error = { status: 400, message: 'Your credit balance is too low to access the Anthropic API.' }
+
+      expect(() => {
+        handleLangChainError(error, 'test context', { provider: 'anthropic' })
+      }).toThrow(LangChainQuotaExceededError)
+    })
+
+    it('remains an instanceof LangChainRateLimitError for existing call sites', () => {
+      const error = { status: 429, code: 'insufficient_quota', message: 'You exceeded your current quota' }
+
+      try {
+        handleLangChainError(error, 'test context', { provider: 'openai' })
+      } catch (e) {
+        expect(e).toBeInstanceOf(LangChainRateLimitError)
+      }
+    })
+
+    it('carries the provider and original message through to the thrown error', () => {
+      const error = { status: 429, code: 'insufficient_quota', message: 'You exceeded your current quota' }
+
+      try {
+        handleLangChainError(error, 'test context', { provider: 'openai' })
+      } catch (e) {
+        expect(e).toBeInstanceOf(LangChainQuotaExceededError)
+        const quotaError = e as LangChainQuotaExceededError
+        expect(quotaError.provider).toBe('openai')
+        expect(quotaError.message).toBe('You exceeded your current quota')
       }
     })
   })

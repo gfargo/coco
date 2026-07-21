@@ -23,8 +23,10 @@ import {
 } from './bitbucketCli'
 import { findOpenBitbucketPullRequestForBranch } from './bitbucketListData'
 import { findOpenMergeRequestForBranch } from './gitlabListData'
+import { describeGiteaStatus, getGiteaStatus, makeGiteaRunner, type GiteaRunner } from './giteaCli'
+import { findOpenGiteaPullRequestForBranch } from './giteaListData'
 
-export type GitProviderType = 'github' | 'gitlab' | 'bitbucket' | 'unsupported'
+export type GitProviderType = 'github' | 'gitlab' | 'bitbucket' | 'gitea' | 'unsupported'
 
 export type ProviderRepository = {
   provider: GitProviderType
@@ -92,10 +94,10 @@ export function parseGitHubRemoteUrl(
  * command executor. Lets self-hosted installs on vanity hostnames (no `gitlab`
  * / `github` in the name) be detected explicitly.
  */
-let forgeHostOverrides: Record<string, 'github' | 'gitlab' | 'bitbucket'> = {}
+let forgeHostOverrides: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'gitea'> = {}
 
 export function setForgeHostOverrides(
-  overrides: Record<string, 'github' | 'gitlab' | 'bitbucket'> | undefined
+  overrides: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'gitea'> | undefined
 ): void {
   forgeHostOverrides = {}
   if (overrides) {
@@ -111,8 +113,10 @@ export function detectProvider(host: string): GitProviderType {
   if (h === 'github.com') return 'github'
   if (h === 'gitlab.com') return 'gitlab'
   if (h === 'bitbucket.org' || h.includes('bitbucket')) return 'bitbucket'
+  if (h === 'codeberg.org') return 'gitea'
   if (h.includes('gitlab')) return 'gitlab'
   if (h.includes('github')) return 'github'
+  if (h.includes('gitea') || h.includes('forgejo') || h.includes('codeberg')) return 'gitea'
   return 'unsupported'
 }
 
@@ -198,6 +202,7 @@ export function buildProviderUrl(
 
   const base = repository.webUrl
   const isBitbucket = repository.provider === 'bitbucket'
+  const isGitea = repository.provider === 'gitea'
   // GitLab namespaces every sub-path under `/-/`; GitHub and Bitbucket do not.
   const seg = repository.provider === 'gitlab' ? '/-' : ''
 
@@ -206,9 +211,10 @@ export function buildProviderUrl(
   }
 
   if (target.type === 'branch') {
-    return isBitbucket
-      ? `${base}/branch/${encodeURIComponent(target.branch)}`
-      : `${base}${seg}/tree/${encodeURIComponent(target.branch)}`
+    if (isBitbucket) return `${base}/branch/${encodeURIComponent(target.branch)}`
+    // Gitea/Forgejo browse a branch under `/src/branch/`, not GitHub's `/tree/`.
+    if (isGitea) return `${base}/src/branch/${encodeURIComponent(target.branch)}`
+    return `${base}${seg}/tree/${encodeURIComponent(target.branch)}`
   }
 
   if (target.type === 'commit') {
@@ -220,6 +226,8 @@ export function buildProviderUrl(
   if (target.type === 'pull-request') {
     if (repository.provider === 'gitlab') return `${base}/-/merge_requests/${target.number}`
     if (isBitbucket) return `${base}/pull-requests/${target.number}`
+    // Gitea/Forgejo use the plural `/pulls/{n}`, unlike GitHub's singular `/pull/{n}`.
+    if (isGitea) return `${base}/pulls/${target.number}`
     return `${base}/pull/${target.number}`
   }
 
@@ -431,6 +439,70 @@ async function getBitbucketProviderOverview(
   }
 }
 
+/**
+ * Gitea/Forgejo overview via REST API: auth probe, default branch,
+ * current-branch PR. `runnerFactory` builds the host-bound runner (every
+ * Gitea/Forgejo install serves its own API base — see `makeGiteaRunner`).
+ */
+async function getGiteaProviderOverview(
+  repository: ProviderRepository,
+  currentBranch: string | undefined,
+  localDefaultBranch: string | undefined,
+  runnerFactory: (host: string) => GiteaRunner
+): Promise<ProviderOverview> {
+  const runner = runnerFactory(repository.host ?? '')
+  const status = await getGiteaStatus(runner)
+  if (status.kind !== 'ok') {
+    return {
+      repository: { ...repository, defaultBranch: localDefaultBranch },
+      currentBranch,
+      authenticated: false,
+      message: describeGiteaStatus(status),
+    }
+  }
+
+  const path =
+    repository.owner && repository.name ? `${repository.owner}/${repository.name}` : undefined
+
+  async function getDefaultBranchGitea(): Promise<string | undefined> {
+    if (!path) return undefined
+    try {
+      const out = (await runner(`repos/${path}`)).trim()
+      return out ? (JSON.parse(out) as { default_branch?: string }).default_branch : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  async function getCurrentPRGitea(): Promise<ProviderPullRequestStatus | undefined> {
+    if (!path || !currentBranch) return undefined
+    try {
+      const pr = await findOpenGiteaPullRequestForBranch(path, currentBranch, runner)
+      if (pr?.number == null) return undefined
+      return {
+        number: Number(pr.number),
+        title: String(pr.title || ''),
+        state: pr.merged ? 'MERGED' : String(pr.state || '').toUpperCase(),
+        isDraft: Boolean(pr.draft),
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  const [defaultBranch, currentPullRequest] = await Promise.all([
+    getDefaultBranchGitea(),
+    getCurrentPRGitea(),
+  ])
+
+  return {
+    repository: { ...repository, defaultBranch: defaultBranch || localDefaultBranch },
+    currentBranch,
+    currentPullRequest,
+    authenticated: true,
+  }
+}
+
 /** GitLab overview via glab: auth probe, default branch, current-branch MR. */
 async function getGitLabProviderOverview(
   repository: ProviderRepository,
@@ -469,7 +541,8 @@ export async function getProviderOverview(
   git: SimpleGit,
   runner: GhRunner = defaultGhRunner,
   glabRunner: GlabRunner = defaultGlabRunner,
-  bitbucketRunner: BitbucketRunner = defaultBitbucketRunner
+  bitbucketRunner: BitbucketRunner = defaultBitbucketRunner,
+  giteaRunnerFactory: (host: string) => GiteaRunner = makeGiteaRunner
 ): Promise<ProviderOverview> {
   const [resolvedRepository, currentBranchOutput, localDefaultBranch] = await Promise.all([
     getProviderRepositoryForGit(git),
@@ -493,6 +566,10 @@ export async function getProviderOverview(
 
   if (repository.provider === 'bitbucket') {
     return getBitbucketProviderOverview(repository, currentBranch, localDefaultBranch, bitbucketRunner)
+  }
+
+  if (repository.provider === 'gitea') {
+    return getGiteaProviderOverview(repository, currentBranch, localDefaultBranch, giteaRunnerFactory)
   }
 
   if (repository.provider !== 'github') {

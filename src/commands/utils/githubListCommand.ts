@@ -122,6 +122,8 @@ export function createGitHubListHandler<
       gitlabPath: forgePath,
       gitlabHost: repository?.host,
       bitbucketPath: forgePath,
+      giteaPath: forgePath,
+      giteaHost: repository?.host,
     })
 
     if (cacheEnabled && !argv.refresh) {

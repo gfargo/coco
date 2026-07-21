@@ -183,6 +183,58 @@ describe('renderHistoryPanel', () => {
     expect(tree).toBeDefined()
   })
 
+  // Rail-density regressions (screenshot report, 2026-07): stacked mode
+  // rendered nearly every commit as subject line + `·`-only meta line +
+  // graph transition line — three terminal lines of mostly air per commit.
+  describe('stacked-mode density', () => {
+    const collectStrings = (node: unknown, out: string[]): string[] => {
+      if (typeof node === 'string') {
+        out.push(node)
+      } else if (Array.isArray(node)) {
+        node.forEach((child) => collectStrings(child, out))
+      } else if (node && typeof node === 'object' && 'props' in node) {
+        collectStrings((node as { props: { children?: unknown } }).props.children, out)
+      }
+      return out
+    }
+
+    const collectKeys = (node: unknown, out: string[]): string[] => {
+      if (Array.isArray(node)) {
+        node.forEach((child) => collectKeys(child, out))
+      } else if (node && typeof node === 'object' && 'props' in node) {
+        const key = (node as { key?: unknown }).key
+        if (typeof key === 'string') out.push(key)
+        collectKeys((node as { props: { children?: unknown } }).props.children, out)
+      }
+      return out
+    }
+
+    it('falls back to the relative date on line 2 for ref-less rows under bucketing', () => {
+      const tree = render(makeState(), {
+        rowMode: 'stacked',
+        width: 40,
+        dateBucketingEnabled: true,
+      })
+      const strings = collectStrings(tree, [])
+      // bbb2222 / ccc3333 have no refs; with the date suppressed they used
+      // to render a bare `·` placeholder. Now the relative date fills the
+      // line ('2026-05-18' vs now 2026-05-26 → '8d').
+      expect(strings).toContain('8d')
+      expect(strings).not.toContain('·')
+    })
+
+    it('skips per-commit graph transition rows in stacked mode', () => {
+      const single = render(makeState(), { rowMode: 'single', width: 120 })
+      const stacked = render(makeState(), { rowMode: 'stacked', width: 40 })
+      const graphRows = (tree: ReactElement) =>
+        collectKeys(tree, []).filter((key) => key.startsWith('graph-'))
+      // Full-graph single mode keeps its spacer rhythm; stacked mode
+      // drops the dedicated topology line (commits already cost 2 lines).
+      expect(graphRows(single).length).toBeGreaterThan(0)
+      expect(graphRows(stacked).length).toBe(0)
+    })
+  })
+
   it('swaps the commit list for a loader while a remote op is in flight', () => {
     // Collect every string rendered anywhere in the tree.
     const collectText = (node: unknown, out: string[]): string[] => {

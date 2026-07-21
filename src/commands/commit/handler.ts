@@ -77,14 +77,14 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
 
   const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
-  const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
-  const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
+  const llm = await getLlm(provider, model as LLMModel, { ...config, service: commitService })
+  const summaryLlm = await getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
   // The split planner uses a dedicated LLM because its output schema
   // is far stricter than the regular commit-message path (every staged
   // file claimed exactly once, no cross-group duplication, hunk-vs-
   // file mode exclusivity). Weak models fail those constraints often
   // enough that the `cost` preference floors `commitSplit` at mini.
-  const splitLlm = getLlm(provider, splitService.model as LLMModel, { ...config, service: splitService })
+  const splitLlm = await getLlm(provider, splitService.model as LLMModel, { ...config, service: splitService })
 
   const INTERACTIVE = argv.interactive || isInteractive(config)
   if (INTERACTIVE) {

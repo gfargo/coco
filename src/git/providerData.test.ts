@@ -69,13 +69,24 @@ describe('log provider data', () => {
   })
 
   it('falls back for unsupported hosts', () => {
-    expect(getProviderRepository('origin', 'git@codeberg.org:gfargo/coco.git')).toEqual({
+    expect(getProviderRepository('origin', 'git@vanity-host.example:gfargo/coco.git')).toEqual({
       provider: 'unsupported',
+      remote: 'origin',
+      host: 'vanity-host.example',
+      owner: 'gfargo',
+      name: 'coco',
+      message: 'Unsupported remote host "vanity-host.example" for origin.',
+    })
+  })
+
+  it('detects Codeberg (Gitea) remotes', () => {
+    expect(getProviderRepository('origin', 'git@codeberg.org:gfargo/coco.git')).toEqual({
+      provider: 'gitea',
       remote: 'origin',
       host: 'codeberg.org',
       owner: 'gfargo',
       name: 'coco',
-      message: 'Unsupported remote host "codeberg.org" for origin.',
+      webUrl: 'https://codeberg.org/gfargo/coco',
     })
   })
 
