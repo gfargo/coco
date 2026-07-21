@@ -153,8 +153,8 @@ export async function generateCommitDraft({
   }
 
   const tokenizer = await getTokenCounterForProvider(provider, String(model))
-  const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
-  const summaryLlm = getLlm(provider, summaryService.model as LLMModel, {
+  const llm = await getLlm(provider, model as LLMModel, { ...config, service: commitService })
+  const summaryLlm = await getLlm(provider, summaryService.model as LLMModel, {
     ...config,
     service: summaryService,
   })

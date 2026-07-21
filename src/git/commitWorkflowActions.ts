@@ -342,8 +342,8 @@ export async function runCommitSplitPlanWorkflow(
 
   try {
     const tokenizer = await getTokenCounterForProvider(provider, String(model))
-    const llm = getLlm(provider, model as LLMModel, { ...config, service: commitService })
-    const planLlm = getLlm(provider, splitService.model as LLMModel, {
+    const llm = await getLlm(provider, model as LLMModel, { ...config, service: commitService })
+    const planLlm = await getLlm(provider, splitService.model as LLMModel, {
       ...config,
       service: splitService,
     })

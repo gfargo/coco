@@ -56,20 +56,13 @@ what shipped.
 
 ## Hard rules
 
-- **No em-dashes (—).** Use a comma, a period, a colon, or parentheses. This is a
-  consistent house style; em-dashes read as AI-generated.
-- **No marketing language.** Ban "seamless", "effortless", "powerful", "blazing-fast",
-  "game-changing", "revolutionary", "delight", "unlock", "supercharge". If a phrase
-  could appear on a SaaS landing page, cut it.
-- **No hype framing.** Don't open bullets with "We've added", "Now you can", "Introducing".
-  Start with the thing itself.
-- **Don't paste commit messages or PR titles verbatim.** Notes are written for readers,
-  not generated from `git log`. (`auto-changelog` produces the raw PR list in
-  `CHANGELOG.md` — that's separate from these curated notes.)
-- **Don't list every dependency bump.** Roll routine `chore(deps)` bumps into a single
-  closing line ("Routine dependency and toolchain bumps") if mentioned at all.
-- **Keep tense present.** "renders", "watches", "surfaces" — describe what the software
-  does now, not what was done to it.
+- **No hard line wrapping.** Do not wrap prose at 80 characters (or any fixed column). Each paragraph, bullet, or sentence should be a single long line. GitHub/rendered markdown handles wrapping naturally; hard breaks at arbitrary column limits produce ugly mid-sentence line breaks when pasted into GitHub Releases or rendered at different widths.
+- **No em-dashes.** Use a comma, a period, a colon, or parentheses. This is a consistent house style; em-dashes read as AI-generated.
+- **No marketing language.** Ban "seamless", "effortless", "powerful", "blazing-fast", "game-changing", "revolutionary", "delight", "unlock", "supercharge". If a phrase could appear on a SaaS landing page, cut it.
+- **No hype framing.** Don't open bullets with "We've added", "Now you can", "Introducing". Start with the thing itself.
+- **Don't paste commit messages or PR titles verbatim.** Notes are written for readers, not generated from `git log`. (`auto-changelog` produces the raw PR list in `CHANGELOG.md`; that's separate from these curated notes.)
+- **Don't list every dependency bump.** Roll routine `chore(deps)` bumps into a single closing line ("Routine dependency and toolchain bumps") if mentioned at all.
+- **Keep tense present.** "renders", "watches", "surfaces": describe what the software does now, not what was done to it.
 
 ## Anti-patterns → fixes
 

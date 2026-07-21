@@ -1,4 +1,4 @@
-import { handleBisectInput } from './input'
+import { getBisectFooterHints, handleBisectInput } from './input'
 import { createLogInkState } from '../../runtime/inkViewModel'
 import type { GitLogRow } from '../../../git/logData'
 
@@ -113,5 +113,25 @@ describe('handleBisectInput', () => {
 
   it('returns null for an unmatched key', () => {
     expect(handleBisectInput(bisectState(), 'q', {}, { bisectActive: true })).toBeNull()
+  })
+})
+
+describe('getBisectFooterHints', () => {
+  const globalHints = ['g jump', '< back', '? help', ': cmds', 'q quit']
+
+  it('surfaces the start wizard when no session is active', () => {
+    expect(getBisectFooterHints({ filterMode: false, focus: 'commits', showHelp: false }, globalHints)).toEqual({
+      contextual: ['s start', 'esc back'],
+      global: globalHints,
+    })
+  })
+
+  it('surfaces the mark/skip/run/reset set while a session is active', () => {
+    expect(
+      getBisectFooterHints({ bisectActive: true, filterMode: false, focus: 'commits', showHelp: false }, globalHints)
+    ).toEqual({
+      contextual: ['y good', 'b bad', 's skip', 'R run', 'x reset', 'esc back'],
+      global: globalHints,
+    })
   })
 })

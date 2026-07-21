@@ -83,7 +83,7 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
     headerRight = `${forge.cli} not authenticated`
     bodyLines = [
       h(Text, { key: 'issues-unauth', dimColor: true },
-        formatLogInkForgeUnauthenticated({ resource: 'Issues', cli: forge.cli, forge: forge.name })),
+        formatLogInkForgeUnauthenticated({ resource: 'Issues', cli: forge.cli, forge: forge.name, authHint: forge.authHint })),
     ]
   } else if (overview.message && !overview.issues) {
     headerRight = 'error'

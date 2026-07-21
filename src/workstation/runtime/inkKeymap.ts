@@ -1,5 +1,6 @@
 import { LogInkFocus, LogInkView } from './inkViewModel'
 import type { LogInkVisiblePane } from '../chrome/layout'
+import { getBisectFooterHints } from '../surfaces/bisect/input'
 import {
     LogInkWorkflowAction,
     LogInkWorkflowActionKind,
@@ -1509,226 +1510,220 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     }
   }
 
-  if (options.activeView === 'status') {
+  const view = options.activeView ?? 'history'
+  const hints = LOG_INK_FOOTER_HINT_REGISTRY[view]
+  return hints ? hints(options) : historyHints(options)
+}
+
+function statusHints(): LogInkFooterHints {
+  return {
+    contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'e/c compose'],
+    global: NORMAL_GLOBAL_HINTS,
+  }
+}
+
+function diffHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
+  // Surface what `d` will switch *to* — labels the next mode rather
+  // than the current one so the hint reads as a verb. The split-mode
+  // hint is only shown for the read-only diff sources (commit/stash);
+  // the worktree diff stays unified-only for now.
+  const splitToggleHint = options.diffViewMode === 'split' ? 'd unified' : 'd split'
+  if (options.diffSource === 'stash') {
     return {
-      contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'e/c compose'],
+      contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
-
-  if (options.activeView === 'diff') {
-    // Surface what `d` will switch *to* — labels the next mode rather
-    // than the current one so the hint reads as a verb. The split-mode
-    // hint is only shown for the read-only diff sources (commit/stash);
-    // the worktree diff stays unified-only for now.
-    const splitToggleHint = options.diffViewMode === 'split' ? 'd unified' : 'd split'
-    if (options.diffSource === 'stash') {
-      return {
-        contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'esc back'],
-        global: NORMAL_GLOBAL_HINTS,
-      }
-    }
-    if (options.diffSource === 'commit') {
-      // Commit-diff explore: read-only diff, but `c` cherry-picks the
-      // cursored file from the commit into the worktree, and `H`
-      // (or `gH` for index) applies just the cursored hunk. `j/k`
-      // line-scroll the diff body; `[`/`]` jump between hunks — the
-      // footer labels match the actual handlers (commit diff has no
-      // per-file `[/]` jump; that's the stash diff).
-      return {
-        contextual: ['j/k lines', '[/] hunk', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'esc back'],
-        global: NORMAL_GLOBAL_HINTS,
-      }
-    }
-    if (options.diffSource === 'compare') {
-      // Compare-two-refs (#779): read-only diff with no per-file
-      // cherry-pick or hunk apply (those don't make sense across
-      // arbitrary refs). Just scroll + back out.
-      return {
-        contextual: ['j/k lines', splitToggleHint, 'esc back'],
-        global: NORMAL_GLOBAL_HINTS,
-      }
-    }
-    if (options.diffSource === 'pr') {
-      // PR-triage drill-in (#1363): read-only like compare (the files
-      // live on the PR's head branch, so no cherry-pick / hunk apply /
-      // open-in-editor), but with the stash diff's per-file `[/]` jump.
-      // `C` checks the PR's branch out locally — the "review this
-      // properly" follow-up to reading the patch.
-      return {
-        contextual: ['j/k lines', '[/] file', 'C checkout', splitToggleHint, 'esc back'],
-        global: NORMAL_GLOBAL_HINTS,
-      }
-    }
-    // Worktree (staging) diff. Consistent with the commit/stash diffs
-    // (#1185): j/k scroll lines, [/] jump between hunks. space stages /
-    // unstages the hunk under the viewport, a stages the whole file, z
-    // discards the current hunk.
+  if (options.diffSource === 'commit') {
+    // Commit-diff explore: read-only diff, but `c` cherry-picks the
+    // cursored file from the commit into the worktree, and `H`
+    // (or `gH` for index) applies just the cursored hunk. `j/k`
+    // line-scroll the diff body; `[`/`]` jump between hunks — the
+    // footer labels match the actual handlers (commit diff has no
+    // per-file `[/]` jump; that's the stash diff).
     return {
-      contextual: ['j/k lines', '[/] hunk', 'v select', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
+      contextual: ['j/k lines', '[/] hunk', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
-
-  if (options.activeView === 'compose') {
+  if (options.diffSource === 'compare') {
+    // Compare-two-refs (#779): read-only diff with no per-file
+    // cherry-pick or hunk apply (those don't make sense across
+    // arbitrary refs). Just scroll + back out.
     return {
-      contextual: ['e edit', 'c commit', 'a amend', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
+      contextual: ['j/k lines', splitToggleHint, 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
-
-  if (options.activeView === 'branches') {
-    if (options.compareBaseSet) {
-      return {
-        contextual: ['↑/↓ branches', 'enter compare', 'm clear', 'esc back'],
-        global: NORMAL_GLOBAL_HINTS,
-      }
-    }
+  if (options.diffSource === 'pr') {
+    // PR-triage drill-in (#1363): read-only like compare (the files
+    // live on the PR's head branch, so no cherry-pick / hunk apply /
+    // open-in-editor), but with the stash diff's per-file `[/]` jump.
+    // `C` checks the PR's branch out locally — the "review this
+    // properly" follow-up to reading the patch.
     return {
-      // `x/v mark` covers both multi-select primitives (#1361): x
-      // toggles a mark, v anchors a range; D then deletes the batch.
-      contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'x/v mark', 'D delete', 'r rebase', 'm compare', 's sort', 'y yank'],
+      contextual: ['j/k lines', '[/] file', 'C checkout', splitToggleHint, 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
+  // Worktree (staging) diff. Consistent with the commit/stash diffs
+  // (#1185): j/k scroll lines, [/] jump between hunks. space stages /
+  // unstages the hunk under the viewport, a stages the whole file, z
+  // discards the current hunk.
+  return {
+    contextual: ['j/k lines', '[/] hunk', 'v select', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
+  }
+}
 
-  if (options.activeView === 'tags') {
-    if (options.compareBaseSet) {
-      return {
-        contextual: ['↑/↓ tags', 'enter compare', 'm clear', 'esc back'],
-        global: NORMAL_GLOBAL_HINTS,
-      }
-    }
+function composeHints(): LogInkFooterHints {
+  return {
+    contextual: ['e edit', 'c commit', 'a amend', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
+  }
+}
+
+function branchesHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
+  if (options.compareBaseSet) {
     return {
-      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 'm compare', 's sort', 'y yank'],
+      contextual: ['↑/↓ branches', 'enter compare', 'm clear', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
+  return {
+    // `x/v mark` covers both multi-select primitives (#1361): x
+    // toggles a mark, v anchors a range; D then deletes the batch.
+    contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'x/v mark', 'D delete', 'r rebase', 'm compare', 's sort', 'y yank'],
+    global: NORMAL_GLOBAL_HINTS,
+  }
+}
 
-  if (options.activeView === 'stash') {
+function tagsHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
+  if (options.compareBaseSet) {
     return {
-      // #1361 — x/v mark covers both multi-select primitives, same as
-      // the branches view.
-      contextual: ['↑/↓ stashes', 'enter diff', 'a/A apply', 'p pop', 'R rename', 'b branch', 'x/v mark', 'X drop · u undo'],
+      contextual: ['↑/↓ tags', 'enter compare', 'm clear', 'esc back'],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
-
-  if (options.activeView === 'worktrees') {
-    return {
-      contextual: ['↑/↓ worktrees', 'W remove', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+  return {
+    contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 'm compare', 's sort', 'y yank'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'pull-request') {
-    return {
-      // #783 — full PR action panel. Five mutating ops scoped to this
-      // view: m / x / a / R / c, plus O for open-in-browser (already
-      // a global). Each routes through y-confirm or an input prompt;
-      // none fire silently.
-      contextual: ['m merge', 'x close', 'a approve', 'R changes', 'c comment', 'O open', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function stashHints(): LogInkFooterHints {
+  return {
+    // #1361 — x/v mark covers both multi-select primitives, same as
+    // the branches view.
+    contextual: ['↑/↓ stashes', 'enter diff', 'a/A apply', 'p pop', 'R rename', 'b branch', 'x/v mark', 'X drop · u undo'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'rebase') {
-    return {
-      contextual: ['↑/↓ move', 'J/K reorder', 'p/s/f/d/e retag', 'r reword', 'enter run', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function worktreesHints(): LogInkFooterHints {
+  return {
+    contextual: ['↑/↓ worktrees', 'W remove', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'conflicts') {
-    return {
-      contextual: ['↑/↓ files', 'enter diff', 's stage', 'u incoming', 'U yours', 'o edit', 'C continue*', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function pullRequestHints(): LogInkFooterHints {
+  // #783 — full PR action panel. Five mutating ops scoped to this
+  // view: m / x / a / R / c, plus O for open-in-browser (already
+  // a global). Each routes through y-confirm or an input prompt;
+  // none fire silently.
+  return {
+    contextual: ['m merge', 'x close', 'a approve', 'R changes', 'c comment', 'O open', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'reflog') {
-    return {
-      contextual: ['↑/↓ entries', 'enter inspect', 'c checkout', 'B branch', 'Z reset', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function rebaseHints(): LogInkFooterHints {
+  return {
+    contextual: ['↑/↓ move', 'J/K reorder', 'p/s/f/d/e retag', 'r reword', 'enter run', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'issues') {
-    return {
-      // #882 phase 4-6 — read + additive mutations + destructive
-      // (gated through y-confirm) + filter cycling. AI summarize
-      // (`I`) deferred to a follow-up.
-      contextual: ['↑/↓ issues', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'x close*', 'X reopen', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function conflictsHints(): LogInkFooterHints {
+  return {
+    contextual: ['↑/↓ files', 'enter diff', 's stage', 'u incoming', 'U yours', 'o edit', 'C continue*', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'pull-request-triage') {
-    return {
-      // #882 phase 4-6 — full PR action panel scoped to the triage
-      // list + filter cycling; #1363 adds the review pair (enter →
-      // read the diff, C → check the branch out locally). AI
-      // summarize (`I`) deferred to a follow-up.
-      contextual: ['↑/↓ PRs', 'enter diff', 'C checkout', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function reflogHints(): LogInkFooterHints {
+  return {
+    contextual: ['↑/↓ entries', 'enter inspect', 'c checkout', 'B branch', 'Z reset', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'submodules') {
-    return {
-      contextual: ['↑/↓ entries', 'i init', 'u update', 's sync', 'y yank path', 'Y yank sha', '/ filter', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function issuesHints(): LogInkFooterHints {
+  // #882 phase 4-6 — read + additive mutations + destructive
+  // (gated through y-confirm) + filter cycling. AI summarize
+  // (`I`) deferred to a follow-up.
+  return {
+    contextual: ['↑/↓ issues', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'x close*', 'X reopen', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'remotes') {
-    return {
-      // #0.71 — remote management. add / set-url prompt for input
-      // (the prompt is the gate); remove / prune route through the
-      // y-confirm path (`*` marks the destructive ones).
-      contextual: ['↑/↓ remotes', 'a add', 'e set-url', 'x remove*', 'p prune*', 'y yank url', '/ filter', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function pullRequestTriageHints(): LogInkFooterHints {
+  // #882 phase 4-6 — full PR action panel scoped to the triage
+  // list + filter cycling; #1363 adds the review pair (enter →
+  // read the diff, C → check the branch out locally). AI
+  // summarize (`I`) deferred to a follow-up.
+  return {
+    contextual: ['↑/↓ PRs', 'enter diff', 'C checkout', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'blame') {
-    return {
-      // #0.71 — on-demand blame drill-down. Read-only: j/k scroll the
-      // windowed line list, esc pops back to the file list.
-      // #COCO-14 — L drills from blame into the file-history log.
-      contextual: ['↑/↓ lines', 'gg/G top/bottom', 'L file log', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function submodulesHints(): LogInkFooterHints {
+  return {
+    contextual: ['↑/↓ entries', 'i init', 'u update', 's sync', 'y yank path', 'Y yank sha', '/ filter', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'file-history') {
-    return {
-      // #COCO-14 — file-history drill-down. j/k scroll the commit list,
-      // enter opens the diff for the cursored commit, esc returns.
-      contextual: ['↑/↓ commits', 'gg/G top/bottom', 'enter diff', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function remotesHints(): LogInkFooterHints {
+  // #0.71 — remote management. add / set-url prompt for input
+  // (the prompt is the gate); remove / prune route through the
+  // y-confirm path (`*` marks the destructive ones).
+  return {
+    contextual: ['↑/↓ remotes', 'a add', 'e set-url', 'x remove*', 'p prune*', 'y yank url', '/ filter', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'bisect') {
-    return {
-      // No session yet → the only live keys are the start wizard and
-      // back-out; the mark/skip/run/reset set is gated on an active
-      // session in the input layer.
-      contextual: options.bisectActive
-        ? ['y good', 'b bad', 's skip', 'R run', 'x reset', 'esc back']
-        : ['s start', 'esc back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function blameHints(): LogInkFooterHints {
+  // #0.71 — on-demand blame drill-down. Read-only: j/k scroll the
+  // windowed line list, esc pops back to the file list.
+  // #COCO-14 — L drills from blame into the file-history log.
+  return {
+    contextual: ['↑/↓ lines', 'gg/G top/bottom', 'L file log', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
-  if (options.activeView === 'changelog') {
-    return {
-      contextual: ['j/k scroll', 'pg up/dn', 'y yank', 'E $EDITOR', 'c PR', 'r regen', '< back'],
-      global: NORMAL_GLOBAL_HINTS,
-    }
+function fileHistoryHints(): LogInkFooterHints {
+  // #COCO-14 — file-history drill-down. j/k scroll the commit list,
+  // enter opens the diff for the cursored commit, esc returns.
+  return {
+    contextual: ['↑/↓ commits', 'gg/G top/bottom', 'enter diff', 'esc back'],
+    global: NORMAL_GLOBAL_HINTS,
   }
+}
 
+function changelogHints(): LogInkFooterHints {
+  return {
+    contextual: ['j/k scroll', 'pg up/dn', 'y yank', 'E $EDITOR', 'c PR', 'r regen', '< back'],
+    global: NORMAL_GLOBAL_HINTS,
+  }
+}
+
+function historyHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   if (options.compareBaseSet) {
     // History view with a compare base set — Enter is overridden to
     // open the compare diff; show the override + the bail-out key.
@@ -1740,19 +1735,44 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     }
   }
 
+  // History view default hints. Mutating ops (`c` cherry-pick, `R`
+  // revert, `Z` reset, `i` interactive-rebase) all route through a
+  // y-confirm or mode prompt — none fire silently from the keystroke.
+  // `B` create-branch-here and `gT` create-tag-here use a prompt as
+  // the affirmative gate (typing the name is the confirmation).
+  // Grouped into compact `c/R/Z/i mutate` and `B/gT new` chips so
+  // the footer stays scannable; full descriptions live in `?` help
+  // and the palette. `v range` (#1361) anchors a span for `c` to
+  // cherry-pick as one command instead of the single cursored commit.
   return {
-    // History view default hints. Mutating ops (`c` cherry-pick, `R`
-    // revert, `Z` reset, `i` interactive-rebase) all route through a
-    // y-confirm or mode prompt — none fire silently from the keystroke.
-    // `B` create-branch-here and `gT` create-tag-here use a prompt as
-    // the affirmative gate (typing the name is the confirmation).
-    // Grouped into compact `c/R/Z/i mutate` and `B/gT new` chips so
-    // the footer stays scannable; full descriptions live in `?` help
-    // and the palette. `v range` (#1361) anchors a span for `c` to
-    // cherry-pick as one command instead of the single cursored commit.
     contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'v range', 'y/Y yank', '/ search'],
     global: NORMAL_GLOBAL_HINTS,
   }
+}
+
+const LOG_INK_FOOTER_HINT_REGISTRY: Partial<
+  Record<LogInkView, (options: GetLogInkFooterHintsOptions) => LogInkFooterHints>
+> = {
+  status: statusHints,
+  diff: diffHints,
+  compose: composeHints,
+  branches: branchesHints,
+  tags: tagsHints,
+  stash: stashHints,
+  worktrees: worktreesHints,
+  'pull-request': pullRequestHints,
+  rebase: rebaseHints,
+  conflicts: conflictsHints,
+  reflog: reflogHints,
+  issues: issuesHints,
+  'pull-request-triage': pullRequestTriageHints,
+  submodules: submodulesHints,
+  remotes: remotesHints,
+  blame: blameHints,
+  'file-history': fileHistoryHints,
+  bisect: (options) => getBisectFooterHints(options, NORMAL_GLOBAL_HINTS),
+  changelog: changelogHints,
+  history: historyHints,
 }
 
 export type GetLogInkHelpSectionsOptions = {

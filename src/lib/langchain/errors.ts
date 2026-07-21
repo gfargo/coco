@@ -91,6 +91,20 @@ export class LangChainRateLimitError extends LangChainError {
 }
 
 /**
+ * Quota/billing exhaustion (`insufficient_quota`). Providers reuse HTTP 429
+ * for this, but it is *not* a rate limit: no amount of waiting or lowering
+ * concurrency helps — the fix is adding credits or raising a budget cap. A
+ * subclass of `LangChainRateLimitError` so any `instanceof` rate-limit call
+ * site still matches, while the formatter can single it out to render
+ * billing-oriented guidance instead of "wait and retry".
+ */
+export class LangChainQuotaExceededError extends LangChainRateLimitError {
+  constructor(message: string, provider?: string, context?: Record<string, unknown>) {
+    super(message, provider, context)
+  }
+}
+
+/**
  * Timeout and retry-related errors
  */
 export class LangChainTimeoutError extends LangChainError {

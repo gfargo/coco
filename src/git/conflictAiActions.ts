@@ -133,7 +133,7 @@ export async function runConflictResolutionWorkflow(input: {
   }
 
   try {
-    const llm = getLlm(provider, service.model as LLMModel, { ...config, service })
+    const llm = await getLlm(provider, service.model as LLMModel, { ...config, service })
     // `any`: @langchain/core bundles its own zod copy, so the parser's
     // inferred output type is `unknown` against the project's zod and
     // fails executeChain's `Runnable<any, T>` constraint. Same

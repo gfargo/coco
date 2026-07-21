@@ -29,7 +29,7 @@ export const NO_PREVIOUS_FEEDBACK_PLACEHOLDER = 'None — this is the first atte
 export const DEFAULT_MAX_PLAN_ATTEMPTS = 3
 
 export interface GenerateSplitPlanArgs {
-  llm: ReturnType<typeof getLlm>
+  llm: Awaited<ReturnType<typeof getLlm>>
   prompt: PromptTemplate
   variables: Record<string, unknown>
   staged: FileChange[]

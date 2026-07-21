@@ -45,8 +45,8 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
   const tokenizer = await getTokenCounterForProvider(provider, String(model))
 
-  const llm = getLlm(provider, model as LLMModel, { ...config, service: recapService })
-  const summaryLlm = getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
+  const llm = await getLlm(provider, model as LLMModel, { ...config, service: recapService })
+  const summaryLlm = await getLlm(provider, summaryService.model as LLMModel, { ...config, service: summaryService })
 
   const INTERACTIVE = argv.json ? false : (argv.interactive || isInteractive(config))
   if (INTERACTIVE) {
