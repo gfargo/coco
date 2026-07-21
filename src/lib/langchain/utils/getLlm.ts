@@ -22,7 +22,11 @@ import { recordLlmMetadata } from './llmMetadata'
  * @throws LangChainConfigurationError if the provider/model combination is invalid
  * @throws LangChainExecutionError if LLM instantiation fails
  */
-export function getLlm(provider: LLMProvider, model: LLMModel, config: Config): BaseChatModel {
+export async function getLlm(
+  provider: LLMProvider,
+  model: LLMModel,
+  config: Config
+): Promise<BaseChatModel> {
   // Validate input parameters
   validateProvider(provider, 'getLlm')
   validateModel(model, provider, 'getLlm')
@@ -46,7 +50,7 @@ export function getLlm(provider: LLMProvider, model: LLMModel, config: Config): 
   }
 
   try {
-    const llm = definition.createLlm({ model, config, apiKey })
+    const llm = await definition.createLlm({ model, config, apiKey })
     recordLlmMetadata(llm, {
       provider,
       endpoint: definition.resolveEndpoint?.(config),

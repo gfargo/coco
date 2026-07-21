@@ -4,6 +4,7 @@ import type {
   LogInkInputEvent,
   LogInkInputKey,
 } from '../../runtime/inkInput'
+import type { GetLogInkFooterHintsOptions, LogInkFooterHints } from '../../runtime/inkKeymap'
 
 /**
  * Bisect view action keys (#784 / #1352) — the first per-surface input
@@ -86,6 +87,27 @@ export function handleBisectInput(
   }
 
   return null
+}
+
+/**
+ * Bisect view footer hints — kept beside `handleBisectInput` so the
+ * bindings and their footer labels can't drift apart (#1727). `globalHints`
+ * is passed in rather than imported from `inkKeymap` to avoid a value-level
+ * import cycle between the two modules.
+ */
+export function getBisectFooterHints(
+  options: GetLogInkFooterHintsOptions,
+  globalHints: string[]
+): LogInkFooterHints {
+  return {
+    // No session yet → the only live keys are the start wizard and
+    // back-out; the mark/skip/run/reset set is gated on an active
+    // session in the input layer.
+    contextual: options.bisectActive
+      ? ['y good', 'b bad', 's skip', 'R run', 'x reset', 'esc back']
+      : ['s start', 'esc back'],
+    global: globalHints,
+  }
 }
 
 function action(actionValue: LogInkAction): LogInkInputEvent {

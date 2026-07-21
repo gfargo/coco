@@ -193,6 +193,12 @@ export type LogInkForgeUnavailableArgs = {
   cli?: string
   /** Forge display name ("GitHub" / "GitLab"). Defaults to GitHub. */
   forge?: string
+  /**
+   * Recovery instructions for forges with no CLI binary to install (Gitea/
+   * Forgejo authenticate via a `GITEA_TOKEN` environment variable, not a CLI
+   * login flow). When set, this replaces the "Install `cli`" wording.
+   */
+  authHint?: string
 }
 
 /**
@@ -201,13 +207,15 @@ export type LogInkForgeUnavailableArgs = {
  * copy — the underlying problem is the same regardless of which
  * surface the user is on, and the recovery is identical. `cli`/`forge`
  * default to the GitHub wording so GitHub callers stay correct; GitLab
- * surfaces pass `glab`/`GitLab`.
+ * surfaces pass `glab`/`GitLab`; forges with no CLI (Gitea) pass `authHint`.
  */
 export function formatLogInkForgeUnauthenticated({
   resource,
   cli = 'gh',
   forge = 'GitHub',
+  authHint,
 }: LogInkForgeUnavailableArgs): string {
+  if (authHint) return `${resource} require ${forge} auth. ${authHint}`
   return `${resource} require the ${forge} CLI. Install \`${cli}\` and run \`${cli} auth login\` to enable triage.`
 }
 

@@ -187,7 +187,7 @@ describe('commit command', () => {
       model: 'gpt-4o',
     })
     mockGetTokenCounterForProvider.mockResolvedValue(jest.fn())
-    mockGetLlm.mockReturnValue({} as unknown as ReturnType<typeof getLlm>)
+    mockGetLlm.mockResolvedValue({} as unknown as Awaited<ReturnType<typeof getLlm>>)
 
     // Mock prompts
     mockCommitPrompt.template = 'Test commit prompt template'
