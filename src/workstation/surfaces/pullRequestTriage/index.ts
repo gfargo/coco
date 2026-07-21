@@ -142,7 +142,7 @@ export function renderPullRequestTriageSurface(
     headerRight = `${nouns.cli} not authenticated`
     bodyLines = [
       h(Text, { key: 'pr-triage-unauth', dimColor: true },
-        formatLogInkForgeUnauthenticated({ resource: nouns.plural, cli: nouns.cli, forge: nouns.name })),
+        formatLogInkForgeUnauthenticated({ resource: nouns.plural, cli: nouns.cli, forge: nouns.name, authHint: nouns.authHint })),
     ]
   } else if (overview.message && !overview.pullRequests) {
     headerRight = 'error'

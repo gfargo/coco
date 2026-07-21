@@ -1,4 +1,4 @@
-import { defaultBitbucketRunner, resolveBitbucketActionError, type BitbucketRunner } from './bitbucketCli'
+import { defaultBitbucketRunner, runBitbucketAction, type BitbucketRunner } from './bitbucketCli'
 import { rejectUnsafeUsername } from './forgeArgGuards'
 import type { IssueActionResult } from './issueActions'
 
@@ -12,25 +12,6 @@ import type { IssueActionResult } from './issueActions'
  * the comment inline.
  */
 
-async function runBitbucketIssueAction(
-  runner: BitbucketRunner,
-  endpoint: string,
-  method: string,
-  body: Record<string, unknown> | undefined,
-  onSuccess: (output: string) => IssueActionResult
-): Promise<IssueActionResult> {
-  try {
-    const out = await runner(endpoint, {
-      method,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    })
-    return onSuccess(out)
-  } catch (error) {
-    const { message, details } = await resolveBitbucketActionError(error, runner)
-    return { ok: false, message, ...(details && details.length ? { details } : {}) }
-  }
-}
-
 export function commentBitbucketIssue(
   projectPath: string,
   issueNumber: number,
@@ -38,7 +19,7 @@ export function commentBitbucketIssue(
   runner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<IssueActionResult> {
   if (!body.trim()) return Promise.resolve({ ok: false, message: 'Comment body required' })
-  return runBitbucketIssueAction(
+  return runBitbucketAction(
     runner,
     `repositories/${projectPath}/issues/${issueNumber}/comments`,
     'POST',
@@ -68,7 +49,7 @@ export function addBitbucketIssueAssignee(
   const bad = rejectUnsafeUsername(assignee)
   if (bad) return Promise.resolve({ ok: false, message: bad })
 
-  return runBitbucketIssueAction(
+  return runBitbucketAction(
     runner,
     `repositories/${projectPath}/issues/${issueNumber}`,
     'PUT',
@@ -82,7 +63,7 @@ export function closeBitbucketIssue(
   issueNumber: number,
   runner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<IssueActionResult> {
-  return runBitbucketIssueAction(
+  return runBitbucketAction(
     runner,
     `repositories/${projectPath}/issues/${issueNumber}`,
     'PUT',
@@ -96,7 +77,7 @@ export function reopenBitbucketIssue(
   issueNumber: number,
   runner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<IssueActionResult> {
-  return runBitbucketIssueAction(
+  return runBitbucketAction(
     runner,
     `repositories/${projectPath}/issues/${issueNumber}`,
     'PUT',

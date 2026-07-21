@@ -1,10 +1,10 @@
-import { ChatBedrockConverse } from '@langchain/aws'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { BedrockLLMService } from '../types'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
-function createBedrockLlm({ model, config }: CreateLlmArgs): BaseChatModel {
+async function createBedrockLlm({ model, config }: CreateLlmArgs): Promise<BaseChatModel> {
+  const { ChatBedrockConverse } = await import('@langchain/aws')
   const svc = config.service as BedrockLLMService
 
   const bedrockConfig: ConstructorParameters<typeof ChatBedrockConverse>[0] = {

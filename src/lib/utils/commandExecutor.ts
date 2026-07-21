@@ -5,7 +5,7 @@ import { Logger } from './logger'
 import { CommandHandler } from '../types'
 import { BaseArgvOptions } from '../../commands/types'
 import { Config } from '../config/types'
-import { LangChainNetworkError, LangChainAuthenticationError, LangChainRateLimitError } from '../langchain/errors'
+import { LangChainNetworkError, LangChainAuthenticationError, LangChainQuotaExceededError, LangChainRateLimitError } from '../langchain/errors'
 import { isCommandExitError } from './commandExit'
 import { decideUsageConsent, isConsentInteractive, USAGE_ENABLED_NOTICE } from './usageConsent'
 import { persistUsagePreference } from '../config/services/xdg'
@@ -111,12 +111,43 @@ function formatRateLimitError(error: LangChainRateLimitError, logger: Logger): v
   logger.error('\nFailed to execute command', { color: 'yellow' })
   logger.error(`\nError: Rate limited by ${provider}`, { color: 'red' })
 
+  // The provider's own message prints unconditionally (was `--verbose`-only):
+  // it carries the specifics — which limit, reset window, request id — that
+  // users need to tell a transient 429 from something deeper.
+  if (error.message) {
+    logger.error(`       ${error.message}`, { color: 'gray' })
+  }
+
   logger.error('\nTroubleshooting:', { color: 'cyan' })
   logger.error('  • Lower `service.maxConcurrent` in your config to send fewer requests at once', { color: 'white' })
   logger.error('  • Wait a bit and retry — many providers reset rate-limit windows quickly', { color: 'white' })
   logger.error('  • Check your provider dashboard for your current rate/usage limits', { color: 'white' })
+}
 
-  logger.verbose(`\nOriginal error: ${error.message}`, { color: 'gray' })
+/**
+ * Formats a quota/billing exhaustion error (`insufficient_quota`). Providers
+ * reuse HTTP 429 for this, but the rate-limit remedy ("wait and retry") can
+ * never fix an exhausted balance — the guidance here is billing-oriented.
+ */
+function formatQuotaExceededError(error: LangChainQuotaExceededError, logger: Logger): void {
+  const provider = error.provider || 'LLM service'
+
+  logger.error('\nFailed to execute command', { color: 'yellow' })
+  logger.error(`\nError: ${provider} quota exhausted (billing) — not a rate limit`, { color: 'red' })
+
+  if (error.message) {
+    logger.error(`       ${error.message}`, { color: 'gray' })
+  }
+
+  logger.error('\nTroubleshooting:', { color: 'cyan' })
+  logger.error('  • Check your credit balance / prepaid credits on the provider dashboard', { color: 'white' })
+  logger.error('  • Check project or organization budget caps and monthly spend limits', { color: 'white' })
+  if (provider === 'openai' || provider === 'OpenAI') {
+    logger.error('  • See https://platform.openai.com/settings/organization/billing and the Limits page', { color: 'white' })
+  } else if (provider === 'anthropic' || provider === 'Anthropic') {
+    logger.error('  • See https://console.anthropic.com/settings/billing', { color: 'white' })
+  }
+  logger.error('  • Waiting and retrying will not help until billing is resolved', { color: 'white' })
 }
 
 /**
@@ -257,6 +288,9 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
         formatNetworkError(error, logger)
       } else if (error instanceof LangChainAuthenticationError) {
         formatAuthenticationError(error, logger)
+      } else if (error instanceof LangChainQuotaExceededError) {
+        // Before the rate-limit branch: quota subclasses LangChainRateLimitError.
+        formatQuotaExceededError(error, logger)
       } else if (error instanceof LangChainRateLimitError) {
         formatRateLimitError(error, logger)
       } else if (missingOllamaModel) {

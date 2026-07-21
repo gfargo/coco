@@ -46,7 +46,7 @@ export type StreamChunkHandler = (chunk: StreamingChunk) => void
 export interface ExecuteChainStreamingInput<T> {
   variables: Record<string, unknown>
   prompt: PromptTemplate
-  llm: ReturnType<typeof getLlm>
+  llm: Awaited<ReturnType<typeof getLlm>>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   parser: Runnable<any, T>
   /**

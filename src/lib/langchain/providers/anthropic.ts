@@ -1,9 +1,9 @@
-import { ChatAnthropic } from '@langchain/anthropic'
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
-function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): BaseChatModel {
+async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
+  const { ChatAnthropic } = await import('@langchain/anthropic')
   const anthropicConfig: ConstructorParameters<typeof ChatAnthropic>[0] = {
     anthropicApiKey: apiKey,
     maxConcurrency: config.service.maxConcurrent,

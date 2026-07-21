@@ -210,14 +210,15 @@ type BaseConfig = {
 
   /**
    * Map self-hosted git remote hosts to a forge so coco talks to the right CLI.
-   * coco auto-detects github.com, gitlab.com, bitbucket.org, and hosts whose
-   * name contains `gitlab` / `github` / `bitbucket`. For vanity hostnames that
-   * carry neither word (e.g. `git.acme.com`), set the mapping here so detection
-   * and dispatch work.
+   * coco auto-detects github.com, gitlab.com, bitbucket.org, codeberg.org, and
+   * hosts whose name contains `gitlab` / `github` / `bitbucket` / `gitea` /
+   * `forgejo` / `codeberg`. For vanity hostnames that carry none of those
+   * words (e.g. `git.acme.com`), set the mapping here so detection and
+   * dispatch work.
    *
-   * @example { "git.acme.com": "gitlab", "code.internal": "github", "bb.corp.com": "bitbucket" }
+   * @example { "git.acme.com": "gitea", "code.internal": "github", "bb.corp.com": "bitbucket" }
    */
-  forgeHosts?: Record<string, 'github' | 'gitlab' | 'bitbucket'>
+  forgeHosts?: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'gitea'>
 }
 
 export type ConfigWithServiceObject = BaseConfig &

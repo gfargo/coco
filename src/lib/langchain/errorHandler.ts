@@ -3,6 +3,7 @@ import {
   LangChainError,
   LangChainExecutionError,
   LangChainNetworkError,
+  LangChainQuotaExceededError,
   LangChainRateLimitError,
 } from './errors'
 
@@ -139,6 +140,37 @@ function isAuthError(error: unknown): boolean {
 const RATE_LIMIT_MESSAGE_PATTERNS = ['rate limit', 'rate-limit', 'ratelimit', 'too many requests']
 
 /**
+ * Substrings that signal quota/billing exhaustion rather than a rate limit.
+ * "exceeded your current quota" is OpenAI's `insufficient_quota` message;
+ * "credit balance is too low" is Anthropic's out-of-credits message.
+ */
+const QUOTA_MESSAGE_PATTERNS = [
+  'insufficient_quota',
+  'exceeded your current quota',
+  'credit balance is too low',
+]
+
+/**
+ * Quota/billing exhaustion. OpenAI (and others) reuse HTTP 429 for
+ * `insufficient_quota`, so without this check a dead billing account rendered
+ * the rate-limit remedy ("wait a bit and retry") — advice that can never
+ * work. Checked before {@link isRateLimitError} since a quota 429 satisfies
+ * that predicate too.
+ */
+function isQuotaExceededError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const err = error as { code?: string | number; error?: { code?: string; type?: string }; message?: string }
+  const code = err.code ?? err.error?.code
+  const type = err.error?.type
+  if (code === 'insufficient_quota' || type === 'insufficient_quota') return true
+  if (typeof err.message === 'string') {
+    const message = err.message.toLowerCase()
+    return QUOTA_MESSAGE_PATTERNS.some((pattern) => message.includes(pattern))
+  }
+  return false
+}
+
+/**
  * #1637 — a 429 that survived the summarize chain's retry/backoff (or any
  * other provider call that doesn't retry) used to surface as a raw
  * provider message via the generic execution-error wrap, with no
@@ -192,6 +224,20 @@ export function handleLangChainError(
     const message = extractErrorMessage(error)
 
     throw new LangChainAuthenticationError(message, provider, endpoint, {
+      originalError: error instanceof Error ? error.name : typeof error,
+      originalMessage: message,
+      context,
+      ...additionalContext
+    })
+  }
+
+  // Quota/billing exhaustion masquerading as a 429 — must precede the
+  // rate-limit check so the billing remedy renders instead of "retry".
+  if (isQuotaExceededError(error)) {
+    const provider = additionalContext?.provider as string | undefined
+    const message = extractErrorMessage(error)
+
+    throw new LangChainQuotaExceededError(message, provider, {
       originalError: error instanceof Error ? error.name : typeof error,
       originalMessage: message,
       context,
