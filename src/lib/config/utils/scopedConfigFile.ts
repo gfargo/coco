@@ -7,7 +7,29 @@ import { SCHEMA_PUBLIC_URL } from '../../schema'
 
 export type ConfigWriteScope = 'global' | 'project'
 
-const PROJECT_CONFIG_CANDIDATES = ['.coco.json', '.coco.config.json'] as const
+/**
+ * The filenames coco looks for when resolving a project-scoped config,
+ * in priority order. Exported so callers that need the raw list (the
+ * workstation's editor-open flow, `coco init`) don't have to hardcode
+ * their own copy (#1731).
+ */
+export const PROJECT_CONFIG_CANDIDATES = ['.coco.json', '.coco.config.json'] as const
+
+/**
+ * Resolve the project config path for a given repo root: the first
+ * existing candidate file, or the preferred default (`.coco.json`) when
+ * none exists yet. Exported as the single source of truth for the
+ * candidate-walk logic previously duplicated in 4 places (#1731).
+ */
+export function resolveProjectConfigPath(repoRoot: string): string {
+  for (const candidate of PROJECT_CONFIG_CANDIDATES) {
+    const candidatePath = path.join(repoRoot, candidate)
+    if (fs.existsSync(candidatePath)) {
+      return candidatePath
+    }
+  }
+  return path.join(repoRoot, PROJECT_CONFIG_CANDIDATES[0])
+}
 
 /**
  * Resolve the on-disk path for a `coco config` write scope (#1605).
@@ -26,15 +48,7 @@ export function resolveScopedConfigPath(scope: ConfigWriteScope): string {
     return getXdgConfigPath()
   }
 
-  const repoRoot = resolveGitRepoRoot()
-  for (const candidate of PROJECT_CONFIG_CANDIDATES) {
-    const candidatePath = path.join(repoRoot, candidate)
-    if (fs.existsSync(candidatePath)) {
-      return candidatePath
-    }
-  }
-
-  return path.join(repoRoot, PROJECT_CONFIG_CANDIDATES[0])
+  return resolveProjectConfigPath(resolveGitRepoRoot())
 }
 
 /** Reads and parses a scoped config file. Returns `{}` if it doesn't exist. */

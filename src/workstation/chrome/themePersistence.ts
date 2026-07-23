@@ -1,8 +1,8 @@
 import * as fs from 'node:fs'
-import * as os from 'node:os'
 import * as path from 'node:path'
 
 import { writeFileAtomic } from '../../lib/utils/atomicFileWrite'
+import { getXdgConfigPath, isRecord } from '../../lib/config/services/xdg'
 import { getLogInkThemePresets, type LogInkThemePreset } from './theme'
 
 /**
@@ -18,15 +18,6 @@ import { getLogInkThemePresets, type LogInkThemePreset } from './theme'
  */
 
 const VALID_PRESETS = new Set<string>(getLogInkThemePresets())
-
-export function getXdgConfigPath(): string {
-  const home = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config')
-  return path.join(home, 'coco', 'config.json')
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 /**
  * Write `logTui.theme.preset = <preset>` into the global config, merging
@@ -91,3 +82,7 @@ export function getSavedThemePreset(): LogInkThemePreset | undefined {
     return undefined
   }
 }
+
+// Re-export for consumers that historically imported from this module.
+// The canonical definition lives in lib/config/services/xdg.ts (#1731).
+export { getXdgConfigPath } from '../../lib/config/services/xdg'
