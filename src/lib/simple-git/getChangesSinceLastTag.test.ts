@@ -37,7 +37,7 @@ describe('getChangesSinceLastTag', () => {
     ])
   })
 
-  it('should return a message when no tags are found', async () => {
+  it('should return an empty array when no tags are found', async () => {
     // Mock git instance with no tags
     const mockGit = {
       tags: jest.fn().mockResolvedValue({
@@ -51,6 +51,6 @@ describe('getChangesSinceLastTag', () => {
 
     // Assertions
     expect(mockGit.tags).toHaveBeenCalled()
-    expect(result).toEqual(['No tags found in the repository.'])
+    expect(result).toEqual([])
   })
 })
