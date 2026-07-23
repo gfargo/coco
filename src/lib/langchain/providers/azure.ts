@@ -14,7 +14,12 @@ async function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): Promise
     azureOpenAIApiVersion: svc.apiVersion,
     temperature: config.service.temperature ?? 0.2,
     maxConcurrency: config.service.maxConcurrent,
+    // Disable LangChain's built-in AsyncCaller retries (#1677).
+    maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    ...(config.service.requestOptions?.timeout
+      ? { timeout: config.service.requestOptions.timeout }
+      : {}),
   }
 
   // Merge Azure-specific fields forwarded from service config.
