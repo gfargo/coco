@@ -1,0 +1,121 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "11.1 Create `src/lib/autofix/adapters/claude.ts`": [
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784780189277
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784780213853
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814590289
+      }
+    ],
+    "11.2 Register `ClaudeAdapter` in the adapter registry in `src/lib/autofix/index.ts`": [
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784780190119
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814597288
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814675144
+      }
+    ],
+    "11.3 Write unit tests for `ClaudeAdapter` in `src/lib/autofix/adapters/claude.test.ts`": [
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784780191441
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814599136
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814676998
+      }
+    ],
+    "12.1 Create `src/lib/autofix/adapters/gemini.ts`": [
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784780192043
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784780214847
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814591131
+      }
+    ],
+    "12.2 Register `GeminiAdapter` in the adapter registry in `src/lib/autofix/index.ts`": [
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784780192845
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814598232
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814676071
+      }
+    ],
+    "12.3 Write unit tests for `GeminiAdapter` in `src/lib/autofix/adapters/gemini.test.ts`": [
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784780193708
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814600253
+      },
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814677890
+      }
+    ],
+    "11. Implement `ClaudeAdapter` for Claude Code CLI": [
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814590355
+      }
+    ],
+    "12. Implement `GeminiAdapter` for Gemini CLI": [
+      {
+        "executionId": "ebdc2fe0-57ac-4008-904e-6a15ec7b616c",
+        "chatSessionId": "sess_4a4d3265-4cbf-4d26-b686-4e4f68b9673b",
+        "timestamp": 1784814591187
+      }
+    ]
+  }
+}
