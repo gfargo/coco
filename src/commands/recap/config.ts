@@ -85,9 +85,12 @@ export const builder = (yargs: Argv) => {
       // Reject up front so the value is never silently discarded.
       const rawArgv = argv as { tag?: boolean; 'last-tag'?: boolean; _: (string | number)[] }
       const tagRequested = Boolean(rawArgv.tag ?? rawArgv['last-tag'])
-      if (tagRequested && rawArgv._.length > 0) {
+      // Filter out the command token ('recap') that yargs always leaves
+      // in `_` — it's not a stray positional (#1668).
+      const positionals = rawArgv._.filter((p, i) => !(i === 0 && p === 'recap'))
+      if (tagRequested && positionals.length > 0) {
         throw new Error(
-          `--tag on recap takes no value (it means "since the last tag") — unexpected argument '${rawArgv._[0]}'. Did you mean 'coco changelog --tag ${rawArgv._[0]}'?`
+          `--tag on recap takes no value (it means "since the last tag") — unexpected argument '${positionals[0]}'. Did you mean 'coco changelog --tag ${positionals[0]}'?`
         )
       }
       return true

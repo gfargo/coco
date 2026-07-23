@@ -12,7 +12,7 @@
  */
 
 import { defaultGhRunner, runGhAction, type GhRunner } from './githubCli'
-import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
+import { rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
 import type { ForgeActionResult } from './pullRequestActions'
 
 export type IssueActionResult = ForgeActionResult
@@ -43,7 +43,7 @@ export function addIssueLabel(
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
   }
-  const bad = rejectFlagLike(label, 'Label')
+  const bad = rejectUnsafeLabel(label)
   if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGhAction(
     runner,

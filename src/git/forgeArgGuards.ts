@@ -16,3 +16,15 @@ export function rejectUnsafeUsername(value: string): string | undefined {
   if (/[,\s]/.test(value)) return `Username '${value}' cannot contain commas or whitespace.`
   return undefined
 }
+
+/**
+ * gh and glab both comma-split `--add-label` / `--label` values, so a
+ * label whose name contains a comma would be silently split into
+ * multiple labels — attaching the wrong ones or erroring. Reject up
+ * front with a clear message (#1710).
+ */
+export function rejectUnsafeLabel(value: string): string | undefined {
+  if (value.startsWith('-')) return `Label '${value}' cannot start with '-'.`
+  if (value.includes(',')) return `Label '${value}' contains a comma, which gh/glab would split into multiple labels.`
+  return undefined
+}

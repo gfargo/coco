@@ -204,6 +204,18 @@ function parseNumericStat(value: string): number | undefined {
 }
 
 /**
+ * Expand git's collapsed rename syntax: `prefix{old => new}suffix`
+ * becomes `[prefixOldsuffix, prefixNewsuffix]`. If the path doesn't
+ * match the pattern, returns undefined (#1707).
+ */
+function expandCollapsedRename(path: string): { oldPath: string; newPath: string } | undefined {
+  const match = path.match(/^(.*)\{(.*) => (.*)\}(.*)$/)
+  if (!match) return undefined
+  const [, prefix, oldPart, newPart, suffix] = match
+  return { oldPath: `${prefix}${oldPart}${suffix}`, newPath: `${prefix}${newPart}${suffix}` }
+}
+
+/**
  * Parses `git show --numstat -z` output (NUL-separated, no C-quoting) —
  * same rationale as `parsePorcelainStatus` (#1597): the text-mode
  * name-status/numstat quote non-ASCII paths (`"caf\303\251.txt"`), which
@@ -213,6 +225,10 @@ function parseNumericStat(value: string): number | undefined {
  * tab-separated line, so those records are walked as three tokens here.
  * Rename stats are keyed by the new path — the only one name-status
  * needs to look up.
+ *
+ * Some git versions still emit the collapsed brace form
+ * (`dir/{old.ts => new.ts}`) in the path field even with `-z`;
+ * expandCollapsedRename handles that variant (#1707).
  */
 function parseNumstat(output: string): ParsedNumstat[] {
   const tokens = output.split('\0').filter((token) => token.length > 0)
@@ -233,11 +249,15 @@ function parseNumstat(output: string): ParsedNumstat[] {
       })
       i += 2
     } else {
+      // Some git versions emit the collapsed brace rename form even
+      // with `-z` (e.g. `dir/{old.ts => new.ts}`). Expand and key by
+      // the new path so name-status lookups match (#1707).
+      const renamed = expandCollapsedRename(path)
       entries.push({
         additions: parseNumericStat(additions),
         binary: additions === '-' || deletions === '-',
         deletions: parseNumericStat(deletions),
-        path,
+        path: renamed ? renamed.newPath : path,
       })
     }
   }

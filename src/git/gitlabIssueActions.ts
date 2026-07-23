@@ -1,5 +1,5 @@
 import { defaultGlabRunner, runGlabAction, type GlabRunner } from './glabCli'
-import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
+import { rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
 import type { IssueActionResult } from './issueActions'
 
 /**
@@ -40,7 +40,7 @@ export function addGitLabIssueLabel(
   if (!label.trim()) {
     return Promise.resolve({ ok: false, message: 'Label name required' })
   }
-  const bad = rejectFlagLike(label, 'Label')
+  const bad = rejectUnsafeLabel(label)
   if (bad) return Promise.resolve({ ok: false, message: bad })
   return runGlabAction(
     runner,

@@ -1,6 +1,6 @@
 import { runGiteaAction, type GiteaRunner } from './giteaCli'
 import { findOpenGiteaPullRequestForBranch } from './giteaListData'
-import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
+import { rejectFlagLike, rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
 
 /**
@@ -165,7 +165,7 @@ export async function addGiteaPullRequestLabel(
   runner: GiteaRunner
 ): Promise<PullRequestActionResult> {
   if (!label.trim()) return { ok: false, message: 'Label name required' }
-  const bad = rejectFlagLike(label, 'Label')
+  const bad = rejectUnsafeLabel(label)
   if (bad) return { ok: false, message: bad }
 
   const id = await resolveGiteaLabelId(projectPath, label, runner)
