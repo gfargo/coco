@@ -109,8 +109,11 @@ function isHeaderLine(line: string): boolean {
   return (
     line.startsWith('diff --git') ||
     line.startsWith('index ') ||
-    line.startsWith('--- ') ||
-    line.startsWith('+++ ') ||
+    // Match only actual unified-diff file headers, not content lines
+    // that happen to start with '--- ' or '+++ ' (e.g. SQL/Lua/Haskell
+    // `-- ` comments rendered as deleted lines: `--- comment`) (#1699).
+    /^--- (?:a\/|b\/|\/dev\/null)/.test(line) ||
+    /^\+\+\+ (?:a\/|b\/|\/dev\/null)/.test(line) ||
     line.startsWith('@@') ||
     line.startsWith('new file mode') ||
     line.startsWith('deleted file mode') ||
