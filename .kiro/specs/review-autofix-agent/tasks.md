@@ -97,36 +97,36 @@ Extend `coco review` with an auto-fix action that spawns a configured AI CLI too
 - [x] 10. Final checkpoint — ensure all tests pass
   - Run `npm run test:jest` and confirm everything passes; ask the user if any questions arise.
 
-- [ ]* 11. Implement `ClaudeAdapter` for Claude Code CLI
-  - [ ]* 11.1 Create `src/lib/autofix/adapters/claude.ts`
+- [x]* 11. Implement `ClaudeAdapter` for Claude Code CLI
+  - [x]* 11.1 Create `src/lib/autofix/adapters/claude.ts`
     - Implement `BaseAdapter`; spawn `claude` binary via `spawn` with `stdio: 'inherit'`
     - Pass the prompt using Claude Code's CLI argument convention (e.g. `--print` flag for non-interactive mode)
     - Append any `autoFixToolOptions` as flags; inherit current process env
     - Resolve on exit code 0; reject with exit code on non-zero; throw descriptive error on `ENOENT`
     - _Requirements: 1.1, 1.2, 1.3_
 
-  - [ ]* 11.2 Register `ClaudeAdapter` in the adapter registry in `src/lib/autofix/index.ts`
+  - [x]* 11.2 Register `ClaudeAdapter` in the adapter registry in `src/lib/autofix/index.ts`
     - Add `claude` key to the registry map pointing to `ClaudeAdapter`
     - _Requirements: 1.3_
 
-  - [ ]* 11.3 Write unit tests for `ClaudeAdapter` in `src/lib/autofix/adapters/claude.test.ts`
+  - [x]* 11.3 Write unit tests for `ClaudeAdapter` in `src/lib/autofix/adapters/claude.test.ts`
     - Mirror the `CodexAdapter` test structure
     - Test correct binary, args, and flag conventions for Claude Code CLI
     - _Requirements: 1.1, 3.3, 3.4, 3.5_
 
-- [ ]* 12. Implement `GeminiAdapter` for Gemini CLI
-  - [ ]* 12.1 Create `src/lib/autofix/adapters/gemini.ts`
+- [x]* 12. Implement `GeminiAdapter` for Gemini CLI
+  - [x]* 12.1 Create `src/lib/autofix/adapters/gemini.ts`
     - Implement `BaseAdapter`; spawn `gemini` binary via `spawn` with `stdio: 'inherit'`
     - Pass the prompt using Gemini CLI's argument convention
     - Append any `autoFixToolOptions` as flags; inherit current process env
     - Resolve on exit code 0; reject with exit code on non-zero; throw descriptive error on `ENOENT`
     - _Requirements: 1.1, 1.2, 1.3_
 
-  - [ ]* 12.2 Register `GeminiAdapter` in the adapter registry in `src/lib/autofix/index.ts`
+  - [x]* 12.2 Register `GeminiAdapter` in the adapter registry in `src/lib/autofix/index.ts`
     - Add `gemini` key to the registry map pointing to `GeminiAdapter`
     - _Requirements: 1.3_
 
-  - [ ]* 12.3 Write unit tests for `GeminiAdapter` in `src/lib/autofix/adapters/gemini.test.ts`
+  - [x]* 12.3 Write unit tests for `GeminiAdapter` in `src/lib/autofix/adapters/gemini.test.ts`
     - Mirror the `CodexAdapter` test structure
     - Test correct binary, args, and flag conventions for Gemini CLI
     - _Requirements: 1.1, 3.3, 3.4, 3.5_
