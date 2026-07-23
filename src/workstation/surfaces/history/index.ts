@@ -476,11 +476,19 @@ function renderStackedCommitHistoryRow(
   // as a leading chip and a trailing label.
   const indent = ' '.repeat(graphWidth + 1)
   const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
-  // Bucket headers make the per-row date redundant — but only when the row
-  // has refs to show instead. A ref-less row under bucketing used to render
-  // a bare `·` placeholder on line 2, which at rail widths made the whole
-  // list read as double-spaced noise; fall back to the relative date so the
-  // line earns its space.
+  // When bucketing is active, the bucket header already conveys the
+  // timeframe — a per-row date is redundant. If the commit also has
+  // no refs, line 2 would only show "1d" / "3d" (or a bare `·`),
+  // which at rail widths makes the whole list read as double-spaced
+  // noise. Collapse to a single-line row in that case so the graph
+  // is dense and readable on tiny terminals (#1421).
+  if (bucketed && !refs) {
+    return h(Box, {
+      key: `${commit.hash}-${index}-stack`,
+      flexDirection: 'column',
+    }, lineOne)
+  }
+
   const dateText = bucketed && refs ? '' : formatCompactRelativeDate(commit.date, now)
   const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
   const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
@@ -686,14 +694,19 @@ export function renderHistoryPanel(
   const chromeRows = (showPendingRow ? 5 : 4)
     + (upstreamBanner ? 1 : 0)
     + (state.historyFetchArgs ? 1 : 0)
-  // Stacked rows take two terminal lines each and (with transition rows
-  // suppressed above) every stacked item is a commit, so the item budget
-  // is the line budget halved. Bucket headers cost one line each, which
-  // under-fills by a line per header — safe direction, never overflows.
-  // (The old 2/3 ratio from #1368 assumed the commit/transition
-  // alternation averaging ~1.5 lines per item.)
+  // Stacked rows normally take two terminal lines each, so the item
+  // budget is the line budget halved. But when bucketing is active,
+  // commits without refs collapse to a single line (#1421) — only
+  // branch-tip / tagged commits keep the metadata row. In practice
+  // ~80-90% of visible commits carry no refs, so the effective lines
+  // per item is much closer to 1 than 2. A divisor of 1.4 fills the
+  // panel densely while leaving headroom for the occasional 2-line
+  // row and the bucket headers (1 line each). Without bucketing the
+  // old /2 ratio applies (every row is two lines). Safe direction:
+  // under-fill never overflows.
+  const stackedDivisor = dateBucketingNow ? 1.4 : 2
   const listRows = rowMode === 'stacked'
-    ? Math.max(2, Math.floor((bodyRows - chromeRows) / 2))
+    ? Math.max(2, Math.floor((bodyRows - chromeRows) / stackedDivisor))
     : Math.max(3, bodyRows - chromeRows)
   const visible = getVisibleLogInkHistory(state, listRows, { fullGraphSpacing, dateBucketingNow })
   const loadState = loadingMoreCommits

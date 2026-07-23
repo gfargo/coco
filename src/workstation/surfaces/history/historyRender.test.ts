@@ -209,17 +209,17 @@ describe('renderHistoryPanel', () => {
       return out
     }
 
-    it('falls back to the relative date on line 2 for ref-less rows under bucketing', () => {
+    it('collapses ref-less rows to single-line under bucketing (no redundant date line)', () => {
       const tree = render(makeState(), {
         rowMode: 'stacked',
         width: 40,
         dateBucketingEnabled: true,
       })
       const strings = collectStrings(tree, [])
-      // bbb2222 / ccc3333 have no refs; with the date suppressed they used
-      // to render a bare `·` placeholder. Now the relative date fills the
-      // line ('2026-05-18' vs now 2026-05-26 → '8d').
-      expect(strings).toContain('8d')
+      // bbb2222 / ccc3333 have no refs; with bucketing active the bucket
+      // header already conveys the timeframe, so line 2 is suppressed
+      // entirely — no relative date, no `·` placeholder (#1421).
+      expect(strings).not.toContain('8d')
       expect(strings).not.toContain('·')
     })
 
