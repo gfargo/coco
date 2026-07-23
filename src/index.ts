@@ -83,7 +83,8 @@ y.option('quiet', {
 
 // Global `--json` — declared globally so it's a recognized, documented flag
 // on every command. Commands that produce structured output (issues, prs,
-// log, changelog, recap, review) read `argv.json` and emit via `emitJson`.
+// log, changelog, recap, review, commit) read `argv.json` and emit via
+// `emitJson`.
 y.option('json', {
   type: 'boolean',
   description: 'Emit machine-readable JSON to stdout (supported commands only).',

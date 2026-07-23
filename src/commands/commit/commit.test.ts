@@ -515,4 +515,72 @@ describe('commit command', () => {
       expect(writes).toHaveLength(0)
     })
   })
+
+  describe('--json', () => {
+    beforeEach(() => {
+      argv.json = true
+    })
+
+    const captureStdout = async (run: () => Promise<void>): Promise<string> => {
+      const writes: string[] = []
+      const writeSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(((chunk: string) => {
+          writes.push(String(chunk))
+          return true
+        }) as never)
+      try {
+        await run()
+      } finally {
+        writeSpy.mockRestore()
+      }
+      return writes.join('')
+    }
+
+    it('emits the draft as structured { title, body } JSON without committing or reviewing', async () => {
+      const output = await captureStdout(() => handler(argv, logger))
+
+      expect(JSON.parse(output)).toEqual({
+        title: 'Test commit title',
+        body: 'Test commit body',
+      })
+      expect(mockCreateCommit).not.toHaveBeenCalled()
+      expect(mockGenerateAndReviewLoop).not.toHaveBeenCalled()
+      expect(mockHandleResult).not.toHaveBeenCalled()
+    })
+
+    it('keeps --append content in the body, so the JSON matches what --print-message would print', async () => {
+      argv.append = 'Reviewed-by: QA'
+
+      const output = await captureStdout(() => handler(argv, logger))
+
+      expect(JSON.parse(output)).toEqual({
+        title: 'Test commit title',
+        body: 'Test commit body\n\nReviewed-by: QA',
+      })
+    })
+
+    it('wins over --print-message: one machine-readable payload, no duplicate raw draft', async () => {
+      argv.printMessage = true
+
+      const output = await captureStdout(() => handler(argv, logger))
+
+      expect(JSON.parse(output)).toEqual({
+        title: 'Test commit title',
+        body: 'Test commit body',
+      })
+    })
+
+    it('emits a parseable { error } payload and exits non-zero when there are no staged changes', async () => {
+      mockGetChanges.mockResolvedValue({ staged: [], unstaged: [], untracked: [] })
+
+      const output = await captureStdout(async () => {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      })
+
+      const parsed = JSON.parse(output)
+      expect(typeof parsed.error).toBe('string')
+      expect(parsed.error.length).toBeGreaterThan(0)
+    })
+  })
 })

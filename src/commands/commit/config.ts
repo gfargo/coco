@@ -159,6 +159,9 @@ export const options = {
     type: 'boolean',
     default: false,
   },
+  // `--json` is a global flag (see src/index.ts). On `commit` it behaves like
+  // `--print-message` — generate a draft, don't commit — but emits the result
+  // as structured `{ "title", "body" }` for machine consumers.
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {

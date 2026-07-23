@@ -19,6 +19,7 @@ import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { CommandHandler, FileChange } from '../../lib/types'
 import { applyRepoFlag } from '../utils/applyRepoFlag'
+import { emitJson } from '../../lib/ui/emitJson'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { handleResult } from '../../lib/ui/handleResult'
@@ -48,7 +49,13 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   // `createCommit` entirely — this is the non-interactive path the
   // `prepare-commit-msg` hook installed via `coco hooks install` calls on
   // every plain `git commit` (#1591).
-  if (argv.printMessage) {
+  //
+  // The global `--json` flag rides the same draft-only path, but emits the
+  // result as structured `{ "title", "body" }` via `emitJson` instead of the
+  // flattened message text — for agents and pipelines that consume the draft
+  // programmatically. When both flags are passed, `--json` wins: one payload,
+  // machine-readable.
+  if (argv.printMessage || argv.json) {
     const result = await generateCommitDraft({ git, argv, logger })
     if (!result.ok || !result.draft) {
       for (const warning of result.warnings) {
@@ -57,9 +64,27 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       for (const validationError of result.validationErrors) {
         logger.verbose(validationError, { color: 'red' })
       }
+      if (argv.json) {
+        // Machine consumers get a parseable error payload on stdout
+        // (mirrors recap's `--json` error shape); the non-zero exit code
+        // stays the primary failure signal.
+        const reason = [...result.warnings, ...result.validationErrors].join('; ')
+        emitJson({ error: reason || 'Failed to generate a commit message draft.' })
+      }
       commandExit(1)
     }
-    process.stdout.write(`${result.draft}\n`)
+    if (argv.json) {
+      // Split the finished draft rather than reusing the raw LLM response:
+      // the draft is the single source of truth after `--append` /
+      // `--append-ticket` and commitlint retries have been applied, and
+      // `formatCommitMessage` always joins the parts as `title\n\nbody`.
+      const separatorIndex = result.draft.indexOf('\n\n')
+      const title = separatorIndex === -1 ? result.draft : result.draft.slice(0, separatorIndex)
+      const body = separatorIndex === -1 ? '' : result.draft.slice(separatorIndex + 2)
+      emitJson({ title, body })
+    } else {
+      process.stdout.write(`${result.draft}\n`)
+    }
     return
   }
 
