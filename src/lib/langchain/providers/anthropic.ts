@@ -7,11 +7,16 @@ async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Pro
   const anthropicConfig: ConstructorParameters<typeof ChatAnthropic>[0] = {
     anthropicApiKey: apiKey,
     maxConcurrency: config.service.maxConcurrent,
+    // Disable LangChain's built-in AsyncCaller retries (#1677).
+    maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     model,
     // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
     // respected instead of being coerced to the 0.2 default.
     temperature: config.service.temperature ?? 0.2,
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    ...(config.service.requestOptions?.timeout
+      ? { clientOptions: { timeout: config.service.requestOptions.timeout } }
+      : {}),
   }
 
   // Custom endpoint for proxies / gateways.

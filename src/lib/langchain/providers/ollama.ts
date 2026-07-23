@@ -18,6 +18,8 @@ async function createOllamaLlm({ model, config }: CreateLlmArgs): Promise<BaseCh
   const ollamaConfig: ConstructorParameters<typeof ChatOllama>[0] = {
     baseUrl: resolveOllamaEndpoint(config),
     maxConcurrency: config.service.maxConcurrent,
+    // Disable LangChain's built-in AsyncCaller retries (#1677).
+    maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     model,
     // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
     // respected instead of being coerced to the default (#1631). Matches the

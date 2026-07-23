@@ -33,6 +33,10 @@ export type SummarizeContext = {
  * pipeline ultimately handles via fewer concurrent passes anyway.
  * 3 retries with 1s/2s/4s waits trade ~7s of worst-case extra
  * latency for resilience to brief rate-limit blips.
+ *
+ * NOTE: LangChain's internal AsyncCaller retries are disabled at the
+ * provider level (maxRetries: 0, #1677) so this is the ONLY retry
+ * layer for summarize calls — no multiplication.
  */
 const BACKOFF_RETRIES = 3
 const BACKOFF_BASE_MS = 1000

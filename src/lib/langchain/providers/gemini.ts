@@ -9,6 +9,8 @@ async function createGeminiLlm({ model, config, apiKey }: CreateLlmArgs): Promis
     model,
     temperature: config.service.temperature ?? 0.2,
     maxConcurrency: config.service.maxConcurrent,
+    // Disable LangChain's built-in AsyncCaller retries (#1677).
+    maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
   }
 
