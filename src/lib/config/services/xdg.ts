@@ -10,7 +10,8 @@ export function getXdgConfigPath(): string {
   return path.join(xdgConfigHome, 'coco', 'config.json')
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+/** Shallow object guard used by the config merge writers. */
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
