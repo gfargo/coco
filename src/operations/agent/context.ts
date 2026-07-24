@@ -61,8 +61,43 @@ function runAgentGit(context: AgentOperationContext, args: string[]): Promise<st
 }
 
 export function isPathWithinRoot(candidate: string, root: string): boolean {
-  const relative = path.relative(root, candidate)
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+  let resolvedCandidate: string
+  let resolvedRoot: string
+  try {
+    resolvedCandidate = realpathSync(candidate)
+    resolvedRoot = realpathSync(root)
+  } catch {
+    return false
+  }
+
+  const relative = path.relative(resolvedRoot, resolvedCandidate)
+  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
+    return true
+  }
+
+  // Windows can spell the same directory with either a long path or an 8.3
+  // alias. If the lexical check disagrees, compare filesystem identities while
+  // walking the already-realpathed candidate's ancestors. This preserves the
+  // symlink boundary while accepting equivalent Windows path spellings.
+  if (process.platform !== 'win32') return false
+
+  try {
+    const rootStats = statSync(resolvedRoot)
+    if (rootStats.ino === 0) return false
+
+    let current = resolvedCandidate
+    while (true) {
+      const currentStats = statSync(current)
+      if (currentStats.dev === rootStats.dev && currentStats.ino === rootStats.ino) {
+        return true
+      }
+      const parent = path.dirname(current)
+      if (parent === current) return false
+      current = parent
+    }
+  } catch {
+    return false
+  }
 }
 
 export function resolveAgentDirectoryRoot(directory: string): string {
