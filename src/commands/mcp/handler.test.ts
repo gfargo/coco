@@ -44,7 +44,7 @@ describe('mcp command handler', () => {
   it('does not start the server when repository resolution fails', async () => {
     mockResolveAgentRepoRoot.mockRejectedValueOnce(new Error('not a repository'))
 
-    await expect(handler({ $0: 'coco', _: ['mcp'] } as never)).rejects.toThrow('not a repository')
+    await expect(handler({ $0: 'coco', _: ['mcp'], repo: '/bad/path' } as never)).rejects.toThrow('not a repository')
 
     expect(chdirSpy).not.toHaveBeenCalled()
     expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
@@ -56,8 +56,17 @@ describe('mcp command handler', () => {
     mockArmNonInteractiveUsageTelemetry.mockImplementationOnce(async () => { order.push('telemetry') })
     mockStartCocoMcpServer.mockImplementationOnce(async () => { order.push('server') })
 
-    await handler({ $0: 'coco', _: ['mcp'] } as never)
+    await handler({ $0: 'coco', _: ['mcp'], repo: '/some/repo' } as never)
 
     expect(order).toEqual(['telemetry', 'server'])
+  })
+
+  it('starts in deferred-binding mode when --repo is omitted', async () => {
+    await handler({ $0: 'coco', _: ['mcp'] } as never)
+
+    expect(mockResolveAgentRepoRoot).not.toHaveBeenCalled()
+    expect(chdirSpy).not.toHaveBeenCalled()
+    expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
+    expect(mockStartCocoMcpServer).toHaveBeenCalledWith(undefined)
   })
 })
