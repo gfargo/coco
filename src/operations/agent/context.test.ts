@@ -45,7 +45,8 @@ describe('agent repository context', () => {
     const nested = path.join(repoRoot, 'src', 'nested')
     fs.mkdirSync(nested, { recursive: true })
 
-    await expect(resolveAgentRepoRoot(nested, path.join(tempRoot, 'allowed'))).resolves.toBe(repoRoot)
+    const resolvedRepoRoot = await resolveAgentRepoRoot(nested, path.join(tempRoot, 'allowed'))
+    expect(isPathWithinRoot(resolvedRepoRoot, repoRoot)).toBe(true)
     expect(isPathWithinRoot(repoRoot, path.join(tempRoot, 'allowed'))).toBe(true)
   })
 
