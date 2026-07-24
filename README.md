@@ -7,7 +7,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/gfargo/coco)](https://github.com/gfargo/coco/tree/main)
 [![Discord](https://img.shields.io/discord/1176716060825767948)](https://discord.gg/KGu9nE9Ejx)
 
-**AI commits, changelogs, code review, PR creation, and a full keyboard-driven git workstation — all from one CLI.** `coco commit` turns your staged diff into a Conventional-Commits-ready message. `coco commit --split` breaks a large staging area into logical multi-commit groups. `coco changelog` writes your release notes. `coco review` catches issues before they ship. `coco pr create` generates a title and body and opens it on your forge. And `coco ui` ties it all together in a terminal workstation with 16 views, chord navigation, and one-keystroke workflows. Seven AI providers — including fully local Ollama — on GitHub, GitHub Enterprise, GitLab, and Bitbucket.
+**AI commits, changelogs, code review, PR creation, a structured agent/MCP API, and a full keyboard-driven git workstation — all from one CLI.** `coco commit` turns your staged diff into a Conventional-Commits-ready message. `coco commit --split` breaks a large staging area into logical multi-commit groups. `coco changelog` writes your release notes. `coco review` catches issues before they ship. `coco pr create` generates a title and body and opens it on your forge. `coco agent` and `coco mcp` expose the same generation engine to coding agents through versioned JSON and four local read-only MCP tools. And `coco ui` ties it all together in a terminal workstation with 16 views, chord navigation, and one-keystroke workflows. Seven AI providers — including fully local Ollama — on GitHub, GitHub Enterprise, GitLab, and Bitbucket.
 
 > The package is **git-coco**; the command is `coco`.
 
@@ -25,6 +25,7 @@ That's the core. Everything else — changelogs, code review, PRs, and the works
 ## Why coco
 
 - 🤖 **Smart commits** — contextual AI messages from your staged diff, with Conventional Commits and commitlint validation built in
+- 🔌 **Agent-native** — versioned JSON/stdin operations plus four discoverable local MCP tools for commit drafts, reviews, changelogs, and recaps
 - 🏠 **Local-first** — run fully offline with Ollama (no API costs, nothing leaves your machine)
 - 🖥️ **Terminal workstation** — 16 views (history, status, diff, branches, PRs, issues, and more) via `g`-chord navigation + command palette
 - 🌐 **Multi-forge** — GitHub, GitHub Enterprise, GitLab, and Bitbucket from the same tool
@@ -66,6 +67,8 @@ coco commit -i       # generate your first commit (interactive)
 | [`coco pr create`](https://github.com/gfargo/coco/wiki/Command-Reference#pr-create) | Generate PR title + body and open via `gh` / `glab` / Bitbucket API |
 | [`coco recap`](https://github.com/gfargo/coco/wiki/Command-Reference#recap) | Summarize recent changes for standups or handoffs |
 | [`coco review`](https://github.com/gfargo/coco/wiki/Command-Reference#review) | AI code review with severity gating for CI (`--severity`) |
+| [`coco agent`](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) | Run commit-draft, review, changelog, or recap through versioned JSON/stdin |
+| [`coco mcp`](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) | Start a local stdio MCP server with four read-only generation tools |
 | [`coco ui`](https://github.com/gfargo/coco/wiki/Coco-UI) | Full-screen git workstation — 16 views, keyboard-driven |
 | [`coco workspace`](https://github.com/gfargo/coco/wiki/Command-Reference#workspace) | Multi-repo overview; drill into any repo as a `coco ui` session |
 | [`coco log`](https://github.com/gfargo/coco/wiki/Command-Reference#log) | Commit history with graph, filters, and JSON output |
@@ -74,6 +77,25 @@ coco commit -i       # generate your first commit (interactive)
 | [`coco init`](https://github.com/gfargo/coco/wiki/Getting-Started) | Interactive setup wizard |
 
 Global flags: `--repo <dir>` targets any repo without `cd`, `--json` for machine output, `--quiet` suppresses chrome.
+
+## Agent and MCP integration
+
+Use `coco` directly from coding agents and IDEs without scraping interactive terminal output:
+
+```bash
+# Inspect the strict protocol-v1 schemas
+coco agent schema --task review
+
+# Run a one-shot structured operation
+coco agent commit-draft --input request.json --repo /work/project
+
+# Expose four local stdio MCP tools, bound to one repository
+coco mcp --repo /work/project
+```
+
+Both transports share typed `commit-draft`, `review`, `changelog`, and `recap` operations. They accept safe repository scopes or caller-supplied patches/summaries and return explicit success/failure envelopes. MCP tools never create commits, write repository files, post comments, or mutate a forge. When local usage stats are already enabled, calls add metadata-only `agent-cli`/`mcp` records to the user-cache ledger; prompts, diffs, and code are never recorded.
+
+See **[Agent CLI and MCP](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP)** for client setup, every parameter and schema, safety boundaries, examples, analytics, and troubleshooting.
 
 ## Configuration
 
@@ -96,6 +118,8 @@ See the [Configuration Overview](https://github.com/gfargo/coco/wiki/Config-Over
 ## Documentation
 
 📚 **[Wiki](https://github.com/gfargo/coco/wiki)** — Getting Started, Command Reference, Configuration, Coco UI, Using Ollama, Team Collaboration, Troubleshooting
+
+🤖 **[Agent CLI and MCP](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP)** — structured operations, MCP client setup, schemas, safety, analytics, and troubleshooting
 
 💬 **[Discord](https://discord.gg/KGu9nE9Ejx)** — real-time help and discussion
 

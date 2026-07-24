@@ -8,9 +8,12 @@ the rules that are easy to get wrong.
 ## What this is
 
 `coco` (published as `git-coco`) is an AI-powered git CLI and full-screen terminal git
-workstation. It generates commit messages, changelogs, code reviews, and PRs, and
-ships `coco ui` — an Ink/React TUI with 16 views, chord navigation, 128 themes, and
-multi-forge support (GitHub, GitHub Enterprise, GitLab, Bitbucket).
+workstation. It generates commit messages, changelogs, code reviews, and PRs; exposes
+those generation tasks to coding agents through a versioned JSON CLI and local stdio
+MCP server; and ships `coco ui` — an Ink/React TUI with 16 views, chord navigation,
+128 themes, and multi-forge support (GitHub, GitHub Enterprise, GitLab, Bitbucket).
+The canonical machine-integration guide is the wiki page
+[Agent CLI and MCP](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP).
 
 ## Steering (load these for any non-trivial task)
 
@@ -38,6 +41,15 @@ design → tasks).
 - **Forge work goes through the adapter.** Add capabilities to the `ForgeActions` type
   in `src/git/forgeActions.ts` and implement for every provider (or return an explicit
   "unsupported on <forge>" result). Never branch on provider inside a surface.
+- **Agent transports share typed operations.** Domain behavior belongs in
+  `src/operations/agent/`; `src/commands/agent/` and `src/mcp/` are transport adapters.
+  Keep protocol versioning, strict schemas, structured failure envelopes, cancellation,
+  repository-root confinement, and supplied-context provenance aligned across both.
+- **MCP generation tools remain repository-read-only.** Do not add commits, file writes,
+  forge mutations, generic shell/argv tools, per-call repo switching, or implicit
+  repository config trust. Local usage records may contain metadata only and must honor
+  the existing `telemetry.usage` / `COCO_USAGE_LOG` gate; never record prompts, diffs,
+  code, filenames, generated content, or credentials.
 - **Themes have one source of truth:** `THEME_PRESET_COLORS` in
   `src/workstation/chrome/themePresets.ts` (re-exported from `theme.ts` for existing
   import sites). Adding a theme = one entry there (+ a synced screenshot). The CLI
@@ -92,6 +104,8 @@ Gotchas that cost a first validation pass if you don't already know them:
 
 ```bash
 npm run coco -- <args>   # run the CLI from source
+npm run coco -- agent schema --task review  # inspect agent protocol schemas
+npm run coco -- mcp --repo <dir>             # start a repo-bound stdio MCP server
 npm run lint             # eslint src bin
 npm run test:jest        # jest
 npm run build            # rollup → dist/ (regenerates schema.json)

@@ -5,9 +5,13 @@ import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
 import { recordUsage } from './usageLedger'
 
+export type LlmUsageSurface = 'cli' | 'agent-cli' | 'mcp'
+
 export type LlmCallMetadata = {
   task: string
   command?: string
+  /** Low-cardinality invocation surface; never contains user or repository content. */
+  surface?: LlmUsageSurface
   provider?: string
   model?: string
   retryAttempt?: number
@@ -36,6 +40,8 @@ export type LlmCallMetadata = {
    */
   streamed?: boolean
   streamChunks?: number
+  /** Explicitly disable persistent local usage-ledger writes for this call. */
+  recordUsage?: boolean
 }
 
 /**
@@ -110,12 +116,17 @@ export function logLlmCall(logger: Logger | undefined, metadata: LlmCallMetadata
 
   recordLlmTelemetry(metadata)
   recordBenchCall(metadata)
-  // Opt-in cross-run usage ledger (#0.68); no-op unless COCO_USAGE_LOG is set.
-  recordUsage(metadata)
+  // Agent transports can disable persistent writes while retaining in-memory
+  // telemetry for the current operation. Existing commands keep the ledger's
+  // config/environment behavior by leaving this field undefined.
+  if (metadata.recordUsage !== false) {
+    recordUsage(metadata)
+  }
 
   const fields = [
     `task=${metadata.task}`,
     metadata.command ? `command=${metadata.command}` : undefined,
+    metadata.surface ? `surface=${metadata.surface}` : undefined,
     metadata.provider ? `provider=${metadata.provider}` : undefined,
     metadata.model ? `model=${metadata.model}` : undefined,
     metadata.retryAttempt ? `retryAttempt=${metadata.retryAttempt}` : undefined,

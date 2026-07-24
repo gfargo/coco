@@ -11,14 +11,15 @@ import { applyRepoCwd } from '../utils/applyRepoFlag'
 import { emitJson } from '../../lib/ui/emitJson'
 import { buildModelRoutingProfile } from '../../lib/langchain/utils/modelRoutingProfile'
 import {
-  clearUsageLog,
-  getUsageLogPath,
-  isUsageLoggingEnabled,
-  readUsageRecords,
-  summarizeUsageByModel,
-  summarizeUsageByRepo,
-  summarizeUsageByTask,
-  type UsageAggregate,
+    clearUsageLog,
+    getUsageLogPath,
+    isUsageLoggingEnabled,
+    readUsageRecords,
+    summarizeUsageByModel,
+    summarizeUsageByRepo,
+    summarizeUsageBySurface,
+    summarizeUsageByTask,
+    type UsageAggregate,
 } from '../../lib/langchain/utils/usageLedger'
 import { DoctorArgv, DoctorOptions } from './config'
 import { checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
@@ -43,13 +44,14 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
   const records = readUsageRecords()
   const byTask = summarizeUsageByTask(records)
   const byModel = summarizeUsageByModel(records)
+  const bySurface = summarizeUsageBySurface(records)
   const byRepo = summarizeUsageByRepo(records)
   const hasRepoData = byRepo.some((row) => row.key !== 'unknown')
 
   if (json) {
     emitJson({
       routing: profile,
-      usage: { records: records.length, byTask, byModel, byRepo },
+      usage: { records: records.length, byTask, byModel, bySurface, byRepo },
     })
     return
   }
@@ -83,6 +85,9 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
   logger.log('')
   logger.log(chalk.dim('  By model:'))
   for (const line of renderUsageRows(byModel, 'call')) logger.log(line)
+  logger.log('')
+  logger.log(chalk.dim('  By surface:'))
+  for (const line of renderUsageRows(bySurface, 'call')) logger.log(line)
   if (hasRepoData) {
     logger.log('')
     logger.log(chalk.dim('  By repo:'))
