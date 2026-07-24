@@ -17,6 +17,9 @@ it", "regenerate the screenshots") don't need follow-up questions.
 - **LLM:** LangChain provider packages — `@langchain/openai`, `@langchain/anthropic`,
   `@langchain/google-genai`, `@langchain/mistralai`, `@langchain/ollama`,
   `@langchain/aws` (Bedrock), `@langchain/community`. Token accounting via `tiktoken`.
+- **Agent protocols:** Zod 4 strict schemas, a protocol-v1 JSON/stdin CLI, and
+  `@modelcontextprotocol/sdk` 1.x for the local stdio MCP server. Both transports call
+  `src/operations/agent/`; MCP is bound to one repository and exposes generation-only tools.
 - **Git/diff:** `simple-git`, `diff`, `web-tree-sitter` (+ TS/TSX grammars) for syntax.
 - **CLI/prompts:** `yargs`, `@inquirer/prompts`, `chalk`, `ora`.
 - **Bundler:** Rollup 4. **Tests:** Jest 30 + ts-jest. **Lint:** ESLint. **Format:** Prettier.
@@ -26,6 +29,8 @@ it", "regenerate the screenshots") don't need follow-up questions.
 ```bash
 npm run dev            # tsx watch src/index.ts (live reload)
 npm run coco -- <args> # run the CLI from source (tsx src/index.ts)
+npm run coco -- agent schema --task review  # print protocol-v1 schemas
+npm run coco -- mcp --repo <dir>            # start local stdio MCP
 npm run build          # rollup -c → dist/ (ESM + CJS + d.ts)
 npm run lint           # eslint src bin
 npm run lint:fix       # eslint --fix src
@@ -95,6 +100,34 @@ Other workflows:
 - Coverage excludes type-only modules, barrel `index.ts`, and generated files
   (`buildInfo.ts`, `schema.ts`).
 - **Thresholds (CI-enforced):** statements 60%, branches 55%, functions 60%, lines 60%.
+
+## Agent/MCP validation and local analytics
+
+Agent integration tests are co-located with the contract and transports:
+
+- `operations/agent/schemas.test.ts` — defaults, strictness, size limits, envelope and
+  published MCP schema alternatives.
+- `operations/agent/context.test.ts` — real temporary Git repositories, realpath/root
+  boundaries, symlink escapes, revision safety, worktree trust, provenance, digest,
+  limits, and cancellation.
+- `commands/agent/handler.test.ts`, `commands/mcp/handler.test.ts`, and
+  `mcp/server.test.ts` — protocol-safe output, telemetry arming, tool registration,
+  annotations, repository binding, cancellation signals, and structured failures.
+- `commands/utils/usageTelemetry.test.ts` and `lib/langchain/utils/usageLedger.test.ts`
+  — config/env gating, invocation surfaces, aggregation, and the guarantee that
+  prompts/diffs/code cannot be serialized.
+
+For release validation, run those targeted suites first, then the normal full gate,
+`npm run build`, `npm run test:cli`, and `npm pack --dry-run`. Smoke the bundled CLI's
+schema output and MCP tool discovery because source-level tests do not catch packaging
+or stdio regressions.
+
+Machine transports never perform first-run consent or write config. They honor an
+existing `telemetry.usage` preference or `COCO_USAGE_LOG`; enabled records are bounded
+local JSONL metadata tagged `cli`, `agent-cli`, or `mcp`. They live in the user cache
+(or the explicit env path), never the repository, and never contain prompts, diffs,
+source code, filenames, generated content, or credentials. `coco doctor --cost` reports
+usage by task/model/surface/repo and `coco doctor --clear` deletes it.
 
 ## Screenshot & GIF pipeline (`bin/screenshot/`)
 

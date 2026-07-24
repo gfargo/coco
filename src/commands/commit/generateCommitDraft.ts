@@ -3,8 +3,8 @@ import { SimpleGit } from 'simple-git'
 
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import {
-  getApiKeyForModel,
-  getModelAndProviderFromConfig,
+    getApiKeyForModel,
+    getModelAndProviderFromConfig,
 } from '../../lib/langchain/utils'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { LangChainCancelledError } from '../../lib/langchain/errors'
@@ -12,14 +12,15 @@ import { executeChainStreaming } from '../../lib/langchain/utils/executeChainStr
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
 import {
-  DEFAULT_RESPONSE_TOKEN_RESERVE,
-  enforcePromptBudget,
+    DEFAULT_RESPONSE_TOKEN_RESERVE,
+    enforcePromptBudget,
 } from '../../lib/langchain/utils/enforcePromptBudget'
 import { formatCommitMessage } from '../../lib/langchain/utils/formatCommitMessage'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { LLMModel } from '../../lib/langchain/types'
+import type { LlmUsageSurface } from '../../lib/langchain/utils/observability'
 import { FileChange } from '../../lib/types'
 import { fileChangeParser } from '../../lib/parsers/default'
 import { createFileChangeParserOptions } from '../../lib/parsers/default/utils/createFileChangeParserOptions'
@@ -31,10 +32,10 @@ import { Logger } from '../../lib/utils/logger'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import {
-  CommitArgv,
-  CommitMessageResponseSchema,
-  CommitOptions,
-  ConventionalCommitMessageResponseSchema,
+    CommitArgv,
+    CommitMessageResponseSchema,
+    CommitOptions,
+    ConventionalCommitMessageResponseSchema,
 } from './config'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from './prompt'
 import { salvageCommitMessageFromText } from './salvageCommitMessage'
@@ -62,18 +63,9 @@ export type CommitDraftInput = {
    */
   onStreamChunk?: (text: string, accumulated: string) => void
   /**
-   * Optional `AbortSignal` for user-initiated cancellation (#881
-   * phase 3). Forwarded into `executeChainStreaming` on the streaming
-   * attempt; when the signal aborts mid-stream the function returns
-   * a `CommitDraftResult` with `cancelled: true` instead of throwing,
-   * so callers can distinguish "user cancelled" from "the call
-   * failed."
-   *
-   * Note: only the streaming attempt honours the signal today. If
-   * streaming produces unparseable text and the non-streaming
-   * fallback fires, that call is NOT cancellable. Acceptable for now
-   * — interrupting the fallback would drop the user back to staging
-   * without a draft, same failure mode as a network error.
+   * Optional `AbortSignal` for user-initiated cancellation. Forwarded to both
+   * streaming and schema-validated generation paths. Cancellation returns a
+   * `CommitDraftResult` with `cancelled: true` instead of being retried.
    */
   signal?: AbortSignal
   /**
@@ -84,11 +76,36 @@ export type CommitDraftInput = {
    * passed to the diff parser (e.g. `'HEAD'`).
    */
   changeSource?: { changes: FileChange[]; commitRef: string }
+  /**
+   * Pre-consolidated context supplied by an agent or another trusted caller.
+   * When present, skip staged-change discovery and fileChangeParser entirely.
+   * The caller remains responsible for describing the intended repository
+   * state and for surfacing whether that context was repository-derived or
+   * externally supplied.
+   */
+  preparedSummary?: string
+  /**
+   * Permit repository-defined prompt and commitlint configuration. Agent and
+   * MCP callers leave this disabled unless the repository is explicitly
+   * trusted, preventing executable commitlint config from running implicitly.
+   */
+  trustRepositoryConfig?: boolean
+  /** Override the invocation surface stored in metadata-only local usage records. */
+  usageSurface?: LlmUsageSurface
+  /** Disable persistent usage-ledger writes when a caller requires it. */
+  recordUsage?: boolean
+}
+
+export type CommitDraftMessage = {
+  title: string
+  body: string
+  formatted: string
 }
 
 export type CommitDraftResult = {
   ok: boolean
   draft: string
+  message?: CommitDraftMessage
   warnings: string[]
   validationErrors: string[]
   /**
@@ -119,6 +136,15 @@ IMPORTANT RULES:
 - The "title" and "body" values must be properly quoted strings`
 )
 
+function structuredDraft(formatted: string): CommitDraftMessage {
+  const separatorIndex = formatted.indexOf('\n\n')
+  return {
+    title: separatorIndex === -1 ? formatted : formatted.slice(0, separatorIndex),
+    body: separatorIndex === -1 ? '' : formatted.slice(separatorIndex + 2),
+    formatted,
+  }
+}
+
 /**
  * Generate a commit message draft with no UI side effects.
  *
@@ -135,6 +161,10 @@ export async function generateCommitDraft({
   onStreamChunk,
   signal,
   changeSource,
+  preparedSummary,
+  trustRepositoryConfig = true,
+  usageSurface,
+  recordUsage,
 }: CommitDraftInput): Promise<CommitDraftResult> {
   const config = loadConfig<CommitOptions, CommitArgv>(argv as Arguments<CommitArgv>)
   const key = getApiKeyForModel(config)
@@ -159,12 +189,15 @@ export async function generateCommitDraft({
     service: summaryService,
   })
 
-  const useConventional = Boolean(config.conventionalCommits || argv.conventional)
+  const useConventional = Boolean(
+    argv.conventional || (trustRepositoryConfig && config.conventionalCommits)
+  )
 
   // `coco amend` passes an explicit change set (the last commit's diff). The
-  // default path summarizes the staged working tree.
+  // default path summarizes the staged working tree. Agent callers may pass a
+  // pre-consolidated summary and bypass both discovery and summarization.
   const diffLabel = changeSource?.commitRef ?? '--staged'
-  const changes = await (async () => {
+  const changes = preparedSummary ? [] : await (async () => {
     if (changeSource) {
       return changeSource.changes
     }
@@ -188,7 +221,7 @@ export async function generateCommitDraft({
     return result.staged
   })()
 
-  if (!changes || changes.length === 0) {
+  if (!preparedSummary && (!changes || changes.length === 0)) {
     return {
       ok: false,
       draft: '',
@@ -202,7 +235,9 @@ export async function generateCommitDraft({
     : CommitMessageResponseSchema
   const promptTemplate = useConventional ? CONVENTIONAL_COMMIT_PROMPT : COMMIT_PROMPT
   const prompt = getPrompt({
-    template: config.prompt || (promptTemplate.template as string),
+    template: trustRepositoryConfig
+      ? config.prompt || (promptTemplate.template as string)
+      : promptTemplate.template as string,
     variables: promptTemplate.inputVariables,
     fallback: promptTemplate,
   })
@@ -219,18 +254,24 @@ export async function generateCommitDraft({
     }
   }
 
-  const branchName = await getCurrentBranchName({ git })
   const includeBranchName = argv.includeBranchName !== undefined
     ? argv.includeBranchName
     : config.includeBranchName !== false
+  const needsBranchName = includeBranchName || Boolean(argv.appendTicket)
+  const branchName = needsBranchName ? await getCurrentBranchName({ git }) : ''
   const branchNameContext = includeBranchName ? `Current git branch name: ${branchName}` : ''
 
   const warnings: string[] = []
-  const hasCommitLintConfig = await hasCommitlintConfig()
+  const hasCommitLintConfig = trustRepositoryConfig
+    ? await hasCommitlintConfig()
+    : false
+  const useSafeBuiltInValidation = !trustRepositoryConfig && useConventional
   let commitlintRulesContext = ''
-  let validationEnabled = useConventional || hasCommitLintConfig
+  let validationEnabled = useSafeBuiltInValidation || (
+    trustRepositoryConfig && (useConventional || hasCommitLintConfig)
+  )
 
-  if (validationEnabled) {
+  if (validationEnabled && trustRepositoryConfig) {
     const { getCommitlintRulesContext, checkCommitlintAvailability } = await import(
       '../../lib/utils/commitlintValidator'
     )
@@ -252,10 +293,13 @@ export async function generateCommitDraft({
     commit_history: commitHistory,
     branch_name_context: branchNameContext,
     commitlint_rules_context: commitlintRulesContext,
-    language_context: getLanguageContext(argv.language || config.language, {
-      taskDescription: 'commit message',
-      preserveConventionalTokens: useConventional,
-    }),
+    language_context: getLanguageContext(
+      argv.language || (trustRepositoryConfig ? config.language : undefined),
+      {
+        taskDescription: 'commit message',
+        preserveConventionalTokens: useConventional,
+      },
+    ),
   }
 
   // Reconciles the summarizer's `|| 4096` fallback (createFileChangeParserOptions
@@ -273,7 +317,7 @@ export async function generateCommitDraft({
     promptTokenLimit - overheadTokenCount - DEFAULT_RESPONSE_TOKEN_RESERVE
   )
 
-  const summary = config.noDiff && !changeSource
+  const summary = preparedSummary || (config.noDiff && !changeSource
     ? `Staged files:\n${changes.map((c) => `${c.status}: ${c.filePath}`).join('\n')}`
     : await fileChangeParser({
       changes,
@@ -288,7 +332,7 @@ export async function generateCommitDraft({
         model: String(summaryService.model),
         service: { ...config.service, tokenLimit: summaryTokenBudget },
       }),
-    })
+    }))
 
   if (!summary || !summary.length) {
     return {
@@ -309,10 +353,11 @@ export async function generateCommitDraft({
   let validationFeedback = ''
   let lastDraft = ''
 
-  // Two attempts max — one initial generation plus one retry that incorporates
-  // commitlint feedback. Beyond that we surface warnings and let the TUI user
-  // edit the draft manually rather than driving an interactive prompt loop.
-  for (let attempt = 1; attempt <= 2; attempt++) {
+  try {
+    // Two attempts max — one initial generation plus one retry that incorporates
+    // commitlint feedback. Beyond that we surface warnings and let the TUI user
+    // edit the draft manually rather than driving an interactive prompt loop.
+    for (let attempt = 1; attempt <= 2; attempt++) {
     const variables = {
       ...baseVariables,
       additional_context: validationFeedback
@@ -390,6 +435,8 @@ export async function generateCommitDraft({
             command: 'commit-draft',
             provider,
             model: String(model),
+            surface: usageSurface,
+            recordUsage,
           },
         })
       } catch (streamErr) {
@@ -455,9 +502,12 @@ export async function generateCommitDraft({
             command: 'commit-draft',
             provider,
             model: String(model),
+            surface: usageSurface,
+            recordUsage,
           },
           retryOptions: { maxAttempts: maxParsingAttempts },
           fallbackParser: salvageCommitMessageFromText,
+          signal,
         })
       }
     } else {
@@ -469,11 +519,14 @@ export async function generateCommitDraft({
           command: 'commit-draft',
           provider,
           model: String(model),
+          surface: usageSurface,
+          recordUsage,
         },
         retryOptions: {
           maxAttempts: maxParsingAttempts,
         },
         fallbackParser: salvageCommitMessageFromText,
+        signal,
       })
     }
 
@@ -486,25 +539,42 @@ export async function generateCommitDraft({
     lastDraft = fullMessage
 
     if (!validationEnabled) {
-      return { ok: true, draft: fullMessage, warnings, validationErrors: [] }
+      return { ok: true, draft: fullMessage, message: structuredDraft(fullMessage), warnings, validationErrors: [] }
     }
 
-    const { validateCommitMessage } = await import('../../lib/utils/commitlintValidator')
-    const validationResult = await validateCommitMessage(fullMessage)
+    const {
+      validateCommitMessage,
+      validateConventionalCommitMessage,
+    } = await import('../../lib/utils/commitlintValidator')
+    const validationResult = useSafeBuiltInValidation
+      ? await validateConventionalCommitMessage(fullMessage)
+      : await validateCommitMessage(fullMessage)
 
     if (validationResult.missingDependencies && validationResult.missingDependencies.length > 0) {
       warnings.push(
         `Skipping commitlint validation: missing packages (${validationResult.missingDependencies.join(', ')}).`
       )
-      return { ok: true, draft: fullMessage, warnings, validationErrors: [] }
+      return { ok: true, draft: fullMessage, message: structuredDraft(fullMessage), warnings, validationErrors: [] }
     }
 
     if (validationResult.valid) {
-      return { ok: true, draft: fullMessage, warnings, validationErrors: [] }
+      return { ok: true, draft: fullMessage, message: structuredDraft(fullMessage), warnings, validationErrors: [] }
     }
 
     lastValidationErrors = validationResult.errors
     validationFeedback = validationResult.errors.map((error) => `- ${error}`).join('\n')
+    }
+  } catch (error) {
+    if (error instanceof LangChainCancelledError) {
+      return {
+        ok: false,
+        draft: error.accumulated || '',
+        warnings,
+        validationErrors: [],
+        cancelled: true,
+      }
+    }
+    throw error
   }
 
   // Both attempts failed validation — return the latest draft so the user can
@@ -512,6 +582,7 @@ export async function generateCommitDraft({
   return {
     ok: false,
     draft: lastDraft,
+    ...(lastDraft ? { message: structuredDraft(lastDraft) } : {}),
     warnings,
     validationErrors: lastValidationErrors,
   }

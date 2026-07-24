@@ -8,7 +8,9 @@ so new code lands in the right layer and follows the established shape.
 
 ```
 src/
-  commands/      CLI command implementations (the user-facing verbs)
+  commands/      CLI command implementations (the user-facing verbs and agent transport)
+  operations/    Transport-neutral typed operations (currently agent generation)
+  mcp/           Local stdio MCP server and tool registration
   git/           Git + forge operations: read actions, write actions, provider adapters
   workstation/   The Ink/React TUI: chrome, runtime, and per-view surfaces
   lib/           Shared foundations: config, LLM/langchain, parsers, simple-git wrappers, UI helpers
@@ -21,13 +23,21 @@ bin/             Build/dev tooling: schema gen, screenshot pipeline, scenario ru
 schema.json      Generated config JSON Schema (committed; CI fails on drift)
 ```
 
-The four concerns under `src/` are the spine of the codebase:
+The core concerns under `src/` are the spine of the codebase:
 
 - **`src/commands/`** — one directory per CLI verb (`commit`, `amend`, `changelog`,
-  `pr create`, `recap`, `review`, `log`, `ui`/`workstation`, `prs`, `issues`,
+  `pr create`, `recap`, `review`, `agent`, `mcp`, `log`, `ui`/`workstation`, `prs`, `issues`,
   `cache`, `doctor`, `init`). Each command parses flags, loads config, calls into
-  `git/` and `lib/`, and renders output. Commands are the only layer that yargs
-  knows about.
+  the appropriate operation/`git`/`lib` layer, and renders output. Commands are the
+  only layer that yargs knows about.
+- **`src/operations/`** — typed application operations shared by multiple transports.
+  `operations/agent/` owns protocol versioning, strict Zod schemas, success/failure
+  envelopes, repository/source resolution, provenance, and dispatch for commit-draft,
+  review, changelog, and recap. Keep transport-specific stdin/MCP behavior out of it.
+- **`src/mcp/`** — the local stdio MCP adapter. It registers four generation tools,
+  enforces client roots and one-repository binding, maps cancellation, and returns the
+  same structured envelopes as `coco agent`. It must not grow generic shell or mutation
+  tools; the canonical contract is documented in the wiki's Agent CLI and MCP page.
 - **`src/git/`** — everything that talks to git or a forge. Read paths (history,
   status, diff, blame, bisect, reflog, branches, tags, stash, worktrees) and write
   paths (commit, the forge actions for PRs/MRs and issues). The multi-forge adapter
@@ -88,6 +98,45 @@ auxiliary modules beside the core trio rather than bloating `handler.ts`:
 
 Pattern: keep `config.ts`/`handler.ts` as the stable skeleton; factor real logic into
 named siblings with their own tests.
+
+## Agent operations and MCP
+
+The agent integration is deliberately split into a domain contract and thin transports:
+
+```
+JSON/stdin (`commands/agent`) ─┐
+                               ├─→ operations/agent ─→ existing LLM generators
+stdio MCP (`mcp/server`) ──────┘
+```
+
+- `operations/agent/schemas.ts` is the protocol-v1 source of truth: operation names,
+  strict requests, change-source variants, options, result data, and discriminated
+  envelopes. MCP publishes top-level object schemas with explicit success/failure
+  `oneOf` metadata because the SDK requires object outputs.
+- `operations/agent/context.ts` owns root normalization, safe Git execution, revision
+  verification, the 2 MiB context cap, SHA-256 digests, provenance, and worktree trust.
+- `operations/agent/generate.ts` dispatches the four operations and frames supplied or
+  repository-derived content as untrusted model data. It intentionally reuses the
+  existing command generators/prompts so interactive and agent behavior do not drift;
+  shared prompt/result types should eventually sink toward `lib/` rather than adding
+  more upward dependencies.
+- `commands/agent/handler.ts` handles JSON files/stdin, schema publication, protocol-only
+  stdout, SIGINT cancellation, and noninteractive telemetry setup.
+- `mcp/server.ts` owns tool registration, client-root checks, repository binding, MCP
+  cancellation, annotations, and structured error mapping. `commands/mcp/handler.ts`
+  only resolves/binds the repository and starts the server.
+
+Safety invariants are part of the public contract: MCP tools generate only; one process
+binds one real Git root; external diff/textconv and optional-lock side effects are
+disabled; refs reject option prefixes; untrusted worktrees and repository-defined
+prompts/commitlint are rejected; supplied content carries digest/provenance metadata.
+Local analytics may write only gated metadata to the user cache, never prompts, diffs,
+code, filenames, generated output, credentials, repository files, or forge state.
+
+Changes to this surface require co-located schema/context/generation/handler/server tests
+and should keep the agent CLI and MCP envelopes behaviorally identical. See
+[Agent CLI and MCP](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) for the canonical
+user-facing contract.
 
 ## The workstation (`src/workstation/`)
 
@@ -160,6 +209,9 @@ then wire the single call site. Never special-case a provider inside a surface.
 | Need to touch…                       | Go to…                                            |
 |--------------------------------------|---------------------------------------------------|
 | A CLI flag or new command            | `src/commands/<name>/config.ts` + `handler.ts`    |
+| Agent protocol/schema/source behavior | `src/operations/agent/`                           |
+| Agent JSON/stdin transport            | `src/commands/agent/`                             |
+| MCP tool registration/root policy     | `src/mcp/server.ts` + `src/commands/mcp/`         |
 | An LLM prompt                        | `src/commands/<name>/prompt.ts`                   |
 | Git read/write logic                 | `src/git/`                                         |
 | A forge (PR/issue) capability        | `src/git/forgeActions.ts` + provider files        |

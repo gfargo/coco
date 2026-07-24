@@ -14,6 +14,11 @@ import { getChanges } from '../../lib/simple-git/getChanges'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
+import {
+    checkCommitlintAvailability,
+    validateCommitMessage,
+    validateConventionalCommitMessage,
+} from '../../lib/utils/commitlintValidator'
 import { executeChainWithSchema } from '../../lib/langchain/utils/executeChainWithSchema'
 
 jest.mock('../../lib/config/utils/loadConfig')
@@ -26,6 +31,7 @@ jest.mock('../../lib/simple-git/getChanges')
 jest.mock('../../lib/simple-git/getCurrentBranchName')
 jest.mock('../../lib/simple-git/getPreviousCommits')
 jest.mock('../../lib/utils/hasCommitlintConfig')
+jest.mock('../../lib/utils/commitlintValidator')
 jest.mock('../../lib/langchain/utils/executeChainWithSchema')
 
 const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
@@ -48,6 +54,15 @@ const mockGetCurrentBranchName = getCurrentBranchName as jest.MockedFunction<
 const mockGetPreviousCommits = getPreviousCommits as jest.MockedFunction<typeof getPreviousCommits>
 const mockHasCommitlintConfig = hasCommitlintConfig as jest.MockedFunction<
   typeof hasCommitlintConfig
+>
+const mockCheckCommitlintAvailability = checkCommitlintAvailability as jest.MockedFunction<
+  typeof checkCommitlintAvailability
+>
+const mockValidateCommitMessage = validateCommitMessage as jest.MockedFunction<
+  typeof validateCommitMessage
+>
+const mockValidateConventionalCommitMessage = validateConventionalCommitMessage as jest.MockedFunction<
+  typeof validateConventionalCommitMessage
 >
 const mockExecuteChainWithSchema = executeChainWithSchema as jest.MockedFunction<
   typeof executeChainWithSchema
@@ -122,6 +137,9 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
     mockGetCurrentBranchName.mockResolvedValue('main')
     mockGetPreviousCommits.mockResolvedValue('')
     mockHasCommitlintConfig.mockResolvedValue(false)
+    mockCheckCommitlintAvailability.mockReturnValue({ available: true, missingPackages: [] })
+    mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockValidateConventionalCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
     mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
   })
 
@@ -198,6 +216,41 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
     expect(mockGetChanges).not.toHaveBeenCalled()
     expect(result.ok).toBe(true)
   })
+
+  it('tags non-streaming agent commit drafts with their invocation surface', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+
+    await generateCommitDraft({
+      git,
+      argv: buildArgv(),
+      preparedSummary: 'Changed the agent transport.',
+      trustRepositoryConfig: false,
+      usageSurface: 'mcp',
+    })
+
+    const options = mockExecuteChainWithSchema.mock.calls[0][4] as {
+      metadata: { surface?: string }
+    }
+    expect(options.metadata.surface).toBe('mcp')
+  })
+
+  it('uses built-in conventional validation without loading repository commitlint config', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+
+    const result = await generateCommitDraft({
+      git,
+      argv: buildArgv({ conventional: true }),
+      preparedSummary: 'Changed the agent transport.',
+      trustRepositoryConfig: false,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(mockHasCommitlintConfig).not.toHaveBeenCalled()
+    expect(mockValidateConventionalCommitMessage).toHaveBeenCalledWith(
+      'feat: test change\n\nTest body.',
+    )
+    expect(mockValidateCommitMessage).not.toHaveBeenCalled()
+  })
 })
 
 describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)', () => {
@@ -226,6 +279,9 @@ describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)
     mockGetCurrentBranchName.mockResolvedValue('main')
     mockGetPreviousCommits.mockResolvedValue('')
     mockHasCommitlintConfig.mockResolvedValue(false)
+    mockCheckCommitlintAvailability.mockReturnValue({ available: true, missingPackages: [] })
+    mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockValidateConventionalCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
     mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
     mockFileChangeParser.mockResolvedValue('a short summary')
   })

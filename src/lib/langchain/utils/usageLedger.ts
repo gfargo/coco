@@ -23,6 +23,8 @@ export type UsageRecord = {
   t: number
   command?: string
   task: string
+  /** Invocation surface. Records written before this field existed are normal CLI calls. */
+  surface?: LlmCallMetadata['surface']
   provider?: string
   model?: string
   promptTokens?: number
@@ -124,6 +126,7 @@ export function recordUsage(metadata: LlmCallMetadata): void {
     t: Date.now(),
     command: metadata.command,
     task: metadata.task,
+    surface: metadata.surface ?? 'cli',
     provider: metadata.provider,
     model: metadata.model,
     promptTokens: metadata.promptTokens,
@@ -215,6 +218,11 @@ export function summarizeUsageByTask(records: UsageRecord[]): UsageAggregate[] {
 /** Aggregate usage by model id. */
 export function summarizeUsageByModel(records: UsageRecord[]): UsageAggregate[] {
   return aggregate(records, (r) => r.model || 'unknown')
+}
+
+/** Aggregate usage by invocation surface. Legacy records predate agent transports and are CLI calls. */
+export function summarizeUsageBySurface(records: UsageRecord[]): UsageAggregate[] {
+  return aggregate(records, (r) => r.surface || 'cli')
 }
 
 /** Aggregate usage by repo identifier. */

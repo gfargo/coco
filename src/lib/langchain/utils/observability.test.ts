@@ -1,9 +1,9 @@
 import { Logger } from '../../utils/logger'
 import {
-  estimatePromptTokens,
-  logLlmCall,
-  logLlmTelemetrySummary,
-  resetLlmTelemetry,
+    estimatePromptTokens,
+    logLlmCall,
+    logLlmTelemetrySummary,
+    resetLlmTelemetry,
 } from './observability'
 
 describe('LLM observability utilities', () => {
@@ -23,6 +23,7 @@ describe('LLM observability utilities', () => {
     logLlmCall(logger, {
       task: 'commit-message',
       command: 'commit',
+      surface: 'agent-cli',
       provider: 'openai',
       model: 'gpt-4o',
       retryAttempt: 2,
@@ -31,7 +32,7 @@ describe('LLM observability utilities', () => {
     })
 
     expect(logger.verbose).toHaveBeenCalledWith(
-      '[llm] task=commit-message command=commit provider=openai model=gpt-4o retryAttempt=2 promptTokens=123 variableKeys=summary,format_instructions',
+      '[llm] task=commit-message command=commit surface=agent-cli provider=openai model=gpt-4o retryAttempt=2 promptTokens=123 variableKeys=summary,format_instructions',
       { color: 'cyan' }
     )
   })
