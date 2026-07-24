@@ -38,7 +38,12 @@ describe('agent repository context', () => {
   })
 
   afterEach(() => {
-    fs.rmSync(tempRoot, { recursive: true, force: true })
+    fs.rmSync(tempRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    })
   })
 
   it('resolves nested paths to the repository root within an allowed boundary', async () => {
