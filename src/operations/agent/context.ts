@@ -215,17 +215,13 @@ async function repositoryText(
         .join('\n\n')
     }
     case 'branch': {
-      const [base, head] = await Promise.all([
-        resolveCommitRevision(context, source.scope.base),
-        resolveCommitRevision(context, source.scope.head || 'HEAD'),
-      ])
+      const base = await resolveCommitRevision(context, source.scope.base)
+      const head = await resolveCommitRevision(context, source.scope.head || 'HEAD')
       return runAgentGit(context, ['diff', ...safeDiffOptions, `${base}..${head}`, '--'])
     }
     case 'range': {
-      const [from, to] = await Promise.all([
-        resolveCommitRevision(context, source.scope.from),
-        resolveCommitRevision(context, source.scope.to),
-      ])
+      const from = await resolveCommitRevision(context, source.scope.from)
+      const to = await resolveCommitRevision(context, source.scope.to)
       return runAgentGit(context, ['diff', ...safeDiffOptions, `${from}..${to}`, '--'])
     }
   }
