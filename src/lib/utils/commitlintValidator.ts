@@ -5,6 +5,22 @@ import { pathToFileURL } from 'url'
 import { COMMITLINT_CONFIG_FILES } from '../config/commitlint'
 import { findProjectRoot } from './findProjectRoot'
 
+const BUILT_IN_CONVENTIONAL_RULES: QualifiedConfig['rules'] = {
+  'header-max-length': [2, 'always', 72],
+  'header-min-length': [2, 'always', 8],
+  'subject-empty': [2, 'never'],
+  'subject-full-stop': [2, 'never', '.'],
+  'subject-case': [2, 'always', ['sentence-case', 'start-case', 'pascal-case', 'upper-case', 'lower-case']],
+  'type-empty': [2, 'never'],
+  'type-case': [2, 'always', 'lower-case'],
+  'type-enum': [2, 'always', [
+    'build', 'chore', 'ci', 'docs', 'feat', 'fix',
+    'perf', 'refactor', 'revert', 'style', 'test',
+  ]],
+  'body-max-line-length': [2, 'always', 100],
+  'scope-case': [2, 'always', 'lower-case'],
+}
+
 /**
  * Result of commit message validation
  */
@@ -144,21 +160,7 @@ export async function loadCommitlintConfig(): Promise<QualifiedConfig> {
     if (isConfigConventionalError) {
       // Return a basic conventional config that matches @commitlint/config-conventional rules
       return await load({
-        rules: {
-          'header-max-length': [2, 'always', 72],
-          'header-min-length': [2, 'always', 8],
-          'subject-empty': [2, 'never'],
-          'subject-full-stop': [2, 'never', '.'],
-          'subject-case': [2, 'always', ['sentence-case', 'start-case', 'pascal-case', 'upper-case', 'lower-case']],
-          'type-empty': [2, 'never'],
-          'type-case': [2, 'always', 'lower-case'],
-          'type-enum': [2, 'always', [
-            'build', 'chore', 'ci', 'docs', 'feat', 'fix', 
-            'perf', 'refactor', 'revert', 'style', 'test'
-          ]],
-          'body-max-line-length': [2, 'always', 100],
-          'scope-case': [2, 'always', 'lower-case'],
-        },
+        rules: BUILT_IN_CONVENTIONAL_RULES,
       })
     }
     throw error
@@ -272,7 +274,34 @@ export async function getCommitlintRulesContext(): Promise<string> {
 }
 
 /**
- * Validate a commit message using commitlint
+ * Validate Conventional Commits syntax without discovering or executing
+ * repository-defined commitlint configuration. Agent/MCP callers use this
+ * when conventional mode is requested but repository configuration is not
+ * explicitly trusted.
+ */
+export async function validateConventionalCommitMessage(
+  message: string,
+  options: LintOptions = {},
+): Promise<ValidationResult> {
+  try {
+    const { lint } = await import('@commitlint/core')
+    const result = await lint(message, BUILT_IN_CONVENTIONAL_RULES, options)
+    return {
+      valid: result.valid,
+      errors: result.errors.map((error) => error.message),
+      warnings: result.warnings.map((warning) => warning.message),
+    }
+  } catch (error) {
+    return {
+      valid: false,
+      errors: [error instanceof Error ? error.message : String(error)],
+      warnings: [],
+    }
+  }
+}
+
+/**
+ * Validate a commit message using repository-aware commitlint configuration.
  */
 export async function validateCommitMessage(
   message: string,

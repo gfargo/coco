@@ -149,6 +149,7 @@
     "@langchain/mistralai": "^1.1.0",
     "@langchain/ollama": "^1.2.7",
     "@langchain/openai": "^1.4.5",
+    "@modelcontextprotocol/sdk": "1.29.0",
     "ajv": "^8.20.0",
     "chalk": "4.1.2",
     "diff": "9.0.0",
@@ -164,9 +165,12 @@
     "simple-git": "3.36.0",
     "tiktoken": "^1.0.21",
     "web-tree-sitter": "^0.26.8",
-    "yargs": "17.7.2"
+    "yargs": "17.7.2",
+    "zod": "4.4.3"
   },
   "resolutions": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "zod": "4.4.3",
     "cross-spawn": "7.0.6",
     "brace-expansion": "^5.0.7",
     "@anthropic-ai/sdk": "^0.91.1",

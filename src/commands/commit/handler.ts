@@ -55,6 +55,13 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   // flattened message text — for agents and pipelines that consume the draft
   // programmatically. When both flags are passed, `--json` wins: one payload,
   // machine-readable.
+  if (argv.json && (argv.split || argv.plan || argv.apply)) {
+    emitJson({
+      error: '--json cannot be combined with --split, --plan, or --apply. Use `coco agent commit-draft` for a structured draft.',
+    })
+    commandExit(1)
+  }
+
   if (argv.printMessage || argv.json) {
     const result = await generateCommitDraft({ git, argv, logger })
     if (!result.ok || !result.draft) {
@@ -74,14 +81,11 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
       commandExit(1)
     }
     if (argv.json) {
-      // Split the finished draft rather than reusing the raw LLM response:
-      // the draft is the single source of truth after `--append` /
-      // `--append-ticket` and commitlint retries have been applied, and
-      // `formatCommitMessage` always joins the parts as `title\n\nbody`.
-      const separatorIndex = result.draft.indexOf('\n\n')
-      const title = separatorIndex === -1 ? result.draft : result.draft.slice(0, separatorIndex)
-      const body = separatorIndex === -1 ? '' : result.draft.slice(separatorIndex + 2)
-      emitJson({ title, body })
+      const message = result.message
+      emitJson({
+        title: message?.title || result.draft,
+        body: message?.body || '',
+      })
     } else {
       process.stdout.write(`${result.draft}\n`)
     }

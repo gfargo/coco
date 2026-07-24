@@ -2,17 +2,18 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import {
-  clearUsageLog,
-  getUsageLogPath,
-  isUsageLoggingEnabled,
-  readUsageRecords,
-  recordUsage,
-  resetUsageLedgerState,
-  setUsageConfigPreference,
-  setUsageRepoTag,
-  summarizeUsageByModel,
-  summarizeUsageByRepo,
-  summarizeUsageByTask,
+    clearUsageLog,
+    getUsageLogPath,
+    isUsageLoggingEnabled,
+    readUsageRecords,
+    recordUsage,
+    resetUsageLedgerState,
+    setUsageConfigPreference,
+    setUsageRepoTag,
+    summarizeUsageByModel,
+    summarizeUsageByRepo,
+    summarizeUsageBySurface,
+    summarizeUsageByTask,
 } from './usageLedger'
 
 describe('usageLedger', () => {
@@ -65,6 +66,59 @@ describe('usageLedger', () => {
 
     const byModel = summarizeUsageByModel(readUsageRecords())
     expect(byModel.find((r) => r.key === 'gpt-4o')?.calls).toBe(2)
+  })
+
+  it('persists and aggregates the invocation surface while treating legacy records as CLI', () => {
+    recordUsage({ task: 'commit', surface: 'agent-cli', promptTokens: 30, completionTokens: 3, elapsedMs: 300 })
+    recordUsage({ task: 'review', surface: 'mcp', promptTokens: 20, completionTokens: 2, elapsedMs: 200 })
+    fs.appendFileSync(logPath, `${JSON.stringify({ t: Date.now(), task: 'legacy', promptTokens: 10, elapsedMs: 100 })}\n`)
+
+    const records = readUsageRecords()
+    expect(records.map((record) => record.surface)).toEqual(['agent-cli', 'mcp', undefined])
+    expect(summarizeUsageBySurface(records)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'agent-cli', calls: 1, promptTokens: 30, completionTokens: 3 }),
+      expect.objectContaining({ key: 'mcp', calls: 1, promptTokens: 20, completionTokens: 2 }),
+      expect.objectContaining({ key: 'cli', calls: 1, promptTokens: 10 }),
+    ]))
+  })
+
+  it('serializes metadata only and cannot persist prompt, diff, or code fields', () => {
+    const sensitive = {
+      prompt: 'SECRET_PROMPT_CONTENT',
+      diff: 'SECRET_DIFF_CONTENT',
+      code: 'SECRET_CODE_CONTENT',
+      messages: ['SECRET_MESSAGE_CONTENT'],
+      variables: { source: 'SECRET_VARIABLE_CONTENT' },
+    }
+    recordUsage({
+      task: 'review',
+      command: 'agent-review',
+      surface: 'mcp',
+      provider: 'openai',
+      model: 'gpt-test',
+      promptTokens: 42,
+      completionTokens: 7,
+      elapsedMs: 123,
+      ...sensitive,
+    } as Parameters<typeof recordUsage>[0])
+
+    const serialized = fs.readFileSync(logPath, 'utf8')
+    const parsed = JSON.parse(serialized.trim()) as Record<string, unknown>
+    expect(Object.keys(parsed).sort()).toEqual([
+      'command',
+      'completionTokens',
+      'elapsedMs',
+      'model',
+      'promptTokens',
+      'provider',
+      'surface',
+      't',
+      'task',
+    ])
+    expect(serialized).not.toContain('SECRET_')
+    expect(parsed).not.toHaveProperty('prompt')
+    expect(parsed).not.toHaveProperty('diff')
+    expect(parsed).not.toHaveProperty('code')
   })
 
   it('returns [] for a missing ledger and clears the file', () => {

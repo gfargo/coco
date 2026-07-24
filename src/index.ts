@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import yargs from 'yargs'
+import agent from './commands/agent'
 import amend from './commands/amend'
 import cache from './commands/cache'
 import changelog from './commands/changelog'
@@ -10,6 +11,7 @@ import hooks from './commands/hooks'
 import init from './commands/init'
 import issues from './commands/issues'
 import log from './commands/log'
+import mcp from './commands/mcp'
 import prCreate from './commands/prCreate'
 import prs from './commands/prs'
 import recap from './commands/recap'
@@ -17,6 +19,7 @@ import review from './commands/review'
 import ui from './commands/ui'
 import workspace from './commands/workspace'
 
+import { AgentCommandOptions } from './commands/agent/config'
 import { AmendOptions } from './commands/amend/config'
 import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
@@ -28,6 +31,7 @@ import { HooksOptions } from './commands/hooks/config'
 import { InitOptions } from './commands/init/config'
 import { IssuesOptions } from './commands/issues/config'
 import { LogOptions } from './commands/log/config'
+import { McpOptions } from './commands/mcp/config'
 import { PrCreateOptions } from './commands/prCreate/config'
 import { PrsOptions } from './commands/prs/config'
 import { RecapOptions } from './commands/recap/config'
@@ -112,6 +116,20 @@ y.command<DefaultRouteArgv>(
   // formatting, and exit-code handling. The router is a regular
   // command so it lights up the same plumbing for free.
   commandExecutor(defaultRouteHandler)
+)
+
+y.command<AgentCommandOptions>(
+  agent.command,
+  agent.desc,
+  agent.builder,
+  agent.handler
+)
+
+y.command<McpOptions>(
+  mcp.command,
+  mcp.desc,
+  mcp.builder,
+  mcp.handler
 )
 
 y.command<CommitOptions>(
@@ -239,6 +257,8 @@ y.completion(
 )
 
 const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
+  { name: firstCommandToken(agent.command), desc: agent.desc },
+  { name: firstCommandToken(mcp.command), desc: mcp.desc },
   { name: firstCommandToken(commit.command), desc: commit.desc },
   { name: firstCommandToken(amend.command), desc: amend.desc },
   { name: firstCommandToken(changelog.command), desc: changelog.desc },
@@ -346,6 +366,7 @@ main().catch((error) => {
 })
 
 export {
+  agent,
   cache,
   changelog,
   commit,
@@ -356,6 +377,7 @@ export {
   init,
   issues,
   log,
+  mcp,
   prs,
   recap,
   types,
