@@ -17,7 +17,12 @@ export type AgentOperationContext = {
   logger: Logger
   surface: LlmUsageSurface
   signal?: AbortSignal
+  cleanFilterProbe?: Promise<CleanFilterProbeResult>
 }
+
+type CleanFilterProbeResult =
+  | { blocked: false }
+  | { blocked: true, filter: string }
 
 export type ResolvedChangeContext = {
   text: string
@@ -186,6 +191,52 @@ async function resolveCommitRevision(
   }
 }
 
+const CLEAN_FILTER_CONFIG_PATTERN = String.raw`^filter\..*\.clean$`
+const CHECK_ATTR_BATCH_SIZE = 200
+
+// Determines whether the repository defines a `clean` filter AND assigns it to a tracked
+// path. Only that combination can cause `git diff` against the worktree to execute
+// arbitrary repository-defined commands; a filter that is merely configured but never
+// assigned to a path is inert.
+async function probeCleanFilters(context: AgentOperationContext): Promise<CleanFilterProbeResult> {
+  let configOutput: string
+  try {
+    configOutput = await runAgentGit(context, ['config', '--get-regexp', CLEAN_FILTER_CONFIG_PATTERN])
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    // `git config --get-regexp` exits with status 1 when nothing matches, which
+    // execFile surfaces as a thrown error rather than empty output.
+    return { blocked: false }
+  }
+
+  const configuredFilters = new Map<string, string>()
+  for (const line of configOutput.split('\n')) {
+    const spaceIndex = line.indexOf(' ')
+    if (spaceIndex === -1) continue
+    const key = line.slice(0, spaceIndex)
+    const filterName = key.slice('filter.'.length, key.length - '.clean'.length)
+    if (filterName) configuredFilters.set(filterName, key)
+  }
+  if (configuredFilters.size === 0) return { blocked: false }
+
+  const trackedFilesOutput = await runAgentGit(context, ['ls-files', '-z'])
+  const trackedFiles = trackedFilesOutput.split('\0').filter(Boolean)
+  if (trackedFiles.length === 0) return { blocked: false }
+
+  for (let offset = 0; offset < trackedFiles.length; offset += CHECK_ATTR_BATCH_SIZE) {
+    const batch = trackedFiles.slice(offset, offset + CHECK_ATTR_BATCH_SIZE)
+    const output = await runAgentGit(context, ['check-attr', '-z', 'filter', '--', ...batch])
+    const fields = output.split('\0')
+    for (let i = 0; i + 2 < fields.length; i += 3) {
+      const assignedFilter = fields[i + 2]
+      const configKey = configuredFilters.get(assignedFilter)
+      if (configKey) return { blocked: true, filter: configKey }
+    }
+  }
+
+  return { blocked: false }
+}
+
 async function repositoryText(
   source: Extract<ChangeSource, { kind: 'repository' }>,
   context: AgentOperationContext,
@@ -197,10 +248,14 @@ async function repositoryText(
       return runAgentGit(context, ['diff', '--cached', ...safeDiffOptions, '--'])
     case 'worktree': {
       if (!trustRepositoryConfig) {
-        throw new AgentOperationError(
-          'UNSAFE_SOURCE',
-          'Worktree inspection can invoke repository-defined clean filters. Supply a patch/summary or explicitly trust repository configuration in the one-shot agent CLI.',
-        )
+        context.cleanFilterProbe ??= probeCleanFilters(context)
+        const probe = await context.cleanFilterProbe
+        if (probe.blocked) {
+          throw new AgentOperationError(
+            'UNSAFE_SOURCE',
+            `Repository defines clean filter '${probe.filter}' which git would execute during worktree inspection. Supply a patch/summary or explicitly trust repository configuration in the one-shot agent CLI.`,
+          )
+        }
       }
       const [staged, unstaged, untrackedFiles] = await Promise.all([
         runAgentGit(context, ['diff', '--cached', ...safeDiffOptions, '--']),

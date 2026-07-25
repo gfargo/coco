@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
@@ -19,6 +20,11 @@ jest.setTimeout(20000)
 describe('agent repository context', () => {
   let tempRoot: string
   let repoRoot: string
+
+  function configureCleanFilter(directory: string, filterName: string, command: string): void {
+    // simple-git blocks configuring filter.*.clean for safety; use the git binary directly.
+    execFileSync('git', ['config', `filter.${filterName}.clean`, command], { cwd: directory })
+  }
 
   async function initializeRepo(directory: string): Promise<string> {
     fs.mkdirSync(directory, { recursive: true })
@@ -90,14 +96,65 @@ describe('agent repository context', () => {
     expect(resolved.meta.digest).toMatch(/^sha256:[a-f0-9]{64}$/)
   })
 
-  it('rejects worktree inspection unless repository configuration is trusted', async () => {
+  it('allows worktree inspection when the repository defines no clean filters', async () => {
+    fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), 'unstaged\n')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const resolved = await resolveChangeSource(
+      { kind: 'repository', scope: { type: 'worktree' } },
+      context,
+    )
+
+    expect(resolved.text).toContain('Unstaged changes:')
+  })
+
+  it('rejects worktree inspection when a clean filter is configured and assigned to a tracked path', async () => {
+    const git = simpleGit(repoRoot)
+    configureCleanFilter(repoRoot, 'secret', 'cat')
+    fs.writeFileSync(path.join(repoRoot, '.gitattributes'), 'tracked.txt filter=secret\n')
+    await git.add('.gitattributes')
+    await git.commit('assign clean filter')
     fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), 'unstaged\n')
     const context = await createAgentOperationContext({ repoRoot })
 
     await expect(resolveChangeSource(
       { kind: 'repository', scope: { type: 'worktree' } },
       context,
-    )).rejects.toMatchObject({ code: 'UNSAFE_SOURCE' })
+    )).rejects.toMatchObject({
+      code: 'UNSAFE_SOURCE',
+      message: expect.stringContaining('filter.secret.clean'),
+    })
+  })
+
+  it('allows worktree inspection when a clean filter is configured but not assigned to any path', async () => {
+    configureCleanFilter(repoRoot, 'secret', 'cat')
+    fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), 'unstaged\n')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const resolved = await resolveChangeSource(
+      { kind: 'repository', scope: { type: 'worktree' } },
+      context,
+    )
+
+    expect(resolved.text).toContain('Unstaged changes:')
+  })
+
+  it('bypasses the clean filter probe when repository configuration is trusted', async () => {
+    const git = simpleGit(repoRoot)
+    configureCleanFilter(repoRoot, 'secret', 'cat')
+    fs.writeFileSync(path.join(repoRoot, '.gitattributes'), 'tracked.txt filter=secret\n')
+    await git.add('.gitattributes')
+    await git.commit('assign clean filter')
+    fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), 'unstaged\n')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const resolved = await resolveChangeSource(
+      { kind: 'repository', scope: { type: 'worktree' } },
+      context,
+      { trustRepositoryConfig: true },
+    )
+
+    expect(resolved.text).toContain('Unstaged changes:')
   })
 
   it('includes staged, unstaged, and untracked changes for a trusted worktree', async () => {
