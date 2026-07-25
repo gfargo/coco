@@ -98,7 +98,7 @@ describe('createCocoMcpServer', () => {
     return registration
   }
 
-  it('registers four read-only generation tools with visible discriminated output schemas', () => {
+  it('registers five read-only generation tools with visible discriminated output schemas', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -106,6 +106,7 @@ describe('createCocoMcpServer', () => {
       'coco_review',
       'coco_changelog',
       'coco_recap',
+      'coco_split_plan',
     ])
     for (const registration of registrations.values()) {
       expect(registration.config.annotations).toEqual({

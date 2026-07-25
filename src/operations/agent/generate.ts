@@ -1,3 +1,4 @@
+import { parsePatch, StructuredPatch } from 'diff'
 import { Arguments } from 'yargs'
 import { z } from 'zod'
 
@@ -8,6 +9,17 @@ import {
 import { CHANGELOG_PROMPT } from '../../commands/changelog/prompt'
 import { CommitOptions } from '../../commands/commit/config'
 import { generateCommitDraft } from '../../commands/commit/generateCommitDraft'
+import {
+    DEFAULT_MAX_PLAN_ATTEMPTS,
+    generateValidatedCommitSplitPlan,
+    NO_PREVIOUS_FEEDBACK_PLACEHOLDER,
+} from '../../commands/commit/splitPlanGenerator'
+import { COMMIT_SPLIT_PROMPT, CONVENTIONAL_COMMITS_RULES } from '../../commands/commit/splitPlanPrompt'
+import {
+    formatPlanValidationIssuesError,
+    getPlanValidationIssues,
+    hasPlanValidationIssues,
+} from '../../commands/commit/splitPlanValidation'
 import { RecapLlmResponseSchema } from '../../commands/recap/config'
 import { RECAP_PROMPT } from '../../commands/recap/prompt'
 import {
@@ -25,6 +37,9 @@ import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
+import { getChanges } from '../../lib/simple-git/getChanges'
+import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
+import { FileChange, FileChangeStatus } from '../../lib/types'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { AgentOperationContext, resolveChangeSource } from './context'
 import { AgentOperationError } from './errors'
@@ -38,9 +53,10 @@ import {
     CommitDraftData,
     RecapData,
     ReviewData,
+    SplitPlanData,
 } from './schemas'
 
-type SupportedTask = 'review' | 'changelog' | 'recap'
+type SupportedTask = 'review' | 'changelog' | 'recap' | 'commitSplit'
 
 type GenerationRuntime = {
   config: ReturnType<typeof loadConfig<Record<string, unknown>, Record<string, unknown>>>
@@ -296,6 +312,127 @@ export async function generateAgentRecap(
   return envelope('recap', result, [], resolved.meta)
 }
 
+function statusForPatch(patch: StructuredPatch): FileChangeStatus {
+  if (patch.oldFileName === '/dev/null') return 'added'
+  if (patch.newFileName === '/dev/null') return 'deleted'
+  return 'modified'
+}
+
+function filePathForPatch(patch: StructuredPatch): string {
+  const raw = patch.newFileName === '/dev/null' ? patch.oldFileName : patch.newFileName
+  return (raw || '').replace(/^[ab]\//, '')
+}
+
+function fileChangesFromPatch(patch: string): FileChange[] {
+  return parsePatch(patch).map((entry) => ({
+    filePath: filePathForPatch(entry),
+    status: statusForPatch(entry),
+    summary: '',
+  }))
+}
+
+export async function generateAgentSplitPlan(
+  input: AgentTaskInput,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<SplitPlanData>> {
+  const { source, options } = input
+
+  if (source.kind === 'summary' || source.kind === 'files') {
+    throw new AgentOperationError(
+      'INVALID_SOURCE',
+      `Split planning requires file-level diff detail and cannot use a '${source.kind}' source. Use 'repository' (staged) or 'patch'.`,
+    )
+  }
+  if (source.kind === 'repository' && source.scope.type !== 'staged') {
+    throw new AgentOperationError(
+      'INVALID_SOURCE',
+      `Split planning only supports the staged repository scope, not '${source.scope.type}'.`,
+    )
+  }
+
+  const resolved = await resolveChangeSource(source, context, {
+    trustRepositoryConfig: options.trustRepositoryConfig,
+  })
+
+  const staged: FileChange[] = source.kind === 'repository'
+    ? (await getChanges({ git: context.git, options: {} })).staged
+    : fileChangesFromPatch(source.patch)
+
+  if (staged.length === 0) {
+    throw new AgentOperationError('NO_CHANGES', 'No staged changes were found for the requested source.')
+  }
+
+  const runtime = await createRuntime('commitSplit', options, context)
+
+  const branchName = options.includeBranchName ? await getCurrentBranchName({ git: context.git }) : ''
+  const branchNameContext = branchName ? `Current git branch name: ${branchName}` : ''
+  const fileInventory = staged
+    .map((change) => `- ${change.filePath}: ${change.status} - ${change.summary}`)
+    .join('\n')
+
+  const variables: Record<string, string> = {
+    file_inventory: fileInventory,
+    hunk_inventory: 'No hunk-level inventory available. Use file-level groups.',
+    summary: asUntrustedChangeContext(resolved.text),
+    additional_context: options.additionalContext || '',
+    commit_message_rules: options.conventional ? `\n${CONVENTIONAL_COMMITS_RULES}` : '',
+    branch_name_context: branchNameContext,
+    // The agent surface never loads repository-defined commitlint config —
+    // unlike `prepareCommitSplitPlan`, which does for the interactive CLI.
+    commitlint_rules_context: '',
+    previous_attempt_feedback: NO_PREVIOUS_FEEDBACK_PLACEHOLDER,
+  }
+
+  const budgeted = await enforcePromptBudget({
+    prompt: COMMIT_SPLIT_PROMPT,
+    variables,
+    tokenizer: runtime.tokenizer,
+    maxTokens: runtime.config.service.tokenLimit || 4096,
+    summaryKey: 'summary',
+  })
+
+  const { plan, fallback } = await generateValidatedCommitSplitPlan({
+    llm: runtime.llm,
+    prompt: COMMIT_SPLIT_PROMPT,
+    variables: budgeted.variables,
+    staged,
+    logger: context.logger,
+    tokenizer: runtime.tokenizer,
+    signal: context.signal,
+    metadata: {
+      task: 'agent-split-plan',
+      command: 'agent-split-plan',
+      provider: runtime.provider,
+      model: runtime.model,
+      surface: context.surface,
+    },
+    maxAttempts: DEFAULT_MAX_PLAN_ATTEMPTS,
+    strict: false,
+  })
+
+  const groups = plan.groups
+    .filter((group) => !group.unclaimed)
+    .map((group) => ({
+      title: group.title,
+      body: group.body || '',
+      files: group.files || [],
+      ...(group.rationale ? { rationale: group.rationale } : {}),
+    }))
+  const ungrouped = plan.groups
+    .filter((group) => group.unclaimed)
+    .flatMap((group) => group.files || [])
+
+  const issues = getPlanValidationIssues(plan, staged, undefined)
+  const validationErrors = hasPlanValidationIssues(issues)
+    ? formatPlanValidationIssuesError(issues).split('; ')
+    : []
+  if (fallback) {
+    validationErrors.push(fallback.reason)
+  }
+
+  return envelope('split-plan', { groups, ungrouped, validationErrors }, [], resolved.meta)
+}
+
 export async function runAgentOperation(
   operation: AgentOperation,
   input: AgentTaskInput,
@@ -310,5 +447,7 @@ export async function runAgentOperation(
       return generateAgentChangelog(input, context)
     case 'recap':
       return generateAgentRecap(input, context)
+    case 'split-plan':
+      return generateAgentSplitPlan(input, context)
   }
 }

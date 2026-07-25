@@ -18,6 +18,7 @@ import {
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
+    SplitPlanDataSchema,
     toAgentOperationError,
 } from '../operations/agent'
 
@@ -31,6 +32,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, ChangelogDataSchema)
     case 'recap':
       return createAgentMcpOutputSchema(operation, RecapDataSchema)
+    case 'split-plan':
+      return createAgentMcpOutputSchema(operation, SplitPlanDataSchema)
   }
 }
 
@@ -209,6 +212,13 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     'recap',
     'Recap changes',
     'Generate a structured recap from repository changes or supplied context.',
+    repoRoot,
+  )
+  registerGenerationTool(
+    server,
+    'split-plan',
+    'Plan commit split',
+    'Plan a multi-commit decomposition of staged changes (or a supplied patch) with commitlint-nudged group titles. Never stages, commits, or otherwise mutates the repository.',
     repoRoot,
   )
 

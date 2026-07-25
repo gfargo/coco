@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import {
+    AgentOperationSchema,
     AgentTaskInputSchema,
     AGENT_PROTOCOL_VERSION,
     ChangelogDataSchema,
@@ -8,7 +9,8 @@ import {
     createAgentInputJsonSchema,
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
-    MAX_AGENT_CONTEXT_BYTES
+    MAX_AGENT_CONTEXT_BYTES,
+    SplitPlanDataSchema
 } from './schemas'
 
 const meta = {
@@ -173,5 +175,48 @@ describe('agent output schemas', () => {
       properties: { ok: { const: false }, operation: { const: 'changelog' } },
       required: expect.arrayContaining(['error']),
     })
+  })
+})
+
+describe('split-plan operation', () => {
+  it('is accepted by AgentOperationSchema', () => {
+    expect(AgentOperationSchema.safeParse('split-plan').success).toBe(true)
+  })
+
+  it('round-trips a success envelope through SplitPlanDataSchema and rejects mismatched shapes', () => {
+    const schema = createAgentOutputSchema('split-plan', SplitPlanDataSchema)
+    const data = {
+      groups: [
+        { title: 'feat: add helper', body: '', files: ['a.ts'] },
+        { title: 'fix: wire helper', body: 'why', files: ['b.ts'], rationale: 'consumer' },
+      ],
+      ungrouped: ['c.ts'],
+      validationErrors: [],
+    }
+    const success = {
+      version: AGENT_PROTOCOL_VERSION,
+      ok: true as const,
+      operation: 'split-plan' as const,
+      status: 'completed' as const,
+      data,
+      warnings: [],
+      meta,
+    }
+
+    expect(schema.parse(success)).toEqual(success)
+    expect(schema.safeParse({
+      ...success,
+      data: { ...data, groups: [{ title: 'x' }] },
+    }).success).toBe(false)
+  })
+
+  it('publishes a two-branch oneOf in the MCP output JSON schema', () => {
+    const jsonSchema = z.toJSONSchema(createAgentMcpOutputSchema('split-plan', SplitPlanDataSchema)) as {
+      type?: string
+      oneOf?: Array<Record<string, unknown>>
+    }
+
+    expect(jsonSchema.type).toBe('object')
+    expect(jsonSchema.oneOf).toHaveLength(2)
   })
 })

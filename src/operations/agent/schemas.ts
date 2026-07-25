@@ -5,7 +5,7 @@ import { ReviewFeedbackItemSchema } from '../../commands/review/config'
 export const AGENT_PROTOCOL_VERSION = 1 as const
 export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'split-plan'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -141,6 +141,17 @@ export const RecapDataSchema = z.object({
   summary: z.string(),
 }).strict()
 
+export const SplitPlanDataSchema = z.object({
+  groups: z.array(z.object({
+    title: z.string(),
+    body: z.string(),
+    files: z.array(z.string()),
+    rationale: z.string().optional(),
+  }).strict()),
+  ungrouped: z.array(z.string()),
+  validationErrors: z.array(z.string()),
+}).strict()
+
 export const AgentErrorSchema = z.object({
   code: z.string(),
   message: z.string(),
@@ -233,6 +244,7 @@ export type CommitDraftData = z.infer<typeof CommitDraftDataSchema>
 export type ReviewData = z.infer<typeof ReviewDataSchema>
 export type ChangelogData = z.infer<typeof ChangelogDataSchema>
 export type RecapData = z.infer<typeof RecapDataSchema>
+export type SplitPlanData = z.infer<typeof SplitPlanDataSchema>
 
 export type AgentSuccessEnvelope<T> = {
   version: typeof AGENT_PROTOCOL_VERSION

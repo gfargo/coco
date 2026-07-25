@@ -106,6 +106,18 @@ describe('agent command handler', () => {
     expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
   })
 
+  it('prints versioned input/output schemas for the split-plan task', async () => {
+    await handler(argv({ operation: 'schema', task: 'split-plan' }))
+
+    const output = JSON.parse(stdout)
+    expect(output).toMatchObject({
+      version: 1,
+      operation: 'split-plan',
+      input: { type: 'object', additionalProperties: false },
+      output: { oneOf: expect.any(Array) },
+    })
+  })
+
   it('emits a structured INVALID_JSON failure', async () => {
     await handler(argv({ input: writeRequest('{not json') }))
 

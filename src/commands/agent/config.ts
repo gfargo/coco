@@ -22,7 +22,7 @@ export const options = {
   },
   task: {
     type: 'string',
-    choices: ['commit-draft', 'review', 'changelog', 'recap'],
+    choices: ['commit-draft', 'review', 'changelog', 'recap', 'split-plan'],
     description: 'Operation whose schemas should be printed by `coco agent schema`.',
   },
 } as Record<string, Options>
@@ -31,7 +31,7 @@ export const builder = (yargs: Argv) => yargs
   .positional('operation', {
     describe: 'Agent operation to run',
     type: 'string',
-    choices: ['commit-draft', 'review', 'changelog', 'recap', 'schema'] as const,
+    choices: ['commit-draft', 'review', 'changelog', 'recap', 'split-plan', 'schema'] as const,
   })
   .options(options)
   .check((argv) => {

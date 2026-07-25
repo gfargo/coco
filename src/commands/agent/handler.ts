@@ -16,6 +16,7 @@ import {
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
+    SplitPlanDataSchema,
     toAgentOperationError
 } from '../../operations/agent'
 import { armNonInteractiveUsageTelemetry } from '../utils/usageTelemetry'
@@ -50,6 +51,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, ChangelogDataSchema)
     case 'recap':
       return createAgentOutputSchema(operation, RecapDataSchema)
+    case 'split-plan':
+      return createAgentOutputSchema(operation, SplitPlanDataSchema)
   }
 }
 
