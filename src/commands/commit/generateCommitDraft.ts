@@ -153,6 +153,101 @@ function structuredDraft(formatted: string): CommitDraftMessage {
 }
 
 /**
+ * Word-wrap a single text line to the given max column width.
+ * Preserves leading whitespace (e.g. indent for list items).
+ * Lines that have no word-break opportunity (a single token longer than
+ * maxLen) are left intact rather than broken mid-token.
+ */
+function wrapLine(line: string, maxLen: number): string {
+  if (line.length <= maxLen) return line
+
+  // Detect and preserve leading whitespace
+  const leadMatch = line.match(/^(\s*)/)
+  const indent = leadMatch ? leadMatch[1] : ''
+  const words = line.trimStart().split(' ')
+  const lines: string[] = []
+  let current = indent
+
+  for (const word of words) {
+    if (current === indent) {
+      // First word on this visual line — always place it even if it overflows
+      current += word
+    } else if ((current + ' ' + word).length <= maxLen) {
+      current += ' ' + word
+    } else {
+      lines.push(current)
+      current = indent + word
+    }
+  }
+  if (current) lines.push(current)
+  return lines.join('\n')
+}
+
+/**
+ * Attempt to mechanically repair a commit message to satisfy commitlint rules
+ * that coco itself chose and generated text for. Handles the two most common
+ * self-inflicted violations:
+ *
+ *   1. `body-max-line-length` — hard-wraps over-length body lines at word
+ *      boundaries using the limit extracted from the error message (defaults
+ *      to 100 if no number is found).
+ *   2. `subject-case` — lower-cases the subject (the part after `type(scope):`)
+ *      when the violation is one of the case rules coco sets by default. Only
+ *      applies the normalisation when *every* case allowed is a lower-case
+ *      form (sentence-case, lower-case) and the fix is unambiguous.
+ *
+ * Returns the repaired message string, or the original when no repair rule
+ * applies (so callers can always call this unconditionally).
+ */
+export function repairDraftAgainstValidationErrors(
+  draft: string,
+  validationErrors: string[],
+): string {
+  if (!draft || validationErrors.length === 0) return draft
+
+  const separatorIndex = draft.indexOf('\n\n')
+  let title = separatorIndex === -1 ? draft : draft.slice(0, separatorIndex)
+  let body = separatorIndex === -1 ? '' : draft.slice(separatorIndex + 2)
+
+  for (const error of validationErrors) {
+    // --- body-max-line-length ---
+    if (/body.{0,30}lines?.{0,30}longer than/i.test(error) || /body-max-line-length/i.test(error)) {
+      const limitMatch = error.match(/\b(\d+)\b/)
+      const limit = limitMatch ? parseInt(limitMatch[1], 10) : 100
+      if (body) {
+        body = body
+          .split('\n')
+          .map((line) => wrapLine(line, limit))
+          .join('\n')
+      }
+    }
+
+    // --- subject-case (lower-case / sentence-case violations) ---
+    // The built-in rule allows any of: sentence-case, start-case, pascal-case,
+    // upper-case, lower-case — so we only normalise when the generated subject
+    // starts with an uppercase letter and lowercasing it is safe (i.e. we only
+    // fix "FooBar" → "fooBar" style capitalisation artefacts, not intentional
+    // proper nouns in start-case/pascal-case, which are already allowed).
+    // A pragmatic approach: lowercase just the first character of the subject,
+    // which is the most common violation (capitalised first word).
+    if (/subject.{0,30}(must be|case)/i.test(error) || /subject-case/i.test(error)) {
+      // Extract subject from conventional title: "type(scope): Subject text"
+      const conventionalMatch = title.match(/^([a-z]+(?:\([^)]*\))?!?):\s*(.*)$/)
+      if (conventionalMatch) {
+        const prefix = conventionalMatch[1]
+        const subject = conventionalMatch[2]
+        if (subject && subject[0] === subject[0].toUpperCase() && subject[0] !== subject[0].toLowerCase()) {
+          // Lower-case the first character of the subject
+          title = `${prefix}: ${subject[0].toLowerCase()}${subject.slice(1)}`
+        }
+      }
+    }
+  }
+
+  return body ? `${title}\n\n${body}` : title
+}
+
+/**
  * Generate a commit message draft with no UI side effects.
  *
  * Mirrors the LLM-chain logic from `commit/handler.ts`'s agent callback but
@@ -586,8 +681,44 @@ export async function generateCommitDraft({
     throw error
   }
 
-  // Both attempts failed validation — return the latest draft so the user can
-  // hand-edit in the compose surface, plus the validator output for context.
+  // Both attempts failed validation — try a mechanical repair pass before
+  // giving up. Re-wrap over-long body lines and normalise subject case where
+  // the fix is unambiguous. Re-validate after the repair so we only return
+  // ok: true when the result actually passes.
+  if (lastDraft && lastValidationErrors.length > 0) {
+    const repairedDraft = repairDraftAgainstValidationErrors(lastDraft, lastValidationErrors)
+    if (repairedDraft !== lastDraft) {
+      try {
+        const {
+          validateCommitMessage: revalidateCommitMessage,
+          validateConventionalCommitMessage: revalidateConventionalCommitMessage,
+        } = await import('../../lib/utils/commitlintValidator')
+        const repairedResult = useSafeBuiltInValidation
+          ? await revalidateConventionalCommitMessage(repairedDraft)
+          : await revalidateCommitMessage(repairedDraft)
+
+        if (repairedResult.valid) {
+          warnings.push('Commit message was automatically repaired to satisfy commitlint rules.')
+          return {
+            ok: true,
+            draft: repairedDraft,
+            message: structuredDraft(repairedDraft),
+            warnings,
+            validationErrors: [],
+          }
+        }
+        // Repair didn't fully fix all errors — update lastDraft and errors
+        // so the caller gets the best available draft.
+        lastDraft = repairedDraft
+        lastValidationErrors = repairedResult.errors
+      } catch {
+        // Repair validation failed unexpectedly; fall through with the original draft.
+      }
+    }
+  }
+
+  // Return the latest draft so the user can hand-edit in the compose surface,
+  // plus the validator output for context.
   return {
     ok: false,
     draft: lastDraft,
