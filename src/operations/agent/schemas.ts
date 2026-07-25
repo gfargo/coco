@@ -83,15 +83,29 @@ export const ChangeSourceSchema = z.discriminatedUnion('kind', [
 ])
 
 export const AgentOptionsSchema = z.object({
-  language: z.string().min(1).max(100).optional(),
-  additionalContext: z.string().max(32 * 1024).optional(),
-  conventional: z.boolean().default(false),
-  includeBranchName: z.boolean().default(false),
-  previousCommitCount: z.number().int().min(0).max(20).default(0),
-  author: z.boolean().default(false),
-  timeframe: z.string().min(1).max(100).optional(),
+  language: z.string().min(1).max(100).optional().describe(
+    'ISO language code or plain name (e.g. "en", "Spanish") for generated output. Honored by: all operations.',
+  ),
+  additionalContext: z.string().max(32 * 1024).optional().describe(
+    'Extra free-text context appended to the prompt (e.g. ticket description, scope notes). Honored by: commit-draft, changelog. Ignored by review and recap.',
+  ),
+  conventional: z.boolean().default(false).describe(
+    'Constrain generated commit message to the Conventional Commits specification. Honored by: commit-draft. Ignored by other operations.',
+  ),
+  includeBranchName: z.boolean().default(false).describe(
+    'Include the current branch name as context when generating the commit message. Honored by: commit-draft. Ignored by other operations.',
+  ),
+  previousCommitCount: z.number().int().min(0).max(20).default(0).describe(
+    'Number of preceding commits to include as context for the commit message. Honored by: commit-draft. Ignored by other operations.',
+  ),
+  author: z.boolean().default(false).describe(
+    'Include author attribution when it is present in the supplied context. Honored by: changelog. Ignored by other operations.',
+  ),
+  timeframe: z.string().min(1).max(100).optional().describe(
+    'Human-readable window for the summary, e.g. "last week" or "yesterday". Honored by: recap. Ignored by other operations.',
+  ),
   trustRepositoryConfig: z.boolean().default(false).describe(
-    'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety.',
+    'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety. Honored by: all operations (agent CLI only; MCP rejects this option).',
   ),
 }).strict()
 

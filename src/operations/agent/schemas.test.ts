@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import {
+    AgentOptionsSchema,
     AgentTaskInputSchema,
     AGENT_PROTOCOL_VERSION,
     ChangelogDataSchema,
@@ -119,6 +120,22 @@ describe('AgentTaskInputSchema', () => {
       ['path', 'status', 'patch'],
       ['path', 'status', 'summary'],
     ])
+  })
+  it('documents every option field with a non-empty applicability description', () => {
+    const jsonSchema = createAgentInputJsonSchema() as unknown as {
+      properties: {
+        options: {
+          properties: Record<string, { description?: string }>
+        }
+      }
+    }
+    const optionProps = jsonSchema.properties.options.properties
+    const fields = Object.keys(AgentOptionsSchema.shape)
+
+    for (const field of fields) {
+      expect(optionProps[field]?.description?.length ?? 0).toBeGreaterThan(0)
+      expect(optionProps[field]?.description).toContain('Honored by:')
+    }
   })
 })
 
