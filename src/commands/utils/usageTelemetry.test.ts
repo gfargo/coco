@@ -5,7 +5,11 @@ import {
   setUsageConfigPreference,
   setUsageRepoTag,
 } from '../../lib/langchain/utils/usageLedger'
-import { armNonInteractiveUsageTelemetry } from './usageTelemetry'
+import {
+  applyUsageRepoTag,
+  armNonInteractiveUsagePreference,
+  armNonInteractiveUsageTelemetry,
+} from './usageTelemetry'
 
 jest.mock('../../git/repoIdentifier', () => ({
   resolveRepoIdentifier: jest.fn(),
@@ -74,5 +78,60 @@ describe('armNonInteractiveUsageTelemetry', () => {
     mockLoadConfig.mockReturnValue({ telemetry: { usage: true } } as never)
     mockResolveRepoIdentifier.mockRejectedValueOnce(new Error('git failed'))
     await expect(armNonInteractiveUsageTelemetry(argv, '/repo')).resolves.toBeUndefined()
+  })
+})
+
+describe('armNonInteractiveUsagePreference', () => {
+  const argv = { _: ['mcp'], $0: 'coco' }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('sets the config preference without touching repository resolution', () => {
+    mockLoadConfig.mockReturnValue({ telemetry: { usage: true } } as never)
+
+    armNonInteractiveUsagePreference(argv)
+
+    expect(mockLoadConfig).toHaveBeenCalledWith(argv)
+    expect(mockSetUsageConfigPreference).toHaveBeenCalledWith(true)
+    expect(mockResolveRepoIdentifier).not.toHaveBeenCalled()
+    expect(mockSetUsageRepoTag).not.toHaveBeenCalled()
+  })
+
+  it('never lets a config load failure interrupt the caller', () => {
+    mockLoadConfig.mockImplementationOnce(() => { throw new Error('config failed') })
+
+    expect(() => armNonInteractiveUsagePreference(argv)).not.toThrow()
+  })
+})
+
+describe('applyUsageRepoTag', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockIsUsageLoggingEnabled.mockReturnValue(true)
+    mockResolveRepoIdentifier.mockResolvedValue('gfargo/coco')
+  })
+
+  it('resolves and stamps the repo identifier when logging is enabled', async () => {
+    await applyUsageRepoTag('/repo')
+
+    expect(mockResolveRepoIdentifier).toHaveBeenCalledWith({ cwd: '/repo' })
+    expect(mockSetUsageRepoTag).toHaveBeenCalledWith('gfargo/coco')
+  })
+
+  it('sets an undefined tag without resolving the repo when logging is disabled', async () => {
+    mockIsUsageLoggingEnabled.mockReturnValue(false)
+
+    await applyUsageRepoTag('/repo')
+
+    expect(mockResolveRepoIdentifier).not.toHaveBeenCalled()
+    expect(mockSetUsageRepoTag).toHaveBeenCalledWith(undefined)
+  })
+
+  it('swallows a repository lookup failure', async () => {
+    mockResolveRepoIdentifier.mockRejectedValueOnce(new Error('git failed'))
+
+    await expect(applyUsageRepoTag('/repo')).resolves.toBeUndefined()
   })
 })

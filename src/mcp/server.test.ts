@@ -7,6 +7,7 @@ import { createCocoMcpServer } from './server'
 const mockResolveAgentRepoRoot = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
+const mockApplyUsageRepoTag = jest.fn()
 
 const registrations = new Map<string, {
   config: {
@@ -49,6 +50,9 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
 }))
 jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: class MockStdioServerTransport {},
+}))
+jest.mock('../commands/utils/usageTelemetry', () => ({
+  applyUsageRepoTag: (...args: unknown[]) => Promise.resolve(mockApplyUsageRepoTag(...args)),
 }))
 jest.mock('../operations/agent', () => {
   const schemas = jest.requireActual('../operations/agent/schemas') as typeof import('../operations/agent/schemas')
@@ -164,6 +168,7 @@ describe('createCocoMcpServer', () => {
       structuredContent: reviewSuccess,
       content: [{ type: 'text', text: expect.stringContaining('"ok": true') }],
     })
+    expect(mockApplyUsageRepoTag).not.toHaveBeenCalled()
   })
 
   it('rejects the unsafe repository-config option with a structured error', async () => {
@@ -221,5 +226,37 @@ describe('createCocoMcpServer', () => {
         error: { code: 'OPERATION_FAILED', message: 'provider unavailable' },
       },
     })
+  })
+})
+
+describe('createCocoMcpServer in deferred-binding mode', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    registrations.clear()
+    serverOptions.length = 0
+    mockResolveAgentRepoRoot.mockResolvedValue('/deferred/repo')
+    mockCreateAgentOperationContext.mockResolvedValue({ signal: undefined } as never)
+    mockRunAgentOperation.mockResolvedValue(reviewSuccess)
+  })
+
+  function createServer() {
+    return createCocoMcpServer(undefined) as unknown as McpServer
+  }
+
+  function tool(name: string) {
+    const registration = registrations.get(name)
+    if (!registration) throw new Error(`Missing registration: ${name}`)
+    return registration
+  }
+
+  it('tags the usage ledger with the repository resolved from tool input', async () => {
+    createServer()
+
+    await tool('coco_review').handler({
+      repo: '/requested/repo',
+      source: { kind: 'summary', summary: 'changed' },
+    }, { signal: new AbortController().signal })
+
+    expect(mockApplyUsageRepoTag).toHaveBeenCalledWith('/deferred/repo')
   })
 })

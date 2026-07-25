@@ -2,10 +2,12 @@ import { startCocoMcpServer } from '../../mcp/server'
 import { handler } from './handler'
 
 const mockArmNonInteractiveUsageTelemetry = jest.fn()
+const mockArmNonInteractiveUsagePreference = jest.fn()
 const mockResolveAgentRepoRoot = jest.fn()
 
 jest.mock('../utils/usageTelemetry', () => ({
   armNonInteractiveUsageTelemetry: (...args: unknown[]) => Promise.resolve(mockArmNonInteractiveUsageTelemetry(...args)),
+  armNonInteractiveUsagePreference: (...args: unknown[]) => mockArmNonInteractiveUsagePreference(...args),
 }))
 jest.mock('../../mcp/server', () => ({
   startCocoMcpServer: jest.fn(),
@@ -62,11 +64,14 @@ describe('mcp command handler', () => {
   })
 
   it('starts in deferred-binding mode when --repo is omitted', async () => {
-    await handler({ $0: 'coco', _: ['mcp'] } as never)
+    const argv = { $0: 'coco', _: ['mcp'] } as never
+
+    await handler(argv)
 
     expect(mockResolveAgentRepoRoot).not.toHaveBeenCalled()
     expect(chdirSpy).not.toHaveBeenCalled()
     expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
+    expect(mockArmNonInteractiveUsagePreference).toHaveBeenCalledWith(argv)
     expect(mockStartCocoMcpServer).toHaveBeenCalledWith(undefined)
   })
 })

@@ -2,6 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 
+import { applyUsageRepoTag } from '../commands/utils/usageTelemetry'
 import { BUILD_VERSION } from '../lib/buildInfo'
 import {
     AgentOperation,
@@ -100,13 +101,20 @@ async function resolveEffectiveRepoRoot(
     return boundRoot
   }
 
-  // Deferred mode: resolve from input.repo or client roots.
+  // Deferred mode: resolve from input.repo or client roots, then stamp the
+  // usage ledger with this call's repository (bound mode already tagged it
+  // once at startup, since the repo never changes there).
   if (inputRepo) {
-    return resolveAgentRepoRoot(inputRepo, undefined, signal)
+    const resolved = await resolveAgentRepoRoot(inputRepo, undefined, signal)
+    await applyUsageRepoTag(resolved)
+    return resolved
   }
 
   const fromRoots = await resolveRepoFromClientRoots(server)
-  if (fromRoots) return fromRoots
+  if (fromRoots) {
+    await applyUsageRepoTag(fromRoots)
+    return fromRoots
+  }
 
   throw new AgentOperationError(
     'INVALID_REPOSITORY',
