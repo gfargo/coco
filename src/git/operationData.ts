@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { isAbsolute, join } from 'path'
 import { SimpleGit } from 'simple-git'
 import {
@@ -41,6 +41,13 @@ const OPERATION_PATHS: Array<{ operation: Exclude<GitOperationType, 'none'>; pat
   { operation: 'cherry-pick', path: 'CHERRY_PICK_HEAD' },
   { operation: 'revert', path: 'REVERT_HEAD' },
 ]
+
+/**
+ * Maximum file size to read when scanning for conflict markers.
+ * Files larger than this are skipped to avoid reading large generated files
+ * (lockfiles, minified bundles) into memory. See #1918.
+ */
+export const MAX_CONFLICT_MARKER_FILE_BYTES = 1024 * 1024 // 1 MiB
 
 const UNMERGED_STATUSES = new Set([
   'DD',
@@ -138,6 +145,17 @@ export async function getConflictMarkers(
     const filePath = join(root, file.path)
 
     if (!existsSync(filePath)) {
+      continue
+    }
+
+    let fileSize: number
+    try {
+      fileSize = statSync(filePath).size
+    } catch {
+      continue
+    }
+
+    if (fileSize > MAX_CONFLICT_MARKER_FILE_BYTES) {
       continue
     }
 
