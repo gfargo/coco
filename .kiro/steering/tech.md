@@ -118,9 +118,12 @@ Agent integration tests are co-located with the contract and transports:
   prompts/diffs/code cannot be serialized.
 
 For release validation, run those targeted suites first, then the normal full gate,
-`npm run build`, `npm run test:cli`, and `npm pack --dry-run`. Smoke the bundled CLI's
-schema output and MCP tool discovery because source-level tests do not catch packaging
-or stdio regressions.
+`npm run build`, `npm run test:cli`, and `npm pack --dry-run`. `npm run test:cli`
+(`bin/smokeCli.ts`) automates the MCP tool discovery smoke: it spawns the built
+`dist/index.js mcp` from a non-git cwd, drives a real newline-delimited JSON-RPC
+`initialize`/`tools/list`/`tools/call` handshake over stdio, and asserts the tool
+set, read-only annotations, and that stdout carries only JSON-RPC — the class of
+packaging and stdio-framing regression source-level tests cannot catch.
 
 Machine transports never perform first-run consent or write config. They honor an
 existing `telemetry.usage` preference or `COCO_USAGE_LOG`; enabled records are bounded
