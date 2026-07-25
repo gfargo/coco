@@ -70,8 +70,23 @@ export function parsePorcelainStatus(output: string): WorktreeFile[] {
   return files
 }
 
-export async function getWorktreeOverview(git: SimpleGit): Promise<WorktreeOverview> {
-  const files = parsePorcelainStatus(await git.raw(['status', '--porcelain', '-z']))
+/**
+ * Optional pre-fetched snapshot that callers may supply to avoid redundant
+ * `git status --porcelain -z` sub-processes.  When `statusOutput` is
+ * `undefined` (or the snapshot itself is omitted), the function fetches
+ * internally as before — preserving full backward compatibility for
+ * standalone callers.
+ */
+export type GitStatusSnapshot = {
+  /** Raw output of `git status --porcelain -z` (NUL-separated). */
+  statusOutput?: string
+}
+
+export async function getWorktreeOverview(git: SimpleGit, snapshot?: GitStatusSnapshot): Promise<WorktreeOverview> {
+  const raw = snapshot?.statusOutput !== undefined
+    ? snapshot.statusOutput
+    : await git.raw(['status', '--porcelain', '-z'])
+  const files = parsePorcelainStatus(raw)
 
   return {
     files,

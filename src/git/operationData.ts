@@ -101,8 +101,23 @@ export function parseConflictedFiles(statusOutput: string): ConflictFile[] {
   return files
 }
 
-export async function getConflictedFiles(git: SimpleGit): Promise<ConflictFile[]> {
-  return parseConflictedFiles(await git.raw(['status', '--porcelain', '-z']))
+/**
+ * Optional pre-fetched snapshot that callers may supply to avoid redundant
+ * `git status --porcelain -z` sub-processes.  When `statusOutput` is
+ * `undefined` (or the snapshot itself is omitted), the function fetches
+ * internally as before — preserving full backward compatibility for
+ * standalone callers.
+ */
+export type GitStatusSnapshot = {
+  /** Raw output of `git status --porcelain -z` (NUL-separated). */
+  statusOutput?: string
+}
+
+export async function getConflictedFiles(git: SimpleGit, snapshot?: GitStatusSnapshot): Promise<ConflictFile[]> {
+  const raw = snapshot?.statusOutput !== undefined
+    ? snapshot.statusOutput
+    : await git.raw(['status', '--porcelain', '-z'])
+  return parseConflictedFiles(raw)
 }
 
 export function parseConflictMarkers(path: string, content: string): ConflictMarker[] {
@@ -178,8 +193,8 @@ export async function getHookOverview(git: SimpleGit): Promise<GitHookOverview> 
   }
 }
 
-export async function getGitOperationOverview(git: SimpleGit): Promise<GitOperationOverview> {
-  const conflictedFiles = await getConflictedFiles(git)
+export async function getGitOperationOverview(git: SimpleGit, snapshot?: GitStatusSnapshot): Promise<GitOperationOverview> {
+  const conflictedFiles = await getConflictedFiles(git, snapshot)
 
   return {
     operation: await getInProgressOperationType(git),
