@@ -30,7 +30,7 @@ import type { LogInkContextStatus } from '../../chrome/context'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatHyperlink } from '../../chrome/hyperlinks'
 import { clampListWindowStart } from '../../chrome/layout'
-import { forgeNouns } from '../../chrome/forgeNouns'
+import { forgeNouns } from '../../../git/forgeNouns'
 import type {
   InspectorAction,
   InspectorActionContext,

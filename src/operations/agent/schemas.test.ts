@@ -1,6 +1,7 @@
 import { z } from 'zod'
 
 import {
+    AgentOptionsSchema,
     AgentTaskInputSchema,
     AGENT_PROTOCOL_VERSION,
     ChangelogDataSchema,
@@ -8,7 +9,8 @@ import {
     createAgentInputJsonSchema,
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
-    MAX_AGENT_CONTEXT_BYTES
+    MAX_AGENT_CONTEXT_BYTES,
+    PrDraftDataSchema
 } from './schemas'
 
 const meta = {
@@ -30,6 +32,7 @@ describe('AgentTaskInputSchema', () => {
         previousCommitCount: 0,
         author: false,
         trustRepositoryConfig: false,
+        draft: false,
       },
     })
     expect(ChangeSourceSchema.parse({ kind: 'repository' })).toEqual({
@@ -72,6 +75,16 @@ describe('AgentTaskInputSchema', () => {
       kind: 'files',
       files: [{ path: 'a.ts', status: 'modified', patch: overLimit }],
     }).success).toBe(false)
+  })
+
+  it('parses the pr-draft base override and draft flag, defaulting draft to false', () => {
+    expect(AgentOptionsSchema.parse({})).toMatchObject({ draft: false })
+    expect(AgentOptionsSchema.parse({ base: 'main', draft: true })).toMatchObject({
+      base: 'main',
+      draft: true,
+    })
+    expect(AgentOptionsSchema.safeParse({ base: '-main' }).success).toBe(false)
+    expect(AgentOptionsSchema.safeParse({ base: 'main\0evil' }).success).toBe(false)
   })
 
   it('requires every supplied file to include a patch or summary', () => {
@@ -173,5 +186,33 @@ describe('agent output schemas', () => {
       properties: { ok: { const: false }, operation: { const: 'changelog' } },
       required: expect.arrayContaining(['error']),
     })
+  })
+})
+
+describe('PrDraftDataSchema', () => {
+  const prDraft = { base: 'main', head: 'feature/x', title: 'Add feature', body: 'Details.', draft: false }
+
+  it('round-trips a valid pr-draft payload', () => {
+    expect(PrDraftDataSchema.parse(prDraft)).toEqual(prDraft)
+  })
+
+  it('rejects unknown fields', () => {
+    expect(PrDraftDataSchema.safeParse({ ...prDraft, unexpected: true }).success).toBe(false)
+  })
+
+  it('accepts only the matching success and failure envelopes', () => {
+    const schema = createAgentOutputSchema('pr-draft', PrDraftDataSchema)
+    const success = {
+      version: AGENT_PROTOCOL_VERSION,
+      ok: true as const,
+      operation: 'pr-draft' as const,
+      status: 'completed' as const,
+      data: prDraft,
+      warnings: [],
+      meta,
+    }
+
+    expect(schema.parse(success)).toEqual(success)
+    expect(schema.safeParse({ ...success, operation: 'changelog' }).success).toBe(false)
   })
 })

@@ -5,7 +5,7 @@ import { ReviewFeedbackItemSchema } from '../../commands/review/config'
 export const AGENT_PROTOCOL_VERSION = 1 as const
 export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'pr-draft'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -93,6 +93,12 @@ export const AgentOptionsSchema = z.object({
   trustRepositoryConfig: z.boolean().default(false).describe(
     'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety.',
   ),
+  base: gitRevisionSchema.optional().describe(
+    'Base branch to draft a pull/merge request against. Defaults to the detected default branch.',
+  ),
+  draft: z.boolean().default(false).describe(
+    'Echoed in pr-draft results to indicate the caller intends to open the pull/merge request as a draft.',
+  ),
 }).strict()
 
 export const AgentTaskInputSchema = z.object({
@@ -105,6 +111,7 @@ export const AgentTaskInputSchema = z.object({
     previousCommitCount: 0,
     author: false,
     trustRepositoryConfig: false,
+    draft: false,
   }),
 }).strict()
 
@@ -139,6 +146,14 @@ export const ChangelogDataSchema = z.object({
 export const RecapDataSchema = z.object({
   title: z.string(),
   summary: z.string(),
+}).strict()
+
+export const PrDraftDataSchema = z.object({
+  base: z.string(),
+  head: z.string(),
+  title: z.string(),
+  body: z.string(),
+  draft: z.boolean(),
 }).strict()
 
 export const AgentErrorSchema = z.object({
@@ -233,6 +248,7 @@ export type CommitDraftData = z.infer<typeof CommitDraftDataSchema>
 export type ReviewData = z.infer<typeof ReviewDataSchema>
 export type ChangelogData = z.infer<typeof ChangelogDataSchema>
 export type RecapData = z.infer<typeof RecapDataSchema>
+export type PrDraftData = z.infer<typeof PrDraftDataSchema>
 
 export type AgentSuccessEnvelope<T> = {
   version: typeof AGENT_PROTOCOL_VERSION

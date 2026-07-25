@@ -50,7 +50,7 @@ import type { GitProviderType } from '../../../git/providerData'
 import type { LogInkAction } from '../inkViewModel'
 import type { LogInkContext } from '../types'
 import { runPullRequestBodyWorkflow } from '../../../git/aiActions'
-import { forgeNouns } from '../../chrome/forgeNouns'
+import { forgeNouns } from '../../../git/forgeNouns'
 
 export type UsePullRequestActionsDeps = {
   /** Reducer dispatch — drives the pending flag, status, and input prompt. */

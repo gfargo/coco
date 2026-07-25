@@ -149,8 +149,9 @@ Three sub-layers:
   carousel, and the `.www` sync are all *derived* from it — adding a theme is one
   entry here plus a synced screenshot. Also in `chrome/`: text/width measurement,
   layout/density, the commit-graph renderer (`graphLanes`/`graphLayout`/`graphOrtho`),
-  date bucketing, iconography, hyperlinks, and `forgeNouns.ts` (maps the active forge
-  to display nouns — GitHub/Bitbucket "PR", GitLab "MR").
+  date bucketing, iconography, and hyperlinks. `forgeNouns.ts` (maps the active forge
+  to display nouns — GitHub/Bitbucket "PR", GitLab "MR") lives in `src/git/` so
+  `operations/` can reuse it without an upward import.
 - **`runtime/`** — the live Ink app. `app.ts` wires the React tree; `inkViewModel.ts`
   holds view state and transitions; `inkInput.ts` + `inkKeymap.ts` implement
   chord-driven navigation, the command palette (`:`), and global search (`/`);

@@ -1,5 +1,5 @@
 /**
- * Forge-aware noun vocabulary for the workstation TUI.
+ * Forge-aware noun vocabulary shared across the CLI and workstation TUI.
  *
  * GitHub (and GitHub Enterprise) and unsupported remotes speak in
  * "Pull request(s)" / "PR"; GitLab speaks in "Merge request(s)" / "MR".
@@ -7,7 +7,7 @@
  * `context.provider?.repository.provider` and pull the right nouns from
  * here so the user-visible copy matches the platform they're on.
  */
-import type { GitProviderType } from '../../git/providerData'
+import type { GitProviderType } from './providerData'
 
 export type ForgeNouns = {
   abbrev: string

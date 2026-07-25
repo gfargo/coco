@@ -15,7 +15,7 @@
  */
 
 import type { GitProviderType } from '../../git/providerData'
-import { forgeNouns } from './forgeNouns'
+import { forgeNouns } from '../../git/forgeNouns'
 
 /**
  * Idle tips. Forge-specific abbreviations (PR/MR) are written as the

@@ -25,7 +25,7 @@
  * other handler's.
  */
 import { LogInkContextStatus, updateLogInkContextStatus } from '../../chrome/context'
-import { forgeNouns } from '../../chrome/forgeNouns'
+import { forgeNouns } from '../../../git/forgeNouns'
 import { defaultOpenUrlRunner } from '../../../git/historyActions'
 import { getForgeActions } from '../../../git/forgeActions'
 import { clearGitHubListCache } from '../../../git/githubListCache'

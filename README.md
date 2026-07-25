@@ -67,8 +67,8 @@ coco commit -i       # generate your first commit (interactive)
 | [`coco pr create`](https://github.com/gfargo/coco/wiki/Command-Reference#pr-create) | Generate PR title + body and open via `gh` / `glab` / Bitbucket API |
 | [`coco recap`](https://github.com/gfargo/coco/wiki/Command-Reference#recap) | Summarize recent changes for standups or handoffs |
 | [`coco review`](https://github.com/gfargo/coco/wiki/Command-Reference#review) | AI code review with severity gating for CI (`--severity`) |
-| [`coco agent`](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) | Run commit-draft, review, changelog, or recap through versioned JSON/stdin |
-| [`coco mcp`](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) | Start a local stdio MCP server with four read-only generation tools |
+| [`coco agent`](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) | Run commit-draft, review, changelog, recap, or pr-draft through versioned JSON/stdin |
+| [`coco mcp`](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) | Start a local stdio MCP server with five read-only generation tools |
 | [`coco ui`](https://github.com/gfargo/coco/wiki/Coco-UI) | Full-screen git workstation — 16 views, keyboard-driven |
 | [`coco workspace`](https://github.com/gfargo/coco/wiki/Command-Reference#workspace) | Multi-repo overview; drill into any repo as a `coco ui` session |
 | [`coco log`](https://github.com/gfargo/coco/wiki/Command-Reference#log) | Commit history with graph, filters, and JSON output |
@@ -89,11 +89,11 @@ coco agent schema --task review
 # Run a one-shot structured operation
 coco agent commit-draft --input request.json --repo /work/project
 
-# Expose four local stdio MCP tools, bound to one repository
+# Expose five local stdio MCP tools, bound to one repository
 coco mcp --repo /work/project
 ```
 
-Both transports share typed `commit-draft`, `review`, `changelog`, and `recap` operations. They accept safe repository scopes or caller-supplied patches/summaries and return explicit success/failure envelopes. MCP tools never create commits, write repository files, post comments, or mutate a forge. When local usage stats are already enabled, calls add metadata-only `agent-cli`/`mcp` records to the user-cache ledger; prompts, diffs, and code are never recorded.
+Both transports share typed `commit-draft`, `review`, `changelog`, `recap`, and `pr-draft` operations. They accept safe repository scopes or caller-supplied patches/summaries and return explicit success/failure envelopes. MCP tools never create commits, write repository files, post comments, or mutate a forge. When local usage stats are already enabled, calls add metadata-only `agent-cli`/`mcp` records to the user-cache ledger; prompts, diffs, and code are never recorded.
 
 See **[Agent CLI and MCP](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP)** for client setup, every parameter and schema, safety boundaries, examples, analytics, and troubleshooting.
 

@@ -106,6 +106,40 @@ describe('agent command handler', () => {
     expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
   })
 
+  it('prints versioned input/output schemas for the pr-draft task', async () => {
+    await handler(argv({ operation: 'schema', task: 'pr-draft' }))
+
+    const output = JSON.parse(stdout)
+    expect(output).toMatchObject({
+      version: 1,
+      operation: 'pr-draft',
+      input: { type: 'object', additionalProperties: false },
+      output: { oneOf: expect.any(Array) },
+    })
+  })
+
+  it('routes the pr-draft operation to runAgentOperation', async () => {
+    const prDraftSuccess = {
+      version: 1 as const,
+      ok: true as const,
+      operation: 'pr-draft' as const,
+      status: 'completed' as const,
+      data: { base: 'main', head: 'feature/x', title: 'Add feature', body: 'Details.', draft: false },
+      warnings: [],
+      meta: {
+        kind: 'repository' as const,
+        digest: 'sha256:test',
+        verification: 'repository-derived' as const,
+      },
+    }
+    mockRunAgentOperation.mockResolvedValueOnce(prDraftSuccess)
+
+    await handler(argv({ operation: 'pr-draft', input: writeRequest({}) }))
+
+    expect(mockRunAgentOperation).toHaveBeenCalledWith('pr-draft', expect.anything(), expect.anything())
+    expect(JSON.parse(stdout)).toEqual(prDraftSuccess)
+  })
+
   it('emits a structured INVALID_JSON failure', async () => {
     await handler(argv({ input: writeRequest('{not json') }))
 

@@ -12,6 +12,7 @@ import {
     createAgentInputJsonSchema,
     createAgentOperationContext,
     createAgentOutputSchema,
+    PrDraftDataSchema,
     RecapDataSchema,
     resolveAgentRepoRoot,
     ReviewDataSchema,
@@ -50,6 +51,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, ChangelogDataSchema)
     case 'recap':
       return createAgentOutputSchema(operation, RecapDataSchema)
+    case 'pr-draft':
+      return createAgentOutputSchema(operation, PrDraftDataSchema)
   }
 }
 

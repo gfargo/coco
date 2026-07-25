@@ -15,7 +15,7 @@ import type { PullRequestListItem } from '../../../git/pullRequestListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { inlineSpinnerGlyph } from '../../chrome/spinner'
 import { clampListWindowStart } from '../../chrome/layout'
-import { forgeNouns } from '../../chrome/forgeNouns'
+import { forgeNouns } from '../../../git/forgeNouns'
 import {
   formatLogInkForgeNoRemote,
   formatLogInkForgeUnauthenticated,

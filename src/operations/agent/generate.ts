@@ -15,6 +15,8 @@ import {
     ReviewFeedbackItemArraySchema,
 } from '../../commands/review/config'
 import { REVIEW_PROMPT } from '../../commands/review/prompt'
+import { forgeNouns } from '../../git/forgeNouns'
+import { detectLocalDefaultBranch, getProviderRepositoryForGit } from '../../git/providerData'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { LLMModel } from '../../lib/langchain/types'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -25,6 +27,7 @@ import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
+import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { AgentOperationContext, resolveChangeSource } from './context'
 import { AgentOperationError } from './errors'
@@ -35,7 +38,9 @@ import {
     AgentTaskInput,
     AGENT_PROTOCOL_VERSION,
     ChangelogData,
+    ChangeSource,
     CommitDraftData,
+    PrDraftData,
     RecapData,
     ReviewData,
 } from './schemas'
@@ -296,6 +301,74 @@ export async function generateAgentRecap(
   return envelope('recap', result, [], resolved.meta)
 }
 
+export async function generateAgentPrDraft(
+  input: AgentTaskInput,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<PrDraftData>> {
+  const providerRepository = await getProviderRepositoryForGit(context.git)
+  const nouns = forgeNouns(providerRepository?.provider)
+
+  const head = await getCurrentBranchName({ git: context.git })
+  if (!head) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'Could not determine the current branch (detached HEAD?).',
+    )
+  }
+
+  const base = input.options.base || await detectLocalDefaultBranch(context.git) || 'main'
+  if (head === base) {
+    throw new AgentOperationError(
+      'NO_CHANGES',
+      `You're on the base branch ('${base}'). Check out a feature branch before drafting a ${nouns.singularLower}.`,
+    )
+  }
+
+  const source: ChangeSource = { kind: 'repository', scope: { type: 'branch', base, head } }
+  let resolved: Awaited<ReturnType<typeof resolveChangeSource>>
+  try {
+    resolved = await resolveChangeSource(source, context, {
+      trustRepositoryConfig: input.options.trustRepositoryConfig,
+    })
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'NO_CHANGES') {
+      throw new AgentOperationError(
+        'NO_CHANGES',
+        `No commits found between '${base}' and '${head}' — nothing to draft a ${nouns.singularLower} from.`,
+      )
+    }
+    throw error
+  }
+  const changeContext = asUntrustedChangeContext(resolved.text)
+
+  const result = await executeStructured<ChangelogResponse>({
+    operation: 'pr-draft',
+    task: 'changelog',
+    context,
+    options: input.options,
+    schema: ChangelogResponseSchema,
+    promptTemplate: CHANGELOG_PROMPT,
+    summaryKey: 'summary',
+    variables: {
+      summary: changeContext,
+      format_instructions: 'Return a JSON object with string fields title and content.',
+      additional_context: input.options.additionalContext ? `## Additional Context\n${input.options.additionalContext}` : '',
+      author_instructions: input.options.author
+        ? 'Include author attribution when it is present in the supplied context.'
+        : 'Do not invent author attribution; include commit references only when present.',
+      language_context: getLanguageContext(input.options.language, { taskDescription: `${nouns.singularLower} description` }),
+    },
+  })
+
+  return envelope('pr-draft', {
+    base,
+    head,
+    title: result.title,
+    body: result.content,
+    draft: input.options.draft,
+  }, [], resolved.meta)
+}
+
 export async function runAgentOperation(
   operation: AgentOperation,
   input: AgentTaskInput,
@@ -310,5 +383,7 @@ export async function runAgentOperation(
       return generateAgentChangelog(input, context)
     case 'recap':
       return generateAgentRecap(input, context)
+    case 'pr-draft':
+      return generateAgentPrDraft(input, context)
   }
 }

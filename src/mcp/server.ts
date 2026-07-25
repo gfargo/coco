@@ -13,6 +13,7 @@ import {
     createAgentMcpOutputSchema,
     createAgentOperationContext,
     isPathWithinRoot,
+    PrDraftDataSchema,
     RecapDataSchema,
     resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
@@ -31,6 +32,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, ChangelogDataSchema)
     case 'recap':
       return createAgentMcpOutputSchema(operation, RecapDataSchema)
+    case 'pr-draft':
+      return createAgentMcpOutputSchema(operation, PrDraftDataSchema)
   }
 }
 
@@ -209,6 +212,13 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     'recap',
     'Recap changes',
     'Generate a structured recap from repository changes or supplied context.',
+    repoRoot,
+  )
+  registerGenerationTool(
+    server,
+    'pr-draft',
+    'Draft pull request',
+    'Draft a pull/merge request title and body from the diff between a base and the current branch. Never creates a pull/merge request on the forge.',
     repoRoot,
   )
 

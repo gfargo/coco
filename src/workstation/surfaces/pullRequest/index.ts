@@ -24,7 +24,7 @@ import {
   summarizePullRequestChecks,
   summarizePullRequestReviews,
 } from '../../chrome/pullRequestPanel'
-import { forgeNouns } from '../../chrome/forgeNouns'
+import { forgeNouns } from '../../../git/forgeNouns'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import type { SurfaceRenderContext } from '../../runtime/types'

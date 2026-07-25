@@ -28,7 +28,7 @@
  */
 
 import { cellWidth } from './text'
-import { forgeNouns } from './forgeNouns'
+import { forgeNouns } from '../../git/forgeNouns'
 import type { LogInkTheme } from './theme'
 import { getPullRequestStateGlyph } from './iconography'
 import type { GitProviderType } from '../../git/providerData'

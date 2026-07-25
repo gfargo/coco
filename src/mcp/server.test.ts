@@ -78,6 +78,20 @@ const reviewSuccess = {
   },
 }
 
+const prDraftSuccess = {
+  version: 1 as const,
+  ok: true as const,
+  operation: 'pr-draft' as const,
+  status: 'completed' as const,
+  data: { base: 'main', head: 'feature/x', title: 'Add feature', body: 'Details.', draft: true },
+  warnings: [],
+  meta: {
+    kind: 'repository' as const,
+    digest: 'sha256:test',
+    verification: 'repository-derived' as const,
+  },
+}
+
 describe('createCocoMcpServer', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -98,7 +112,7 @@ describe('createCocoMcpServer', () => {
     return registration
   }
 
-  it('registers four read-only generation tools with visible discriminated output schemas', () => {
+  it('registers five read-only generation tools with visible discriminated output schemas', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -106,6 +120,7 @@ describe('createCocoMcpServer', () => {
       'coco_review',
       'coco_changelog',
       'coco_recap',
+      'coco_pr_draft',
     ])
     for (const registration of registrations.values()) {
       expect(registration.config.annotations).toEqual({
@@ -164,6 +179,25 @@ describe('createCocoMcpServer', () => {
       structuredContent: reviewSuccess,
       content: [{ type: 'text', text: expect.stringContaining('"ok": true') }],
     })
+  })
+
+  it('routes coco_pr_draft to the pr-draft operation and echoes base/draft options', async () => {
+    createServer()
+    mockRunAgentOperation.mockResolvedValueOnce(prDraftSuccess)
+    const controller = new AbortController()
+
+    const result = await tool('coco_pr_draft').handler({
+      options: { base: 'main', draft: true },
+    }, { signal: controller.signal })
+
+    expect(mockRunAgentOperation).toHaveBeenCalledWith(
+      'pr-draft',
+      expect.objectContaining({
+        options: expect.objectContaining({ base: 'main', draft: true }),
+      }),
+      expect.anything(),
+    )
+    expect(result).toMatchObject({ structuredContent: prDraftSuccess })
   })
 
   it('rejects the unsafe repository-config option with a structured error', async () => {

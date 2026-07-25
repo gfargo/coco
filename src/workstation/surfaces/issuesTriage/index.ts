@@ -13,7 +13,7 @@ import type * as ReactTypes from 'react'
 import type { IssueListItem } from '../../../git/issuesListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
-import { forgeNouns } from '../../chrome/forgeNouns'
+import { forgeNouns } from '../../../git/forgeNouns'
 import {
   formatLogInkForgeNoRemote,
   formatLogInkForgeUnauthenticated,
