@@ -5,7 +5,7 @@ import { ReviewFeedbackItemSchema } from '../../commands/review/config'
 export const AGENT_PROTOCOL_VERSION = 1 as const
 export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -223,6 +223,98 @@ export const AgentFailureEnvelopeSchema = z.object({
   operation: AgentOperationSchema,
   error: AgentErrorSchema,
 }).strict()
+
+// ─── condense-diff operation ──────────────────────────────────────────────────
+
+/**
+ * Language identifiers accepted by the condense-diff operation.
+ * Mirrors `StructuralLanguageId` in the parser registry without
+ * importing from `lib/` (keeps the schema layer independent).
+ */
+export const CondenseDiffLanguageSchema = z.enum([
+  'ts', 'js', 'py', 'rs', 'go', 'java', 'cpp', 'cs', 'rb', 'php', 'kt', 'swift', 'lua', 'bash',
+])
+
+/**
+ * Request schema for `coco agent condense-diff` and the MCP tool
+ * `coco_condense_diff`. This is a distinct schema from `AgentTaskInputSchema`
+ * because condense carries extra fields (budget, mode, languages, model) that
+ * the four generation operations do not need, and those operations carry an
+ * `options` bag that condense does not use.
+ */
+export const CondenseDiffRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  source: ChangeSourceSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
+  budget: z.object({
+    tokens: z.number().int().min(1).max(MAX_AGENT_CONTEXT_BYTES),
+  }).strict(),
+  /**
+   * `structural` (default): use tree-sitter / regex extractors — deterministic,
+   * no LLM call, no API key required.
+   * `summary`: invoke an LLM for prose summarization (currently returns
+   * UNSUPPORTED_MODE; reserved for a future extension).
+   */
+  mode: z.enum(['structural', 'summary']).default('structural'),
+  /** Restrict structural extraction to a subset of languages. Omit to process all. */
+  languages: z.array(CondenseDiffLanguageSchema).optional(),
+  /**
+   * Target model for tokenization. Used ONLY to select the correct
+   * tiktoken encoding for budget math — no LLM call is made in
+   * `structural` mode. Defaults to `gpt-4o` when omitted.
+   */
+  model: z.string().optional(),
+  /**
+   * Target provider for tokenization (governs the correction factor
+   * applied when the provider does not use tiktoken natively).
+   * Defaults to `openai` when omitted.
+   */
+  provider: z.string().optional(),
+  trustRepositoryConfig: z.boolean().default(false).describe(
+    'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety.',
+  ),
+}).strict()
+
+/** Per-file outcome reported in the `files` array of the condense result. */
+export const CondenseDiffFileResultSchema = z.object({
+  path: z.string(),
+  language: z.string().optional(),
+  /**
+   * What strategy was applied to this file:
+   * - `structural`: tree-sitter or regex extractor succeeded.
+   * - `trivial`: trivial-shape shortcut (pure add/delete/rename/binary).
+   * - `line-based`: no structural extraction available; raw diff kept.
+   * - `omitted`: file was dropped to stay within the token budget.
+   */
+  applied: z.enum(['structural', 'trivial', 'line-based', 'omitted']),
+  inputTokens: z.number().int(),
+  outputTokens: z.number().int(),
+}).strict()
+
+export const CondenseDiffDataSchema = z.object({
+  condensed: z.string(),
+  metrics: z.object({
+    inputTokens: z.number().int(),
+    outputTokens: z.number().int(),
+    /** Fraction reduced: 1 - (outputTokens / inputTokens). 0 when no reduction. */
+    reductionRatio: z.number(),
+    filesIncluded: z.number().int(),
+    filesOmitted: z.number().int(),
+    /** Which condensation strategy produced the final result. */
+    strategy: z.enum(['structural', 'summary']),
+  }).strict(),
+  files: z.array(CondenseDiffFileResultSchema),
+}).strict()
+
+/** Publish the caller-facing condense-diff request schema. */
+export function createCondenseDiffInputJsonSchema() {
+  return z.toJSONSchema(CondenseDiffRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export type CondenseDiffLanguage = z.infer<typeof CondenseDiffLanguageSchema>
+export type CondenseDiffRequest = z.infer<typeof CondenseDiffRequestSchema>
+export type CondenseDiffData = z.infer<typeof CondenseDiffDataSchema>
+export type CondenseDiffFileResult = z.infer<typeof CondenseDiffFileResultSchema>
 
 export type AgentOperation = z.infer<typeof AgentOperationSchema>
 export type AgentTaskInput = z.infer<typeof AgentTaskInputSchema>
