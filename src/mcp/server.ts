@@ -241,6 +241,12 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     const operation = 'condense-diff' as const
     try {
       const input = CondenseDiffRequestSchema.parse(rawInput)
+      if (input.trustRepositoryConfig) {
+        throw new AgentOperationError(
+          'UNSAFE_OPTION',
+          'MCP tools do not execute repository-defined prompts or commitlint configuration. Use the one-shot agent CLI only for explicitly trusted repositories.',
+        )
+      }
       // repoRoot here shadows the outer parameter, using it as the "boundRoot"
       // to match the single-repo confinement pattern of the other tools.
       const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)

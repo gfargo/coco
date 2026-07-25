@@ -7,6 +7,7 @@ import { createCocoMcpServer } from './server'
 const mockResolveAgentRepoRoot = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
+const mockRunCondenseDiff = jest.fn()
 
 const registrations = new Map<string, {
   config: {
@@ -61,15 +62,7 @@ jest.mock('../operations/agent', () => {
     resolveAgentRepoRoot: (...args: unknown[]) => mockResolveAgentRepoRoot(...args),
     isPathWithinRoot: jest.fn(() => true),
     runAgentOperation: (...args: unknown[]) => mockRunAgentOperation(...args),
-    runCondenseDiff: jest.fn().mockResolvedValue({
-      version: 1,
-      ok: true,
-      operation: 'condense-diff',
-      status: 'completed',
-      data: { condensed: '', metrics: { inputTokens: 0, outputTokens: 0, reductionRatio: 0, filesIncluded: 0, filesOmitted: 0, strategy: 'structural' }, files: [] },
-      warnings: [],
-      meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
-    }),
+    runCondenseDiff: (...args: unknown[]) => mockRunCondenseDiff(...args),
   }
 })
 
@@ -88,6 +81,20 @@ const reviewSuccess = {
 }
 
 describe('createCocoMcpServer', () => {
+  const condenseDiffSuccess = {
+    version: 1 as const,
+    ok: true as const,
+    operation: 'condense-diff' as const,
+    status: 'completed' as const,
+    data: {
+      condensed: '',
+      metrics: { inputTokens: 0, outputTokens: 0, reductionRatio: 0, filesIncluded: 0, filesOmitted: 0, strategy: 'structural' as const },
+      files: [],
+    },
+    warnings: [],
+    meta: { kind: 'summary' as const, digest: 'sha256:test', verification: 'provided-unverified' as const },
+  }
+
   beforeEach(() => {
     jest.clearAllMocks()
     registrations.clear()
@@ -95,6 +102,7 @@ describe('createCocoMcpServer', () => {
     mockResolveAgentRepoRoot.mockResolvedValue('/repo')
     mockCreateAgentOperationContext.mockResolvedValue({ signal: undefined } as never)
     mockRunAgentOperation.mockResolvedValue(reviewSuccess)
+    mockRunCondenseDiff.mockResolvedValue(condenseDiffSuccess)
   })
 
   function createServer() {
@@ -289,5 +297,27 @@ describe('createCocoMcpServer', () => {
         error: { code: 'INVALID_INPUT' },
       },
     })
+  })
+
+  it('rejects trustRepositoryConfig:true on coco_condense_diff with UNSAFE_OPTION', async () => {
+    createServer()
+
+    const result = await tool('coco_condense_diff').handler({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+      trustRepositoryConfig: true,
+    }, { signal: new AbortController().signal })
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        version: 1,
+        ok: false,
+        operation: 'condense-diff',
+        error: { code: 'UNSAFE_OPTION', retryable: false },
+      },
+    })
+    expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
+    expect(mockRunCondenseDiff).not.toHaveBeenCalled()
   })
 })
