@@ -3,6 +3,7 @@ import {
   addGiteaIssueLabel,
   addGiteaIssueAssignee,
   closeGiteaIssue,
+  createGiteaIssue,
   reopenGiteaIssue,
 } from './giteaIssueActions'
 
@@ -96,5 +97,28 @@ describe('reopenGiteaIssue (#826)', () => {
     expect(result.ok).toBe(true)
     expect(calls[0].method).toBe('PATCH')
     expect(JSON.parse(calls[0].body ?? '{}').state).toBe('open')
+  })
+})
+
+describe('createGiteaIssue', () => {
+  it('POSTs to the issues endpoint and parses the URL', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/issues': JSON.stringify({ html_url: 'https://gitea.example/owner/repo/issues/9' }),
+    })
+    const result = await createGiteaIssue('owner/repo', { title: 'Bug', body: 'details' }, runner)
+    expect(result).toEqual({
+      ok: true,
+      message: 'Created issue: https://gitea.example/owner/repo/issues/9',
+      url: 'https://gitea.example/owner/repo/issues/9',
+    })
+    expect(calls[0].endpoint).toBe('repos/owner/repo/issues')
+    expect(calls[0].method).toBe('POST')
+    expect(JSON.parse(calls[0].body ?? '{}')).toEqual({ title: 'Bug', body: 'details' })
+  })
+
+  it('rejects a blank title without shelling out', async () => {
+    const result = await createGiteaIssue('owner/repo', { title: '   ', body: 'b' }, async () => '{}')
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Issue title required')
   })
 })

@@ -1,6 +1,6 @@
 import { defaultGlabRunner, runGlabAction, type GlabRunner } from './glabCli'
 import { rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
-import type { IssueActionResult } from './issueActions'
+import type { CreateIssueInput, IssueActionResult } from './issueActions'
 
 /**
  * GitLab issue mutations, the glab counterparts to `issueActions.ts`. Each wraps
@@ -10,6 +10,36 @@ import type { IssueActionResult } from './issueActions'
  * contract-locked by the arg-builder tests; smoke-test against a live GitLab
  * before relying on them.
  */
+
+function parseCreatedIssueUrl(output: string): string | undefined {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('https://'))
+}
+
+export function createGitLabIssue(
+  input: CreateIssueInput,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<IssueActionResult> {
+  if (!input.title.trim()) {
+    return Promise.resolve({ ok: false, message: 'Issue title required' })
+  }
+  return runGlabAction(
+    runner,
+    ['issue', 'create', `--title=${input.title}`, `--description=${input.body}`, '--yes'],
+    (output) => {
+      const url = parseCreatedIssueUrl(output)
+      return {
+        ok: true,
+        message: url ? `Created issue: ${url}` : 'Created issue',
+        url,
+      }
+    },
+    hostname
+  )
+}
 
 export function commentGitLabIssue(
   issueNumber: number,

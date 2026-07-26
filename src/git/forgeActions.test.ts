@@ -24,6 +24,7 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
   'addIssueAssignee',
   'closeIssue',
   'reopenIssue',
+  'createIssue',
 ]
 
 describe('getForgeActions (#0.70)', () => {
@@ -52,6 +53,7 @@ describe('getForgeActions (#0.70)', () => {
     const forge = getForgeActions('bitbucket', {})
     expect((await forge.getPullRequestDetail(1)).ok).toBe(false)
     expect((await forge.getIssueDetail(1)).ok).toBe(false)
+    expect((await forge.createIssue({ title: 't', body: 'b' })).ok).toBe(false)
   })
 
   it('Gitea detail loaders fail gracefully without a resolved project path', async () => {
@@ -59,6 +61,7 @@ describe('getForgeActions (#0.70)', () => {
     expect((await forge.getPullRequestDetail(1)).ok).toBe(false)
     expect((await forge.getIssueDetail(1)).ok).toBe(false)
     expect((await forge.getPullRequestDiffByNumber(1)).ok).toBe(false)
+    expect((await forge.createIssue({ title: 't', body: 'b' })).ok).toBe(false)
   })
 
   it('Gitea checkout is a graceful unsupported stub', async () => {

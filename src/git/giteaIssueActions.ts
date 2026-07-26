@@ -1,6 +1,6 @@
 import { runGiteaAction, type GiteaRunner } from './giteaCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
-import type { IssueActionResult } from './issueActions'
+import type { CreateIssueInput, IssueActionResult } from './issueActions'
 
 /**
  * Gitea/Forgejo issue mutations via the REST API v1. Mirrors
@@ -8,6 +8,25 @@ import type { IssueActionResult } from './issueActions'
  * runner indirection. `runner` is a host-bound `GiteaRunner` (see
  * `giteaCli.ts`'s `makeGiteaRunner`).
  */
+
+export function createGiteaIssue(
+  projectPath: string,
+  input: CreateIssueInput,
+  runner: GiteaRunner
+): Promise<IssueActionResult> {
+  if (!input.title.trim()) return Promise.resolve({ ok: false, message: 'Issue title required' })
+  return runGiteaAction(
+    runner,
+    `repos/${projectPath}/issues`,
+    'POST',
+    { title: input.title, body: input.body },
+    (out) => {
+      const issue = out.trim() ? (JSON.parse(out) as { html_url?: string }) : undefined
+      const url = issue?.html_url
+      return { ok: true, message: url ? `Created issue: ${url}` : 'Created issue', url }
+    }
+  )
+}
 
 export function commentGiteaIssue(
   projectPath: string,

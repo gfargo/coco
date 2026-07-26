@@ -14,7 +14,7 @@ import type {
   PullRequestActionResult,
   PullRequestMergeStrategy,
 } from './pullRequestActions'
-import type { IssueActionResult } from './issueActions'
+import type { CreateIssueInput, IssueActionResult } from './issueActions'
 
 // GitHub implementations.
 import { getPullRequestList } from './pullRequestListData'
@@ -44,6 +44,7 @@ import {
   addIssueLabel,
   closeIssue,
   commentIssue,
+  createIssue,
   reopenIssue,
 } from './issueActions'
 
@@ -73,6 +74,7 @@ import {
   addGitLabIssueLabel,
   closeGitLabIssue,
   commentGitLabIssue,
+  createGitLabIssue,
   reopenGitLabIssue,
 } from './gitlabIssueActions'
 import { defaultGlabRunner } from './glabCli'
@@ -101,6 +103,7 @@ import {
   addBitbucketIssueLabel,
   addBitbucketIssueAssignee,
   closeBitbucketIssue,
+  createBitbucketIssue,
   reopenBitbucketIssue,
 } from './bitbucketIssueActions'
 
@@ -128,6 +131,7 @@ import {
   addGiteaIssueLabel,
   addGiteaIssueAssignee,
   closeGiteaIssue,
+  createGiteaIssue,
   reopenGiteaIssue,
 } from './giteaIssueActions'
 import { makeGiteaRunner } from './giteaCli'
@@ -181,6 +185,7 @@ export type ForgeActions = {
   addIssueAssignee: (n: number, assignee: string) => Promise<IssueActionResult>
   closeIssue: (n: number) => Promise<IssueActionResult>
   reopenIssue: (n: number) => Promise<IssueActionResult>
+  createIssue: (input: CreateIssueInput) => Promise<IssueActionResult>
 }
 
 const githubActions: ForgeActions = {
@@ -209,6 +214,7 @@ const githubActions: ForgeActions = {
   addIssueAssignee,
   closeIssue,
   reopenIssue,
+  createIssue,
 }
 
 /**
@@ -248,6 +254,7 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
     addIssueAssignee: (n, assignee) => addGitLabIssueAssignee(n, assignee, defaultGlabRunner, host),
     closeIssue: (n) => closeGitLabIssue(n, defaultGlabRunner, host),
     reopenIssue: (n) => reopenGitLabIssue(n, defaultGlabRunner, host),
+    createIssue: (input) => createGitLabIssue(input, defaultGlabRunner, host),
   }
 }
 
@@ -300,6 +307,10 @@ function bitbucketActions(
     addIssueAssignee: (n, assignee) => addBitbucketIssueAssignee(path ?? '', n, assignee),
     closeIssue: (n) => closeBitbucketIssue(path ?? '', n),
     reopenIssue: (n) => reopenBitbucketIssue(path ?? '', n),
+    createIssue: (input) =>
+      path
+        ? createBitbucketIssue(path, input)
+        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
   }
 }
 
@@ -361,6 +372,10 @@ function giteaActions(
     addIssueAssignee: (n, assignee) => addGiteaIssueAssignee(path ?? '', n, assignee, runner),
     closeIssue: (n) => closeGiteaIssue(path ?? '', n, runner),
     reopenIssue: (n) => reopenGiteaIssue(path ?? '', n, runner),
+    createIssue: (input) =>
+      path
+        ? createGiteaIssue(path, input, runner)
+        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
   }
 }
 
