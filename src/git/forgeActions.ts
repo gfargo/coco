@@ -294,7 +294,7 @@ function bitbucketActions(
       path
         ? createBitbucketPullRequest(path, input)
         : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
-    openPullRequest: (url) => Promise.resolve(openBitbucketPullRequest(url)),
+    openPullRequest: (url) => openBitbucketPullRequest(url),
     commentIssue: (n, body) => commentBitbucketIssue(path ?? '', n, body),
     addIssueLabel: () => addBitbucketIssueLabel(),
     addIssueAssignee: (n, assignee) => addBitbucketIssueAssignee(path ?? '', n, assignee),
@@ -355,7 +355,7 @@ function giteaActions(
       path
         ? createGiteaPullRequest(path, input, runner)
         : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
-    openPullRequest: (url) => Promise.resolve(openGiteaPullRequest(url)),
+    openPullRequest: (url) => openGiteaPullRequest(url),
     commentIssue: (n, body) => commentGiteaIssue(path ?? '', n, body, runner),
     addIssueLabel: (n, label) => addGiteaIssueLabel(path ?? '', n, label, runner),
     addIssueAssignee: (n, assignee) => addGiteaIssueAssignee(path ?? '', n, assignee, runner),
