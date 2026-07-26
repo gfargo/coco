@@ -51,15 +51,23 @@ describe('workspacePullRequestData parsers', () => {
 
 describe('getWorkspacePullRequestCounts', () => {
   it('returns authenticated:false when gh auth status fails', async () => {
+    // Provide a GitHub remote so a host probe is issued. The probe throws
+    // (gh not authenticated), and the result should be authenticated:false.
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/a', 'git@github.com:owner/repo-a.git'],
+    ])
     const runner = jest.fn(async (args: string[]) => {
       if (args[0] === 'auth') throw new Error('not logged in')
       return ''
     })
 
-    const result = await getWorkspacePullRequestCounts(['/tmp/a'], { ghRunner: runner })
+    const result = await getWorkspacePullRequestCounts(['/tmp/a'], {
+      ghRunner: runner,
+      remoteUrls,
+    })
 
     expect(result).toEqual({ authenticated: false, counts: {} })
-    // Only the auth probe should have been issued.
+    // Only the auth probe should have been issued (no pr list calls).
     expect(runner).toHaveBeenCalledTimes(1)
   })
 
@@ -157,4 +165,81 @@ describe('getWorkspacePullRequestCounts', () => {
       '/tmp/repo-b': 0,
     })
   })
+
+  it('fetches PR counts for a GitHub Enterprise repo using the full webUrl as -R arg', async () => {
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/ghe-repo', 'git@github.acme.com:owner/ghe-repo.git'],
+    ])
+
+    const runner = jest.fn(async (args: string[]) => {
+      if (args[0] === 'auth') {
+        // Only the GHE hostname probe should be issued
+        const hostnameIdx = args.indexOf('--hostname')
+        if (hostnameIdx !== -1 && args[hostnameIdx + 1] === 'github.acme.com') return 'ok'
+        throw new Error('not logged in')
+      }
+      if (args[0] === 'pr') {
+        const repoArg = args[args.indexOf('-R') + 1]
+        if (repoArg === 'https://github.acme.com/owner/ghe-repo') {
+          return '[{"number":10},{"number":11},{"number":12}]'
+        }
+        throw new Error('unexpected -R arg: ' + repoArg)
+      }
+      return ''
+    })
+
+    const result = await getWorkspacePullRequestCounts(['/tmp/ghe-repo'], {
+      ghRunner: runner,
+      remoteUrls,
+    })
+
+    expect(result.authenticated).toBe(true)
+    expect(result.counts).toEqual({ '/tmp/ghe-repo': 3 })
+    // Confirm the -R arg was the full GHE URL, not a bare owner/name slug
+    const prCall = runner.mock.calls.find((c) => c[0][0] === 'pr')
+    expect(prCall).toBeDefined()
+    const repoArg = prCall![0][args_indexOf_R_plus_one(prCall![0])]
+    expect(repoArg).toBe('https://github.acme.com/owner/ghe-repo')
+  })
+
+  it('handles a mixed workspace: github.com authenticated, GHE unauthenticated', async () => {
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/gh-repo', 'git@github.com:owner/gh-repo.git'],
+      ['/tmp/ghe-repo', 'git@github.acme.com:owner/ghe-repo.git'],
+    ])
+
+    const runner = jest.fn(async (args: string[]) => {
+      if (args[0] === 'auth') {
+        const hostnameIdx = args.indexOf('--hostname')
+        const host = hostnameIdx !== -1 ? args[hostnameIdx + 1] : 'github.com'
+        if (host === 'github.com') return 'ok'
+        throw new Error('not logged in to ' + host)
+      }
+      if (args[0] === 'pr') {
+        const repoArg = args[args.indexOf('-R') + 1]
+        if (repoArg === 'owner/gh-repo') return '[{"number":1}]'
+        throw new Error('unexpected call for unauthenticated host')
+      }
+      return ''
+    })
+
+    const result = await getWorkspacePullRequestCounts(
+      ['/tmp/gh-repo', '/tmp/ghe-repo'],
+      { ghRunner: runner, remoteUrls }
+    )
+
+    // Overall authenticated = true because github.com is authenticated
+    expect(result.authenticated).toBe(true)
+    // github.com count present, GHE count absent
+    expect(result.counts).toEqual({ '/tmp/gh-repo': 1 })
+    // GHE pr list was not called (host unauthenticated)
+    const prCalls = runner.mock.calls.filter((c) => c[0][0] === 'pr')
+    expect(prCalls).toHaveLength(1)
+    expect(prCalls[0][0][prCalls[0][0].indexOf('-R') + 1]).toBe('owner/gh-repo')
+  })
 })
+
+/** Helper: find the index after -R in an args array. */
+function args_indexOf_R_plus_one(args: string[]): number {
+  return args.indexOf('-R') + 1
+}
