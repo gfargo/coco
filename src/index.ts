@@ -17,6 +17,7 @@ import prs from './commands/prs'
 import recap from './commands/recap'
 import review from './commands/review'
 import ui from './commands/ui'
+import watch from './commands/watch'
 import workspace from './commands/workspace'
 
 import { AgentCommandOptions } from './commands/agent/config'
@@ -37,6 +38,7 @@ import { PrsOptions } from './commands/prs/config'
 import { RecapOptions } from './commands/recap/config'
 import { ReviewOptions } from './commands/review/config'
 import { UiOptions } from './commands/ui/config'
+import { WatchOptions } from './commands/watch/config'
 import { WorkspaceOptions } from './commands/workspace/config'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
@@ -202,6 +204,13 @@ y.command<WorkspaceOptions>(
   workspace.handler
 )
 
+y.command<WatchOptions>(
+  watch.command,
+  watch.desc,
+  watch.builder,
+  watch.handler
+)
+
 y.command<CacheOptions>(
   cache.command,
   cache.desc,
@@ -268,6 +277,7 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(doctor.command), desc: doctor.desc },
   { name: firstCommandToken(log.command), desc: log.desc },
   { name: firstCommandToken(ui.command), desc: ui.desc },
+  { name: firstCommandToken(watch.command), desc: watch.desc },
   { name: firstCommandToken(workspace.command), desc: workspace.desc },
   { name: firstCommandToken(cache.command), desc: cache.desc },
   { name: firstCommandToken(configCmd.command), desc: configCmd.desc },

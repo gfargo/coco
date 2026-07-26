@@ -5,7 +5,7 @@ import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
 import { recordUsage } from './usageLedger'
 
-export type LlmUsageSurface = 'cli' | 'agent-cli' | 'mcp'
+export type LlmUsageSurface = 'cli' | 'agent-cli' | 'mcp' | 'watch'
 
 export type LlmCallMetadata = {
   task: string
