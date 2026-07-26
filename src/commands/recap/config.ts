@@ -83,7 +83,16 @@ export const builder = (yargs: Argv) => {
       // value (`coco recap --tag v1.0.0`) used to silently drop it as a
       // stray positional and recap since the *latest* tag instead (#1613).
       // Reject up front so the value is never silently discarded.
-      const rawArgv = argv as { tag?: boolean; 'last-tag'?: boolean; _: (string | number)[] }
+      const rawArgv = argv as {
+        tag?: boolean
+        'last-tag'?: boolean
+        yesterday?: boolean
+        'last-week'?: boolean
+        'last-month'?: boolean
+        currentBranch?: boolean
+        timeframe?: string
+        _: (string | number)[]
+      }
       const tagRequested = Boolean(rawArgv.tag ?? rawArgv['last-tag'])
       // Filter out the command token ('recap') that yargs always leaves
       // in `_` — it's not a stray positional (#1668).
@@ -91,6 +100,28 @@ export const builder = (yargs: Argv) => {
       if (tagRequested && positionals.length > 0) {
         throw new Error(
           `--tag on recap takes no value (it means "since the last tag") — unexpected argument '${positionals[0]}'. Did you mean 'coco changelog --tag ${positionals[0]}'?`
+        )
+      }
+
+      // `--timeframe` is documented as "the canonical form of the shortcut
+      // flags above", but the handler's ternary chain used to resolve the
+      // shortcuts before ever looking at `--timeframe` — so e.g. `--yesterday
+      // --timeframe last-week` silently recapped yesterday with no warning
+      // about the conflict (#1898). Reject ambiguous combinations up front.
+      const selectors: Array<[string, boolean]> = [
+        ['--yesterday', Boolean(rawArgv.yesterday)],
+        ['--last-week', Boolean(rawArgv['last-week'])],
+        ['--last-month', Boolean(rawArgv['last-month'])],
+        ['--last-tag', tagRequested],
+        ['--current-branch', Boolean(rawArgv.currentBranch)],
+        ['--timeframe', rawArgv.timeframe !== undefined],
+      ]
+      const activeSelectors = selectors.filter(([, isSet]) => isSet)
+      if (activeSelectors.length > 1) {
+        throw new Error(
+          `Only one timeframe selector may be used at a time — got ${activeSelectors
+            .map(([flag]) => flag)
+            .join(', ')}.`
         )
       }
       return true

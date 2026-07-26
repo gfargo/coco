@@ -372,3 +372,48 @@ describe('recap --tag rejects a discarded value (#1613)', () => {
     expect(failMessage).toBeNull()
   })
 })
+
+// ---------------------------------------------------------------------------
+// `recap` rejects combining a shortcut flag with an explicit `--timeframe`
+// (#1898)
+//
+// `--timeframe` is documented as "the canonical form of the shortcut flags
+// above", but the handler used to resolve the shortcuts first — so e.g.
+// `--yesterday --timeframe last-week` silently recapped yesterday with no
+// warning about the conflict. The builder's `.check()` now rejects any
+// combination of more than one timeframe selector up front.
+// ---------------------------------------------------------------------------
+
+describe('recap rejects conflicting timeframe selectors (#1898)', () => {
+  it('rejects --yesterday combined with --timeframe', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, ['--yesterday', '--timeframe', 'last-week'])
+    expect(failMessage).toMatch(/Only one timeframe selector/)
+    expect(failMessage).toMatch(/--yesterday/)
+    expect(failMessage).toMatch(/--timeframe/)
+  })
+
+  it('rejects two shortcut flags used together', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, ['--last-week', '--last-month'])
+    expect(failMessage).toMatch(/Only one timeframe selector/)
+  })
+
+  it('rejects --current-branch combined with --timeframe', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, ['--currentBranch', '--timeframe', 'last-tag'])
+    expect(failMessage).toMatch(/Only one timeframe selector/)
+  })
+
+  it('accepts a single shortcut flag on its own', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, ['--yesterday'])
+    expect(failMessage).toBeNull()
+  })
+
+  it('accepts an explicit --timeframe on its own', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, ['--timeframe', 'last-week'])
+    expect(failMessage).toBeNull()
+  })
+
+  it('accepts no timeframe selector at all', () => {
+    const { failMessage } = parseWithStrict(recapBuilder, [])
+    expect(failMessage).toBeNull()
+  })
+})
