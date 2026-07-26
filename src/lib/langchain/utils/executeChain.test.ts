@@ -19,7 +19,12 @@ import { executeChain } from './executeChain'
 class FakeUsageChatModel extends BaseChatModel {
   constructor(
     private readonly responseText: string,
-    private readonly usage?: { input_tokens: number; output_tokens: number; total_tokens: number }
+    private readonly usage?: {
+      input_tokens: number
+      output_tokens: number
+      total_tokens: number
+      input_token_details?: { cache_read?: number }
+    }
   ) {
     super({})
   }
@@ -107,6 +112,30 @@ describe('executeChain', () => {
       expect(result).toBe('hello world')
       expect(logger.verbose).toHaveBeenCalledWith(
         expect.stringContaining('completionTokens=34'),
+        { color: 'cyan' }
+      )
+    })
+
+    it('captures cachedInputTokens from usage_metadata.input_token_details.cache_read', async () => {
+      const llm = new FakeUsageChatModel('hello world', {
+        input_tokens: 1000,
+        output_tokens: 34,
+        total_tokens: 1034,
+        input_token_details: { cache_read: 800 },
+      })
+      const logger = { verbose: jest.fn() } as unknown as Logger
+
+      await executeChain<string>({
+        llm: asLlm(llm as unknown as FakeListChatModel),
+        prompt,
+        variables,
+        parser: new StringOutputParser(),
+        logger,
+        metadata: { task: 'commit-message' },
+      })
+
+      expect(logger.verbose).toHaveBeenCalledWith(
+        expect.stringContaining('cachedInputTokens=800'),
         { color: 'cyan' }
       )
     })

@@ -1,5 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { toGeminiThinkingLevel } from './reasoning'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 async function createGeminiLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
@@ -12,6 +13,9 @@ async function createGeminiLlm({ model, config, apiKey }: CreateLlmArgs): Promis
     // Disable LangChain's built-in AsyncCaller retries (#1677).
     maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     maxOutputTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    ...(config.service.reasoningEffort
+      ? { thinkingConfig: { thinkingLevel: toGeminiThinkingLevel(config.service.reasoningEffort) } }
+      : {}),
   }
 
   // Merge Gemini-specific fields forwarded from service config.
@@ -30,4 +34,5 @@ export const geminiProvider: ProviderDefinition = {
   // Approximation vs. the gpt-4o tiktoken baseline, per the AI-core
   // token-counting audit — no synchronous local Gemini tokenizer available.
   tokenCorrectionFactor: 1.1,
+  supportsReasoningEffort: true,
 }

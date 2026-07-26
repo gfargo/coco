@@ -16,6 +16,7 @@ async function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): Promis
     // respected instead of being coerced to the 0.2 default.
     temperature: config.service.temperature ?? 0.2,
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    ...(config.service.reasoningEffort ? { reasoning: { effort: config.service.reasoningEffort } } : {}),
     ...(config.service.requestOptions?.timeout
       ? { timeout: config.service.requestOptions.timeout }
       : {}),
@@ -41,4 +42,5 @@ export const openaiProvider: ProviderDefinition = {
   createLlm: createOpenAiLlm,
   resolveEndpoint: (config) =>
     'baseURL' in config.service ? config.service.baseURL : undefined,
+  supportsReasoningEffort: true,
 }

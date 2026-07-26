@@ -142,6 +142,15 @@ function extractCompletionTokens(messageChunk: unknown): number | undefined {
   return typeof outputTokens === 'number' ? outputTokens : undefined
 }
 
+/** Same last-seen-wins contract as `extractCompletionTokens` above. */
+function extractCachedInputTokens(messageChunk: unknown): number | undefined {
+  if (!messageChunk || typeof messageChunk !== 'object') return undefined
+  const cacheRead = (
+    messageChunk as { usage_metadata?: { input_token_details?: { cache_read?: number } } }
+  ).usage_metadata?.input_token_details?.cache_read
+  return typeof cacheRead === 'number' ? cacheRead : undefined
+}
+
 function coerceChunkNonTextFallback(messageChunk: unknown): string {
   if (!messageChunk || typeof messageChunk !== 'object' || !('content' in messageChunk)) return ''
   const content = (messageChunk as { content: unknown }).content
@@ -268,9 +277,13 @@ export async function executeChainStreaming<T>({
     // the user finishes waiting on a useless stream.
     const MAX_CALLBACK_FAILURES = 5
     let completionTokens: number | undefined
+    let cachedInputTokens: number | undefined
     for await (const messageChunk of stream) {
       const chunkCompletionTokens = extractCompletionTokens(messageChunk)
       if (chunkCompletionTokens !== undefined) completionTokens = chunkCompletionTokens
+
+      const chunkCachedInputTokens = extractCachedInputTokens(messageChunk)
+      if (chunkCachedInputTokens !== undefined) cachedInputTokens = chunkCachedInputTokens
 
       const text = coerceChunkText(messageChunk)
       if (!text) {
@@ -341,6 +354,7 @@ export async function executeChainStreaming<T>({
       variableKeys: Object.keys(variables),
       promptTokens,
       completionTokens,
+      cachedInputTokens,
       elapsedMs,
       // Surfaced in observability so consumers can spot the streaming
       // path in their logs without correlating across tools. `chunks`

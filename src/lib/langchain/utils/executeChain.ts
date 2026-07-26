@@ -104,17 +104,23 @@ export const executeChain = async <T>({
     // legacy `llmOutput.tokenUsage.completionTokens`. Left `undefined`
     // (never defaulted to 0) when neither is present.
     let completionTokens: number | undefined
+    let cachedInputTokens: number | undefined
     const usageCallback = {
       handleLLMEnd: (output: LLMResult) => {
         const generation = output.generations[0]?.[0] as { message?: AIMessage } | undefined
         const outputTokens = generation?.message?.usage_metadata?.output_tokens
         if (typeof outputTokens === 'number') {
           completionTokens = outputTokens
-          return
+        } else {
+          const legacyCompletionTokens = output.llmOutput?.tokenUsage?.completionTokens
+          if (typeof legacyCompletionTokens === 'number') {
+            completionTokens = legacyCompletionTokens
+          }
         }
-        const legacyCompletionTokens = output.llmOutput?.tokenUsage?.completionTokens
-        if (typeof legacyCompletionTokens === 'number') {
-          completionTokens = legacyCompletionTokens
+
+        const cacheReadTokens = generation?.message?.usage_metadata?.input_token_details?.cache_read
+        if (typeof cacheReadTokens === 'number') {
+          cachedInputTokens = cacheReadTokens
         }
       },
     }
@@ -132,6 +138,7 @@ export const executeChain = async <T>({
       variableKeys: Object.keys(variables),
       promptTokens,
       completionTokens,
+      cachedInputTokens,
       elapsedMs,
       ...metadata,
     })

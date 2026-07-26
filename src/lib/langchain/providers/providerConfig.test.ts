@@ -90,6 +90,69 @@ describe.each(CASES)('provider config forwarding — $provider', (c) => {
     ) as unknown as Record<string, unknown>
     expect(llm[c.maxTokensField]).toBe(8192)
   })
+
+  it('translates reasoningEffort per the provider capability flag (mistral has none, and no-ops)', async () => {
+    const llm = await getLlm(
+      c.provider,
+      c.model as LLMModel,
+      makeConfig(c, { reasoningEffort: 'high' })
+    ) as unknown as Record<string, unknown>
+
+    switch (c.provider) {
+      case 'gemini':
+        expect((llm.thinkingConfig as { thinkingLevel?: string } | undefined)?.thinkingLevel).toBe('HIGH')
+        break
+      case 'anthropic':
+        expect((llm.thinking as { type?: string } | undefined)?.type).toBe('adaptive')
+        break
+      case 'mistral':
+        // No `supportsReasoningEffort` flag — the option is silently ignored, never throws.
+        expect(llm.reasoning).toBeUndefined()
+        break
+      default:
+        expect((llm.reasoning as { effort?: string } | undefined)?.effort).toBe('high')
+    }
+  })
+})
+
+describe('anthropic reasoning effort + prompt caching', () => {
+  const anthropicCase = CASES.find((c) => c.provider === 'anthropic')!
+
+  it('skips the 0.2 temperature default when reasoningEffort is set (extended thinking rejects it)', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase, { reasoningEffort: 'low' })
+    )
+    expect(temperatureOf(llm)).toBeUndefined()
+  })
+
+  it('still respects an explicit temperature alongside reasoningEffort', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase, { reasoningEffort: 'low', temperature: 1 })
+    )
+    expect(temperatureOf(llm)).toBe(1)
+  })
+
+  it('binds cache_control as a call option when promptCache is enabled', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase, { promptCache: true })
+    ) as unknown as { config?: { cache_control?: { type?: string } } }
+    expect(llm.config?.cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  it('does not bind cache_control when promptCache is unset', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase)
+    ) as unknown as { config?: unknown }
+    expect(llm.config).toBeUndefined()
+  })
 })
 
 describe('bedrock config forwarding', () => {

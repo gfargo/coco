@@ -17,6 +17,7 @@ async function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): Promise
     // Disable LangChain's built-in AsyncCaller retries (#1677).
     maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    ...(config.service.reasoningEffort ? { reasoning: { effort: config.service.reasoningEffort } } : {}),
     ...(config.service.requestOptions?.timeout
       ? { timeout: config.service.requestOptions.timeout }
       : {}),
@@ -41,4 +42,5 @@ export const azureProvider: ProviderDefinition = {
       ? `https://${svc.instanceName}.openai.azure.com`
       : undefined
   },
+  supportsReasoningEffort: true,
 }

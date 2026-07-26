@@ -25,12 +25,17 @@ import { DoctorArgv, DoctorOptions } from './config'
 import { checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
 import { Config } from '../../lib/config/types'
 
-function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
+export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
   return rows.map((row) => {
     const tokens = row.promptTokens > 0 || row.completionTokens > 0
       ? `${row.promptTokens} in / ${row.completionTokens} out tok`
       : '–'
-    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms`
+    // Cache hit-rate is only meaningful once we have both a cached count and
+    // a prompt-token denominator to divide it by.
+    const hitRate = row.cachedInputTokens > 0 && row.promptTokens > 0
+      ? `  cache ${Math.round((row.cachedInputTokens / row.promptTokens) * 100)}%`
+      : ''
+    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms${hitRate}`
   })
 }
 

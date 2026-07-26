@@ -11,6 +11,15 @@ export type DynamicModelTask =
   | 'repair'
   | 'largeDiff'
 export type DynamicModelPreference = 'cost' | 'balanced' | 'quality'
+/**
+ * Reasoning/thinking effort for providers with a graded reasoning dial.
+ * Applied only by providers whose `ProviderDefinition` sets
+ * `supportsReasoningEffort` (OpenAI, Azure, Gemini, Anthropic); silently
+ * ignored elsewhere. Gemini has no `minimal` level and maps it to `LOW`.
+ * Anthropic has no graded levels — any value here enables adaptive
+ * extended thinking rather than selecting a tier.
+ */
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
 
 export type OpenAIModel =
   | TiktokenModel
@@ -218,6 +227,29 @@ export type BaseLLMService = {
    * @default 3
    */
   maxParsingAttempts?: number
+  /**
+   * Enable server-side prompt caching for providers that support it, so a
+   * repeated stable prefix (system prompt, few-shot examples) is billed at
+   * the cached-read rate instead of full input price on every call.
+   *
+   * Anthropic-only today (`cache_control` applied to the last cacheable
+   * block, advancing automatically as the conversation grows). OpenAI/Azure
+   * cache automatically server-side with no opt-in needed. Silently ignored
+   * (never throws) on providers whose `ProviderDefinition` doesn't set
+   * `supportsPromptCache`.
+   *
+   * @default false
+   */
+  promptCache?: boolean
+  /**
+   * Reasoning effort for models with a graded or extended-thinking mode.
+   * Trades cost/latency for answer quality. See `ReasoningEffort` for the
+   * per-provider mapping. Silently ignored (never throws) on providers
+   * whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.
+   *
+   * @default undefined (provider's own default)
+   */
+  reasoningEffort?: ReasoningEffort
   /**
    * Optional task-to-model overrides used when model is set to "dynamic".
    */

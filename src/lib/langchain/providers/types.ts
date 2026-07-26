@@ -49,4 +49,16 @@ export type ProviderDefinition = {
    * Bedrock hosts multiple model families under one provider).
    */
   tokenCorrectionFactor?: number | ((model: string) => number)
+  /**
+   * Whether `createLlm` translates `service.promptCache` into this
+   * provider's caching mechanism. Undefined/false means the option is
+   * silently ignored rather than causing an error.
+   */
+  supportsPromptCache?: boolean
+  /**
+   * Whether `createLlm` translates `service.reasoningEffort` into this
+   * provider's reasoning/thinking configuration. Undefined/false means the
+   * option is silently ignored rather than causing an error.
+   */
+  supportsReasoningEffort?: boolean
 }

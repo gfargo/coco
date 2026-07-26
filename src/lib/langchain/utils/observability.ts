@@ -28,6 +28,13 @@ export type LlmCallMetadata = {
    * measurement.
    */
   completionTokens?: number
+  /**
+   * Input tokens served from the provider's prompt cache
+   * (`usage_metadata.input_token_details.cache_read`). Optional and left
+   * `undefined` (never `0`) when a provider doesn't report cache metadata —
+   * same discipline as `completionTokens` above.
+   */
+  cachedInputTokens?: number
   elapsedMs?: number
   inputDocuments?: number
   inputChunks?: number
@@ -132,6 +139,7 @@ export function logLlmCall(logger: Logger | undefined, metadata: LlmCallMetadata
     metadata.retryAttempt ? `retryAttempt=${metadata.retryAttempt}` : undefined,
     metadata.promptTokens !== undefined ? `promptTokens=${metadata.promptTokens}` : undefined,
     metadata.completionTokens !== undefined ? `completionTokens=${metadata.completionTokens}` : undefined,
+    metadata.cachedInputTokens !== undefined ? `cachedInputTokens=${metadata.cachedInputTokens}` : undefined,
     metadata.elapsedMs !== undefined ? `elapsedMs=${metadata.elapsedMs}` : undefined,
     metadata.inputDocuments !== undefined ? `inputDocuments=${metadata.inputDocuments}` : undefined,
     metadata.inputChunks !== undefined ? `inputChunks=${metadata.inputChunks}` : undefined,
