@@ -19,18 +19,28 @@ import {
     summarizeUsageByRepo,
     summarizeUsageBySurface,
     summarizeUsageByTask,
+    totalUsageCost,
     type UsageAggregate,
 } from '../../lib/langchain/utils/usageLedger'
+import { PRICES_AS_OF } from '../../lib/langchain/utils/pricing'
 import { DoctorArgv, DoctorOptions } from './config'
 import { checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
 import { Config } from '../../lib/config/types'
+
+function formatRowCost(row: UsageAggregate): string {
+  // Fully unpriced group (e.g. all calls used a model we don't have a price
+  // for) — show a dash rather than a misleading $0.00.
+  if (row.pricedCalls === 0) return '–'
+  return `$${row.estimatedCostUsd.toFixed(4)}`
+}
 
 function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
   return rows.map((row) => {
     const tokens = row.promptTokens > 0 || row.completionTokens > 0
       ? `${row.promptTokens} in / ${row.completionTokens} out tok`
       : '–'
-    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms`
+    const cost = formatRowCost(row)
+    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  ${cost.padStart(9)}  avg ${row.avgMs}ms`
   })
 }
 
@@ -47,11 +57,22 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
   const bySurface = summarizeUsageBySurface(records)
   const byRepo = summarizeUsageByRepo(records)
   const hasRepoData = byRepo.some((row) => row.key !== 'unknown')
+  const { totalCostUsd, pricedCalls, unpricedCalls } = totalUsageCost(records)
 
   if (json) {
     emitJson({
       routing: profile,
-      usage: { records: records.length, byTask, byModel, bySurface, byRepo },
+      usage: {
+        records: records.length,
+        pricesAsOf: PRICES_AS_OF,
+        totalEstimatedCostUsd: totalCostUsd,
+        pricedCalls,
+        unpricedCalls,
+        byTask,
+        byModel,
+        bySurface,
+        byRepo,
+      },
     })
     return
   }
@@ -92,6 +113,17 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
     logger.log('')
     logger.log(chalk.dim('  By repo:'))
     for (const line of renderUsageRows(byRepo, 'call')) logger.log(line)
+  }
+
+  logger.log('')
+  if (pricedCalls > 0) {
+    const unpricedNote = unpricedCalls > 0 ? `, ${unpricedCalls} call(s) on unpriced models shown as tokens only` : ''
+    logger.log(
+      chalk.bold(`Estimated cost: $${totalCostUsd.toFixed(4)}`) +
+        chalk.dim(` (prices as of ${PRICES_AS_OF}${unpricedNote})`)
+    )
+  } else {
+    logger.log(chalk.dim(`No priced models in this ledger yet — showing tokens only (prices as of ${PRICES_AS_OF}).`))
   }
 }
 

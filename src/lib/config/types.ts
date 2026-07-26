@@ -206,6 +206,31 @@ type BaseConfig = {
      * @default false
      */
     usage?: boolean
+
+    /**
+     * Optional monthly spend guardrail checked against the local usage
+     * ledger. `coco doctor` sums the current calendar month's *estimated*
+     * cost (tokens priced via coco's built-in per-model table — see `coco
+     * doctor --cost`) and emits a warning once that total reaches
+     * `warnAtPercent` of `monthlyUsd`. This is advisory only: coco never
+     * blocks or throttles a call because of it, and the check is a no-op
+     * unless `telemetry.usage` (or `COCO_USAGE_LOG`) is actually recording,
+     * since there'd be no ledger to sum.
+     */
+    budget?: {
+      /**
+       * Monthly estimated-spend cap in USD. Leave unset to disable the
+       * budget check entirely.
+       */
+      monthlyUsd?: number
+
+      /**
+       * Percentage of `monthlyUsd` at or above which `coco doctor` warns.
+       *
+       * @default 80
+       */
+      warnAtPercent?: number
+    }
   }
 
   /**

@@ -14,6 +14,7 @@ import {
     summarizeUsageByRepo,
     summarizeUsageBySurface,
     summarizeUsageByTask,
+    totalUsageCost,
 } from './usageLedger'
 
 describe('usageLedger', () => {
@@ -127,6 +128,38 @@ describe('usageLedger', () => {
     expect(fs.existsSync(logPath)).toBe(true)
     clearUsageLog()
     expect(fs.existsSync(logPath)).toBe(false)
+  })
+
+  it('aggregates estimated cost, distinguishing priced from unpriced calls', () => {
+    // gpt-5.4-mini: $1/1M in, $4/1M out -> (1M,1M) = $5
+    recordUsage({ task: 'commit', model: 'gpt-5.4-mini', promptTokens: 1_000_000, completionTokens: 1_000_000 })
+    // Unpriced model: contributes tokens but no cost.
+    recordUsage({ task: 'commit', model: 'some-unpriced-model', promptTokens: 500, completionTokens: 500 })
+
+    const records = readUsageRecords()
+    const byModel = summarizeUsageByModel(records)
+
+    const priced = byModel.find((r) => r.key === 'gpt-5.4-mini')
+    expect(priced).toMatchObject({ calls: 1, pricedCalls: 1, unpricedCalls: 0 })
+    expect(priced?.estimatedCostUsd).toBeCloseTo(5, 10)
+
+    const unpriced = byModel.find((r) => r.key === 'some-unpriced-model')
+    expect(unpriced).toMatchObject({ calls: 1, pricedCalls: 0, unpricedCalls: 1, estimatedCostUsd: 0 })
+
+    const byTask = summarizeUsageByTask(records)
+    const commit = byTask.find((r) => r.key === 'commit')
+    expect(commit).toMatchObject({ calls: 2, pricedCalls: 1, unpricedCalls: 1 })
+    expect(commit?.estimatedCostUsd).toBeCloseTo(5, 10)
+  })
+
+  it('totalUsageCost sums cost across records and counts priced/unpriced calls', () => {
+    recordUsage({ task: 'commit', model: 'gpt-5.4-nano', promptTokens: 1_000_000 })
+    recordUsage({ task: 'commit', model: 'unknown-model', promptTokens: 1_000_000 })
+
+    const { totalCostUsd, pricedCalls, unpricedCalls } = totalUsageCost(readUsageRecords())
+    expect(pricedCalls).toBe(1)
+    expect(unpricedCalls).toBe(1)
+    expect(totalCostUsd).toBeCloseTo(0.15, 10)
   })
 
   it('skips malformed lines without throwing', () => {

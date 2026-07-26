@@ -1,10 +1,15 @@
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import { Config } from '../../lib/config/types'
 import { getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
+import { recordUsage, resetUsageLedgerState } from '../../lib/langchain/utils/usageLedger'
 import {
     checkAuthentication,
     checkEndpointSupport,
     checkOllamaLiveness,
     checkProviderValidity,
+    checkUsageBudget,
     Diagnostic,
 } from './checks'
 
@@ -296,5 +301,80 @@ describe('checkOllamaLiveness', () => {
     // balanced commit tier for ollama is qwen2.5-coder:14b
     expect(diagnostic.message).toContain('qwen2.5-coder:14b')
     expect(diagnostic.message).toContain('dynamic → commit')
+  })
+})
+
+describe('checkUsageBudget', () => {
+  let dir: string
+  let logPath: string
+  const prevEnv = process.env.COCO_USAGE_LOG
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-budget-'))
+    logPath = path.join(dir, 'usage.jsonl')
+    process.env.COCO_USAGE_LOG = logPath
+    resetUsageLedgerState()
+  })
+
+  afterEach(() => {
+    if (prevEnv === undefined) delete process.env.COCO_USAGE_LOG
+    else process.env.COCO_USAGE_LOG = prevEnv
+    resetUsageLedgerState()
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  function budgetConfig(monthlyUsd?: number, warnAtPercent?: number): Config {
+    return { telemetry: { budget: { monthlyUsd, warnAtPercent } } } as unknown as Config
+  }
+
+  it('is a no-op when no monthlyUsd cap is configured', () => {
+    recordUsage({ task: 'commit', model: 'gpt-5.5', promptTokens: 1_000_000, completionTokens: 1_000_000 })
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget({ telemetry: {} } as unknown as Config, diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('is a no-op when spend is under warnAtPercent', () => {
+    // gpt-5.5: $10/1M in, $30/1M out -> ~$4 for these tokens
+    recordUsage({ task: 'commit', model: 'gpt-5.5', promptTokens: 100_000, completionTokens: 100_000 })
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget(budgetConfig(100, 80), diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('warns when spend is at or above warnAtPercent', () => {
+    // gpt-5.5: $10/1M in, $30/1M out -> $10 + $30 = $40 for 1M/1M tokens
+    recordUsage({ task: 'commit', model: 'gpt-5.5', promptTokens: 1_000_000, completionTokens: 1_000_000 })
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget(budgetConfig(50, 80), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].message).toContain('$40.00')
+    expect(diagnostics[0].message).toContain('$50')
+  })
+
+  it('defaults warnAtPercent to 80 when unset', () => {
+    recordUsage({ task: 'commit', model: 'gpt-5.5', promptTokens: 1_000_000, completionTokens: 1_000_000 })
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget(budgetConfig(45), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+  })
+
+  it('does not false-warn when the ledger only has unpriced models', () => {
+    recordUsage({ task: 'commit', model: 'some-unpriced-model', promptTokens: 1_000_000, completionTokens: 1_000_000 })
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget(budgetConfig(1, 1), diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('ignores records outside the current calendar month', () => {
+    const oldTimestamp = new Date('2020-01-01T00:00:00Z').getTime()
+    fs.writeFileSync(
+      logPath,
+      `${JSON.stringify({ t: oldTimestamp, task: 'commit', model: 'gpt-5.5', promptTokens: 1_000_000, completionTokens: 1_000_000 })}\n`
+    )
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget(budgetConfig(1, 1), diagnostics)
+    expect(diagnostics).toEqual([])
   })
 })

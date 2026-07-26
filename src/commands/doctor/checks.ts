@@ -4,6 +4,7 @@ import { resolveDynamicModel } from '../../lib/langchain/utils/dynamicModels'
 import { DEFAULT_OLLAMA_ENDPOINT, getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
 import { DEPRECATED_MODELS, detectProviderMismatch } from '../../lib/langchain/modelValidity'
 import { LLMProvider } from '../../lib/langchain/types'
+import { readUsageRecords, totalUsageCost } from '../../lib/langchain/utils/usageLedger'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
 
@@ -45,6 +46,7 @@ export function runDiagnostics(config: Config): Diagnostic[] {
   checkEndpointSupport(config, diagnostics)
   checkIgnoredFiles(config, diagnostics)
   checkProjectConfigFile(diagnostics)
+  checkUsageBudget(config, diagnostics)
 
   return diagnostics
 }
@@ -299,6 +301,37 @@ function checkTokenLimits(config: Config, diagnostics: Diagnostic[]) {
           svc.maxConcurrent = 1
         }
       },
+    })
+  }
+}
+
+/**
+ * Compares this calendar month's *estimated* ledger spend against
+ * `telemetry.budget.monthlyUsd` and warns at/above `warnAtPercent`. No-op
+ * when no cap is configured, or when nothing in this month's ledger priced
+ * out to a cost (unset ledger, or every call used an unpriced model).
+ */
+export function checkUsageBudget(config: Config, diagnostics: Diagnostic[]) {
+  const budget = config.telemetry?.budget
+  if (!budget?.monthlyUsd) return
+
+  const now = new Date()
+  const records = readUsageRecords().filter((r) => {
+    const d = new Date(r.t)
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+  })
+
+  const { totalCostUsd, pricedCalls } = totalUsageCost(records)
+  if (pricedCalls === 0) return
+
+  const warnAtPercent = budget.warnAtPercent ?? 80
+  const percentSpent = (totalCostUsd / budget.monthlyUsd) * 100
+
+  if (percentSpent >= warnAtPercent) {
+    diagnostics.push({
+      severity: 'warn',
+      message: `Estimated spend this month is $${totalCostUsd.toFixed(2)}, ${percentSpent.toFixed(0)}% of your telemetry.budget.monthlyUsd cap ($${budget.monthlyUsd}).`,
+      fix: 'Raise telemetry.budget.monthlyUsd, or lower cost by setting service.dynamicModelPreference to "cost" (or a cheaper fixed service.model).',
     })
   }
 }
