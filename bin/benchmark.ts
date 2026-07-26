@@ -14,6 +14,7 @@
  *   npm run bench                # run all fixtures, write bench file
  *   npm run bench -- --update    # also overwrite the baseline
  *   npm run bench -- --fixture=medium   # narrow to one fixture
+ *   npm run bench -- --check     # gate: fail if llmCalls regress vs baseline
  *
  * The mock chain uses a deterministic latency model so before/after
  * runs compare apples to apples without paying for real API calls.
@@ -40,6 +41,13 @@ import {
   flushLlmBenchRun,
   resetLlmTelemetry,
 } from '../src/lib/langchain/utils/observability'
+import {
+  BenchResult,
+  CheckEntry,
+  CheckStatus,
+  DEFAULT_CHECK_TOLERANCES,
+  evaluateCheck,
+} from './benchmark/evaluateCheck'
 
 // Silence the type checker about the unused `fileChangeParser` import
 // being present for future bench scenarios; the active runner uses
@@ -86,18 +94,6 @@ const DEFAULT_OPTIONS: BenchOptions = {
   // Match the canonical service tokenLimit from `langchain/utils.ts`
   // (raised from 2048 to 4096 in PR 1 of #845).
   maxTokens: 4096,
-}
-
-type BenchResult = {
-  fixture: string
-  fileCount: number
-  approxTokens: number
-  durationMs: number
-  llmCalls: number
-  llmTotalMs: number
-  llmTotalPromptTokens: number
-  /** When this row is a warm-cache re-run, the cold result it amortized against. */
-  pass?: 'cold' | 'warm'
 }
 
 /**
@@ -259,6 +255,47 @@ function readBaseline(): BenchResult[] | undefined {
   }
 }
 
+function printCheckResults(entries: CheckEntry[]): void {
+  console.log('\n=== benchmark check ===\n')
+  for (const entry of entries) {
+    const marker = entry.status === 'regression' ? 'FAIL' : entry.status === 'warning' ? 'WARN' : ' ok '
+    const log = entry.status === 'regression' ? console.error : console.log
+    log(`[${marker}] ${entry.fixture}: ${entry.message}`)
+  }
+  console.log('')
+}
+
+function renderCheckSummary(entries: CheckEntry[]): void {
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY
+  if (!summaryPath) return
+
+  const statusLabel = (status: CheckStatus) =>
+    status === 'regression' ? '❌ regression' : status === 'warning' ? '⚠️ warning' : '✅ ok'
+
+  const rows = entries.map((entry) => {
+    const llmCallsCell =
+      entry.baselineLlmCalls === undefined
+        ? `${entry.llmCalls}`
+        : `${entry.llmCalls} (baseline ${entry.baselineLlmCalls})`
+    const durationCell =
+      entry.baselineDurationMs === undefined
+        ? `${entry.durationMs}ms`
+        : `${entry.durationMs}ms (baseline ${entry.baselineDurationMs}ms)`
+    return `| ${entry.fixture} | ${llmCallsCell} | ${durationCell} | ${statusLabel(entry.status)} |`
+  })
+
+  const table = [
+    '## Diff-condensing benchmark',
+    '',
+    '| Fixture | LLM calls | Duration | Status |',
+    '| --- | --- | --- | --- |',
+    ...rows,
+    '',
+  ].join('\n')
+
+  fs.appendFileSync(summaryPath, table)
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const updateBaseline = args.includes('--update')
@@ -268,6 +305,10 @@ async function main(): Promise<void> {
   // Demonstrates the cache hit rate added in #845 PR 5 — same fixture,
   // unchanged inputs, second run should be essentially free.
   const repeat = args.includes('--repeat')
+  // --check runs a single cold pass per fixture (cache cleared
+  // beforehand, same as the cold half of --repeat) and gates on the
+  // committed baseline instead of writing a new bench/baseline file.
+  const check = args.includes('--check')
   // --no-cache disables the diff-summary cache for the run. Useful
   // for reproducing pre-PR-5 numbers against the same harness.
   if (args.includes('--no-cache')) {
@@ -305,6 +346,14 @@ async function main(): Promise<void> {
       console.log(`Running fixture ${fixture.name} (warm)...`)
       const warm = await runFixture(fixture, runOptions)
       results.push({ ...warm, pass: 'warm' })
+    } else if (check) {
+      // Cache cleared per fixture, same as the cold half of --repeat,
+      // so a --check run always measures cold numbers comparable to
+      // the baseline's cold rows.
+      clearDiffSummaryCache(process.cwd())
+      console.log(`Running fixture ${fixture.name} (check)...`)
+      const result = await runFixture(fixture, runOptions)
+      results.push(result)
     } else {
       console.log(`Running fixture ${fixture.name}...`)
       const result = await runFixture(fixture, runOptions)
@@ -314,7 +363,17 @@ async function main(): Promise<void> {
 
   const baseline = updateBaseline ? undefined : readBaseline()
   printSummary(results, baseline)
-  writeBenchFile(results, updateBaseline)
+
+  if (check) {
+    const { ok, entries } = evaluateCheck(results, baseline, DEFAULT_CHECK_TOLERANCES)
+    printCheckResults(entries)
+    renderCheckSummary(entries)
+    if (!ok) {
+      process.exitCode = 1
+    }
+  } else {
+    writeBenchFile(results, updateBaseline)
+  }
 
   // Flush any in-memory bench telemetry to a separate file when
   // COCO_BENCH is set externally; lets devs capture the per-call

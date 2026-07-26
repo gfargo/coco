@@ -373,3 +373,30 @@ jobs:
           COCO_GITLAB_IT: ${{ secrets.COCO_GITLAB_IT }}
           COCO_GITLAB_TEST_PROJECT: ${{ secrets.COCO_GITLAB_TEST_PROJECT }}
         run: npm run test:integration
+
+  # Diff-condensing benchmark gate (bin/benchmark.ts --check): runs the
+  # mock LLM chain against the fixture set and fails if `llmCalls` for any
+  # fixture regresses past the committed `.bench/baseline.json`. llmCalls
+  # is deterministic so it's a strict gate; `durationMs` is real
+  # wall-clock and varies by runner, so it only warns (never fails) —
+  # same "artifact first, gate later" caution as the visual-regression
+  # job above. No API keys needed; the mock chain is fully deterministic.
+  bench:
+    name: Diff-condensing benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run diff-condensing benchmark gate
+        run: npm run bench -- --check
