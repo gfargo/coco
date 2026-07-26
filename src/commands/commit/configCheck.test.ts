@@ -118,3 +118,40 @@ describe('commit config validation (#1889)', () => {
     expect(check({ json: true, split: true, _: [] })).toBe(true)
   })
 })
+
+// yargs coerces an unparseable --withPreviousCommits value to NaN, and
+// `NaN > 0` is false — so a typo silently dropped the requested commit
+// history instead of failing loudly (#1893).
+describe('commit config validation (#1893)', () => {
+  const check = extractCheckFn()
+
+  it('rejects an unparseable --withPreviousCommits (NaN)', () => {
+    expect(() => check({ withPreviousCommits: NaN, _: [] })).toThrow(
+      '--withPreviousCommits (-p) must be a non-negative integer'
+    )
+  })
+
+  it('rejects a negative --withPreviousCommits', () => {
+    expect(() => check({ withPreviousCommits: -1, _: [] })).toThrow(
+      '--withPreviousCommits (-p) must be a non-negative integer'
+    )
+  })
+
+  it('rejects a non-integer --withPreviousCommits', () => {
+    expect(() => check({ withPreviousCommits: 2.5, _: [] })).toThrow(
+      '--withPreviousCommits (-p) must be a non-negative integer'
+    )
+  })
+
+  it('accepts the default --withPreviousCommits of 0', () => {
+    expect(check({ withPreviousCommits: 0, _: [] })).toBe(true)
+  })
+
+  it('accepts a positive integer --withPreviousCommits', () => {
+    expect(check({ withPreviousCommits: 5, _: [] })).toBe(true)
+  })
+
+  it('accepts --withPreviousCommits being undefined', () => {
+    expect(check({ _: [] })).toBe(true)
+  })
+})
