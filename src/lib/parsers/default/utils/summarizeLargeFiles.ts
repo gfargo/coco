@@ -298,8 +298,11 @@ async function summarizeFileDiff(
       tokenCount: newTokenCount,
     }
   } catch (error) {
-    // On error, return original diff unchanged
-    console.error(`Failed to summarize file ${fileDiff.file}:`, error)
+    // On error, return original diff unchanged. Route through the
+    // logger (not console.error) so this respects --quiet and is
+    // visible without needing --verbose (#1931).
+    const message = error instanceof Error ? error.message : String(error)
+    logger.warn(`Failed to summarize file ${fileDiff.file}: ${message}`)
     return fileDiff
   }
 }

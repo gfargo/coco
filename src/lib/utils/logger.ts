@@ -84,6 +84,22 @@ export class Logger {
     return this
   }
 
+  /**
+   * Non-fatal warning. Respects `--quiet`/`silent` (unlike `error()`,
+   * which always writes) but does not require `--verbose` (unlike
+   * `verbose()`, which is fully suppressed by default). Use for
+   * degraded-but-recovered conditions the user should see by default
+   * — e.g. a summarization call that failed and fell back to the raw
+   * diff — without requiring `--verbose` to notice.
+   */
+  public warn(message: string, options: LoggerOptions = { color: 'yellow' }): Logger {
+    if (isMuted(this.config)) {
+      return this
+    }
+    this.log(message, options)
+    return this
+  }
+
   public verbose(message: string, options: LoggerOptions = {}): Logger {
     if (!this.config?.verbose || isMuted(this.config)) {
       return this

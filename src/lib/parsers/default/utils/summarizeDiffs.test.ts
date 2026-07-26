@@ -83,6 +83,11 @@ describe('summarizeDirectoryDiff', () => {
   const mockTokenizer = (text: string) => Math.ceil(text.length / 4)
   const mockChain = {} as never
   const mockTextSplitter = {} as never
+  const summarizeMock = jest.requireMock('../../../langchain/chains/summarize').summarize
+
+  beforeEach(() => {
+    summarizeMock.mockImplementation(async (docs: unknown[]) => `Summary of ${docs.length} file(s)`)
+  })
 
   it('should summarize directory and update token count', async () => {
     const directory = {
@@ -105,6 +110,60 @@ describe('summarizeDirectoryDiff', () => {
     expect(result.summary).toContain('Summary')
     expect(result.diffs).toEqual(directory.diffs) // Original diffs preserved
   })
+
+  it('keeps the directory unchanged and warns via the logger when summarize() rejects (#1931)', async () => {
+    const mockLogger = {
+      verbose: jest.fn().mockReturnThis(),
+      warn: jest.fn().mockReturnThis(),
+      log: jest.fn().mockReturnThis(),
+      startSpinner: jest.fn().mockReturnThis(),
+      stopSpinner: jest.fn().mockReturnThis(),
+      startTimer: jest.fn().mockReturnThis(),
+      stopTimer: jest.fn().mockReturnThis(),
+    }
+    summarizeMock.mockRejectedValueOnce(new Error('summarize: chain failed'))
+
+    const directory = {
+      path: 'src/components',
+      diffs: [
+        { file: 'src/components/A.tsx', diff: 'a'.repeat(400), summary: 'A', tokenCount: 100 },
+      ],
+      tokenCount: 100,
+    }
+
+    const result = await summarizeDirectoryDiff(directory, {
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+    })
+
+    // Original directory preserved, not overwritten on failure.
+    expect(result).toEqual(directory)
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('src/components')
+    )
+  })
+
+  it('does not throw when summarize() rejects and no logger is supplied', async () => {
+    summarizeMock.mockRejectedValueOnce(new Error('summarize: chain failed'))
+
+    const directory = {
+      path: 'src/components',
+      diffs: [
+        { file: 'src/components/A.tsx', diff: 'a'.repeat(400), summary: 'A', tokenCount: 100 },
+      ],
+      tokenCount: 100,
+    }
+
+    const result = await summarizeDirectoryDiff(directory, {
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+      tokenizer: mockTokenizer,
+    })
+
+    expect(result).toEqual(directory)
+  })
 })
 
 describe('summarizeDiffs', () => {
@@ -112,6 +171,7 @@ describe('summarizeDiffs', () => {
   const summarizeMock = jest.requireMock('../../../langchain/chains/summarize').summarize
   const mockLogger = {
     verbose: jest.fn().mockReturnThis(),
+    warn: jest.fn().mockReturnThis(),
     log: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),
     stopSpinner: jest.fn().mockReturnThis(),

@@ -130,7 +130,11 @@ export async function summarizeDirectoryDiff(
       tokenCount: newTokenTotal,
     }
   } catch (error) {
-    console.error(error)
+    // On error, return original directory diff unchanged. Route
+    // through the logger (not console.error) so this respects
+    // --quiet and is visible without needing --verbose (#1931).
+    const message = error instanceof Error ? error.message : String(error)
+    logger?.warn(`Failed to summarize directory "/${directory.path}": ${message}`)
     return directory
   }
 }

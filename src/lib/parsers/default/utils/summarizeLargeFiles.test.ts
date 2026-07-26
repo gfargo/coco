@@ -20,6 +20,7 @@ describe('summarizeLargeFiles', () => {
   const mockTokenizer = (text: string) => Math.ceil(text.length / 4) // ~4 chars per token
   const mockLogger = {
     verbose: jest.fn().mockReturnThis(),
+    warn: jest.fn().mockReturnThis(),
     log: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),
     stopSpinner: jest.fn().mockReturnThis(),
@@ -376,7 +377,6 @@ describe('summarizeLargeFiles', () => {
   })
 
   it('keeps the raw diff when summarize() rejects with an empty-summary error (#1700)', async () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
     mockSummarize.mockRejectedValueOnce(
       new Error('summarize: chain returned an empty summary')
     )
@@ -402,7 +402,9 @@ describe('summarizeLargeFiles', () => {
 
     // Raw diff preserved, not overwritten with an empty summary.
     expect(result[0]).toEqual(diffs[0])
-    consoleErrorSpy.mockRestore()
+    // Failure is routed through the logger (not console.error) so it
+    // respects --quiet and is visible without needing --verbose (#1931).
+    expect(mockLogger.warn).toHaveBeenCalledWith(expect.stringContaining('large.ts'))
   })
 
   it('should respect maxConcurrent limit', async () => {
@@ -435,6 +437,7 @@ describe('preprocessLargeFiles', () => {
   const mockTokenizer = (text: string) => Math.ceil(text.length / 4)
   const mockLogger = {
     verbose: jest.fn().mockReturnThis(),
+    warn: jest.fn().mockReturnThis(),
     log: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),
     stopSpinner: jest.fn().mockReturnThis(),
