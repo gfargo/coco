@@ -8,6 +8,12 @@ const mockResolveAgentRepoRoot = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
 
+type HandlerExtra = {
+  signal: AbortSignal
+  _meta?: { progressToken?: string | number }
+  sendNotification: (notification: unknown) => Promise<void>
+}
+
 const registrations = new Map<string, {
   config: {
     title: string
@@ -16,7 +22,7 @@ const registrations = new Map<string, {
     outputSchema: z.ZodType
     annotations: Record<string, boolean>
   }
-  handler: (input: unknown, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>
+  handler: (input: unknown, extra: HandlerExtra) => Promise<Record<string, unknown>>
 }>()
 const serverOptions: unknown[] = []
 
@@ -40,7 +46,7 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
           outputSchema: z.ZodType
           annotations: Record<string, boolean>
         },
-        handler: handler as (input: unknown, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>,
+        handler: handler as (input: unknown, extra: HandlerExtra) => Promise<Record<string, unknown>>,
       })
     }
 
@@ -98,6 +104,14 @@ describe('createCocoMcpServer', () => {
     return registration
   }
 
+  function makeExtra(overrides: Partial<HandlerExtra> = {}): HandlerExtra {
+    return {
+      signal: new AbortController().signal,
+      sendNotification: jest.fn(async () => undefined),
+      ...overrides,
+    }
+  }
+
   it('registers four read-only generation tools with visible discriminated output schemas', () => {
     createServer()
 
@@ -144,13 +158,14 @@ describe('createCocoMcpServer', () => {
 
     const result = await tool('coco_review').handler({
       source: { kind: 'summary', summary: 'changed' },
-    }, { signal: controller.signal })
+    }, makeExtra({ signal: controller.signal }))
 
     expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith(undefined, '/repo', controller.signal)
     expect(mockCreateAgentOperationContext).toHaveBeenCalledWith({
       repoRoot: '/repo',
       signal: controller.signal,
       surface: 'mcp',
+      onProgress: undefined,
     })
     expect(mockRunAgentOperation).toHaveBeenCalledWith(
       'review',
@@ -172,7 +187,7 @@ describe('createCocoMcpServer', () => {
     const result = await tool('coco_review').handler({
       source: { kind: 'summary', summary: 'changed' },
       options: { trustRepositoryConfig: true },
-    }, { signal: new AbortController().signal })
+    }, makeExtra())
 
     expect(result).toMatchObject({
       isError: true,
@@ -190,9 +205,7 @@ describe('createCocoMcpServer', () => {
   it('returns strict input validation failures as structured MCP errors', async () => {
     createServer()
 
-    const result = await tool('coco_changelog').handler({ unexpected: true }, {
-      signal: new AbortController().signal,
-    })
+    const result = await tool('coco_changelog').handler({ unexpected: true }, makeExtra())
 
     expect(result).toMatchObject({
       isError: true,
@@ -211,7 +224,7 @@ describe('createCocoMcpServer', () => {
 
     const result = await tool('coco_recap').handler({
       source: { kind: 'summary', summary: 'changed' },
-    }, { signal: new AbortController().signal })
+    }, makeExtra())
 
     expect(result).toMatchObject({
       isError: true,
@@ -221,5 +234,57 @@ describe('createCocoMcpServer', () => {
         error: { code: 'OPERATION_FAILED', message: 'provider unavailable' },
       },
     })
+  })
+
+  it('builds a progress reporter and forwards notifications/progress with a monotonic counter when a progressToken is present', async () => {
+    createServer()
+    let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
+    mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
+      capturedOnProgress = input.onProgress
+      return { signal: undefined } as never
+    })
+    const sendNotification = jest.fn(async () => undefined)
+
+    await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra({ _meta: { progressToken: 'token-1' }, sendNotification }))
+
+    expect(capturedOnProgress).toBeInstanceOf(Function)
+    capturedOnProgress!({ message: 'Resolved changes' })
+    capturedOnProgress!({ message: 'Generating review…' })
+
+    expect(sendNotification).toHaveBeenNthCalledWith(1, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-1', progress: 1, message: 'Resolved changes' },
+    })
+    expect(sendNotification).toHaveBeenNthCalledWith(2, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-1', progress: 2, message: 'Generating review…' },
+    })
+  })
+
+  it('passes no progress reporter when the request has no progressToken', async () => {
+    createServer()
+
+    await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(mockCreateAgentOperationContext).toHaveBeenCalledWith(
+      expect.objectContaining({ onProgress: undefined }),
+    )
+  })
+
+  it('keeps the terminal envelope byte-identical whether or not a progressToken is present', async () => {
+    createServer()
+
+    const withToken = await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra({ _meta: { progressToken: 'token-2' } }))
+    const withoutToken = await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(withToken).toEqual(withoutToken)
   })
 })

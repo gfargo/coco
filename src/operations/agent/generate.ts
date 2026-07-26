@@ -21,7 +21,9 @@ import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/lang
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
 import { resolveDynamicService } from '../../lib/langchain/utils/dynamicModels'
 import { enforcePromptBudget } from '../../lib/langchain/utils/enforcePromptBudget'
+import { LangChainCancelledError } from '../../lib/langchain/errors'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
+import { executeChainStreaming } from '../../lib/langchain/utils/executeChainStreaming'
 import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
@@ -61,6 +63,20 @@ function baseArgv(options: AgentOptions): Record<string, unknown> {
     version: false,
     help: false,
     language: options.language,
+  }
+}
+
+/**
+ * Reports a coarse progress tick through the transport-agnostic reporter.
+ * No-ops when the caller didn't opt into progress; swallows callback
+ * throws so a broken client-side handler never fails the operation.
+ */
+function report(context: AgentOperationContext, message: string, fraction?: number): void {
+  if (!context.onProgress) return
+  try {
+    context.onProgress({ message, fraction })
+  } catch {
+    // Progress reporting is best-effort; never let it break generation.
   }
 }
 
@@ -122,6 +138,38 @@ async function executeStructured<T>(input: {
   // LangChain's bundled Zod output type is erased across Zod versions.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const parser: any = createSchemaParser(input.schema)
+  const metadata = {
+    task: `agent-${input.task}`,
+    command: `agent-${input.operation}`,
+    provider: runtime.provider,
+    model: runtime.model,
+    surface: input.context.surface,
+  }
+
+  if (input.context.onProgress) {
+    try {
+      return await executeChainStreaming<T>({
+        llm: runtime.llm,
+        prompt,
+        variables: budgeted.variables,
+        parser,
+        // Chunk-level ticks are just a liveness signal for this
+        // single dominant call — no fractional progress is derivable
+        // from raw text length, so only the message is forwarded.
+        onChunk: () => report(input.context, `Generating ${input.task}…`),
+        logger: input.context.logger,
+        tokenizer: runtime.tokenizer,
+        signal: input.context.signal,
+        metadata,
+      })
+    } catch (error) {
+      if (error instanceof LangChainCancelledError) throw error
+      // Streaming failed for a non-cancellation reason (unsupported
+      // provider/model, transient error): fall back to the
+      // non-streaming call so output/resilience is unchanged.
+    }
+  }
+
   return executeChain<T>({
     llm: runtime.llm,
     prompt,
@@ -130,13 +178,7 @@ async function executeStructured<T>(input: {
     logger: input.context.logger,
     tokenizer: runtime.tokenizer,
     signal: input.context.signal,
-    metadata: {
-      task: `agent-${input.task}`,
-      command: `agent-${input.operation}`,
-      provider: runtime.provider,
-      model: runtime.model,
-      surface: input.context.surface,
-    },
+    metadata,
   })
 }
 
@@ -164,6 +206,7 @@ export async function generateAgentCommitDraft(
   const resolved = await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
+  report(context, 'Resolved changes')
   const changeContext = asUntrustedChangeContext(resolved.text)
   const options = input.options
   const argv = {
@@ -185,6 +228,7 @@ export async function generateAgentCommitDraft(
     printMessage: true,
     openInEditor: false,
   } as unknown as Arguments<CommitOptions>
+  report(context, 'Generating commit-draft…')
   const result = await generateCommitDraft({
     git: context.git,
     argv,
@@ -193,6 +237,9 @@ export async function generateAgentCommitDraft(
     preparedSummary: changeContext,
     trustRepositoryConfig: options.trustRepositoryConfig,
     usageSurface: context.surface,
+    onStreamChunk: context.onProgress
+      ? () => report(context, 'Generating commit-draft…')
+      : undefined,
   })
   if (result.cancelled) {
     throw new AgentOperationError('CANCELLED', 'Commit draft generation was cancelled.')
@@ -205,6 +252,7 @@ export async function generateAgentCommitDraft(
       { validationErrors: result.validationErrors },
     )
   }
+  report(context, 'Completed')
   return envelope('commit-draft', {
     ...result.message,
     validationErrors: result.validationErrors,
@@ -218,11 +266,13 @@ export async function generateAgentReview(
   const resolved = await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
+  report(context, 'Resolved changes')
   const changeContext = asUntrustedChangeContext(resolved.text)
   const schema = z.preprocess(
     (value) => (Array.isArray(value) ? value : [value]),
     ReviewFeedbackItemArraySchema,
   )
+  report(context, 'Generating review…')
   const findings = await executeStructured<ReviewFeedbackItem[]>({
     operation: 'review',
     task: 'review',
@@ -238,6 +288,7 @@ export async function generateAgentReview(
     },
   })
   findings.sort((a, b) => b.severity - a.severity)
+  report(context, 'Completed')
   return envelope('review', { findings }, [], resolved.meta)
 }
 
@@ -248,7 +299,9 @@ export async function generateAgentChangelog(
   const resolved = await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
+  report(context, 'Resolved changes')
   const changeContext = asUntrustedChangeContext(resolved.text)
+  report(context, 'Generating changelog…')
   const result = await executeStructured<ChangelogResponse>({
     operation: 'changelog',
     task: 'changelog',
@@ -267,6 +320,7 @@ export async function generateAgentChangelog(
       language_context: getLanguageContext(input.options.language, { taskDescription: 'changelog' }),
     },
   })
+  report(context, 'Completed')
   return envelope('changelog', result, [], resolved.meta)
 }
 
@@ -277,7 +331,9 @@ export async function generateAgentRecap(
   const resolved = await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
+  report(context, 'Resolved changes')
   const changeContext = asUntrustedChangeContext(resolved.text)
+  report(context, 'Generating recap…')
   const result = await executeStructured<RecapData>({
     operation: 'recap',
     task: 'recap',
@@ -293,6 +349,7 @@ export async function generateAgentRecap(
       language_context: getLanguageContext(input.options.language, { taskDescription: 'summary' }),
     },
   })
+  report(context, 'Completed')
   return envelope('recap', result, [], resolved.meta)
 }
 

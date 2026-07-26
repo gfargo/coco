@@ -11,12 +11,21 @@ import { Logger } from '../../lib/utils/logger'
 import { AgentOperationError } from './errors'
 import { ChangeSource, MAX_AGENT_CONTEXT_BYTES, SourceMetadata } from './schemas'
 
+/**
+ * Transport-agnostic progress callback. Operations report coarse stage
+ * boundaries and (when streaming) chunk ticks through this plain function;
+ * only `src/mcp/server.ts` knows how to turn it into an MCP notification, so
+ * `src/operations/agent/` never imports the MCP SDK.
+ */
+export type AgentProgressReporter = (update: { message?: string; fraction?: number }) => void
+
 export type AgentOperationContext = {
   repoRoot: string
   git: SimpleGit
   logger: Logger
   surface: LlmUsageSurface
   signal?: AbortSignal
+  onProgress?: AgentProgressReporter
 }
 
 export type ResolvedChangeContext = {
@@ -152,6 +161,7 @@ export async function createAgentOperationContext(input: {
   repoRoot: string
   signal?: AbortSignal
   surface?: LlmUsageSurface
+  onProgress?: AgentProgressReporter
 }): Promise<AgentOperationContext> {
   const repoRoot = await resolveAgentRepoRoot(input.repoRoot, undefined, input.signal)
   const git = getRepo(repoRoot)
@@ -160,6 +170,7 @@ export async function createAgentOperationContext(input: {
     git,
     surface: input.surface ?? 'agent-cli',
     signal: input.signal,
+    onProgress: input.onProgress,
     logger: new Logger({ silent: true }),
   }
 }
