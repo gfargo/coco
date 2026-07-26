@@ -30,7 +30,10 @@ function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
     const tokens = row.promptTokens > 0 || row.completionTokens > 0
       ? `${row.promptTokens} in / ${row.completionTokens} out tok`
       : '–'
-    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms`
+    const cache = row.cacheLookups > 0
+      ? `  cache ${Math.round((row.cacheHits / row.cacheLookups) * 100)}% (${row.cacheHits}/${row.cacheLookups})`
+      : ''
+    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms${cache}`
   })
 }
 

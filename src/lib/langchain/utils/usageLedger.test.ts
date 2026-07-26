@@ -121,6 +121,26 @@ describe('usageLedger', () => {
     expect(parsed).not.toHaveProperty('code')
   })
 
+  it('aggregates cache hit/lookup counts and excludes records with no cacheHit field', () => {
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: true })
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false })
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false })
+    recordUsage({ task: 'commit', model: 'gpt-4o', promptTokens: 10 })
+
+    const byTask = summarizeUsageByTask(readUsageRecords())
+    const summarizeRow = byTask.find((r) => r.key === 'summarize-large-file')
+    expect(summarizeRow).toMatchObject({ calls: 3, cacheHits: 1, cacheLookups: 3 })
+
+    const commitRow = byTask.find((r) => r.key === 'commit')
+    expect(commitRow).toMatchObject({ calls: 1, cacheHits: 0, cacheLookups: 0 })
+  })
+
+  it('omits cacheHit from the serialized record when undefined', () => {
+    recordUsage({ task: 'commit', promptTokens: 5 })
+    const serialized = JSON.parse(fs.readFileSync(logPath, 'utf8').trim())
+    expect(serialized).not.toHaveProperty('cacheHit')
+  })
+
   it('returns [] for a missing ledger and clears the file', () => {
     expect(readUsageRecords(path.join(dir, 'nope.jsonl'))).toEqual([])
     recordUsage({ task: 'commit', promptTokens: 1 })

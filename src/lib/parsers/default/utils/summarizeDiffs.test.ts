@@ -1,5 +1,11 @@
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import { DiffNode } from '../../../types'
+import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
+import { readUsageRecords } from '../../../langchain/utils/usageLedger'
 import { createDirectoryDiffs, summarizeDiffs, summarizeDirectoryDiff } from './summarizeDiffs'
+import { diffSummaryKey, resolveDiffSummaryCacheRepoPath, writeDiffSummary } from './diffSummaryCache'
 
 // Mock the summarize chain
 jest.mock('../../../langchain/chains/summarize', () => ({
@@ -104,6 +110,82 @@ describe('summarizeDirectoryDiff', () => {
     expect(result.summary).toBeDefined()
     expect(result.summary).toContain('Summary')
     expect(result.diffs).toEqual(directory.diffs) // Original diffs preserved
+  })
+
+  describe('diff-summary cache hit/miss reporting (#1958)', () => {
+    const summarizeMock = jest.requireMock('../../../langchain/chains/summarize').summarize
+
+    let cacheDir: string
+    let usageDir: string
+    let usageLogPath: string
+    const prevXdgCacheHome = process.env.XDG_CACHE_HOME
+    const prevUsageLog = process.env.COCO_USAGE_LOG
+
+    beforeEach(() => {
+      jest.clearAllMocks()
+      summarizeMock.mockImplementation(async (docs: unknown[]) => `Summary of ${docs.length} file(s)`)
+      cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-diffcache-dir-'))
+      usageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-usage-dir-'))
+      usageLogPath = path.join(usageDir, 'usage.jsonl')
+      process.env.XDG_CACHE_HOME = cacheDir
+      process.env.COCO_USAGE_LOG = usageLogPath
+    })
+
+    afterEach(() => {
+      if (prevXdgCacheHome === undefined) delete process.env.XDG_CACHE_HOME
+      else process.env.XDG_CACHE_HOME = prevXdgCacheHome
+      if (prevUsageLog === undefined) delete process.env.COCO_USAGE_LOG
+      else process.env.COCO_USAGE_LOG = prevUsageLog
+      fs.rmSync(cacheDir, { recursive: true, force: true })
+      fs.rmSync(usageDir, { recursive: true, force: true })
+    })
+
+    it('records a cacheHit:true usage entry and skips the LLM on a cache hit', async () => {
+      const model = 'gpt-4o'
+      const directory = {
+        path: 'src/components',
+        diffs: [{ file: 'src/components/A.tsx', diff: 'a'.repeat(400), summary: 'A', tokenCount: 100 }],
+        tokenCount: 100,
+      }
+      const payload = directory.diffs.map((d) => `${d.file}\x1e${d.diff}`).join('\x1d')
+      const repo = resolveDiffSummaryCacheRepoPath()
+      const key = diffSummaryKey(payload, model, SUMMARIZE_PROMPT_HASH)
+      writeDiffSummary(repo, key, { summary: 'cached directory summary', model, tokens: 5 })
+
+      const result = await summarizeDirectoryDiff(directory, {
+        chain: mockChain,
+        textSplitter: mockTextSplitter,
+        tokenizer: mockTokenizer,
+        metadata: { model },
+      })
+
+      expect(result.summary).toBe('cached directory summary')
+      expect(summarizeMock).not.toHaveBeenCalled()
+
+      const records = readUsageRecords(usageLogPath)
+      expect(records).toHaveLength(1)
+      expect(records[0]).toMatchObject({ task: 'summarize-directory-diff', model, cacheHit: true })
+    })
+
+    it('marks the downstream LLM call cacheHit:false on a cache miss', async () => {
+      const model = 'gpt-4o'
+      const directory = {
+        path: 'src/utils',
+        diffs: [{ file: 'src/utils/b.tsx', diff: 'b'.repeat(400), summary: 'B', tokenCount: 100 }],
+        tokenCount: 100,
+      }
+
+      await summarizeDirectoryDiff(directory, {
+        chain: mockChain,
+        textSplitter: mockTextSplitter,
+        tokenizer: mockTokenizer,
+        metadata: { model },
+      })
+
+      expect(summarizeMock).toHaveBeenCalledTimes(1)
+      const [, options] = summarizeMock.mock.calls[0] as [unknown, { metadata?: { cacheHit?: boolean } }]
+      expect(options.metadata?.cacheHit).toBe(false)
+    })
   })
 })
 

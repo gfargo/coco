@@ -1,7 +1,12 @@
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import { Config } from '../../lib/config/types'
 import { getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
+import { recordUsage } from '../../lib/langchain/utils/usageLedger'
 import {
     checkAuthentication,
+    checkCacheHitRate,
     checkEndpointSupport,
     checkOllamaLiveness,
     checkProviderValidity,
@@ -208,6 +213,76 @@ describe('checkEndpointSupport', () => {
   it('produces no diagnostic when provider is absent', () => {
     const diagnostics: Diagnostic[] = []
     checkEndpointSupport({ service: { model: 'gpt-4o', endpoint: 'http://x' } } as unknown as Config, diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+})
+
+describe('checkCacheHitRate', () => {
+  let dir: string
+  let logPath: string
+  const prevEnv = process.env.COCO_USAGE_LOG
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-doctor-cache-'))
+    logPath = path.join(dir, 'usage.jsonl')
+    process.env.COCO_USAGE_LOG = logPath
+  })
+
+  afterEach(() => {
+    if (prevEnv === undefined) delete process.env.COCO_USAGE_LOG
+    else process.env.COCO_USAGE_LOG = prevEnv
+    fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('produces no diagnostic when the ledger is empty', () => {
+    const diagnostics: Diagnostic[] = []
+    checkCacheHitRate(diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('produces no diagnostic below the minimum lookup sample size', () => {
+    for (let i = 0; i < 5; i++) {
+      recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false })
+    }
+    const diagnostics: Diagnostic[] = []
+    checkCacheHitRate(diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('produces no diagnostic when the hit rate is healthy', () => {
+    for (let i = 0; i < 18; i++) {
+      recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: true })
+    }
+    for (let i = 0; i < 2; i++) {
+      recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false })
+    }
+    const diagnostics: Diagnostic[] = []
+    checkCacheHitRate(diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('warns when the hit rate is low across enough lookups', () => {
+    for (let i = 0; i < 2; i++) {
+      recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: true })
+    }
+    for (let i = 0; i < 18; i++) {
+      recordUsage({ task: 'summarize-directory-diff', model: 'gpt-4o', cacheHit: false })
+    }
+    const diagnostics: Diagnostic[] = []
+    checkCacheHitRate(diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].message).toContain('10%')
+    expect(diagnostics[0].fix).toContain('repo root')
+  })
+
+  it('ignores non-cache tasks when computing the rate', () => {
+    for (let i = 0; i < 20; i++) {
+      recordUsage({ task: 'commit', model: 'gpt-4o', promptTokens: 10 })
+    }
+    const diagnostics: Diagnostic[] = []
+    checkCacheHitRate(diagnostics)
     expect(diagnostics).toEqual([])
   })
 })

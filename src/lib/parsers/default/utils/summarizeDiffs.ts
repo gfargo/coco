@@ -4,6 +4,7 @@ import { getPathFromFilePath } from '../../../utils/getPathFromFilePath'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
 import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
 import { TokenCounter } from '../../../utils/tokenizer'
+import { recordUsage } from '../../../langchain/utils/usageLedger'
 import {
   diffSummaryKey,
   readDiffSummary,
@@ -80,6 +81,14 @@ export async function summarizeDirectoryDiff(
         { color: 'cyan' }
       )
       touchDiffSummary(cacheRepo, cacheKey)
+      if (metadata?.recordUsage !== false) {
+        recordUsage({
+          ...metadata,
+          task: 'summarize-directory-diff',
+          model: cacheModel,
+          cacheHit: true,
+        })
+      }
       return {
         diffs: directory.diffs,
         path: directory.path,
@@ -106,6 +115,7 @@ export async function summarizeDirectoryDiff(
         metadata: {
           ...metadata,
           task: 'summarize-directory-diff',
+          ...(cacheKey ? { cacheHit: false } : {}),
         },
         options: {
           returnIntermediateSteps: true,

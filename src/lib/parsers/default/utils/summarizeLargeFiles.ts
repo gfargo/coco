@@ -3,6 +3,7 @@ import { SummarizeContext, summarize } from '../../../langchain/chains/summarize
 import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
 import { TokenCounter } from '../../../utils/tokenizer'
 import { Logger } from '../../../utils/logger'
+import { recordUsage } from '../../../langchain/utils/usageLedger'
 import {
   diffSummaryKey,
   readDiffSummary,
@@ -248,6 +249,14 @@ async function summarizeFileDiff(
         { color: 'cyan' }
       )
       touchDiffSummary(cacheRepo, cacheKey)
+      if (metadata?.recordUsage !== false) {
+        recordUsage({
+          ...metadata,
+          task: 'summarize-large-file',
+          model: cacheModel,
+          cacheHit: true,
+        })
+      }
       return {
         ...fileDiff,
         diff: cached.summary,
@@ -275,6 +284,7 @@ async function summarizeFileDiff(
         metadata: {
           ...metadata,
           task: 'summarize-large-file',
+          ...(cacheKey ? { cacheHit: false } : {}),
         },
         options: {
           returnIntermediateSteps: false,

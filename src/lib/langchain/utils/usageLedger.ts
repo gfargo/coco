@@ -33,6 +33,14 @@ export type UsageRecord = {
   elapsedMs?: number
   /** Readable `owner/repo` (or directory name) the call ran against. */
   repo?: string
+  /**
+   * Diff-summary cache outcome (#1958): `true` on a hit, `false` on a
+   * miss. Absent when the cache wasn't consulted for this call (disabled,
+   * or not a cache-eligible task) — records without this field predate
+   * the feature or are non-cache tasks, and are excluded from hit-rate
+   * aggregation rather than counted as misses.
+   */
+  cacheHit?: boolean
 }
 
 export type UsageAggregate = {
@@ -42,6 +50,10 @@ export type UsageAggregate = {
   completionTokens: number
   totalMs: number
   avgMs: number
+  /** Count of calls where the diff-summary cache was consulted and hit. */
+  cacheHits: number
+  /** Count of calls where the diff-summary cache was consulted (hit or miss). */
+  cacheLookups: number
 }
 
 /**
@@ -133,6 +145,7 @@ export function recordUsage(metadata: LlmCallMetadata): void {
     completionTokens: metadata.completionTokens,
     elapsedMs: metadata.elapsedMs,
     ...(repoTag ? { repo: repoTag } : {}),
+    ...(metadata.cacheHit !== undefined ? { cacheHit: metadata.cacheHit } : {}),
   }
 
   try {
@@ -188,14 +201,28 @@ export function readUsageRecords(filePath: string = getUsageLogPath()): UsageRec
 }
 
 function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): UsageAggregate[] {
-  const byKey = new Map<string, { calls: number; promptTokens: number; completionTokens: number; totalMs: number }>()
+  const byKey = new Map<
+    string,
+    { calls: number; promptTokens: number; completionTokens: number; totalMs: number; cacheHits: number; cacheLookups: number }
+  >()
   for (const r of records) {
     const key = keyOf(r) || 'unknown'
-    const current = byKey.get(key) || { calls: 0, promptTokens: 0, completionTokens: 0, totalMs: 0 }
+    const current = byKey.get(key) || {
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalMs: 0,
+      cacheHits: 0,
+      cacheLookups: 0,
+    }
     current.calls += 1
     current.promptTokens += r.promptTokens || 0
     current.completionTokens += r.completionTokens || 0
     current.totalMs += r.elapsedMs || 0
+    if (typeof r.cacheHit === 'boolean') {
+      current.cacheLookups += 1
+      if (r.cacheHit) current.cacheHits += 1
+    }
     byKey.set(key, current)
   }
   return [...byKey.entries()]
@@ -206,6 +233,8 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       completionTokens: v.completionTokens,
       totalMs: v.totalMs,
       avgMs: v.calls > 0 ? Math.round(v.totalMs / v.calls) : 0,
+      cacheHits: v.cacheHits,
+      cacheLookups: v.cacheLookups,
     }))
     .sort((a, b) => b.promptTokens - a.promptTokens || b.calls - a.calls)
 }
