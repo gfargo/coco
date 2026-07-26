@@ -2849,3 +2849,49 @@ describe('PR-triage diff drill-in (#1363)', () => {
     expect(state.prDiffNumber).toBe(962)
   })
 })
+
+describe('undo stack reducer cases (OSS-1606)', () => {
+  const branchEntry = {
+    kind: 'delete-branch' as const,
+    label: 'delete branch feature/test',
+    depth: 0,
+    name: 'feature/test',
+    sha: 'abc1234',
+  }
+  const tagEntry = {
+    kind: 'delete-tag' as const,
+    label: 'delete tag v1',
+    depth: 0,
+    name: 'v1',
+    sha: 'def5678',
+  }
+
+  it('starts empty', () => {
+    expect(createLogInkState(rows).undoStack).toEqual([])
+  })
+
+  it('pushUndoEntry appends and popUndoEntry removes the most recent entry (LIFO)', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'pushUndoEntry', value: branchEntry })
+    state = applyLogInkAction(state, { type: 'pushUndoEntry', value: tagEntry })
+    expect(state.undoStack).toEqual([branchEntry, tagEntry])
+
+    state = applyLogInkAction(state, { type: 'popUndoEntry' })
+    expect(state.undoStack).toEqual([branchEntry])
+  })
+
+  it('popUndoEntry on an empty stack is a no-op', () => {
+    let state = createLogInkState(rows)
+    state = applyLogInkAction(state, { type: 'popUndoEntry' })
+    expect(state.undoStack).toEqual([])
+  })
+
+  it('survives a repo-frame push/pop round-trip (entries are depth-tagged, not frame-scoped)', () => {
+    let state = createLogInkState(rows, { repoLabel: 'coco' })
+    state = applyLogInkAction(state, { type: 'pushUndoEntry', value: branchEntry })
+    state = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
+    expect(state.undoStack).toEqual([branchEntry])
+    state = applyLogInkAction(state, { type: 'popRepoFrame' })
+    expect(state.undoStack).toEqual([branchEntry])
+  })
+})

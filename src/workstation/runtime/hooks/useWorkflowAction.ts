@@ -113,6 +113,7 @@ import { applyStatusFilterMask } from '../../../git/statusData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../../git/bisectActions'
 import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
 import { executeRebasePlan } from '../../../git/rebasePlanActions'
+import { performUndo, type UndoEntry } from '../undoStack'
 import { createSubmoduleRemoteWorkflowHandlers } from './useSubmoduleRemoteWorkflowActions'
 import { createForgeTriageWorkflowHandlers } from './useForgeTriageWorkflowActions'
 import type { RepoStackRuntimes } from '../repoStackRuntime'
@@ -239,6 +240,10 @@ export const HISTORY_MUTATING_WORKFLOW_IDS = new Set([
   // #1361 — global undo moves HEAD either way (checkout back to the
   // previous branch, or reset --hard to the previous commit).
   'global-undo',
+  // OSS-1606 — undoing a reset-to-commit entry moves HEAD the same way;
+  // undoing a branch/tag delete or stash drop changes the ref set. All
+  // four warrant a graph refresh.
+  'undo-last-action',
 ])
 
 export function resolvePendingItemAction(
@@ -445,6 +450,15 @@ export function useWorkflowAction(
       return applyHunkPatch(git, patchText, { target: effectiveTarget })
     }
 
+    // OSS-1606 — undo stack. Handlers below that perform an invertible
+    // destructive op (delete-branch, force-delete-branch, delete-tag,
+    // drop-stash, reset-to-commit) capture the pre-mutation state
+    // (sha / hash / previous HEAD) here BEFORE the git call runs. The
+    // post-handler block pushes these onto `state.undoStack` only once
+    // the op actually succeeded — see the `capturedUndoEntries.length`
+    // check below.
+    let capturedUndoEntries: UndoEntry[] = []
+
     const handlers: Record<string, () => Promise<{ ok: boolean; message: string } | undefined>> = {
       'create-branch': async () => {
         const name = payload?.trim()
@@ -471,11 +485,28 @@ export function useWorkflowAction(
       'delete-branch': async () => {
         const branches = getSelectedBranchBatch(state, context)
         if (branches.length === 0) return { ok: false, message: 'No branch selected' }
+        // #1361 aggregate `ok` only fires when EVERY branch in the batch
+        // deleted successfully, so it's safe to stage an undo entry per
+        // branch here before we know the outcome.
+        capturedUndoEntries = branches.map((branch) => ({
+          kind: 'delete-branch' as const,
+          label: `delete branch ${branch.shortName}`,
+          depth: issuedAtDepth,
+          name: branch.shortName,
+          sha: branch.hash,
+        }))
         return deleteBranches(git, branches)
       },
       'force-delete-branch': async () => {
         const branches = getSelectedBranchBatch(state, context)
         if (branches.length === 0) return { ok: false, message: 'No branch selected' }
+        capturedUndoEntries = branches.map((branch) => ({
+          kind: 'delete-branch' as const,
+          label: `force-delete branch ${branch.shortName}`,
+          depth: issuedAtDepth,
+          name: branch.shortName,
+          sha: branch.hash,
+        }))
         return deleteBranches(git, branches, true)
       },
       // #0.71 — rebase the current branch onto the cursored branch / ref.
@@ -502,6 +533,13 @@ export function useWorkflowAction(
       'delete-tag': async () => {
         const tag = getSelectedTag(state, context)
         if (!tag) return { ok: false, message: 'No tag selected' }
+        capturedUndoEntries = [{
+          kind: 'delete-tag',
+          label: `delete tag ${tag.name}`,
+          depth: issuedAtDepth,
+          name: tag.name,
+          sha: tag.hash,
+        }]
         return deleteLocalTag(git, tag.name)
       },
       'push-tag': async () => {
@@ -525,6 +563,18 @@ export function useWorkflowAction(
         if (mostRecent.hash) {
           lastDroppedStashRef.current = { hash: mostRecent.hash, message: mostRecent.message, depth: issuedAtDepth }
         }
+        // #1361 aggregate `ok` only fires when EVERY stash in the batch
+        // dropped successfully (same guarantee `delete-branch` relies
+        // on above), so staging one undo entry per stash here is safe.
+        capturedUndoEntries = stashes
+          .filter((stash) => stash.hash)
+          .map((stash) => ({
+            kind: 'drop-stash' as const,
+            label: `drop ${stash.ref}`,
+            depth: issuedAtDepth,
+            hash: stash.hash,
+            message: stash.message,
+          }))
         return dropStashes(git, stashes)
       },
       'undo-drop-stash': async () => {
@@ -808,6 +858,11 @@ export function useWorkflowAction(
         if (!isResetMode(raw)) {
           return { ok: false, message: `Unknown reset mode: ${raw}. Use soft, mixed, or hard.` }
         }
+        // Capture the pre-reset HEAD so a successful reset can be pushed
+        // onto the undo stack — the inverse is `reset --hard` back to
+        // this sha (OSS-1606). Best-effort: if revparse fails for any
+        // reason, the reset still proceeds, it just isn't undoable.
+        const previousHead = await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
         // Reflog "time machine" (#0.67): when the reflog view is active the
         // target is the cursored reflog entry, not a history commit.
         if (state.activeView === 'reflog') {
@@ -815,6 +870,14 @@ export function useWorkflowAction(
             Math.min(state.selectedReflogIndex, Math.max(0, filteredReflogList.length - 1))
           ]
           if (!entry) return { ok: false, message: 'No reflog entry selected' }
+          if (previousHead) {
+            capturedUndoEntries = [{
+              kind: 'reset-to-commit',
+              label: `reset --${raw} to ${entry.hash}`,
+              depth: issuedAtDepth,
+              previousSha: previousHead,
+            }]
+          }
           return resetToCommit(git, {
             hash: entry.hash,
             shortHash: entry.hash,
@@ -823,6 +886,14 @@ export function useWorkflowAction(
         }
         const commit = getSelectedInkCommit(state)
         if (!commit) return { ok: false, message: 'No commit selected' }
+        if (previousHead) {
+          capturedUndoEntries = [{
+            kind: 'reset-to-commit',
+            label: `reset --${raw} to ${commit.shortHash}`,
+            depth: issuedAtDepth,
+            previousSha: previousHead,
+          }]
+        }
         return resetToCommit(git, {
           hash: commit.hash,
           shortHash: commit.shortHash,
@@ -872,6 +943,28 @@ export function useWorkflowAction(
         const plan = planReflogUndo(context.reflog?.entries || [])
         if (!plan) return { ok: false, message: 'No reflog entry to undo.' }
         return performReflogUndo(git, plan)
+      },
+      // OSS-1606 — `gu`: pop the workstation's session-scoped undo
+      // stack and run the recorded inverse for the top entry. Distinct
+      // from `global-undo` above (the reflog-powered single-shot `z`
+      // safety net for ANY git operation): this tracks MULTIPLE steps,
+      // but only for the handful of workstation actions that stage a
+      // real inverse (delete-branch, drop-stash, reset-to-commit,
+      // delete-tag) — see `capturedUndoEntries` above.
+      'undo-last-action': async () => {
+        const entry = state.undoStack[state.undoStack.length - 1]
+        if (!entry) return { ok: false, message: 'Nothing to undo.' }
+        // #1607-style guard — an entry captured in a different repo
+        // frame belongs to a different `git` handle; refuse rather
+        // than apply it against the wrong repo.
+        if (entry.depth !== issuedAtDepth) {
+          return { ok: false, message: 'Nothing to undo at this repo level.' }
+        }
+        const result = await performUndo(git, entry)
+        if (result.ok) {
+          dispatch({ type: 'popUndoEntry' })
+        }
+        return { ok: result.ok, message: result.ok ? `Undid: ${entry.label}` : result.message }
       },
       // Follow-up checkout after a successful create-branch-here (#1326).
       // Reached only via the in-runner setPendingConfirmation dispatch
@@ -1252,6 +1345,16 @@ export function useWorkflowAction(
       value: `${result?.message || 'Workflow action complete'}${historyRewriteHint}`,
       kind: result ? (result.ok ? 'success' : 'error') : undefined,
     })
+    // OSS-1606 — undo stack. A handler above staged `capturedUndoEntries`
+    // BEFORE its destructive git call ran; only push them now that the
+    // op is confirmed to have actually succeeded (and the repo frame
+    // hasn't changed mid-await — a stale-frame push would let a later
+    // `gu` apply the wrong entry's inverse against the wrong `git`).
+    if (result?.ok && capturedUndoEntries.length > 0 && !frameChanged) {
+      for (const entry of capturedUndoEntries) {
+        dispatch({ type: 'pushUndoEntry', value: entry })
+      }
+    }
     // #1361 — batch delete selection lifecycle. A successful delete
     // consumed the selection; clear it so leftover marks can't re-aim a
     // later D. On failure, FREEZE the attempted target set into explicit

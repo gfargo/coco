@@ -72,6 +72,8 @@ import {
     cycleBranchSort,
     cycleTagSort,
 } from '../chrome/sorting'
+import { pushUndoEntry, popUndoEntry, type UndoEntry } from './undoStack'
+export type { UndoEntry } from './undoStack'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
@@ -592,6 +594,18 @@ export type LogInkState = {
    * depth.
    */
   repoStack: LogInkRepoFrame[]
+  /**
+   * Session-scoped undo stack (OSS-1606). Populated by
+   * `useWorkflowAction.ts` after an invertible destructive action
+   * (branch delete, stash drop, reset, tag delete) succeeds; `gu` pops
+   * the top entry and runs its recorded git-level inverse. Bounded
+   * (`MAX_UNDO_STACK_SIZE` in `./undoStack`) and never persisted —
+   * intentionally NOT reset on repo-frame push/pop (unlike most
+   * per-frame UI state above) because each entry carries its own
+   * `depth`; the consumer refuses to pop an entry captured in a
+   * different repo frame rather than dropping it silently.
+   */
+  undoStack: UndoEntry[]
   /**
    * Sort modes for the promoted views (P4.2). `s` cycles through the
    * available modes; the surface header shows a `▼ <mode>` indicator.
@@ -1163,6 +1177,8 @@ export type LogInkAction =
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'togglePeek' }
   | { type: 'setPendingKey'; value?: string }
+  | { type: 'pushUndoEntry'; value: UndoEntry }
+  | { type: 'popUndoEntry' }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
   | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' | 'warning'; loading?: boolean; ttl?: 'echo' | 'result' | 'advisory' }
@@ -1995,6 +2011,7 @@ export function createLogInkState(
     selectedIssueFilter: 'open',
     selectedPullRequestFilter: 'open',
     repoStack: [{ label: options.repoLabel || 'root', workdir: options.repoWorkdir }],
+    undoStack: [],
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
     ...createCommandPaletteState(),
@@ -2819,6 +2836,16 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         pendingKey: action.value,
+      }
+    case 'pushUndoEntry':
+      return {
+        ...state,
+        undoStack: pushUndoEntry(state.undoStack, action.value),
+      }
+    case 'popUndoEntry':
+      return {
+        ...state,
+        undoStack: popUndoEntry(state.undoStack).stack,
       }
     case 'setSidebarTab':
       return {

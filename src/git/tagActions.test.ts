@@ -3,6 +3,7 @@ import {
   deleteLocalTag,
   deleteRemoteTag,
   pushTag,
+  restoreDeletedTag,
 } from './tagActions'
 
 describe('log tag actions', () => {
@@ -35,6 +36,26 @@ describe('log tag actions', () => {
       message: "Tag name '-d' cannot start with '-'.",
     })
     await expect(deleteLocalTag(git as never, '-d')).resolves.toEqual({
+      ok: false,
+      message: "Tag name '-d' cannot start with '-'.",
+    })
+    expect(git.raw).not.toHaveBeenCalled()
+  })
+
+  it('restoreDeletedTag recreates the tag at its recorded sha', async () => {
+    const git = { raw: jest.fn().mockResolvedValue('') }
+
+    await expect(restoreDeletedTag(git as never, '0.34.0', 'abc1234')).resolves.toEqual({
+      ok: true,
+      message: 'Restored tag 0.34.0',
+    })
+    expect(git.raw).toHaveBeenCalledWith(['tag', '0.34.0', 'abc1234'])
+  })
+
+  it('restoreDeletedTag rejects a flag-like tag name', async () => {
+    const git = { raw: jest.fn() }
+
+    await expect(restoreDeletedTag(git as never, '-d', 'abc1234')).resolves.toEqual({
       ok: false,
       message: "Tag name '-d' cannot start with '-'.",
     })

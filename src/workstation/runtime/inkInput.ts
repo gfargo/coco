@@ -910,6 +910,7 @@ export function getLogInkPaletteExecuteEvents(
     case 'workflowRenameStash':
     case 'workflowStashBranch':
     case 'workflowUndoDropStash':
+    case 'workflowUndoLastAction':
     case 'workflowPushTag':
     case 'workflowDeleteRemoteTag':
     case 'workflowResolveOurs':
@@ -1984,6 +1985,18 @@ export function getLogInkInputEvents(
     return [
       action({ type: 'replaceView', value: 'reflog' }),
       action({ type: 'setStatus', value: 'jumped to reflog', ttl: 'echo' }),
+    ]
+  }
+
+  // `gu` chord (OSS-1606): pop the session-scoped undo stack and run
+  // the recorded inverse for the most recent invertible destructive
+  // action (branch delete, stash drop, reset, tag delete). No y-confirm
+  // — `undo-last-action` is restorative by construction (kind: 'normal'
+  // in the registry), matching `undo-drop-stash`'s bare `u` on stash.
+  if (state.pendingKey === 'g' && inputValue === 'u') {
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      { type: 'runWorkflowAction', id: 'undo-last-action' },
     ]
   }
 

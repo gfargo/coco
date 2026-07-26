@@ -89,6 +89,7 @@ export type LogInkCommandId =
   | 'workflowRenameStash'
   | 'workflowStashBranch'
   | 'workflowUndoDropStash'
+  | 'workflowUndoLastAction'
   | 'workflowPushTag'
   | 'workflowDeleteRemoteTag'
   | 'workflowResolveOurs'
@@ -381,6 +382,18 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['gr'],
     label: 'reflog',
     description: 'Push the reflog browser view — chronological recovery log.',
+    contexts: ['normal'],
+  },
+  {
+    // OSS-1606 — pop the session-scoped undo stack (branch delete /
+    // stash drop / reset / tag delete) and run its recorded inverse.
+    // Lives in the `g` chord namespace alongside the other global/meta
+    // commands rather than a bare key, so it can't collide with any
+    // per-view single-letter binding.
+    id: 'workflowUndoLastAction',
+    keys: ['gu'],
+    label: 'undo',
+    description: 'Undo the most recent invertible destructive action from this session (branch delete, stash drop, reset, or tag delete).',
     contexts: ['normal'],
   },
   {
@@ -973,6 +986,14 @@ export type GetLogInkFooterHintsOptions = {
    * affordance (`v/esc → main`) since the user is mid-glance, not
    * navigating. */
   peeking?: boolean
+  /**
+   * Depth of the session-scoped undo stack (OSS-1606). When > 0, the
+   * default (non-overlay) global hint cluster surfaces `gu undo (N)` so
+   * the safety net stays discoverable exactly when it's actionable —
+   * hidden the rest of the time rather than advertising a key that
+   * would just report "nothing to undo".
+   */
+  undoStackSize?: number
 }
 
 export type LogInkChordContinuation = {
@@ -1143,6 +1164,7 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   editCommitExternal: 'edit',
   commitSplit: 'edit',
   revertSelection: 'edit',
+  workflowUndoLastAction: 'edit',
   // ── Mutate: destructive / AI workflows that fire from anywhere
   //    (hence the global confirmation gating).
   workflowDeleteBranch: 'mutate',
@@ -1370,6 +1392,16 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
       contextual: [...lead, ...hints.contextual.slice(0, SINGLE_PANE_VIEW_HINT_LIMIT)],
       global: SINGLE_PANE_GLOBAL_HINTS,
     }
+  }
+  // OSS-1606 — surface the undo stack ONLY in the default (non-overlay)
+  // global cluster: the reference-equality check against
+  // NORMAL_GLOBAL_HINTS confirms we're in one of the plain per-view /
+  // per-focus branches below, not mid-overlay (help / palette / filter /
+  // split-plan), where `gu` isn't actually live and advertising it would
+  // be a footer lie. Hidden entirely at depth 0 rather than always
+  // shown-but-inert — an undo hint that does nothing is noise.
+  if (options.undoStackSize && options.undoStackSize > 0 && hints.global === NORMAL_GLOBAL_HINTS) {
+    return { ...hints, global: [...NORMAL_GLOBAL_HINTS, `gu undo (${options.undoStackSize})`] }
   }
   return hints
 }

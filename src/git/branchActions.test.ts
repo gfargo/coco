@@ -23,6 +23,7 @@ import {
   isNonFastForwardPushError,
   pullCurrentBranchMerge,
   pullCurrentBranchRebase,
+  restoreDeletedBranch,
 } from './branchActions'
 import { BranchRef } from './branchData'
 
@@ -220,6 +221,18 @@ describe('log branch actions', () => {
       const result = await deleteBranch(git as never, localBranch())
       expect(result.ok).toBe(false)
       expect(isBranchNotFullyMergedError(result.message)).toBe(true)
+    })
+  })
+
+  describe('restoreDeletedBranch', () => {
+    it('recreates the branch at its recorded sha', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+
+      await expect(restoreDeletedBranch(git as never, 'feature/test', 'abc1234')).resolves.toEqual({
+        ok: true,
+        message: 'Restored branch feature/test',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['branch', 'feature/test', 'abc1234'])
     })
   })
 

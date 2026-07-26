@@ -205,6 +205,25 @@ export async function deleteBranches(
 }
 
 /**
+ * Recreate a branch previously deleted by `deleteBranch(es)` at its
+ * recorded sha — the undo-stack inverse (OSS-1606). The deleted commit
+ * stays reachable in the object database until gc, so `git branch <name>
+ * <sha>` resurrects the ref exactly where it was. Does not restore the
+ * upstream link, if the branch had one — git has no way to recreate that
+ * from a sha alone.
+ */
+export function restoreDeletedBranch(
+  git: SimpleGit,
+  name: string,
+  sha: string
+): Promise<BranchActionResult> {
+  return runAction(
+    () => git.raw(['branch', name, sha]),
+    `Restored branch ${name}`
+  )
+}
+
+/**
  * True when a failed `git branch -d` was rejected specifically because the
  * branch isn't fully merged (the one case worth offering a force-delete
  * for). Matches git's wording across versions ("not fully merged").
