@@ -226,7 +226,16 @@ const OLLAMA_DYNAMIC_DEFAULTS: ProviderDynamicDefaults = {
   },
 }
 
-const DYNAMIC_DEFAULTS: Record<LLMProvider, ProviderDynamicDefaults> = {
+/**
+ * Partial, not a full `Record<LLMProvider, ...>` — the OpenAI-compatible
+ * presets (DeepSeek, Groq, xAI, Together, Fireworks, OpenRouter, LM Studio,
+ * vLLM) deliberately have no entry here. Their hosted model catalogs churn
+ * too fast to keep a `cost`/`balanced`/`quality` × 8-task grid from going
+ * stale, so they opt out of `model: "dynamic"` entirely — `resolveDynamicModel`
+ * below throws a clear, actionable error for them instead of silently
+ * resolving to `undefined`.
+ */
+const DYNAMIC_DEFAULTS: Partial<Record<LLMProvider, ProviderDynamicDefaults>> = {
   openai: OPENAI_DYNAMIC_DEFAULTS,
   // Azure hosts the same OpenAI models, so it reuses the OpenAI defaults.
   azure: OPENAI_DYNAMIC_DEFAULTS,
@@ -281,11 +290,22 @@ export function resolveDynamicModel(config: Config, task: DynamicModelTask): LLM
     return service.model as LLMModel
   }
 
-  const preference = service.dynamicModelPreference || 'balanced'
-  const providerDefaults = DYNAMIC_DEFAULTS[service.provider]
-  const defaultModel = providerDefaults[preference]?.[task]
+  const override = service.dynamicModels?.[task]
+  if (override) {
+    return override
+  }
 
-  return service.dynamicModels?.[task] || defaultModel
+  const providerDefaults = DYNAMIC_DEFAULTS[service.provider]
+  if (!providerDefaults) {
+    throw new LangChainConfigurationError(
+      `resolveDynamicModel: provider '${service.provider}' does not support model: "dynamic" — its hosted model catalog isn't tracked here. ` +
+        `Set service.model to a concrete model id, or add a service.dynamicModels.${task} override.`,
+      { provider: service.provider, task }
+    )
+  }
+
+  const preference = service.dynamicModelPreference || 'balanced'
+  return providerDefaults[preference]?.[task]
 }
 
 export function resolveDynamicService(config: Config, task: DynamicModelTask): LLMService {
@@ -297,5 +317,5 @@ export function resolveDynamicService(config: Config, task: DynamicModelTask): L
 }
 
 export function getDynamicModelDefaults(provider: LLMProvider, preference: DynamicModelPreference = 'balanced') {
-  return DYNAMIC_DEFAULTS[provider][preference]
+  return DYNAMIC_DEFAULTS[provider]?.[preference]
 }

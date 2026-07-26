@@ -30,6 +30,13 @@ const PROVIDER_API_KEY_ENV_VARS: Record<string, LLMProvider> = {
   GOOGLE_API_KEY: 'gemini',
   MISTRAL_API_KEY: 'mistral',
   AZURE_OPENAI_API_KEY: 'azure',
+  DEEPSEEK_API_KEY: 'deepseek',
+  GROQ_API_KEY: 'groq',
+  XAI_API_KEY: 'xai',
+  TOGETHER_API_KEY: 'together',
+  FIREWORKS_API_KEY: 'fireworks',
+  OPENROUTER_API_KEY: 'openrouter',
+  // lmstudio/vllm are typically unauthenticated local servers — no env var.
 }
 
 /**
@@ -52,6 +59,25 @@ const SERVICE_SCALAR_ENV_KEYS = new Set([
 function isServiceEnvKey(key: string): boolean {
   return SERVICE_SCALAR_ENV_KEYS.has(key) || key in PROVIDER_API_KEY_ENV_VARS
 }
+
+/**
+ * Providers whose service config carries an optional `baseURL: string` field
+ * that `COCO_SERVICE_BASE_URL` may override — `openai` plus every
+ * OpenAI-compatible preset. LM Studio and vLLM are included even though they
+ * don't require auth: overriding their local endpoint via env var is exactly
+ * how a non-default host/port gets configured for them.
+ */
+const BASE_URL_ENV_PROVIDERS = new Set<LLMProvider>([
+  'openai',
+  'deepseek',
+  'groq',
+  'xai',
+  'together',
+  'fireworks',
+  'openrouter',
+  'lmstudio',
+  'vllm',
+])
 
 /**
  * Load environment variables
@@ -171,8 +197,9 @@ function handleServiceEnvVar(
       service.model = value
       break
     case 'COCO_SERVICE_BASE_URL':
-      if (effectiveProvider === 'openai') {
-        // Cast to OpenAILLMService to access baseURL property
+      if (effectiveProvider && BASE_URL_ENV_PROVIDERS.has(effectiveProvider)) {
+        // Cast to OpenAILLMService — every provider in BASE_URL_ENV_PROVIDERS
+        // shares the same optional `baseURL: string` field shape.
         (service as OpenAILLMService).baseURL = value
       }
       break

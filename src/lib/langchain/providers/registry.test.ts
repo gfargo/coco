@@ -27,7 +27,23 @@ function makeConfig(service: Record<string, unknown>): Config {
 
 describe('provider registry', () => {
   it('registers the built-in providers', async () => {
-    expect(LLM_PROVIDER_IDS.sort()).toEqual(['anthropic', 'azure', 'bedrock', 'gemini', 'mistral', 'ollama', 'openai'])
+    expect(LLM_PROVIDER_IDS.sort()).toEqual([
+      'anthropic',
+      'azure',
+      'bedrock',
+      'deepseek',
+      'fireworks',
+      'gemini',
+      'groq',
+      'lmstudio',
+      'mistral',
+      'ollama',
+      'openai',
+      'openrouter',
+      'together',
+      'vllm',
+      'xai',
+    ])
   })
 
   it('exposes per-provider auth requirements', async () => {
@@ -38,12 +54,56 @@ describe('provider registry', () => {
     expect(providerRequiresAuth('azure')).toBe(true)
     expect(providerRequiresAuth('bedrock')).toBe(false)
     expect(providerRequiresAuth('ollama')).toBe(false)
+    expect(providerRequiresAuth('deepseek')).toBe(true)
+    expect(providerRequiresAuth('groq')).toBe(true)
+    expect(providerRequiresAuth('xai')).toBe(true)
+    expect(providerRequiresAuth('together')).toBe(true)
+    expect(providerRequiresAuth('fireworks')).toBe(true)
+    expect(providerRequiresAuth('openrouter')).toBe(true)
+    expect(providerRequiresAuth('lmstudio')).toBe(false)
+    expect(providerRequiresAuth('vllm')).toBe(false)
     expect(providerRequiresAuth('nope')).toBe(false)
   })
 
   it('finds definitions by id and returns undefined for unknown', async () => {
     expect(findProviderDefinition('openai')?.id).toBe('openai')
     expect(findProviderDefinition('mystery')).toBeUndefined()
+  })
+})
+
+describe('OpenAI-compatible presets via registry (#OSS-1623)', () => {
+  it.each([
+    ['deepseek', 'https://api.deepseek.com/v1'],
+    ['groq', 'https://api.groq.com/openai/v1'],
+    ['xai', 'https://api.x.ai/v1'],
+    ['together', 'https://api.together.xyz/v1'],
+    ['fireworks', 'https://api.fireworks.ai/inference/v1'],
+    ['openrouter', 'https://openrouter.ai/api/v1'],
+    ['lmstudio', 'http://localhost:1234/v1'],
+    ['vllm', 'http://localhost:8000/v1'],
+  ] as const)('builds a ChatOpenAI client for %s at its default baseURL', async (provider, defaultBaseURL) => {
+    const llm = await getLlm(
+      provider,
+      'some-model' as LLMModel,
+      makeConfig({ provider, model: 'some-model' })
+    )
+    expect(llm).toBeInstanceOf(ChatOpenAI)
+    expect(getLlmMetadata(llm).endpoint).toBe(defaultBaseURL)
+    expect((llm as unknown as { clientConfig?: { baseURL?: string } }).clientConfig?.baseURL).toBe(
+      defaultBaseURL
+    )
+  })
+
+  it('lets service.baseURL override a compat provider default endpoint', async () => {
+    const llm = await getLlm(
+      'groq',
+      'some-model' as LLMModel,
+      makeConfig({ provider: 'groq', model: 'some-model', baseURL: 'https://custom.example/v1' })
+    )
+    expect((llm as unknown as { clientConfig?: { baseURL?: string } }).clientConfig?.baseURL).toBe(
+      'https://custom.example/v1'
+    )
+    expect(getLlmMetadata(llm).endpoint).toBe('https://custom.example/v1')
   })
 })
 

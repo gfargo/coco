@@ -99,6 +99,17 @@ describe('checkProviderValidity', () => {
     checkProviderValidity(configWithProvider('aws'), diagnostics)
     expect(diagnostics[0].message).toContain('"bedrock"')
   })
+
+  // #OSS-1623 — the OpenAI-compatible presets are first-class providers now,
+  // so `coco doctor` must recognize them (not flag as "Unknown provider").
+  it.each(['deepseek', 'groq', 'xai', 'together', 'fireworks', 'openrouter', 'lmstudio', 'vllm'])(
+    'produces no diagnostic for the first-class provider "%s"',
+    (provider) => {
+      const diagnostics: Diagnostic[] = []
+      checkProviderValidity(configWithProvider(provider), diagnostics)
+      expect(diagnostics).toEqual([])
+    }
+  )
 })
 
 describe('checkAuthentication', () => {
@@ -146,6 +157,41 @@ describe('checkAuthentication', () => {
     checkAuthentication(config, diagnostics)
 
     expect(diagnostics).toEqual([])
+  })
+
+  // #OSS-1623 — first-class OpenAI-compatible providers.
+  it('errors when a hosted compat provider (groq) has no authentication configured', () => {
+    const config = {
+      service: { provider: 'groq', model: 'llama-3.3-70b-versatile', authentication: { type: 'None' } },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('error')
+    expect(diagnostics[0].message).toContain('requires authentication')
+  })
+
+  it('only warns when a no-auth local provider (lmstudio) has no authentication configured', () => {
+    const config = {
+      service: { provider: 'lmstudio', model: 'local-model', authentication: { type: 'None' } },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+  })
+
+  it('only warns when a no-auth local provider (vllm) has no authentication configured', () => {
+    const config = {
+      service: { provider: 'vllm', model: 'local-model', authentication: { type: 'None' } },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
   })
 })
 
@@ -209,6 +255,15 @@ describe('checkEndpointSupport', () => {
     const diagnostics: Diagnostic[] = []
     checkEndpointSupport({ service: { model: 'gpt-4o', endpoint: 'http://x' } } as unknown as Config, diagnostics)
     expect(diagnostics).toEqual([])
+  })
+
+  // #OSS-1623 — compat providers use service.baseURL, same as openai/anthropic.
+  it('warns when endpoint (not baseURL) is set for a first-class compat provider (groq)', () => {
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport(configWith('groq', { endpoint: 'http://custom-host:8080' }), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].fix).toContain('baseURL')
   })
 })
 

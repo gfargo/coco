@@ -2,6 +2,7 @@ import chalk from 'chalk'
 
 import { ANTHROPIC_MODELS, BEDROCK_MODELS, GEMINI_MODELS, MISTRAL_MODELS, OPEN_AI_MODELS } from '../../lib/langchain/constants'
 import { LLMModel, LLMProvider } from '../../lib/langchain/types'
+import { OPENAI_COMPATIBLE_PROVIDER_IDS } from '../../lib/langchain/providers/openaiCompatible'
 import {
   getOllamaStatus,
   OllamaNotReadyError,
@@ -86,6 +87,22 @@ async function ensureOllamaModels(): Promise<string[]> {
   return status.models
 }
 
+/**
+ * Free-text model id prompt shared by every open-namespace provider — the
+ * OpenAI-compatible presets (DeepSeek, Groq, xAI, Together, Fireworks,
+ * OpenRouter, LM Studio, vLLM) and the legacy custom-baseURL escape hatch —
+ * none of which has a fixed, enumerable model catalog coco can offer as a
+ * select list.
+ */
+async function promptOpenAiCompatibleModelId(): Promise<LLMModel> {
+  return (await inputPrompt({
+    message: 'model id (e.g. meta-llama/llama-3.3-70b-instruct):',
+    validate(input) {
+      return input.trim().length > 0 ? true : 'Model id cannot be empty'
+    },
+  })) as LLMModel
+}
+
 export const questions = {
   /**
    * @description configure coco globally for the current user or project?
@@ -146,9 +163,49 @@ export const questions = {
           description: 'AWS Bedrock (uses the AWS credential chain)',
         },
         {
-          name: 'OpenAI-compatible endpoint',
+          name: 'DeepSeek',
+          value: 'deepseek',
+          description: 'DeepSeek API',
+        },
+        {
+          name: 'Groq',
+          value: 'groq',
+          description: 'Groq API',
+        },
+        {
+          name: 'xAI (Grok)',
+          value: 'xai',
+          description: 'xAI API',
+        },
+        {
+          name: 'Together AI',
+          value: 'together',
+          description: 'Together AI API',
+        },
+        {
+          name: 'Fireworks AI',
+          value: 'fireworks',
+          description: 'Fireworks AI API',
+        },
+        {
+          name: 'OpenRouter',
+          value: 'openrouter',
+          description: 'OpenRouter API',
+        },
+        {
+          name: 'LM Studio',
+          value: 'lmstudio',
+          description: 'LM Studio (local, OpenAI-compatible)',
+        },
+        {
+          name: 'vLLM',
+          value: 'vllm',
+          description: 'vLLM (self-hosted, OpenAI-compatible)',
+        },
+        {
+          name: 'Other OpenAI-compatible endpoint',
           value: OPENAI_COMPATIBLE_SENTINEL,
-          description: 'OpenRouter, Groq, LM Studio, vLLM, or any other OpenAI-compatible API',
+          description: 'Any other OpenAI-compatible API — you provide the base URL',
         },
       ],
       default: 'ollama',
@@ -183,15 +240,16 @@ export const questions = {
     return { ...preset, baseURL: baseURL.trim() }
   },
 
-  inputOpenAiCompatibleModel: async (): Promise<LLMModel> =>
-    (await inputPrompt({
-      message: 'model id (e.g. meta-llama/llama-3.3-70b-instruct):',
-      validate(input) {
-        return input.trim().length > 0 ? true : 'Model id cannot be empty'
-      },
-    })) as LLMModel,
+  inputOpenAiCompatibleModel: promptOpenAiCompatibleModelId,
 
   selectLLMModel: async (provider: LLMProvider): Promise<LLMModel> => {
+    // The OpenAI-compatible presets are open model namespaces — no fixed,
+    // enumerable catalog to offer as a select list — so prompt for a model
+    // id directly instead of falling through to the (empty) select below.
+    if (OPENAI_COMPATIBLE_PROVIDER_IDS.includes(provider)) {
+      return promptOpenAiCompatibleModelId()
+    }
+
     let availableModels = [] as { name: string; value: LLMModel }[]
 
     if (provider === 'openai') {

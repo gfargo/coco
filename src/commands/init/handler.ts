@@ -119,12 +119,22 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       )
     )
   }
+  // lmstudio/vllm are deliberately absent here, same as ollama/bedrock — all
+  // four are typically no-auth (local/self-hosted or credential-chain-based)
+  // providers, so the wizard skips the API-key prompt entirely rather than
+  // asking for a key that'll usually be left blank.
   const inputPromptByProvider: Partial<Record<LLMProvider, { label: string; envVar: string }>> = {
     openai: { label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
     anthropic: { label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
     gemini: { label: 'Google Gemini', envVar: 'GEMINI_API_KEY' },
     mistral: { label: 'Mistral', envVar: 'MISTRAL_API_KEY' },
     azure: { label: 'Azure OpenAI', envVar: 'AZURE_OPENAI_API_KEY' },
+    deepseek: { label: 'DeepSeek', envVar: 'DEEPSEEK_API_KEY' },
+    groq: { label: 'Groq', envVar: 'GROQ_API_KEY' },
+    xai: { label: 'xAI', envVar: 'XAI_API_KEY' },
+    together: { label: 'Together AI', envVar: 'TOGETHER_API_KEY' },
+    fireworks: { label: 'Fireworks AI', envVar: 'FIREWORKS_API_KEY' },
+    openrouter: { label: 'OpenRouter', envVar: 'OPENROUTER_API_KEY' },
   }
 
   let apiKey = '' as string

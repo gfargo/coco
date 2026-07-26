@@ -4,6 +4,7 @@ import { resolveDynamicModel } from '../../lib/langchain/utils/dynamicModels'
 import { DEFAULT_OLLAMA_ENDPOINT, getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
 import { DEPRECATED_MODELS, detectProviderMismatch } from '../../lib/langchain/modelValidity'
 import { LLMProvider } from '../../lib/langchain/types'
+import { LLM_PROVIDER_IDS, providerRequiresAuth } from '../../lib/langchain/providers/registry'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
 
@@ -14,15 +15,9 @@ export interface Diagnostic {
   autoFix?: (config: Record<string, unknown>) => void
 }
 
-const SUPPORTED_PROVIDERS: LLMProvider[] = [
-  'openai',
-  'anthropic',
-  'azure',
-  'gemini',
-  'mistral',
-  'bedrock',
-  'ollama',
-]
+// Derived from the provider registry (rather than a hand-maintained list) so
+// a new registered provider never has to be added here too (#OSS-1623).
+const SUPPORTED_PROVIDERS: LLMProvider[] = LLM_PROVIDER_IDS
 
 const PROVIDER_ALIASES: Record<string, LLMProvider> = {
   claude: 'anthropic',
@@ -63,7 +58,7 @@ function checkServiceBlock(config: Config, diagnostics: Diagnostic[]) {
     diagnostics.push({
       severity: 'error',
       message: 'No provider set in service config.',
-      fix: 'Set service.provider to "openai", "anthropic", "azure", "gemini", "mistral", "bedrock", or "ollama".',
+      fix: `Set service.provider to one of: ${SUPPORTED_PROVIDERS.map((p) => `"${p}"`).join(', ')}.`,
     })
   }
 
@@ -164,14 +159,20 @@ export function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
     // A custom baseURL on the openai provider means an OpenAI-compatible
     // endpoint (OpenRouter, Groq, LM Studio, vLLM, custom — #1610), not the
     // real OpenAI API. Self-hosted/local ones commonly run without auth, so
-    // this is a warning rather than a hard error for that case.
-    const isCompatEndpoint = provider === 'openai' && Boolean((config.service as { baseURL?: string }).baseURL)
+    // this is a warning rather than a hard error for that case. Also warn
+    // (rather than error) for any first-class provider whose registry entry
+    // says it doesn't require auth (LM Studio, vLLM — #OSS-1623), regardless
+    // of baseURL.
+    const isLegacyCompatEndpoint =
+      provider === 'openai' && Boolean((config.service as { baseURL?: string }).baseURL)
+    const isNoAuthProvider = provider ? !providerRequiresAuth(provider) : false
+    const isCompatEndpoint = isLegacyCompatEndpoint || isNoAuthProvider
     diagnostics.push({
       severity: isCompatEndpoint ? 'warn' : 'error',
       message: isCompatEndpoint
-        ? `No authentication configured for the OpenAI-compatible endpoint at "${(config.service as { baseURL?: string }).baseURL}". This is fine for a self-hosted/no-auth endpoint (LM Studio, vLLM, ...) — otherwise set an API key.`
+        ? `No authentication configured for "${provider}"${(config.service as { baseURL?: string }).baseURL ? ` at "${(config.service as { baseURL?: string }).baseURL}"` : ''}. This is fine for a self-hosted/no-auth endpoint (LM Studio, vLLM, ...) — otherwise set an API key.`
         : `Provider "${provider}" requires authentication but none is configured.`,
-      fix: `Set service.authentication to { "type": "APIKey", "credentials": { "apiKey": "..." } } or use the OPENAI_API_KEY / ANTHROPIC_API_KEY / AZURE_OPENAI_API_KEY / GEMINI_API_KEY / MISTRAL_API_KEY environment variable.`,
+      fix: `Set service.authentication to { "type": "APIKey", "credentials": { "apiKey": "..." } } or use the OPENAI_API_KEY / ANTHROPIC_API_KEY / AZURE_OPENAI_API_KEY / GEMINI_API_KEY / MISTRAL_API_KEY / DEEPSEEK_API_KEY / GROQ_API_KEY / XAI_API_KEY / TOGETHER_API_KEY / FIREWORKS_API_KEY / OPENROUTER_API_KEY environment variable.`,
     })
     return
   }
@@ -304,9 +305,20 @@ function checkTokenLimits(config: Config, diagnostics: Diagnostic[]) {
 }
 
 // Providers whose client honors a custom host via service.endpoint.
-// Only Ollama reads service.endpoint; openai/anthropic use service.baseURL instead.
+// Only Ollama reads service.endpoint; the rest use service.baseURL instead.
 const ENDPOINT_AWARE_PROVIDERS: LLMProvider[] = ['ollama']
-const BASE_URL_PROVIDERS: LLMProvider[] = ['openai', 'anthropic']
+const BASE_URL_PROVIDERS: LLMProvider[] = [
+  'openai',
+  'anthropic',
+  'deepseek',
+  'groq',
+  'xai',
+  'together',
+  'fireworks',
+  'openrouter',
+  'lmstudio',
+  'vllm',
+]
 
 export function checkEndpointSupport(config: Config, diagnostics: Diagnostic[]) {
   const provider = config.service?.provider
