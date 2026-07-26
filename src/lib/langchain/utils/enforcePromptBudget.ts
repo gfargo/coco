@@ -182,6 +182,11 @@ async function trimSummaryByCharSlice(
 /**
  * Ensure the fully rendered LLM prompt fits the configured request budget.
  *
+ * `maxTokens` is the *request* budget (prompt + the model's response), not the
+ * prompt budget alone — it is compared everywhere against `maxTokens -
+ * responseTokenReserve` so the reserve is always honored, whether or not
+ * trimming ends up engaging.
+ *
  * Diff condensation budgets only cover the diff summary itself. This guard accounts
  * for the rest of the rendered prompt, then trims the summary as a deterministic
  * fallback when additional context pushes the request over budget.
@@ -197,7 +202,7 @@ export async function enforcePromptBudget({
   const renderedPrompt = await renderPrompt(prompt, variables)
   const promptTokenCount = tokenizer(renderedPrompt)
 
-  if (promptTokenCount <= maxTokens) {
+  if (promptTokenCount <= maxTokens - responseTokenReserve) {
     return { variables, promptTokenCount, truncated: false }
   }
 
