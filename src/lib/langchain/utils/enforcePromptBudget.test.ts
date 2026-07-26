@@ -175,6 +175,42 @@ describe('enforcePromptBudget', () => {
     expect(() => JSON.stringify(result.variables.summary)).not.toThrow()
   })
 
+  it('throws when even an empty last block plus the omission marker exceeds budget', async () => {
+    const bigBlockBody =
+      `* changes in "/generated"\n\n${FILE_BULLET_PREFIX}${'x'.repeat(300)}\n\n` +
+      `${FILE_BULLET_PREFIX}${'y'.repeat(300)}\n\n`
+    const smallBlockBody = `* changes in "/src/auth"\n\n${FILE_BULLET_PREFIX}fix auth token bug\n\n`
+    const summary =
+      `${DIRECTORY_BLOCK_SEPARATOR}${bigBlockBody}` +
+      `${DIRECTORY_BLOCK_SEPARATOR}${smallBlockBody}`
+
+    const additionalContext = 'context'
+    const responseTokenReserve = 10
+    const marker = '\n\n[2 files omitted for length]\n'
+
+    const emptyLastBlockTokenCount = tokenizer(
+      await prompt.format({
+        summary: `${DIRECTORY_BLOCK_SEPARATOR}${marker}`,
+        additional_context: additionalContext,
+      })
+    )
+    // A budget too tight even for an empty last block plus the marker -- the
+    // binary search can never find a fitting candidate, so it must throw
+    // rather than silently returning the unchecked initial (over-budget) guess.
+    const tokenBudget = emptyLastBlockTokenCount - 1
+    const maxTokens = tokenBudget + responseTokenReserve
+
+    await expect(
+      enforcePromptBudget({
+        prompt,
+        variables: { summary, additional_context: additionalContext },
+        tokenizer,
+        maxTokens,
+        responseTokenReserve,
+      })
+    ).rejects.toThrow('Rendered prompt exceeds token budget')
+  })
+
   it('never leaves an unpaired surrogate when the last-block char-slice fallback lands mid-emoji', async () => {
     const bigBlockBody = `* changes in "/generated"\n\n${FILE_BULLET_PREFIX}${'x'.repeat(300)}\n\n`
     const prefix = `* changes in "/src/auth"\n\n${FILE_BULLET_PREFIX}${'a'.repeat(20)}`

@@ -140,6 +140,13 @@ async function trimSummaryByBlocks(
     }
   }
 
+  if (bestTokenCount > tokenBudget) {
+    throw new Error(
+      `Rendered prompt exceeds token budget even with an empty ${summaryKey} block: ` +
+      `${bestTokenCount} > ${tokenBudget}`
+    )
+  }
+
   return { summary: bestSummary.trimEnd(), tokenCount: bestTokenCount }
 }
 
