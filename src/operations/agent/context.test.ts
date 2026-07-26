@@ -6,6 +6,11 @@ import simpleGit from 'simple-git'
 
 import {
     createAgentOperationContext,
+    digestOf,
+    getBranchContext,
+    getRecentLog,
+    getRepoStatus,
+    getStagedDiff,
     isPathWithinRoot,
     resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
@@ -199,5 +204,59 @@ describe('agent repository context', () => {
       code: 'CANCELLED',
       retryable: false,
     }))
+  })
+
+  it('computes a stable sha256 digest', () => {
+    expect(digestOf('hello')).toBe(`sha256:${createHash('sha256').update('hello').digest('hex')}`)
+  })
+
+  it('reports repository status including untracked files', async () => {
+    fs.writeFileSync(path.join(repoRoot, 'untracked.txt'), 'new\n')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const status = await getRepoStatus(context)
+
+    expect(status).toContain('untracked.txt')
+  })
+
+  it('reports the staged diff', async () => {
+    fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), 'staged content\n')
+    await simpleGit(repoRoot).add('tracked.txt')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const diff = await getStagedDiff(context)
+
+    expect(diff).toContain('+staged content')
+  })
+
+  it('reports an empty staged diff when nothing is staged', async () => {
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const diff = await getStagedDiff(context)
+
+    expect(diff.trim()).toBe('')
+  })
+
+  it('reports the current branch without an upstream', async () => {
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const branchContext = await getBranchContext(context)
+
+    expect(branchContext).toContain('Branch:')
+    expect(branchContext).toContain('Upstream: none configured')
+  })
+
+  it('bounds the recent log to the maximum allowed entries', async () => {
+    const git = simpleGit(repoRoot)
+    for (let index = 0; index < 25; index += 1) {
+      fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), `content ${index}\n`)
+      await git.add('tracked.txt')
+      await git.commit(`commit ${index}`)
+    }
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const log = await getRecentLog(context, 100)
+
+    expect(log.trim().split('\n')).toHaveLength(20)
   })
 })

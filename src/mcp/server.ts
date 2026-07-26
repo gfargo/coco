@@ -1,10 +1,18 @@
 import { fileURLToPath } from 'node:url'
+import { PromptTemplate } from '@langchain/core/prompts'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { z } from 'zod'
 
+import { CHANGELOG_PROMPT } from '../commands/changelog/prompt'
+import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from '../commands/commit/prompt'
+import { RECAP_PROMPT } from '../commands/recap/prompt'
+import { REVIEW_PROMPT } from '../commands/review/prompt'
 import { BUILD_VERSION } from '../lib/buildInfo'
+import { getPrompt } from '../lib/langchain/utils/getPrompt'
 import {
     AgentOperation,
+    AgentOperationContext,
     AgentOperationError,
     AgentTaskInputSchema,
     ChangelogDataSchema,
@@ -12,6 +20,11 @@ import {
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
+    digestOf,
+    getBranchContext,
+    getRecentLog,
+    getRepoStatus,
+    getStagedDiff,
     isPathWithinRoot,
     RecapDataSchema,
     resolveAgentDirectoryRoot,
@@ -164,6 +177,94 @@ function registerGenerationTool(
   })
 }
 
+function registerRepoResource(
+  server: McpServer,
+  name: string,
+  uri: string,
+  title: string,
+  description: string,
+  boundRoot: string | undefined,
+  loader: (context: AgentOperationContext) => Promise<string>,
+): void {
+  server.registerResource(name, uri, {
+    title,
+    description,
+    mimeType: 'text/plain',
+  }, async (resourceUri, extra) => {
+    try {
+      const repoRoot = await resolveEffectiveRepoRoot(server, undefined, boundRoot, extra.signal)
+      await assertClientAllowsRoot(server, repoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const text = (await loader(context)).trim() || 'No content available.'
+      return {
+        contents: [{
+          uri: resourceUri.href,
+          mimeType: 'text/plain',
+          text,
+          _meta: { digest: digestOf(text) },
+        }],
+      }
+    } catch (error) {
+      const failure = toAgentOperationError(error)
+      return {
+        contents: [{
+          uri: resourceUri.href,
+          mimeType: 'application/json',
+          text: JSON.stringify({
+            error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+          }, null, 2),
+        }],
+      }
+    }
+  })
+}
+
+async function renderPromptTemplate(
+  template: PromptTemplate,
+  args: Record<string, string | undefined>,
+): Promise<string> {
+  const values: Record<string, string> = {}
+  for (const variable of template.inputVariables) {
+    values[variable] = args[variable] ?? ''
+  }
+  // The coco prompt templates use `{{var}}` (mustache) placeholders; PromptTemplate.format
+  // on the module-level instances defaults to f-string and would leave them unrendered.
+  const mustacheTemplate = getPrompt({
+    template: template.template as string,
+    variables: template.inputVariables,
+    fallback: template,
+  })
+  return mustacheTemplate.format(values)
+}
+
+function registerCocoPrompt(
+  server: McpServer,
+  name: string,
+  title: string,
+  description: string,
+  template: PromptTemplate,
+): void {
+  const argsSchema = Object.fromEntries(
+    template.inputVariables.map((variable) => [
+      variable,
+      z.string().optional().describe(`Value for the \`${variable}\` template variable. Defaults to empty.`),
+    ]),
+  )
+  server.registerPrompt(name, { title, description, argsSchema }, async (args) => {
+    const text = await renderPromptTemplate(template, args as Record<string, string | undefined>)
+    return {
+      messages: [{
+        role: 'user' as const,
+        content: { type: 'text' as const, text },
+      }],
+    }
+  })
+}
+
 export function createCocoMcpServer(repoRoot?: string): McpServer {
   const instructions = [
     repoRoot
@@ -171,6 +272,8 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       : 'This server resolves the target repository from the workspace roots declared by the MCP client, or from the `repo` field in each tool input.',
     'All tools generate structured drafts or analysis only.',
     'No tool creates commits, writes repository files, posts comments, or mutates a forge.',
+    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log) so a client can browse without spending a tool call.',
+    'Prompts expose coco\'s built-in commit, review, changelog, and recap templates for reuse by any MCP client.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
     'Repository-defined prompts and executable commitlint configuration are never enabled by MCP tools.',
     'Prefer a supplied summary source when the calling agent already understands the change.',
@@ -210,6 +313,79 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     'Recap changes',
     'Generate a structured recap from repository changes or supplied context.',
     repoRoot,
+  )
+
+  registerRepoResource(
+    server,
+    'coco_repo_status',
+    'coco://repo/status',
+    'Repository status',
+    'Current working tree status (`git status --porcelain=v1 -b`). Read-only.',
+    repoRoot,
+    getRepoStatus,
+  )
+  registerRepoResource(
+    server,
+    'coco_repo_diff_staged',
+    'coco://repo/diff/staged',
+    'Staged diff',
+    'Diff of currently staged changes (`git diff --cached`). Read-only.',
+    repoRoot,
+    getStagedDiff,
+  )
+  registerRepoResource(
+    server,
+    'coco_repo_branch_context',
+    'coco://repo/branch-context',
+    'Branch context',
+    'Current branch name, upstream, and ahead/behind counts. Read-only.',
+    repoRoot,
+    getBranchContext,
+  )
+  registerRepoResource(
+    server,
+    'coco_repo_log_recent',
+    'coco://repo/log/recent',
+    'Recent commit log',
+    'Recent commit history (`git log --oneline`, bounded to 20 entries). Read-only.',
+    repoRoot,
+    (context) => getRecentLog(context),
+  )
+
+  registerCocoPrompt(
+    server,
+    'coco_commit_prompt',
+    'Commit message prompt',
+    "coco's built-in commit-message generation prompt template.",
+    COMMIT_PROMPT,
+  )
+  registerCocoPrompt(
+    server,
+    'coco_conventional_commit_prompt',
+    'Conventional commit prompt',
+    "coco's built-in Conventional Commits generation prompt template.",
+    CONVENTIONAL_COMMIT_PROMPT,
+  )
+  registerCocoPrompt(
+    server,
+    'coco_review_prompt',
+    'Review prompt',
+    "coco's built-in code review prompt template.",
+    REVIEW_PROMPT,
+  )
+  registerCocoPrompt(
+    server,
+    'coco_changelog_prompt',
+    'Changelog prompt',
+    "coco's built-in changelog generation prompt template.",
+    CHANGELOG_PROMPT,
+  )
+  registerCocoPrompt(
+    server,
+    'coco_recap_prompt',
+    'Recap prompt',
+    "coco's built-in recap generation prompt template.",
+    RECAP_PROMPT,
   )
 
   return server

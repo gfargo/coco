@@ -60,6 +60,10 @@ function runAgentGit(context: AgentOperationContext, args: string[]): Promise<st
   return runGitAtPath(context.repoRoot, args, context.signal)
 }
 
+export function digestOf(text: string): string {
+  return `sha256:${createHash('sha256').update(text).digest('hex')}`
+}
+
 export function isPathWithinRoot(candidate: string, root: string): boolean {
   let resolvedCandidate: string
   let resolvedRoot: string
@@ -290,7 +294,7 @@ export async function resolveChangeSource(
     text,
     meta: {
       kind: source.kind,
-      digest: `sha256:${createHash('sha256').update(text).digest('hex')}`,
+      digest: digestOf(text),
       repositoryHead,
       verification: source.kind === 'repository'
         ? 'repository-derived'
@@ -299,4 +303,42 @@ export async function resolveChangeSource(
         : 'provided-unverified',
     },
   }
+}
+
+const MAX_RECENT_LOG_COUNT = 20
+
+export function getRepoStatus(context: AgentOperationContext): Promise<string> {
+  return runAgentGit(context, ['status', '--porcelain=v1', '-b'])
+}
+
+export function getStagedDiff(context: AgentOperationContext): Promise<string> {
+  return runAgentGit(context, ['diff', '--cached', '--no-ext-diff', '--no-textconv', '--'])
+}
+
+export async function getBranchContext(context: AgentOperationContext): Promise<string> {
+  const branch = (await runAgentGit(context, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+  const lines = [`Branch: ${branch}`]
+
+  try {
+    const upstream = (await runAgentGit(
+      context,
+      ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
+    )).trim()
+    const counts = (await runAgentGit(
+      context,
+      ['rev-list', '--left-right', '--count', `${upstream}...HEAD`],
+    )).trim()
+    const [behind, ahead] = counts.split(/\s+/)
+    lines.push(`Upstream: ${upstream}`, `Ahead: ${ahead}`, `Behind: ${behind}`)
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    lines.push('Upstream: none configured')
+  }
+
+  return lines.join('\n')
+}
+
+export function getRecentLog(context: AgentOperationContext, count = MAX_RECENT_LOG_COUNT): Promise<string> {
+  const bounded = Math.max(1, Math.min(count, MAX_RECENT_LOG_COUNT))
+  return runAgentGit(context, ['log', '--oneline', '-n', String(bounded)])
 }

@@ -7,6 +7,10 @@ import { createCocoMcpServer } from './server'
 const mockResolveAgentRepoRoot = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
+const mockGetRepoStatus = jest.fn()
+const mockGetStagedDiff = jest.fn()
+const mockGetBranchContext = jest.fn()
+const mockGetRecentLog = jest.fn()
 
 const registrations = new Map<string, {
   config: {
@@ -17,6 +21,23 @@ const registrations = new Map<string, {
     annotations: Record<string, boolean>
   }
   handler: (input: unknown, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>
+}>()
+const resourceRegistrations = new Map<string, {
+  uri: string
+  config: {
+    title: string
+    description: string
+    mimeType: string
+  }
+  readCallback: (uri: URL, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>
+}>()
+const promptRegistrations = new Map<string, {
+  config: {
+    title: string
+    description: string
+    argsSchema: Record<string, z.ZodType>
+  }
+  callback: (args: Record<string, unknown>, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>
 }>()
 const serverOptions: unknown[] = []
 
@@ -44,6 +65,29 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
       })
     }
 
+    registerResource(name: string, uri: string, config: unknown, readCallback: unknown) {
+      resourceRegistrations.set(name, {
+        uri,
+        config: config as {
+          title: string
+          description: string
+          mimeType: string
+        },
+        readCallback: readCallback as (uri: URL, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>,
+      })
+    }
+
+    registerPrompt(name: string, config: unknown, callback: unknown) {
+      promptRegistrations.set(name, {
+        config: config as {
+          title: string
+          description: string
+          argsSchema: Record<string, z.ZodType>
+        },
+        callback: callback as (args: Record<string, unknown>, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>,
+      })
+    }
+
     connect = jest.fn()
   },
 }))
@@ -53,14 +97,20 @@ jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
 jest.mock('../operations/agent', () => {
   const schemas = jest.requireActual('../operations/agent/schemas') as typeof import('../operations/agent/schemas')
   const errors = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
+  const context = jest.requireActual('../operations/agent/context') as typeof import('../operations/agent/context')
   return {
     ...schemas,
     ...errors,
+    digestOf: context.digestOf,
     createAgentOperationContext: (...args: unknown[]) => mockCreateAgentOperationContext(...args),
     resolveAgentDirectoryRoot: jest.fn((value: string) => value),
     resolveAgentRepoRoot: (...args: unknown[]) => mockResolveAgentRepoRoot(...args),
     isPathWithinRoot: jest.fn(() => true),
     runAgentOperation: (...args: unknown[]) => mockRunAgentOperation(...args),
+    getRepoStatus: (...args: unknown[]) => mockGetRepoStatus(...args),
+    getStagedDiff: (...args: unknown[]) => mockGetStagedDiff(...args),
+    getBranchContext: (...args: unknown[]) => mockGetBranchContext(...args),
+    getRecentLog: (...args: unknown[]) => mockGetRecentLog(...args),
   }
 })
 
@@ -82,10 +132,16 @@ describe('createCocoMcpServer', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     registrations.clear()
+    resourceRegistrations.clear()
+    promptRegistrations.clear()
     serverOptions.length = 0
     mockResolveAgentRepoRoot.mockResolvedValue('/repo')
     mockCreateAgentOperationContext.mockResolvedValue({ signal: undefined } as never)
     mockRunAgentOperation.mockResolvedValue(reviewSuccess)
+    mockGetRepoStatus.mockResolvedValue('## main\n')
+    mockGetStagedDiff.mockResolvedValue('')
+    mockGetBranchContext.mockResolvedValue('Branch: main')
+    mockGetRecentLog.mockResolvedValue('abc1234 initial commit')
   })
 
   function createServer() {
@@ -95,6 +151,18 @@ describe('createCocoMcpServer', () => {
   function tool(name: string) {
     const registration = registrations.get(name)
     if (!registration) throw new Error(`Missing registration: ${name}`)
+    return registration
+  }
+
+  function resource(name: string) {
+    const registration = resourceRegistrations.get(name)
+    if (!registration) throw new Error(`Missing resource registration: ${name}`)
+    return registration
+  }
+
+  function prompt(name: string) {
+    const registration = promptRegistrations.get(name)
+    if (!registration) throw new Error(`Missing prompt registration: ${name}`)
     return registration
   }
 
@@ -220,6 +288,114 @@ describe('createCocoMcpServer', () => {
         operation: 'recap',
         error: { code: 'OPERATION_FAILED', message: 'provider unavailable' },
       },
+    })
+  })
+
+  it('registers four read-only repository resources with static URIs', () => {
+    createServer()
+
+    expect([...resourceRegistrations.keys()]).toEqual([
+      'coco_repo_status',
+      'coco_repo_diff_staged',
+      'coco_repo_branch_context',
+      'coco_repo_log_recent',
+    ])
+    expect(resourceRegistrations.get('coco_repo_status')?.uri).toBe('coco://repo/status')
+    expect(resourceRegistrations.get('coco_repo_diff_staged')?.uri).toBe('coco://repo/diff/staged')
+    expect(resourceRegistrations.get('coco_repo_branch_context')?.uri).toBe('coco://repo/branch-context')
+    expect(resourceRegistrations.get('coco_repo_log_recent')?.uri).toBe('coco://repo/log/recent')
+    for (const registration of resourceRegistrations.values()) {
+      expect(registration.config.mimeType).toBe('text/plain')
+      expect(registration.config.description).toEqual(expect.stringContaining('Read-only'))
+    }
+  })
+
+  it('reads a repository resource without letting the URI switch the bound repo', async () => {
+    createServer()
+    const controller = new AbortController()
+
+    const result = await resource('coco_repo_status').readCallback(
+      new URL('coco://repo/status'),
+      { signal: controller.signal },
+    )
+
+    expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith(undefined, '/repo', controller.signal)
+    expect(mockCreateAgentOperationContext).toHaveBeenCalledWith({
+      repoRoot: '/repo',
+      signal: controller.signal,
+      surface: 'mcp',
+    })
+    expect(mockGetRepoStatus).toHaveBeenCalled()
+    expect(result).toMatchObject({
+      contents: [{
+        uri: 'coco://repo/status',
+        mimeType: 'text/plain',
+        text: '## main',
+        _meta: { digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+      }],
+    })
+  })
+
+  it('surfaces an empty staged diff as clean content instead of an error', async () => {
+    createServer()
+    mockGetStagedDiff.mockResolvedValue('')
+
+    const result = await resource('coco_repo_diff_staged').readCallback(
+      new URL('coco://repo/diff/staged'),
+      { signal: new AbortController().signal },
+    )
+
+    expect(result).toMatchObject({
+      contents: [{ mimeType: 'text/plain', text: 'No content available.' }],
+    })
+  })
+
+  it('returns a structured, non-throwing error when a resource read fails', async () => {
+    createServer()
+    mockCreateAgentOperationContext.mockRejectedValueOnce(new Error('git unavailable'))
+
+    const result = await resource('coco_repo_branch_context').readCallback(
+      new URL('coco://repo/branch-context'),
+      { signal: new AbortController().signal },
+    )
+
+    expect(result).toMatchObject({
+      contents: [{
+        mimeType: 'application/json',
+        text: expect.stringContaining('OPERATION_FAILED'),
+      }],
+    })
+  })
+
+  it('registers coco prompt templates for commit, review, changelog, and recap', () => {
+    createServer()
+
+    expect([...promptRegistrations.keys()]).toEqual([
+      'coco_commit_prompt',
+      'coco_conventional_commit_prompt',
+      'coco_review_prompt',
+      'coco_changelog_prompt',
+      'coco_recap_prompt',
+    ])
+    expect(promptRegistrations.get('coco_review_prompt')?.config.argsSchema).toMatchObject({
+      format_instructions: expect.anything(),
+      changes: expect.anything(),
+      language_context: expect.anything(),
+    })
+  })
+
+  it('renders a prompt template with supplied arguments and defaults for the rest', async () => {
+    createServer()
+
+    const result = await prompt('coco_review_prompt').callback({
+      changes: 'diff --git a/a.ts b/a.ts',
+    }, { signal: new AbortController().signal })
+
+    expect(result).toMatchObject({
+      messages: [{
+        role: 'user',
+        content: { type: 'text', text: expect.stringContaining('diff --git a/a.ts b/a.ts') },
+      }],
     })
   })
 })
