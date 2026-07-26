@@ -60,8 +60,13 @@ function parseNotes(output: string): IssueComment[] {
  * single request silently truncates long discussion threads; accumulate pages
  * (up to a 20-page ceiling) until a short page. A failed or malformed page
  * degrades to whatever was collected rather than failing the whole detail.
+ * Returns both the collected comments and a `truncated` flag indicating whether
+ * the result is known to be incomplete (ceiling hit or error swallowed).
  */
-async function fetchAllNotes(runner: GlabRunner, base: string): Promise<IssueComment[]> {
+async function fetchAllNotes(
+  runner: GlabRunner,
+  base: string
+): Promise<{ items: IssueComment[]; truncated: boolean }> {
   return paginate({
     fetchPage: async (page) => (await runner(['api', `${base}/notes?per_page=100&page=${page}`])).trim(),
     parsePage: (output) => {
@@ -140,7 +145,7 @@ export async function getMergeRequestDetail(
 ): Promise<PullRequestDetailResult> {
   try {
     const base = `projects/${enc(projectPath)}/merge_requests/${mergeRequestNumber}`
-    const [mr, comments, approvals] = await Promise.all([
+    const [mr, notesResult, approvals] = await Promise.all([
       safeJson<{ description?: string; head_pipeline?: unknown }>(runner, base),
       fetchAllNotes(runner, base),
       safeJson<unknown>(runner, `${base}/approvals`),
@@ -153,9 +158,10 @@ export async function getMergeRequestDetail(
     const detail: PullRequestDetail = {
       number: mergeRequestNumber,
       body: mr.description || '',
-      comments,
+      comments: notesResult.items,
       reviews: parseApprovalsAsReviews(approvals),
       statusCheckRollup: parsePipelineAsChecks(mr.head_pipeline),
+      ...(notesResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
@@ -170,7 +176,7 @@ export async function getGitLabIssueDetail(
 ): Promise<IssueDetailResult> {
   try {
     const base = `projects/${enc(projectPath)}/issues/${issueNumber}`
-    const [issue, comments] = await Promise.all([
+    const [issue, notesResult] = await Promise.all([
       safeJson<{ description?: string }>(runner, base),
       fetchAllNotes(runner, base),
     ])
@@ -182,7 +188,8 @@ export async function getGitLabIssueDetail(
     const detail: IssueDetail = {
       number: issueNumber,
       body: issue.description || '',
-      comments,
+      comments: notesResult.items,
+      ...(notesResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {

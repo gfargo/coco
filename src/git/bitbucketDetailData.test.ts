@@ -89,6 +89,66 @@ describe('getBitbucketPullRequestDetail (1238)', () => {
     if (result.ok) return
     expect(result.message).toContain('pull request #1')
   })
+
+  it('sets commentsTruncated when the comment ceiling is hit while more pages remain', async () => {
+    const prPayload = JSON.stringify({
+      description: 'body',
+      participants: [],
+      source: { commit: { hash: 'abc' } },
+    })
+    // Always return a full page (50 comments) so the 20-page ceiling is hit.
+    const fullPage = JSON.stringify({
+      values: Array.from({ length: 50 }, (_, i) => ({
+        content: { raw: `c${i}` },
+        created_on: '2026-01-01',
+        author: { nickname: 'a' },
+      })),
+    })
+    const runner = async (endpoint: string) => {
+      if (endpoint.includes('/comments')) return fullPage
+      if (endpoint.includes('/commit/')) return JSON.stringify({ values: [] })
+      return prPayload
+    }
+    const result = await getBitbucketPullRequestDetail('ws/repo', 1, runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // 20 pages × 50 comments = 1000.
+    expect(result.detail.comments).toHaveLength(1000)
+    expect(result.detail.commentsTruncated).toBe(true)
+  })
+
+  it('sets commentsTruncated when a comment page fetch fails mid-pagination', async () => {
+    const prPayload = JSON.stringify({
+      description: 'body',
+      participants: [],
+      source: { commit: { hash: 'abc' } },
+    })
+    let page = 0
+    const runner = async (endpoint: string) => {
+      if (endpoint.includes('/comments')) {
+        page++
+        if (page === 1) {
+          // Return a full page (50 items) so hasMore is true and we proceed to page 2.
+          return JSON.stringify({
+            values: Array.from({ length: 50 }, (_, i) => ({
+              content: { raw: `c${i}` },
+              created_on: '2026-01-01',
+              author: { nickname: 'a' },
+            })),
+          })
+        }
+        // Empty output on page 2 → parsePage returns undefined → truncated.
+        return ''
+      }
+      if (endpoint.includes('/commit/')) return JSON.stringify({ values: [] })
+      return prPayload
+    }
+    const result = await getBitbucketPullRequestDetail('ws/repo', 1, runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.detail.comments).toHaveLength(50)
+    expect(result.detail.commentsTruncated).toBe(true)
+  })
 })
 
 describe('getBitbucketIssueDetail (1238)', () => {

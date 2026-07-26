@@ -72,7 +72,7 @@ async function fetchAllPages<T>(
 ): Promise<T[]> {
   const pagelen = Math.min(want, 50)
   const sep = baseEndpoint.includes('?') ? '&' : '?'
-  return paginate({
+  return (await paginate({
     fetchPage: (page) => runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`),
     parsePage: (output) => {
       const result = parsePage<T>(output, resource)
@@ -80,7 +80,7 @@ async function fetchAllPages<T>(
     },
     want,
     maxPages: 100,
-  })
+  })).items
 }
 
 function normalizeState(raw: unknown): string {
