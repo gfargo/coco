@@ -41,7 +41,7 @@ describe('commentGiteaIssue (#826)', () => {
 describe('addGiteaIssueLabel (#826)', () => {
   it('resolves the label name to an id, then posts it', async () => {
     const { calls, runner } = capturingRunner({
-      'repos/owner/repo/labels?limit=50': JSON.stringify([{ id: 3, name: 'bug' }]),
+      'repos/owner/repo/labels?limit=50&page=1': JSON.stringify([{ id: 3, name: 'bug' }]),
     })
     const result = await addGiteaIssueLabel('owner/repo', 7, 'bug', runner)
     expect(result.ok).toBe(true)
@@ -50,10 +50,65 @@ describe('addGiteaIssueLabel (#826)', () => {
   })
 
   it('returns an explanatory error when the label does not exist', async () => {
-    const { runner } = capturingRunner({ 'repos/owner/repo/labels?limit=50': '[]' })
+    const { runner } = capturingRunner({
+      'repos/owner/repo/labels?limit=50&page=1': '[]',
+      'orgs/owner/labels?limit=50&page=1': '[]',
+    })
     const result = await addGiteaIssueLabel('owner/repo', 7, 'missing', runner)
     expect(result.ok).toBe(false)
     expect(result.message).toContain('not found')
+    expect(result.message).not.toContain('Could not verify')
+  })
+
+  it('resolves a label on page 2 when the first page is full', async () => {
+    const page1 = JSON.stringify(Array.from({ length: 50 }, (_, i) => ({ id: i + 1, name: `label-${i + 1}` })))
+    const page2 = JSON.stringify([{ id: 99, name: 'rare-label' }])
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/labels?limit=50&page=1': page1,
+      'repos/owner/repo/labels?limit=50&page=2': page2,
+    })
+    const result = await addGiteaIssueLabel('owner/repo', 7, 'rare-label', runner)
+    expect(result.ok).toBe(true)
+    const labelCall = calls.find((c) => c.endpoint === 'repos/owner/repo/issues/7/labels')
+    expect(JSON.parse(labelCall?.body ?? '{}').labels).toEqual([99])
+  })
+
+  it('resolves a label from org labels when not in repo labels', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/labels?limit=50&page=1': '[]',
+      'orgs/owner/labels?limit=50&page=1': JSON.stringify([{ id: 55, name: 'org-label' }]),
+    })
+    const result = await addGiteaIssueLabel('owner/repo', 7, 'org-label', runner)
+    expect(result.ok).toBe(true)
+    const labelCall = calls.find((c) => c.endpoint === 'repos/owner/repo/issues/7/labels')
+    expect(JSON.parse(labelCall?.body ?? '{}').labels).toEqual([55])
+  })
+
+  it('returns "lookup failed" (not "create it") on API error', async () => {
+    const runner = async (endpoint: string): Promise<string> => {
+      if (endpoint.startsWith('repos/owner/repo/labels')) {
+        throw Object.assign(new Error('Gitea API error 500: internal'), { status: 500 })
+      }
+      return '{}'
+    }
+    const result = await addGiteaIssueLabel('owner/repo', 7, 'bug', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Could not verify')
+    expect(result.message).not.toContain('Create it in Gitea first')
+  })
+
+  it('treats org 404 as "no org labels" and returns not-found for personal repos', async () => {
+    const runner = async (endpoint: string): Promise<string> => {
+      if (endpoint.startsWith('repos/owner/repo/labels')) return '[]'
+      if (endpoint.startsWith('orgs/owner/labels')) {
+        throw Object.assign(new Error('Gitea API error 404: not found'), { status: 404 })
+      }
+      return '{}'
+    }
+    const result = await addGiteaIssueLabel('owner/repo', 7, 'missing', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not found')
+    expect(result.message).toContain('Create it in Gitea first')
   })
 })
 

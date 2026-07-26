@@ -7,6 +7,7 @@ import {
 } from './githubCli'
 import type { ForgeActionResult } from './pullRequestActions'
 import { compactCliError, resolveForgeActionError } from './forgeErrors'
+import { paginate } from './forgeLoad'
 
 /**
  * Gitea / Forgejo (incl. Codeberg) project coordinates parsed from a remote
@@ -174,5 +175,91 @@ export async function runGiteaAction(
   } catch (error) {
     const { message, details } = await resolveGiteaActionError(error, runner)
     return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
+}
+
+/**
+ * Discriminated result type for label resolution.
+ *   - `found`     — label resolved to a numeric Gitea ID
+ *   - `not-found` — all pages fetched successfully; label absent from repo and org
+ *   - `error`     — fetch/parse failure; do NOT advise the user to create the label
+ */
+export type GiteaLabelLookup =
+  | { status: 'found'; id: number }
+  | { status: 'not-found' }
+  | { status: 'error'; message: string }
+
+const GITEA_LABEL_PAGE_SIZE = 50
+const GITEA_LABEL_MAX_PAGES = 20
+
+/**
+ * Resolve a Gitea label name to a numeric ID, consulting both the repo label
+ * list (paginated) and, if not found there, the org-level label list.
+ *
+ * Returns:
+ *   `{ status: 'found', id }` — label exists and can be applied
+ *   `{ status: 'not-found' }` — label genuinely absent; user should create it
+ *   `{ status: 'error', message }` — API failure; do NOT advise creating the label
+ *
+ * Org-level 404s (personal-repo owner is a user, not an org) are swallowed and
+ * treated as "no org labels" so personal-repo label adds don't regress.
+ */
+export async function resolveGiteaLabelId(
+  projectPath: string,
+  label: string,
+  runner: GiteaRunner
+): Promise<GiteaLabelLookup> {
+  type LabelItem = { id?: number; name?: string }
+  const org = projectPath.split('/')[0]
+
+  try {
+    // 1. Page through repo labels
+    const repoLabels = await paginate<LabelItem>({
+      fetchPage: (page) =>
+        runner(`repos/${projectPath}/labels?limit=${GITEA_LABEL_PAGE_SIZE}&page=${page}`),
+      parsePage: (raw) => {
+        const items = raw.trim() ? (JSON.parse(raw) as LabelItem[]) : []
+        return { items, hasMore: items.length >= GITEA_LABEL_PAGE_SIZE }
+      },
+      want: Infinity,
+      maxPages: GITEA_LABEL_MAX_PAGES,
+      onError: 'throw',
+    })
+
+    const repoMatch = repoLabels.find((l) => l.name === label)
+    if (repoMatch?.id !== undefined) {
+      return { status: 'found', id: repoMatch.id }
+    }
+
+    // 2. Page through org-level labels (404 = personal repo owner; swallow it)
+    let orgLabels: LabelItem[] = []
+    try {
+      orgLabels = await paginate<LabelItem>({
+        fetchPage: (page) =>
+          runner(`orgs/${org}/labels?limit=${GITEA_LABEL_PAGE_SIZE}&page=${page}`),
+        parsePage: (raw) => {
+          const items = raw.trim() ? (JSON.parse(raw) as LabelItem[]) : []
+          return { items, hasMore: items.length >= GITEA_LABEL_PAGE_SIZE }
+        },
+        want: Infinity,
+        maxPages: GITEA_LABEL_MAX_PAGES,
+        onError: 'throw',
+      })
+    } catch (orgError) {
+      const err = orgError as Error & { status?: number }
+      if (err.status !== 404) throw orgError
+      // 404 means the owner is a user, not an org — no org labels to consult
+    }
+
+    const orgMatch = orgLabels.find((l) => l.name === label)
+    if (orgMatch?.id !== undefined) {
+      return { status: 'found', id: orgMatch.id }
+    }
+
+    return { status: 'not-found' }
+  } catch (error) {
+    const err = error as Error
+    const { message } = compactGiteaError(err.message || 'Unknown error')
+    return { status: 'error', message }
   }
 }
