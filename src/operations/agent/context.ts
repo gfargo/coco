@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { realpathSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import * as path from 'node:path'
 import { promisify } from 'node:util'
 import { SimpleGit } from 'simple-git'
@@ -9,7 +9,7 @@ import type { LlmUsageSurface } from '../../lib/langchain/utils/observability'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { Logger } from '../../lib/utils/logger'
 import { AgentOperationError } from './errors'
-import { ChangeSource, MAX_AGENT_CONTEXT_BYTES, SourceMetadata } from './schemas'
+import { ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
 
 export type AgentOperationContext = {
   repoRoot: string
@@ -98,6 +98,128 @@ export function isPathWithinRoot(candidate: string, root: string): boolean {
   } catch {
     return false
   }
+}
+
+const CONVENTION_FILE_ALLOWLIST = ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md']
+const STEERING_DIRECTORY = path.join('.kiro', 'steering')
+
+export type ProjectConventions = {
+  text: string
+  digest: string
+  files: string[]
+}
+
+/**
+ * A char-index slice can land inside a UTF-16 surrogate pair, leaving a
+ * trailing lone high surrogate that JSON.stringify serializes as an
+ * unpaired `\ud...` escape -- rejected by strict providers. Mirrors
+ * `enforcePromptBudget`'s helper of the same name.
+ */
+function stripTrailingHighSurrogate(value: string): string {
+  return /[\uD800-\uDBFF]$/.test(value) ? value.slice(0, -1) : value
+}
+
+function truncateToByteBudget(text: string, maxBytes: number): string {
+  if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text
+
+  let low = 0
+  let high = text.length
+  let best = ''
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2)
+    const candidate = stripTrailingHighSurrogate(text.slice(0, mid))
+    if (Buffer.byteLength(candidate, 'utf8') <= maxBytes) {
+      best = candidate
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
+  }
+  return best
+}
+
+function listSteeringFiles(root: string): string[] {
+  const steeringDir = path.join(root, STEERING_DIRECTORY)
+  let entries: string[]
+  try {
+    entries = readdirSync(steeringDir)
+  } catch {
+    return []
+  }
+  return entries
+    .filter((entry) => entry.toLowerCase().endsWith('.md'))
+    .sort()
+    .map((entry) => path.join(STEERING_DIRECTORY, entry))
+}
+
+/**
+ * Reads a fixed allowlist of repository convention files (house style,
+ * agent steering docs, contribution guidelines) into a single
+ * hash-provenanced block. Bounded to `MAX_CONVENTIONS_BYTES` so this text
+ * can't crowd out the diff in the downstream prompt budget. Callers gate
+ * this behind `trustRepositoryConfig` -- see `getConventionsContext`.
+ */
+export function resolveProjectConventions(root: string): ProjectConventions | null {
+  const relativePaths = [...CONVENTION_FILE_ALLOWLIST, ...listSteeringFiles(root)]
+  const parts: string[] = []
+  const files: string[] = []
+  let remainingBytes = MAX_CONVENTIONS_BYTES
+
+  for (const relativePath of relativePaths) {
+    if (remainingBytes <= 0) break
+
+    const candidate = path.join(root, relativePath)
+    if (!isPathWithinRoot(candidate, root)) continue
+
+    let stats
+    try {
+      stats = statSync(candidate)
+    } catch {
+      continue
+    }
+    if (!stats.isFile()) continue
+
+    let content: string
+    try {
+      content = readFileSync(candidate, 'utf8')
+    } catch {
+      continue
+    }
+
+    const posixPath = relativePath.split(path.sep).join('/')
+    const section = truncateToByteBudget(`## ${posixPath}\n\n${content.trim()}`, remainingBytes)
+    if (!section.trim()) continue
+
+    parts.push(section)
+    files.push(posixPath)
+    remainingBytes -= Buffer.byteLength(section, 'utf8')
+  }
+
+  if (parts.length === 0) return null
+
+  const text = parts.join('\n\n')
+  return {
+    text,
+    digest: `sha256:${createHash('sha256').update(text).digest('hex')}`,
+    files,
+  }
+}
+
+/**
+ * Builds the `conventions_context` prompt variable (#1956). Repository
+ * convention files are repository-controlled text entering the prompt, so
+ * this only reads them when the caller has explicitly trusted repository
+ * configuration -- MCP tools reject `trustRepositoryConfig`, so they never
+ * reach this path. Empty string when untrusted or nothing was found,
+ * mirroring how `language_context` and `branch_name_context` degrade.
+ */
+export function getConventionsContext(root: string, trustRepositoryConfig: boolean | undefined): string {
+  if (!trustRepositoryConfig) return ''
+
+  const conventions = resolveProjectConventions(root)
+  if (!conventions) return ''
+
+  return `Follow these project conventions where they apply:\n\n${conventions.text}`
 }
 
 export function resolveAgentDirectoryRoot(directory: string): string {

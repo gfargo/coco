@@ -6,13 +6,15 @@ import simpleGit from 'simple-git'
 
 import {
     createAgentOperationContext,
+    getConventionsContext,
     isPathWithinRoot,
     resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
     resolveChangeSource,
+    resolveProjectConventions,
 } from './context'
 import { AgentOperationError } from './errors'
-import { ChangeSource, MAX_AGENT_CONTEXT_BYTES } from './schemas'
+import { ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES } from './schemas'
 
 jest.setTimeout(20000)
 
@@ -199,5 +201,118 @@ describe('agent repository context', () => {
       code: 'CANCELLED',
       retryable: false,
     }))
+  })
+})
+
+describe('resolveProjectConventions', () => {
+  let tempRoot: string
+  let repoRoot: string
+
+  beforeEach(() => {
+    tempRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'coco-agent-conventions-')))
+    repoRoot = path.join(tempRoot, 'repo')
+    fs.mkdirSync(repoRoot, { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tempRoot, { recursive: true, force: true })
+  })
+
+  it('returns null when no convention files exist', () => {
+    expect(resolveProjectConventions(repoRoot)).toBeNull()
+  })
+
+  it('reads the allowlisted files and orders AGENTS.md, CLAUDE.md, CONTRIBUTING.md, then steering docs', () => {
+    fs.writeFileSync(path.join(repoRoot, 'CONTRIBUTING.md'), 'Contributing guide.')
+    fs.writeFileSync(path.join(repoRoot, 'AGENTS.md'), 'House style.')
+    fs.writeFileSync(path.join(repoRoot, 'CLAUDE.md'), 'Claude steering.')
+    fs.mkdirSync(path.join(repoRoot, '.kiro', 'steering'), { recursive: true })
+    fs.writeFileSync(path.join(repoRoot, '.kiro', 'steering', 'b-second.md'), 'Second steering doc.')
+    fs.writeFileSync(path.join(repoRoot, '.kiro', 'steering', 'a-first.md'), 'First steering doc.')
+
+    const conventions = resolveProjectConventions(repoRoot)
+
+    expect(conventions).not.toBeNull()
+    expect(conventions!.files).toEqual([
+      'AGENTS.md',
+      'CLAUDE.md',
+      'CONTRIBUTING.md',
+      '.kiro/steering/a-first.md',
+      '.kiro/steering/b-second.md',
+    ])
+    expect(conventions!.text).toContain('House style.')
+    expect(conventions!.text).toContain('Claude steering.')
+    expect(conventions!.text).toContain('Contributing guide.')
+    expect(conventions!.text).toContain('First steering doc.')
+    expect(conventions!.text.indexOf('First steering doc.')).toBeLessThan(
+      conventions!.text.indexOf('Second steering doc.')
+    )
+    expect(conventions!.digest).toBe(
+      `sha256:${createHash('sha256').update(conventions!.text).digest('hex')}`
+    )
+  })
+
+  it('produces a stable digest for identical content', () => {
+    fs.writeFileSync(path.join(repoRoot, 'AGENTS.md'), 'House style.')
+
+    const first = resolveProjectConventions(repoRoot)
+    const second = resolveProjectConventions(repoRoot)
+
+    expect(first!.digest).toBe(second!.digest)
+  })
+
+  it('truncates combined content to the byte budget', () => {
+    fs.writeFileSync(path.join(repoRoot, 'AGENTS.md'), 'a'.repeat(MAX_CONVENTIONS_BYTES))
+    fs.writeFileSync(path.join(repoRoot, 'CLAUDE.md'), 'b'.repeat(MAX_CONVENTIONS_BYTES))
+
+    const conventions = resolveProjectConventions(repoRoot)
+
+    expect(conventions).not.toBeNull()
+    expect(Buffer.byteLength(conventions!.text, 'utf8')).toBeLessThanOrEqual(MAX_CONVENTIONS_BYTES)
+  })
+
+  it('excludes a symlinked steering file that escapes the repository root', () => {
+    const outside = path.join(tempRoot, 'outside.md')
+    fs.writeFileSync(outside, 'Should not be read.')
+    fs.mkdirSync(path.join(repoRoot, '.kiro', 'steering'), { recursive: true })
+    fs.symlinkSync(
+      outside,
+      path.join(repoRoot, '.kiro', 'steering', 'escape.md'),
+      process.platform === 'win32' ? 'file' : undefined
+    )
+
+    expect(resolveProjectConventions(repoRoot)).toBeNull()
+  })
+})
+
+describe('getConventionsContext', () => {
+  let tempRoot: string
+  let repoRoot: string
+
+  beforeEach(() => {
+    tempRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'coco-agent-conventions-gate-')))
+    repoRoot = path.join(tempRoot, 'repo')
+    fs.mkdirSync(repoRoot, { recursive: true })
+    fs.writeFileSync(path.join(repoRoot, 'AGENTS.md'), 'House style.')
+  })
+
+  afterEach(() => {
+    fs.rmSync(tempRoot, { recursive: true, force: true })
+  })
+
+  it('returns an empty string when repository configuration is not trusted', () => {
+    expect(getConventionsContext(repoRoot, false)).toBe('')
+    expect(getConventionsContext(repoRoot, undefined)).toBe('')
+  })
+
+  it('returns non-empty guidance text when trusted and conventions exist', () => {
+    const result = getConventionsContext(repoRoot, true)
+    expect(result).toContain('House style.')
+  })
+
+  it('returns an empty string when trusted but no convention files exist', () => {
+    const emptyRoot = path.join(tempRoot, 'empty-repo')
+    fs.mkdirSync(emptyRoot, { recursive: true })
+    expect(getConventionsContext(emptyRoot, true)).toBe('')
   })
 })

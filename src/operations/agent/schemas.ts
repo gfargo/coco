@@ -4,6 +4,7 @@ import { ReviewFeedbackItemSchema } from '../../commands/review/config'
 
 export const AGENT_PROTOCOL_VERSION = 1 as const
 export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
+export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
 export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap'])
 

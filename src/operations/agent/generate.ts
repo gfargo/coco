@@ -26,7 +26,7 @@ import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
-import { AgentOperationContext, resolveChangeSource } from './context'
+import { AgentOperationContext, getConventionsContext, resolveChangeSource } from './context'
 import { AgentOperationError } from './errors'
 import {
     AgentOperation,
@@ -192,6 +192,7 @@ export async function generateAgentCommitDraft(
     signal: context.signal,
     preparedSummary: changeContext,
     trustRepositoryConfig: options.trustRepositoryConfig,
+    conventionsContext: getConventionsContext(context.repoRoot, options.trustRepositoryConfig),
     usageSurface: context.surface,
   })
   if (result.cancelled) {
@@ -235,6 +236,7 @@ export async function generateAgentReview(
       changes: changeContext,
       format_instructions: 'Return a JSON array of findings with title, summary, severity (1-10), category, and filePath.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'code review feedback' }),
+      conventions_context: getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig),
     },
   })
   findings.sort((a, b) => b.severity - a.severity)
@@ -265,6 +267,7 @@ export async function generateAgentChangelog(
         ? 'Include author attribution when it is present in the supplied context.'
         : 'Do not invent author attribution; include commit references only when present.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'changelog' }),
+      conventions_context: getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig),
     },
   })
   return envelope('changelog', result, [], resolved.meta)
@@ -291,6 +294,7 @@ export async function generateAgentRecap(
       timeframe: input.options.timeframe || 'provided change context',
       format_instructions: 'Return a JSON object with string fields title and summary.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'summary' }),
+      conventions_context: getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig),
     },
   })
   return envelope('recap', result, [], resolved.meta)
