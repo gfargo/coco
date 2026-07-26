@@ -8,6 +8,7 @@ import type {
   PullRequestReview,
   PullRequestStatusCheck,
 } from './pullRequestDetailData'
+import { parsePullRequestDiffLines, type PullRequestDiffResult } from './pullRequestDiffData'
 
 /**
  * On-demand Bitbucket pull-request / issue detail for the workstation
@@ -187,6 +188,25 @@ export async function getBitbucketIssueDetail(
       comments,
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * Unified-patch fetch for a Bitbucket Cloud pull request by number (#1363,
+ * #1938). Bitbucket's `/diff` endpoint returns the raw patch text directly
+ * (following a redirect to the raw content, which `fetch` does by default),
+ * so this is a real implementation rather than a graceful "unsupported" stub.
+ */
+export async function getBitbucketPullRequestDiff(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: BitbucketRunner = defaultBitbucketRunner
+): Promise<PullRequestDiffResult> {
+  try {
+    const output = await runner(`repositories/${projectPath}/pullrequests/${pullRequestNumber}/diff`)
+    return { ok: true, lines: parsePullRequestDiffLines(output) }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) }
   }
