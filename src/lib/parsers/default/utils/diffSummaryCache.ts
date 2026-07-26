@@ -151,13 +151,30 @@ export function flushDiffSummaryCache(): void {
   dirtyPaths.clear()
 }
 
+/**
+ * Flush then re-raise the signal so Node's default "terminate
+ * immediately" disposition still applies. `writeDiffSummary`/
+ * `touchDiffSummary` run on the ordinary `coco commit`/`coco pr`
+ * path, not just long-lived `coco ui` — a signal handler that only
+ * flushes (and never exits) would silently remove Ctrl+C's ability
+ * to kill the process while an LLM request is in flight (#1923
+ * review). Removing our own listener before re-sending the signal
+ * lets Node apply the default action (or any other registered
+ * handler) exactly as if we were never here.
+ */
+function handleTerminationSignal(signal: NodeJS.Signals): void {
+  flushDiffSummaryCache()
+  process.removeListener(signal, handleTerminationSignal)
+  process.kill(process.pid, signal)
+}
+
 function installFlushHandlers(): void {
   if (flushHandlersInstalled) return
   flushHandlersInstalled = true
   process.on('exit', flushDiffSummaryCache)
   process.on('beforeExit', flushDiffSummaryCache)
-  process.on('SIGINT', flushDiffSummaryCache)
-  process.on('SIGTERM', flushDiffSummaryCache)
+  process.on('SIGINT', handleTerminationSignal)
+  process.on('SIGTERM', handleTerminationSignal)
 }
 
 export function readDiffSummary(
@@ -242,6 +259,7 @@ export function clearDiffSummaryCache(repoPath: string): { ok: boolean; removed:
 export const __testInternals = {
   CACHE_ENTRY_HARD_CAP,
   enforceHardCap,
+  handleTerminationSignal,
   /** Drop all in-memory envelopes/dirty state between tests. */
   resetInMemoryCache(): void {
     envelopes.clear()

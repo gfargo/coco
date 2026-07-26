@@ -303,6 +303,34 @@ describe('diffSummaryCache (#845, PR 5)', () => {
     })
   })
 
+  describe('termination signal handling (#1923 review)', () => {
+    it('flushes, removes its own listener, then re-raises the signal instead of swallowing it', () => {
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary('/repo/sigint', key, { summary: 's', model: 'gpt', tokens: 1 })
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/sigint'))).toBe(false)
+
+      const removeListenerSpy = jest.spyOn(process, 'removeListener')
+      const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => true)
+
+      try {
+        __testInternals.handleTerminationSignal('SIGINT')
+
+        // Cache was flushed to disk instead of being silently dropped.
+        expect(fs.existsSync(getDiffSummaryCachePath('/repo/sigint'))).toBe(true)
+        // The handler removes itself so it never suppresses the
+        // default "terminate immediately" disposition on later signals...
+        expect(removeListenerSpy).toHaveBeenCalledWith('SIGINT', __testInternals.handleTerminationSignal)
+        // ...and re-sends the signal so that default behavior (or any
+        // other listener) still runs, rather than leaving the process
+        // hanging around after an in-flight LLM request drains.
+        expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGINT')
+      } finally {
+        removeListenerSpy.mockRestore()
+        killSpy.mockRestore()
+      }
+    })
+  })
+
   describe('robustness', () => {
     it('returns undefined on a corrupt cache file', () => {
       const cachePath = getDiffSummaryCachePath('/repo/corrupt')
