@@ -7,6 +7,7 @@ import {
   __testInternals,
   clearDiffSummaryCache,
   diffSummaryKey,
+  flushDiffSummaryCache,
   getDiffSummaryCachePath,
   readDiffSummary,
   resolveDiffSummaryCacheRepoPath,
@@ -25,6 +26,7 @@ describe('diffSummaryCache (#845, PR 5)', () => {
   })
 
   afterEach(() => {
+    __testInternals.resetInMemoryCache()
     if (originalXdgCacheHome === undefined) {
       delete process.env.XDG_CACHE_HOME
     } else {
@@ -194,6 +196,7 @@ describe('diffSummaryCache (#845, PR 5)', () => {
     it('removes the cache file for the repo', () => {
       const key = diffSummaryKey('diff', 'gpt', 'p')
       writeDiffSummary('/repo/foo', key, { summary: 's', model: 'gpt', tokens: 1 })
+      flushDiffSummaryCache()
       expect(fs.existsSync(getDiffSummaryCachePath('/repo/foo'))).toBe(true)
       const result = clearDiffSummaryCache('/repo/foo')
       expect(result).toEqual({ ok: true, removed: true })
@@ -202,6 +205,76 @@ describe('diffSummaryCache (#845, PR 5)', () => {
 
     it('returns removed=false when the cache file did not exist', () => {
       expect(clearDiffSummaryCache('/repo/never-cached')).toEqual({ ok: true, removed: false })
+    })
+
+    it('drops in-memory state so a later flush does not resurrect the file (#1923)', () => {
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary('/repo/resurrect', key, { summary: 's', model: 'gpt', tokens: 1 })
+      flushDiffSummaryCache()
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/resurrect'))).toBe(true)
+
+      clearDiffSummaryCache('/repo/resurrect')
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/resurrect'))).toBe(false)
+
+      // A flush after clearing must not recreate the file from a
+      // stale in-memory envelope.
+      flushDiffSummaryCache()
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/resurrect'))).toBe(false)
+    })
+  })
+
+  describe('deferred writes (#1923)', () => {
+    it('writeDiffSummary does not touch disk until flushed', () => {
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary('/repo/deferred', key, { summary: 's', model: 'gpt', tokens: 1 })
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/deferred'))).toBe(false)
+      // In-process reads still see the write immediately (memory hit).
+      expect(readDiffSummary('/repo/deferred', key)?.summary).toBe('s')
+
+      flushDiffSummaryCache()
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/deferred'))).toBe(true)
+    })
+
+    it('touchDiffSummary does not write to disk before flush, and is persisted on flush', async () => {
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary('/repo/touch-defer', key, { summary: 's', model: 'gpt', tokens: 1 })
+      flushDiffSummaryCache()
+      const cachePath = getDiffSummaryCachePath('/repo/touch-defer')
+      const before = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { lastAccessedAt: string }>
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      touchDiffSummary('/repo/touch-defer', key)
+      // Still the pre-touch content on disk — the touch hasn't flushed yet.
+      const midFlight = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { lastAccessedAt: string }>
+      }
+      expect(midFlight.entries[key].lastAccessedAt).toBe(before.entries[key].lastAccessedAt)
+
+      flushDiffSummaryCache()
+      const after = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { lastAccessedAt: string }>
+      }
+      expect(Date.parse(after.entries[key].lastAccessedAt)).toBeGreaterThan(
+        Date.parse(before.entries[key].lastAccessedAt)
+      )
+    })
+
+    it('multiple writes before a flush produce a single file with all entries', () => {
+      for (let i = 0; i < 5; i++) {
+        writeDiffSummary('/repo/batched', diffSummaryKey(`diff-${i}`, 'gpt', 'p'), {
+          summary: `s${i}`,
+          model: 'gpt',
+          tokens: i,
+        })
+      }
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/batched'))).toBe(false)
+      flushDiffSummaryCache()
+
+      const raw = fs.readFileSync(getDiffSummaryCachePath('/repo/batched'), 'utf8')
+      const parsed = JSON.parse(raw) as { entries: Record<string, unknown> }
+      expect(Object.keys(parsed.entries)).toHaveLength(5)
     })
   })
 
