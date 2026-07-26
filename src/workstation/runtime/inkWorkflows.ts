@@ -575,6 +575,26 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'normal',
       requiresConfirmation: false,
     },
+    // OSS-1615 — CI-checks surface. Re-run is non-destructive (it just
+    // re-triggers CI) so it fires straight from the key; auto-merge
+    // prompts for a strategy the same way `merge-pr` does since it
+    // schedules a real merge once checks pass.
+    {
+      id: 'rerun-pr-checks',
+      key: '',
+      label: 'Re-run failed checks',
+      description: 'Re-run the current pull request\'s failed CI checks.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'automerge-pr',
+      key: '',
+      label: 'Enable auto-merge',
+      description: 'Merge the current pull request automatically once its checks pass (prompts for merge / squash / rebase).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
     // #882 phase 5 — triage-view destructive verbs. Each routed
     // through the y-confirm path so single-keystroke `x` / `a` /
     // `R` / `m` never silently rewrites publicly-visible state.
@@ -627,6 +647,24 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       label: 'Request changes on pull request',
       description: 'Submit a change-request review on the cursored pull request (prompts for body, then confirms).',
       kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      // OSS-1615 — CI-checks surface, triage-view siblings of
+      // `rerun-pr-checks` / `automerge-pr`.
+      id: 'triage-pr-rerun-checks',
+      key: '',
+      label: 'Re-run failed checks',
+      description: 'Re-run the cursored pull request\'s failed CI checks.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'triage-pr-automerge',
+      key: '',
+      label: 'Enable auto-merge',
+      description: 'Merge the cursored pull request automatically once its checks pass (prompts for merge / squash / rebase).',
+      kind: 'destructive',
       requiresConfirmation: true,
     },
     {

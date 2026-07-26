@@ -8,8 +8,10 @@ import {
   requestChangesGiteaPullRequestByNumber,
   addGiteaPullRequestLabel,
   addGiteaPullRequestReviewer,
+  enableGiteaAutoMerge,
   mergeGiteaPullRequest,
   closeGiteaPullRequest,
+  rerunFailedGiteaChecks,
 } from './giteaPullRequestActions'
 
 type RunnerCall = { endpoint: string; method?: string; body?: string }
@@ -218,5 +220,24 @@ describe('closeGiteaPullRequest current-branch (#826)', () => {
     const closeCall = calls.find((c) => c.method === 'PATCH')
     expect(closeCall).toBeDefined()
     expect(closeCall?.endpoint).toBe('repos/owner/repo/pulls/3')
+  })
+})
+
+describe('enableGiteaAutoMerge (OSS-1615)', () => {
+  it('POSTs merge_when_checks_succeed alongside the merge strategy', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await enableGiteaAutoMerge('owner/repo', 5, 'squash', runner)
+    expect(result.ok).toBe(true)
+    expect(calls[0].endpoint).toBe('repos/owner/repo/pulls/5/merge')
+    expect(calls[0].method).toBe('POST')
+    expect(JSON.parse(calls[0].body ?? '{}')).toEqual({ Do: 'squash', merge_when_checks_succeed: true })
+  })
+})
+
+describe('rerunFailedGiteaChecks (OSS-1615)', () => {
+  it('is an explicit unsupported gap', async () => {
+    const result = await rerunFailedGiteaChecks()
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not supported for Gitea')
   })
 })

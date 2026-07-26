@@ -6,7 +6,7 @@ import type {
   PullRequestListFilter,
   PullRequestListOverview,
 } from './pullRequestListData'
-import type { PullRequestDetailResult } from './pullRequestDetailData'
+import type { PullRequestChecksResult, PullRequestDetailResult } from './pullRequestDetailData'
 import type { PullRequestDiffResult } from './pullRequestDiffData'
 import type { IssueDetailResult } from './issueDetailData'
 import type {
@@ -19,7 +19,7 @@ import type { IssueActionResult } from './issueActions'
 // GitHub implementations.
 import { getPullRequestList } from './pullRequestListData'
 import { getIssueList } from './issuesListData'
-import { getPullRequestDetail } from './pullRequestDetailData'
+import { getPullRequestChecks, getPullRequestDetail } from './pullRequestDetailData'
 import { getIssueDetail } from './issueDetailData'
 import { getPullRequestDiff } from './pullRequestDiffData'
 import {
@@ -33,11 +33,13 @@ import {
   commentPullRequest,
   commentPullRequestByNumber,
   createPullRequest,
+  enableAutoMerge,
   mergePullRequest,
   mergePullRequestByNumber,
   openPullRequest,
   requestChangesPullRequest,
   requestChangesPullRequestByNumber,
+  rerunFailedChecks,
 } from './pullRequestActions'
 import {
   addIssueAssignee,
@@ -61,12 +63,15 @@ import {
   commentMergeRequest,
   commentMergeRequestByNumber,
   createMergeRequest,
+  enableMergeRequestAutoMerge,
+  getMergeRequestChecks,
   getMergeRequestDiff,
   mergeMergeRequest,
   mergeMergeRequestByNumber,
   openMergeRequest,
   requestChangesMergeRequest,
   requestChangesMergeRequestByNumber,
+  rerunFailedMergeRequestChecks,
 } from './mergeRequestActions'
 import {
   addGitLabIssueAssignee,
@@ -79,7 +84,7 @@ import { defaultGlabRunner } from './glabCli'
 
 // Bitbucket implementations.
 import { getBitbucketPullRequestList, getBitbucketIssueList, getBitbucketPullRequestOverview } from './bitbucketListData'
-import { getBitbucketPullRequestDetail, getBitbucketIssueDetail } from './bitbucketDetailData'
+import { getBitbucketPullRequestDetail, getBitbucketIssueDetail, getBitbucketPullRequestChecks } from './bitbucketDetailData'
 import {
   createBitbucketPullRequest,
   openBitbucketPullRequest,
@@ -90,11 +95,13 @@ import {
   requestChangesBitbucketPullRequestByNumber,
   addBitbucketPullRequestLabel,
   addBitbucketPullRequestReviewer,
+  enableBitbucketAutoMerge,
   mergeBitbucketPullRequest,
   closeBitbucketPullRequest,
   approveBitbucketPullRequest,
   commentBitbucketPullRequest,
   requestChangesBitbucketPullRequest,
+  rerunFailedBitbucketChecks,
 } from './bitbucketPullRequestActions'
 import {
   commentBitbucketIssue,
@@ -106,7 +113,7 @@ import {
 
 // Gitea / Forgejo implementations.
 import { getGiteaPullRequestList, getGiteaIssueList, getGiteaPullRequestOverview } from './giteaListData'
-import { getGiteaPullRequestDetail, getGiteaIssueDetail, getGiteaPullRequestDiff } from './giteaDetailData'
+import { getGiteaPullRequestDetail, getGiteaIssueDetail, getGiteaPullRequestDiff, getGiteaPullRequestChecks } from './giteaDetailData'
 import {
   createGiteaPullRequest,
   openGiteaPullRequest,
@@ -117,11 +124,13 @@ import {
   requestChangesGiteaPullRequestByNumber,
   addGiteaPullRequestLabel,
   addGiteaPullRequestReviewer,
+  enableGiteaAutoMerge,
   mergeGiteaPullRequest,
   closeGiteaPullRequest,
   approveGiteaPullRequest,
   commentGiteaPullRequest,
   requestChangesGiteaPullRequest,
+  rerunFailedGiteaChecks,
 } from './giteaPullRequestActions'
 import {
   commentGiteaIssue,
@@ -167,6 +176,19 @@ export type ForgeActions = {
    * counterpart, so its facade returns a graceful `{ ok: false }`.
    */
   checkoutPullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
+  /**
+   * CI-checks surface (OSS-1615). `getPullRequestChecks` fetches the
+   * per-check breakdown (richer than `getPullRequestDetail`'s
+   * `statusCheckRollup` for GitLab, which collapses to one synthetic
+   * row); `rerunFailedChecks` re-triggers whatever failed;
+   * `enableAutoMerge` merges automatically once checks/pipeline pass.
+   * Re-run and auto-merge semantics differ enough per forge that some
+   * facades return a graceful `{ ok: false }` explaining the gap
+   * instead of a real mutation — see each facade's inline comments.
+   */
+  getPullRequestChecks: (n: number) => Promise<PullRequestChecksResult>
+  rerunFailedChecks: (n: number) => Promise<PullRequestActionResult>
+  enableAutoMerge: (n: number, strategy: PullRequestMergeStrategy) => Promise<PullRequestActionResult>
   // Current-branch PR / MR mutations
   mergePullRequest: (strategy: PullRequestMergeStrategy) => Promise<PullRequestActionResult>
   closePullRequest: () => Promise<PullRequestActionResult>
@@ -197,6 +219,9 @@ const githubActions: ForgeActions = {
   approvePullRequestByNumber,
   requestChangesPullRequestByNumber,
   checkoutPullRequestByNumber,
+  getPullRequestChecks: (n) => getPullRequestChecks(n),
+  rerunFailedChecks,
+  enableAutoMerge,
   mergePullRequest,
   closePullRequest,
   approvePullRequest,
@@ -236,6 +261,18 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
     approvePullRequestByNumber: (n) => approveMergeRequestByNumber(n, defaultGlabRunner, host),
     requestChangesPullRequestByNumber: (n, body) => requestChangesMergeRequestByNumber(n, body, defaultGlabRunner, host),
     checkoutPullRequestByNumber: (n) => checkoutMergeRequestByNumber(n, defaultGlabRunner, host),
+    getPullRequestChecks: (n) =>
+      path
+        ? getMergeRequestChecks(path, n, defaultGlabRunner, host)
+        : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
+    rerunFailedChecks: (n) =>
+      path
+        ? rerunFailedMergeRequestChecks(path, n, defaultGlabRunner, host)
+        : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
+    enableAutoMerge: (n, strategy) =>
+      path
+        ? enableMergeRequestAutoMerge(path, n, strategy, defaultGlabRunner, host)
+        : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
     mergePullRequest: (strategy) => mergeMergeRequest(strategy, defaultGlabRunner, host),
     closePullRequest: () => closeMergeRequest(defaultGlabRunner, host),
     approvePullRequest: () => approveMergeRequest(defaultGlabRunner, host),
@@ -285,6 +322,12 @@ function bitbucketActions(
     requestChangesPullRequestByNumber: (n, body) => requestChangesBitbucketPullRequestByNumber(path ?? '', n, body),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket yet.' }),
+    getPullRequestChecks: (n) =>
+      path
+        ? getBitbucketPullRequestChecks(path, n)
+        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
+    rerunFailedChecks: () => rerunFailedBitbucketChecks(),
+    enableAutoMerge: () => enableBitbucketAutoMerge(),
     mergePullRequest: (strategy) => mergeBitbucketPullRequest(path, currentBranch, strategy),
     closePullRequest: () => closeBitbucketPullRequest(path, currentBranch),
     approvePullRequest: () => approveBitbucketPullRequest(path, currentBranch),
@@ -346,6 +389,15 @@ function giteaActions(
     // of dead-ending (mirrors the Bitbucket facade, #1363).
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Gitea yet.' }),
+    getPullRequestChecks: (n) =>
+      path
+        ? getGiteaPullRequestChecks(path, n, runner)
+        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
+    rerunFailedChecks: () => rerunFailedGiteaChecks(),
+    enableAutoMerge: (n, strategy) =>
+      path
+        ? enableGiteaAutoMerge(path, n, strategy, runner)
+        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
     mergePullRequest: (strategy) => mergeGiteaPullRequest(path, currentBranch, strategy, runner),
     closePullRequest: () => closeGiteaPullRequest(path, currentBranch, runner),
     approvePullRequest: () => approveGiteaPullRequest(path, currentBranch, runner),

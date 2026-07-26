@@ -104,7 +104,7 @@ function parseApprovalsAsReviews(approvals: unknown): PullRequestReview[] {
  * GitLab's `failed`/`running`/`canceled` fall through to the renderer's "other"
  * bucket, so a red pipeline shows "1 other" instead of "1 fail".
  */
-function normalizePipelineConclusion(status: string): string {
+export function normalizePipelineConclusion(status: string): string {
   switch (status) {
     case 'success':
       return 'success'

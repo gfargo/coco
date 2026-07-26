@@ -3,6 +3,7 @@ import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
 import type {
+  PullRequestChecksResult,
   PullRequestDetail,
   PullRequestDetailResult,
   PullRequestReview,
@@ -159,6 +160,30 @@ export async function getGiteaPullRequestDetail(
       statusCheckRollup: statusChecks,
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * CI-checks surface (OSS-1615) — lighter-weight sibling of
+ * `getGiteaPullRequestDetail` that fetches only the head commit's
+ * statuses, so a checks refresh doesn't re-hydrate comments/reviews too.
+ */
+export async function getGiteaPullRequestChecks(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: GiteaRunner
+): Promise<PullRequestChecksResult> {
+  try {
+    const pr = await safeJson<{ head?: { sha?: string } }>(
+      runner,
+      `repos/${projectPath}/pulls/${pullRequestNumber}`
+    )
+    if (!pr) {
+      return { ok: false, message: `Empty response from Gitea for pull request #${pullRequestNumber}` }
+    }
+    return { ok: true, checks: await fetchCommitStatuses(runner, projectPath, pr.head?.sha) }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) }
   }

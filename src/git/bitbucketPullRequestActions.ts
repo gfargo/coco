@@ -148,6 +148,32 @@ export function addBitbucketPullRequestLabel(): Promise<PullRequestActionResult>
   })
 }
 
+/**
+ * Bitbucket Cloud's Pipelines API has no per-check-name re-run — a
+ * pipeline step retry needs the pipeline UUID, which the commit-status
+ * entries this facade exposes (`fetchCommitStatuses`) don't carry. Left
+ * as an explicit gap (OSS-1615) rather than guessing at Pipelines UUIDs.
+ */
+export function rerunFailedBitbucketChecks(): Promise<PullRequestActionResult> {
+  return Promise.resolve({
+    ok: false,
+    message: 'Re-running checks is not supported for Bitbucket yet.',
+  })
+}
+
+/**
+ * Bitbucket Cloud has no per-PR "merge when pipeline succeeds" toggle —
+ * the closest equivalent is a repository-level merge check / branch
+ * restriction configured outside the PR itself, not an action this
+ * facade can take on a single pull request.
+ */
+export function enableBitbucketAutoMerge(): Promise<PullRequestActionResult> {
+  return Promise.resolve({
+    ok: false,
+    message: 'Auto-merge is not supported for Bitbucket yet.',
+  })
+}
+
 export function addBitbucketPullRequestReviewer(
   projectPath: string,
   pullRequestNumber: number,

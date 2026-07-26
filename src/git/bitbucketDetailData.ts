@@ -3,6 +3,7 @@ import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
 import type {
+  PullRequestChecksResult,
   PullRequestDetail,
   PullRequestDetailResult,
   PullRequestReview,
@@ -159,6 +160,31 @@ export async function getBitbucketPullRequestDetail(
       statusCheckRollup: statusChecks,
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+/**
+ * CI-checks surface (OSS-1615) — lighter-weight sibling of
+ * `getBitbucketPullRequestDetail` that fetches only the commit statuses,
+ * so the checks surface doesn't have to hydrate comments/reviews just to
+ * show or refresh the checks list.
+ */
+export async function getBitbucketPullRequestChecks(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: BitbucketRunner = defaultBitbucketRunner
+): Promise<PullRequestChecksResult> {
+  try {
+    const pr = await safeJson<{ source?: { commit?: { hash?: string } } }>(
+      runner,
+      `repositories/${projectPath}/pullrequests/${pullRequestNumber}`
+    )
+    if (!pr) {
+      return { ok: false, message: `Empty response from Bitbucket for pull request #${pullRequestNumber}` }
+    }
+    return { ok: true, checks: await fetchCommitStatuses(runner, projectPath, pr.source?.commit?.hash) }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) }
   }

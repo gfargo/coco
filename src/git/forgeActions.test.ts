@@ -12,6 +12,9 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
   'closePullRequestByNumber',
   'approvePullRequestByNumber',
   'requestChangesPullRequestByNumber',
+  'getPullRequestChecks',
+  'rerunFailedChecks',
+  'enableAutoMerge',
   'mergePullRequest',
   'closePullRequest',
   'approvePullRequest',
@@ -66,5 +69,42 @@ describe('getForgeActions (#0.70)', () => {
     const result = await forge.checkoutPullRequestByNumber(1)
     expect(result.ok).toBe(false)
     expect(result.message).toContain('not supported for Gitea')
+  })
+
+  describe('CI-checks facade (OSS-1615)', () => {
+    it('GitLab checks/rerun/auto-merge fail gracefully without a resolved project path', async () => {
+      const forge = getForgeActions('gitlab', {})
+      expect((await forge.getPullRequestChecks(1)).ok).toBe(false)
+      expect((await forge.rerunFailedChecks(1)).ok).toBe(false)
+      expect((await forge.enableAutoMerge(1, 'merge')).ok).toBe(false)
+    })
+
+    it('Gitea checks/auto-merge fail gracefully without a resolved project path', async () => {
+      const forge = getForgeActions('gitea', {})
+      expect((await forge.getPullRequestChecks(1)).ok).toBe(false)
+      expect((await forge.enableAutoMerge(1, 'merge')).ok).toBe(false)
+    })
+
+    it('Gitea rerun is an explicit unsupported stub regardless of project path', async () => {
+      const forge = getForgeActions('gitea', { giteaPath: 'o/r', giteaHost: 'codeberg.org' })
+      const result = await forge.rerunFailedChecks(1)
+      expect(result.ok).toBe(false)
+      expect(result.message).toContain('not supported for Gitea')
+    })
+
+    it('Bitbucket rerun and auto-merge are explicit unsupported stubs', async () => {
+      const forge = getForgeActions('bitbucket', { bitbucketPath: 'ws/repo' })
+      const rerun = await forge.rerunFailedChecks(1)
+      expect(rerun.ok).toBe(false)
+      expect(rerun.message).toContain('not supported for Bitbucket')
+      const autoMerge = await forge.enableAutoMerge(1, 'merge')
+      expect(autoMerge.ok).toBe(false)
+      expect(autoMerge.message).toContain('not supported for Bitbucket')
+    })
+
+    it('Bitbucket getPullRequestChecks fails gracefully without a resolved project path', async () => {
+      const forge = getForgeActions('bitbucket', {})
+      expect((await forge.getPullRequestChecks(1)).ok).toBe(false)
+    })
   })
 })

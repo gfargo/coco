@@ -7,8 +7,10 @@ import {
   commentBitbucketPullRequestByNumber,
   requestChangesBitbucketPullRequestByNumber,
   addBitbucketPullRequestLabel,
+  enableBitbucketAutoMerge,
   mergeBitbucketPullRequest,
   closeBitbucketPullRequest,
+  rerunFailedBitbucketChecks,
 } from './bitbucketPullRequestActions'
 
 type RunnerCall = { endpoint: string; method?: string; body?: string }
@@ -182,4 +184,16 @@ describe('closeBitbucketPullRequest current-branch (1238)', () => {
     expect(declineCall).toBeDefined()
     expect(declineCall?.endpoint).toBe('repositories/ws/repo/pullrequests/3/decline')
   }))
+})
+
+describe('rerunFailedBitbucketChecks / enableBitbucketAutoMerge (OSS-1615)', () => {
+  it('are explicit unsupported gaps', async () => {
+    const rerun = await rerunFailedBitbucketChecks()
+    expect(rerun.ok).toBe(false)
+    expect(rerun.message).toContain('not supported for Bitbucket')
+
+    const autoMerge = await enableBitbucketAutoMerge()
+    expect(autoMerge.ok).toBe(false)
+    expect(autoMerge.message).toContain('not supported for Bitbucket')
+  })
 })

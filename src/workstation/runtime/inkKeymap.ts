@@ -1631,9 +1631,10 @@ function pullRequestHints(): LogInkFooterHints {
   // #783 — full PR action panel. Five mutating ops scoped to this
   // view: m / x / a / R / c, plus O for open-in-browser (already
   // a global). Each routes through y-confirm or an input prompt;
-  // none fire silently.
+  // none fire silently. OSS-1615 adds K (re-run failed checks,
+  // fires directly) and M (auto-merge, opens the strategy picker).
   return {
-    contextual: ['m merge', 'x close', 'a approve', 'R changes', 'c comment', 'O open', 'esc back'],
+    contextual: ['m merge', 'x close', 'a approve', 'R changes', 'c comment', 'K rerun checks', 'M auto-merge', 'O open', 'esc back'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1673,9 +1674,10 @@ function pullRequestTriageHints(): LogInkFooterHints {
   // #882 phase 4-6 — full PR action panel scoped to the triage
   // list + filter cycling; #1363 adds the review pair (enter →
   // read the diff, C → check the branch out locally). AI
-  // summarize (`I`) deferred to a follow-up.
+  // summarize (`I`) deferred to a follow-up. OSS-1615 adds K
+  // (re-run failed checks) and M (auto-merge).
   return {
-    contextual: ['↑/↓ PRs', 'enter diff', 'C checkout', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'esc back'],
+    contextual: ['↑/↓ PRs', 'enter diff', 'C checkout', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'K rerun checks', 'M auto-merge*', 'esc back'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }

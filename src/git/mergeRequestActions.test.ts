@@ -2,6 +2,8 @@ import {
   addMergeRequestAssignee,
   buildMergeRequestDiffArgs,
   checkoutMergeRequestByNumber,
+  enableMergeRequestAutoMerge,
+  getMergeRequestChecks,
   getMergeRequestDiff,
   addMergeRequestLabel,
   approveMergeRequest,
@@ -16,6 +18,7 @@ import {
   mergeMergeRequestByNumber,
   openMergeRequest,
   requestChangesMergeRequestByNumber,
+  rerunFailedMergeRequestChecks,
 } from './mergeRequestActions'
 
 /** Capture the args a glab action passes to the runner. */
@@ -168,5 +171,91 @@ describe('MR checkout + diff (#1363)', () => {
     if (!result.ok) {
       expect(result.message).toContain('404 Not Found')
     }
+  })
+})
+
+describe('MR CI checks (OSS-1615)', () => {
+  it('getMergeRequestChecks resolves the head pipeline then maps its jobs', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]): Promise<string> => {
+      calls.push(args)
+      if (args[1].includes('/merge_requests/9')) {
+        return JSON.stringify({ head_pipeline: { id: 555 } })
+      }
+      return JSON.stringify([
+        { id: 1, name: 'build', status: 'success' },
+        { id: 2, name: 'test', status: 'failed' },
+      ])
+    }
+
+    const result = await getMergeRequestChecks('acme/widgets', 9, runner)
+
+    expect(calls[0]).toEqual(['api', 'projects/acme%2Fwidgets/merge_requests/9'])
+    expect(calls[1]).toEqual(['api', 'projects/acme%2Fwidgets/pipelines/555/jobs?per_page=100'])
+    expect(result).toEqual({
+      ok: true,
+      checks: [
+        { name: 'build', status: 'success', conclusion: 'success', runId: '1' },
+        { name: 'test', status: 'failed', conclusion: 'failure', runId: '2' },
+      ],
+    })
+  })
+
+  it('getMergeRequestChecks returns no checks when there is no head pipeline', async () => {
+    const runner = async (): Promise<string> => JSON.stringify({})
+    await expect(getMergeRequestChecks('acme/widgets', 9, runner)).resolves.toEqual({ ok: true, checks: [] })
+  })
+
+  it('rerunFailedMergeRequestChecks retries the head pipeline', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]): Promise<string> => {
+      calls.push(args)
+      if (args[1].includes('/merge_requests/9')) {
+        return JSON.stringify({ head_pipeline: { id: 555 } })
+      }
+      return ''
+    }
+
+    const result = await rerunFailedMergeRequestChecks('acme/widgets', 9, runner)
+
+    expect(calls[1]).toEqual(['api', '--method', 'POST', 'projects/acme%2Fwidgets/pipelines/555/retry'])
+    expect(result.ok).toBe(true)
+    expect(result.message).toBe('Retried pipeline #555 for merge request !9.')
+  })
+
+  it('rerunFailedMergeRequestChecks fails gracefully when there is no head pipeline', async () => {
+    const runner = async (): Promise<string> => JSON.stringify({})
+    const result = await rerunFailedMergeRequestChecks('acme/widgets', 9, runner)
+    expect(result).toEqual({ ok: false, message: 'No pipeline found for merge request !9.' })
+  })
+
+  it('enableMergeRequestAutoMerge sets merge_when_pipeline_succeeds via the API', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await enableMergeRequestAutoMerge('acme/widgets', 9, 'merge', runner)
+    expect(calls[0]).toEqual([
+      'api', '--method', 'PUT',
+      'projects/acme%2Fwidgets/merge_requests/9/merge',
+      '-F', 'merge_when_pipeline_succeeds=true',
+    ])
+    expect(result.ok).toBe(true)
+  })
+
+  it('enableMergeRequestAutoMerge also sets squash for the squash strategy', async () => {
+    const { calls, runner } = capturingRunner()
+    await enableMergeRequestAutoMerge('acme/widgets', 9, 'squash', runner)
+    expect(calls[0]).toEqual([
+      'api', '--method', 'PUT',
+      'projects/acme%2Fwidgets/merge_requests/9/merge',
+      '-F', 'merge_when_pipeline_succeeds=true',
+      '-F', 'squash=true',
+    ])
+  })
+
+  it('enableMergeRequestAutoMerge declines the rebase strategy without calling glab', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await enableMergeRequestAutoMerge('acme/widgets', 9, 'rebase', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('rebase')
+    expect(calls).toEqual([])
   })
 })
