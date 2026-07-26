@@ -30,4 +30,5 @@ export const geminiProvider: ProviderDefinition = {
   // Approximation vs. the gpt-4o tiktoken baseline, per the AI-core
   // token-counting audit — no synchronous local Gemini tokenizer available.
   tokenCorrectionFactor: 1.1,
+  supportsStructuredOutput: 'json-schema',
 }

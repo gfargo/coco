@@ -30,4 +30,5 @@ export const mistralProvider: ProviderDefinition = {
   // Approximation vs. the gpt-4o tiktoken baseline, per the AI-core
   // token-counting audit — no synchronous local Mistral tokenizer available.
   tokenCorrectionFactor: 1.15,
+  supportsStructuredOutput: 'json-schema',
 }

@@ -1,13 +1,16 @@
 import { StringOutputParser } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
+import { RunnablePassthrough } from '@langchain/core/runnables'
 import { z } from 'zod'
 import { LangChainCancelledError } from '../errors'
+import { findProviderDefinition } from '../providers/registry'
 import { withRetry, type RetryOptions } from '../../utils/retry'
 import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
 import { createSchemaParser, SchemaParserOptions } from './createSchemaParser'
 import { executeChain } from './executeChain'
 import { getLlm } from './getLlm'
+import { getLlmMetadata } from './llmMetadata'
 import { LlmCallMetadata } from './observability'
 
 export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
@@ -57,17 +60,41 @@ export async function executeChainWithSchema<T>(
     ...parserOptions
   } = options
   
+  const llmInfo = getLlmMetadata(llm)
+  const structuredOutputSupport = llmInfo.provider
+    ? findProviderDefinition(llmInfo.provider)?.supportsStructuredOutput
+    : undefined
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const parser: any = createSchemaParser(schema, parserOptions)
+  let parser: any = createSchemaParser(schema, parserOptions)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let effectiveLlm: any = llm
+
+  if (structuredOutputSupport) {
+    const method = structuredOutputSupport === 'json-schema' ? 'jsonSchema' : 'jsonMode'
+    // `as never`/`Function` casts: the resolved provider's chat model overrides
+    // `withStructuredOutput`, but that isn't reflected in the narrow
+    // `Awaited<ReturnType<typeof getLlm>>` union `executeChainWithSchema` is
+    // typed against (same rationale as `createSchemaParser.ts:54`).
+    effectiveLlm = (
+      llm as unknown as { withStructuredOutput: (schema: unknown, config: { method: string }) => unknown }
+    ).withStructuredOutput(schema as never, { method })
+    // The model now returns the schema-shaped object directly — no text to
+    // parse, so the chain's parser stage is an identity passthrough.
+    parser = new RunnablePassthrough()
+  }
+
   let attempt = 0
 
   const operation = async (): Promise<T> => {
     attempt++
     const result = await executeChain({
-      llm,
+      llm: effectiveLlm,
       prompt,
       variables,
       parser,
+      provider: llmInfo.provider,
+      endpoint: llmInfo.endpoint,
       logger,
       tokenizer,
       signal,
