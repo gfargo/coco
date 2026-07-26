@@ -1,4 +1,4 @@
-import { runGiteaAction, type GiteaRunner } from './giteaCli'
+import { resolveGiteaActionError, runGiteaAction, type GiteaRunner } from './giteaCli'
 import { findOpenGiteaPullRequestForBranch } from './giteaListData'
 import { rejectFlagLike, rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
@@ -102,6 +102,70 @@ export function closeGiteaPullRequestByNumber(
     { state: 'closed' },
     () => ({ ok: true, message: `Closed pull request #${pullRequestNumber}` })
   )
+}
+
+export function reopenGiteaPullRequestByNumber(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: GiteaRunner
+): Promise<PullRequestActionResult> {
+  return runGiteaAction(
+    runner,
+    `repos/${projectPath}/pulls/${pullRequestNumber}`,
+    'PATCH',
+    { state: 'open' },
+    () => ({ ok: true, message: `Reopened pull request #${pullRequestNumber}` })
+  )
+}
+
+/**
+ * Draft-title prefix Gitea/Forgejo uses on older releases without a real
+ * `draft` field — mirrors the `[WIP]` prefix `createGiteaPullRequest` writes.
+ */
+const GITEA_DRAFT_TITLE_PREFIX = /^\s*\[WIP\]\s*/i
+
+async function fetchGiteaPullRequestTitle(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: GiteaRunner
+): Promise<string | undefined> {
+  const out = (await runner(`repos/${projectPath}/pulls/${pullRequestNumber}`)).trim()
+  const pr = out ? (JSON.parse(out) as { title?: string }) : undefined
+  return pr?.title
+}
+
+/**
+ * Promote a draft PR to ready for review (#1933), the Gitea counterpart of
+ * `gh pr ready`. Mirrors `createGiteaPullRequest`'s draft convention: fetch
+ * the current title and strip a leading `[WIP]` prefix, rather than setting
+ * a `draft` field the create path never writes. A title with no prefix is
+ * left untouched (already ready).
+ */
+export async function markGiteaPullRequestReadyByNumber(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: GiteaRunner
+): Promise<PullRequestActionResult> {
+  try {
+    const title = await fetchGiteaPullRequestTitle(projectPath, pullRequestNumber, runner)
+    if (title === undefined) {
+      return { ok: false, message: `Could not fetch pull request #${pullRequestNumber}.` }
+    }
+    if (!GITEA_DRAFT_TITLE_PREFIX.test(title)) {
+      return { ok: true, message: `Pull request #${pullRequestNumber} is not a draft` }
+    }
+    const readyTitle = title.replace(GITEA_DRAFT_TITLE_PREFIX, '')
+    return await runGiteaAction(
+      runner,
+      `repos/${projectPath}/pulls/${pullRequestNumber}`,
+      'PATCH',
+      { title: readyTitle },
+      () => ({ ok: true, message: `Marked pull request #${pullRequestNumber} as ready for review` })
+    )
+  } catch (error) {
+    const { message, details } = await resolveGiteaActionError(error, runner)
+    return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
 }
 
 export function commentGiteaPullRequestByNumber(

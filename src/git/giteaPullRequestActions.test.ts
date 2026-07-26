@@ -4,6 +4,8 @@ import {
   mergeGiteaPullRequestByNumber,
   approveGiteaPullRequestByNumber,
   closeGiteaPullRequestByNumber,
+  reopenGiteaPullRequestByNumber,
+  markGiteaPullRequestReadyByNumber,
   commentGiteaPullRequestByNumber,
   requestChangesGiteaPullRequestByNumber,
   addGiteaPullRequestLabel,
@@ -121,6 +123,40 @@ describe('closeGiteaPullRequestByNumber (#826)', () => {
     expect(calls[0].endpoint).toBe('repos/owner/repo/pulls/5')
     expect(calls[0].method).toBe('PATCH')
     expect(JSON.parse(calls[0].body ?? '{}').state).toBe('closed')
+  })
+})
+
+describe('reopenGiteaPullRequestByNumber (#1933)', () => {
+  it('PATCHes state=open', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await reopenGiteaPullRequestByNumber('owner/repo', 5, runner)
+    expect(result.ok).toBe(true)
+    expect(calls[0].endpoint).toBe('repos/owner/repo/pulls/5')
+    expect(calls[0].method).toBe('PATCH')
+    expect(JSON.parse(calls[0].body ?? '{}').state).toBe('open')
+  })
+})
+
+describe('markGiteaPullRequestReadyByNumber (#1933)', () => {
+  it('strips the [WIP] title prefix via PATCH', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ title: '[WIP] Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls[0]).toEqual({ endpoint: 'repos/owner/repo/pulls/5', method: undefined, body: undefined })
+    expect(calls[1].endpoint).toBe('repos/owner/repo/pulls/5')
+    expect(calls[1].method).toBe('PATCH')
+    expect(JSON.parse(calls[1].body ?? '{}').title).toBe('Add feature')
+    expect(result).toEqual({ ok: true, message: 'Marked pull request #5 as ready for review' })
+  })
+
+  it('is a no-op when the title has no [WIP] prefix', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ title: 'Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls).toHaveLength(1)
+    expect(result).toEqual({ ok: true, message: 'Pull request #5 is not a draft' })
   })
 })
 

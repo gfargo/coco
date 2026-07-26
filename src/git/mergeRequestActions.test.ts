@@ -12,9 +12,11 @@ import {
   commentMergeRequest,
   commentMergeRequestByNumber,
   createMergeRequest,
+  markMergeRequestReadyByNumber,
   mergeMergeRequest,
   mergeMergeRequestByNumber,
   openMergeRequest,
+  reopenMergeRequestByNumber,
   requestChangesMergeRequestByNumber,
 } from './mergeRequestActions'
 
@@ -164,6 +166,62 @@ describe('MR checkout + diff (#1363)', () => {
     // the original stderr surfaces.
     const runner = jest.fn().mockRejectedValueOnce(failure).mockResolvedValue('ok')
     const result = await getMergeRequestDiff(7, runner)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.message).toContain('404 Not Found')
+    }
+  })
+})
+
+describe('reopenMergeRequestByNumber (#1933)', () => {
+  it('runs glab mr reopen <n>', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await reopenMergeRequestByNumber(5, runner)
+    expect(calls).toEqual([['mr', 'reopen', '5']])
+    expect(result).toEqual({ ok: true, message: 'Reopened merge request !5' })
+  })
+})
+
+describe('markMergeRequestReadyByNumber (#1933)', () => {
+  it('strips a Draft: title prefix via glab api PUT', async () => {
+    const runner = jest.fn()
+      .mockResolvedValueOnce(JSON.stringify({ title: 'Draft: Add feature' }))
+      .mockResolvedValueOnce('')
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenNthCalledWith(1, ['api', 'projects/g%2Fp/merge_requests/5'])
+    expect(runner).toHaveBeenNthCalledWith(2, [
+      'api', 'projects/g%2Fp/merge_requests/5', '-X', 'PUT', '-f', 'title=Add feature',
+    ])
+    expect(result).toEqual({ ok: true, message: 'Marked merge request !5 as ready for review' })
+  })
+
+  it('strips a legacy WIP: title prefix case-insensitively', async () => {
+    const runner = jest.fn()
+      .mockResolvedValueOnce(JSON.stringify({ title: 'wip: Add feature' }))
+      .mockResolvedValueOnce('')
+    await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenNthCalledWith(2, [
+      'api', 'projects/g%2Fp/merge_requests/5', '-X', 'PUT', '-f', 'title=Add feature',
+    ])
+  })
+
+  it('is a no-op when the title has no draft prefix', async () => {
+    const runner = jest.fn().mockResolvedValueOnce(JSON.stringify({ title: 'Add feature' }))
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ ok: true, message: 'Merge request !5 is not a draft' })
+  })
+
+  it('never rewrites a user title that merely mentions "draft" mid-sentence', async () => {
+    const runner = jest.fn().mockResolvedValueOnce(JSON.stringify({ title: 'Fix the draft renderer' }))
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+  })
+
+  it('surfaces glab failures as { ok: false }', async () => {
+    const runner = jest.fn().mockRejectedValueOnce(new Error('404 Not Found')).mockResolvedValue('ok')
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
     expect(result.ok).toBe(false)
     if (!result.ok) {
       expect(result.message).toContain('404 Not Found')

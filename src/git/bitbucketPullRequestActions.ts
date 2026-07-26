@@ -148,6 +148,39 @@ export function addBitbucketPullRequestLabel(): Promise<PullRequestActionResult>
   })
 }
 
+/**
+ * Promote a draft PR to ready for review (#1933). Unlike GitLab/Gitea,
+ * Bitbucket Cloud's pull request resource carries a real `draft` boolean
+ * (set on create by `createBitbucketPullRequest`), so this is a direct
+ * field update rather than a title rewrite.
+ */
+export function markBitbucketPullRequestReadyByNumber(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: BitbucketRunner = defaultBitbucketRunner
+): Promise<PullRequestActionResult> {
+  return runBitbucketAction(
+    runner,
+    `repositories/${projectPath}/pullrequests/${pullRequestNumber}`,
+    'PUT',
+    { draft: false },
+    () => ({ ok: true, message: `Marked pull request #${pullRequestNumber} as ready for review` })
+  )
+}
+
+/**
+ * Bitbucket Cloud's REST API has no endpoint to reopen a declined pull
+ * request (only `.../decline`, `.../approve`, `.../merge` exist) — reopening
+ * is a web-UI-only action. Surface the gap as a graceful failure, mirroring
+ * `addBitbucketPullRequestLabel` and the checkout gap above.
+ */
+export function reopenBitbucketPullRequestByNumber(): Promise<PullRequestActionResult> {
+  return Promise.resolve({
+    ok: false,
+    message: 'Reopening a declined pull request is not supported by the Bitbucket API. Reopen it from the Bitbucket web UI.',
+  })
+}
+
 export function addBitbucketPullRequestReviewer(
   projectPath: string,
   pullRequestNumber: number,

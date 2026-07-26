@@ -12,6 +12,8 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
   'closePullRequestByNumber',
   'approvePullRequestByNumber',
   'requestChangesPullRequestByNumber',
+  'markPullRequestReadyByNumber',
+  'reopenPullRequestByNumber',
   'mergePullRequest',
   'closePullRequest',
   'approvePullRequest',
@@ -66,5 +68,17 @@ describe('getForgeActions (#0.70)', () => {
     const result = await forge.checkoutPullRequestByNumber(1)
     expect(result.ok).toBe(false)
     expect(result.message).toContain('not supported for Gitea')
+  })
+
+  it('Bitbucket reopen is a graceful unsupported stub (#1933)', async () => {
+    const forge = getForgeActions('bitbucket', { bitbucketPath: 'ws/repo' })
+    const result = await forge.reopenPullRequestByNumber(1)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not supported')
+  })
+
+  it('GitLab markPullRequestReadyByNumber fails gracefully without a resolved project path (#1933)', async () => {
+    const forge = getForgeActions('gitlab', {})
+    expect((await forge.markPullRequestReadyByNumber(1)).ok).toBe(false)
   })
 })

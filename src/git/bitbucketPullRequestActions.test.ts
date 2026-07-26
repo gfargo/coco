@@ -7,6 +7,8 @@ import {
   commentBitbucketPullRequestByNumber,
   requestChangesBitbucketPullRequestByNumber,
   addBitbucketPullRequestLabel,
+  markBitbucketPullRequestReadyByNumber,
+  reopenBitbucketPullRequestByNumber,
   mergeBitbucketPullRequest,
   closeBitbucketPullRequest,
 } from './bitbucketPullRequestActions'
@@ -113,6 +115,25 @@ describe('closeBitbucketPullRequestByNumber (1238)', () => {
     expect(result.ok).toBe(true)
     expect(calls[0].endpoint).toBe('repositories/ws/repo/pullrequests/5/decline')
   }))
+})
+
+describe('markBitbucketPullRequestReadyByNumber (#1933)', () => {
+  it('PUTs draft: false to the pull request endpoint', withCredentials(async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await markBitbucketPullRequestReadyByNumber('ws/repo', 5, runner)
+    expect(result.ok).toBe(true)
+    expect(calls[0].endpoint).toBe('repositories/ws/repo/pullrequests/5')
+    expect(calls[0].method).toBe('PUT')
+    expect(JSON.parse(calls[0].body ?? '{}').draft).toBe(false)
+  }))
+})
+
+describe('reopenBitbucketPullRequestByNumber (#1933)', () => {
+  it('reports the Bitbucket API has no reopen endpoint', async () => {
+    const result = await reopenBitbucketPullRequestByNumber()
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not supported')
+  })
 })
 
 describe('commentBitbucketPullRequestByNumber (1238)', () => {
