@@ -55,8 +55,10 @@ function countFileBullets(blockText: string): number {
   return blockText.split('\n').filter((line) => line.startsWith(FILE_BULLET_PREFIX)).length
 }
 
-function buildOmittedMarker(omittedFileCount: number): string {
-  return omittedFileCount > 0 ? `\n\n[${omittedFileCount} files omitted for length]\n` : ''
+function buildOmittedMarker(omittedFileCount: number, omittedDirectoryCount: number): string {
+  return omittedFileCount > 0
+    ? `\n\n[${omittedFileCount} files across ${omittedDirectoryCount} directories omitted for length]\n`
+    : ''
 }
 
 /**
@@ -101,11 +103,12 @@ async function trimSummaryByBlocks(
 
   let remaining = blocks
   let omittedFileCount = 0
+  let omittedDirectoryCount = 0
 
   while (remaining.length > 1) {
     const candidateSummary =
       remaining.map(({ text }) => `${DIRECTORY_BLOCK_SEPARATOR}${text}`).join('') +
-      buildOmittedMarker(omittedFileCount)
+      buildOmittedMarker(omittedFileCount, omittedDirectoryCount)
     const candidateTokenCount = await render(candidateSummary)
 
     if (candidateTokenCount <= tokenBudget) {
@@ -116,10 +119,11 @@ async function trimSummaryByBlocks(
     if (!dropped) break
     remaining = remaining.filter((block) => block.index !== dropped.index)
     omittedFileCount += countFileBullets(dropped.text)
+    omittedDirectoryCount += 1
   }
 
   const [lastBlock] = remaining
-  const marker = buildOmittedMarker(omittedFileCount)
+  const marker = buildOmittedMarker(omittedFileCount, omittedDirectoryCount)
 
   let low = 0
   let high = lastBlock.text.length
