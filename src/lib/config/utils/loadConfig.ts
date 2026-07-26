@@ -7,6 +7,7 @@ import { Config } from '../types'
 
 import { DEFAULT_CONFIG, DEFAULT_IGNORED_FILES, DEFAULT_IGNORED_EXTENSIONS } from '../constants'
 import { BaseCommandOptions } from '../../../commands/types'
+import { removeUndefined } from '../../utils/removeUndefined'
 import { mergeIgnoreLists } from './mergeIgnoreLists'
 
 export type ConfigSource =
@@ -93,5 +94,24 @@ export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} 
 
   _lastConfigSources = sources
 
-  return { ...config, ...argv } as Config & ConfigType & ArgvType
+  // Strip yargs bookkeeping (`_`, `$0`) and any explicitly-`undefined`
+  // argv values before merging, mirroring the sanitization the env/git
+  // loaders already do — an unset argv flag must never clobber a
+  // resolved config value with `undefined` (#1922).
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { _: _positional, $0: _bin, ...argvRest } = argv as Record<string, unknown>
+  const cleanedArgv = removeUndefined(argvRest)
+  const merged = { ...config, ...cleanedArgv } as Config & ConfigType & ArgvType
+
+  // Deep-merge `service` rather than letting the shallow top-level spread
+  // replace it wholesale, matching services/env.ts.
+  const argvService = (cleanedArgv as { service?: unknown }).service
+  if (argvService && config.service) {
+    ;(merged as Config).service = {
+      ...(config.service as object),
+      ...(argvService as object),
+    } as Config['service']
+  }
+
+  return merged
 }
