@@ -170,6 +170,29 @@ describe('agent generate progress reporting', () => {
 
       expect(withoutProgress).toEqual(withProgress)
     })
+
+    it('swallows a throwing onProgress callback and still completes generation', async () => {
+      const onProgress = jest.fn(() => {
+        throw new Error('client-side handler exploded')
+      })
+      const context = makeContext(onProgress)
+      mockExecuteChainStreaming.mockImplementation(async ({ onChunk }) => {
+        onChunk({ text: 'a', accumulated: 'a' })
+        return [{
+          title: 'finding',
+          summary: 'summary',
+          severity: 5,
+          category: 'bug',
+          filePath: 'a.ts',
+        }] as never
+      })
+
+      const result = await generateAgentReview(baseInput, context)
+
+      expect(result.data.findings).toHaveLength(1)
+      // Called once per stage boundary/chunk tick despite always throwing.
+      expect(onProgress).toHaveBeenCalledTimes(4)
+    })
   })
 
   describe('generateAgentChangelog / generateAgentRecap (share executeStructured)', () => {

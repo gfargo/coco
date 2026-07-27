@@ -263,6 +263,33 @@ describe('createCocoMcpServer', () => {
     })
   })
 
+  it('swallows a rejecting sendNotification without failing the operation', async () => {
+    createServer()
+    let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
+    mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
+      capturedOnProgress = input.onProgress
+      return { signal: undefined } as never
+    })
+    const sendNotification = jest.fn(async () => {
+      throw new Error('client closed its notification channel')
+    })
+
+    const result = await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra({ _meta: { progressToken: 'token-3' }, sendNotification }))
+
+    expect(capturedOnProgress).toBeInstanceOf(Function)
+    expect(() => capturedOnProgress!({ message: 'Resolved changes' })).not.toThrow()
+    expect(sendNotification).toHaveBeenCalledTimes(1)
+
+    // Give the fire-and-forget rejection a microtask turn to settle,
+    // then confirm it never surfaced through the handler's own result.
+    await Promise.resolve()
+    expect(result).toMatchObject({
+      structuredContent: { ok: true },
+    })
+  })
+
   it('passes no progress reporter when the request has no progressToken', async () => {
     createServer()
 
