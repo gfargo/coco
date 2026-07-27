@@ -11,6 +11,13 @@
  * anything that rewrites already-pushed history are deliberately never
  * pushed here — see the callers in `hooks/useWorkflowAction.ts`.
  *
+ * `pullRequestTriage`'s close is intentionally excluded, not an
+ * oversight: "undo" for a forge-side close would mean reopening via the
+ * GitHub/GitLab API, which isn't a git-level inverse at all (no local
+ * sha/hash to restore from) and would need its own auth/network path
+ * distinct from everything else on this stack. Scoped out of OSS-1606;
+ * a forge-reopen affordance is a separate feature if wanted.
+ *
  * Each entry carries the repo-frame `depth` (#1384/#1607 convention) it
  * was captured at, mirroring `lastDroppedStashRef` in
  * `useWorkflowAction.ts` — an entry captured in a parent repo frame must

@@ -1350,8 +1350,31 @@ export function useWorkflowAction(
     // op is confirmed to have actually succeeded (and the repo frame
     // hasn't changed mid-await — a stale-frame push would let a later
     // `gu` apply the wrong entry's inverse against the wrong `git`).
-    if (result?.ok && capturedUndoEntries.length > 0 && !frameChanged) {
-      for (const entry of capturedUndoEntries) {
+    //
+    // `delete-branch` / `force-delete-branch` / `drop-stash` are batch
+    // handlers where `result.ok` reflects the WHOLE batch, not each
+    // item — a partial failure (one branch refused, the rest deleted)
+    // must still push undo entries for the ones that actually deleted,
+    // since that's the exact situation where a mistake is most likely
+    // and, for a dropped stash, the recorded hash is the primary
+    // recovery path. Filter the speculatively-staged entries down to
+    // the batch's reported `succeeded` list rather than pushing
+    // everything staged.
+    if (capturedUndoEntries.length > 0 && !frameChanged) {
+      const isPartialBatchHandler = id === 'delete-branch' || id === 'force-delete-branch' || id === 'drop-stash'
+      const succeeded = (result as { succeeded?: string[] } | undefined)?.succeeded
+      const entriesToPush = result?.ok
+        ? capturedUndoEntries
+        : isPartialBatchHandler && succeeded
+          ? capturedUndoEntries.filter((entry) =>
+              entry.kind === 'delete-branch'
+                ? succeeded.includes(entry.name)
+                : entry.kind === 'drop-stash'
+                  ? succeeded.includes(entry.hash)
+                  : false
+            )
+          : []
+      for (const entry of entriesToPush) {
         dispatch({ type: 'pushUndoEntry', value: entry })
       }
     }

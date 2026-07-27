@@ -1243,6 +1243,82 @@ describe('undo stack (OSS-1606)', () => {
     })
   })
 
+  // OSS-1606 follow-up (review concern): a partial batch delete must
+  // still push undo entries for the branches that actually deleted,
+  // not zero — that's the exact case where a mistake is most likely.
+  it('delete-branch (partial batch) pushes undo entries only for the branches that actually deleted', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        selection: { view: 'branches', ids: new Set(['main', 'feature/other']) },
+      } as never,
+      context: { branches: { localBranches: [localBranch, otherBranch], currentBranch: 'other' } } as never,
+    }))
+
+    deleteBranchesMock.mockResolvedValueOnce({
+      ok: false,
+      message: 'Deleted 1 of 2 branches — 1 refused',
+      succeeded: ['feature/other'],
+    })
+    await runWorkflowAction('delete-branch')
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: { kind: 'delete-branch', label: 'delete branch feature/other', depth: 0, name: 'feature/other', sha: 'def' },
+    })
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: expect.objectContaining({ name: 'main' }),
+    })
+  })
+
+  // OSS-1606 follow-up (review concern): same partial-batch guarantee
+  // for drop-stash — the dropped stash's recorded hash is the primary
+  // recovery path (branches also have reflog), so silently dropping the
+  // undo entry here is the worse regression of the two.
+  it('drop-stash (partial batch) pushes undo entries only for the stashes whose hash succeeded', async () => {
+    const dispatch = jest.fn()
+    const stashEntry2 = {
+      ref: 'stash@{1}',
+      hash: 'hash1',
+      baseHash: 'base1',
+      date: '2026-05-17',
+      branch: 'main',
+      message: 'WIP on main: def5678 more',
+      files: ['src/other.ts'],
+    }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        selection: { view: 'stash', ids: new Set(['stash@{0}', 'stash@{1}']) },
+      } as never,
+      context: { stashes: { stashes: [stashEntry, stashEntry2] } } as never,
+    }))
+
+    dropStashesMock.mockResolvedValueOnce({
+      ok: false,
+      message: 'Dropped 1 of 2 stashes — 1 refused',
+      succeeded: [stashEntry.hash],
+    })
+    await runWorkflowAction('drop-stash')
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: { kind: 'drop-stash', label: `drop ${stashEntry.ref}`, depth: 0, hash: stashEntry.hash, message: stashEntry.message },
+    })
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: expect.objectContaining({ hash: stashEntry2.hash }),
+    })
+  })
+
   it('undo-last-action reports "nothing to undo" against an empty stack', async () => {
     const dispatch = jest.fn()
     const harness = createHookHarness()

@@ -6,6 +6,14 @@ export type BranchActionResult = {
   ok: boolean
   message: string
   details?: string[]
+  /**
+   * Identifiers of the batch items that actually completed — branch
+   * short names for `deleteBranches`, stash hashes for `dropStashes` —
+   * so a partial-failure caller can tell which of its
+   * speculatively-staged undo entries correspond to a real mutation
+   * (OSS-1606); `ok` alone only reflects the whole batch.
+   */
+  succeeded?: string[]
 }
 
 function localNameFromRemote(remoteBranch: string): string {
@@ -195,12 +203,13 @@ export async function deleteBranches(
 
   if (failures.length === 0) {
     const verb = force ? 'Force-deleted' : 'Deleted'
-    return { ok: true, message: `${verb} ${deleted.length} branches: ${deleted.join(', ')}` }
+    return { ok: true, message: `${verb} ${deleted.length} branches: ${deleted.join(', ')}`, succeeded: deleted }
   }
   return {
     ok: false,
     message: `Deleted ${deleted.length} of ${branches.length} branches — ${failures.length} refused`,
     details: failures,
+    succeeded: deleted,
   }
 }
 
