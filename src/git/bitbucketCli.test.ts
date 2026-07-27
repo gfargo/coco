@@ -2,9 +2,11 @@ import { SimpleGit } from 'simple-git'
 import {
   bbqlQuote,
   describeBitbucketStatus,
+  defaultBitbucketRunner,
   getBitbucketProject,
   getBitbucketStatus,
   isBitbucketAuthenticated,
+  makeBitbucketRunner,
   resolveBitbucketActionError,
   compactBitbucketError,
 } from './bitbucketCli'
@@ -181,5 +183,30 @@ describe('getBitbucketProject (1238)', () => {
 
   it('returns undefined when there is no remote', async () => {
     expect(await getBitbucketProject(fakeGit([]))).toBeUndefined()
+  })
+})
+
+describe('makeBitbucketRunner (1899)', () => {
+  it('routes an undefined host to the cloud runner', () => {
+    expect(makeBitbucketRunner(undefined)).toBe(defaultBitbucketRunner)
+  })
+
+  it('routes bitbucket.org to the cloud runner', () => {
+    expect(makeBitbucketRunner('bitbucket.org')).toBe(defaultBitbucketRunner)
+  })
+
+  it('matches bitbucket.org case-insensitively', () => {
+    expect(makeBitbucketRunner('BitBucket.Org')).toBe(defaultBitbucketRunner)
+  })
+
+  it('rejects a self-hosted Bitbucket Server/Data Center host without calling fetch', async () => {
+    const fetchSpy = jest.spyOn(global, 'fetch')
+    const runner = makeBitbucketRunner('bitbucket.acme.com')
+
+    await expect(runner('repositories/ws/repo/pullrequests')).rejects.toThrow(
+      /Bitbucket Server \/ Data Center \("bitbucket\.acme\.com"\) is not supported yet/
+    )
+    expect(fetchSpy).not.toHaveBeenCalled()
+    fetchSpy.mockRestore()
   })
 })

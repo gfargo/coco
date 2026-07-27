@@ -45,6 +45,7 @@ export function useForgeAdapter(
       gitlabPath: forgePath,
       gitlabHost: forgeGitlabHost,
       bitbucketPath: forgePath,
+      bitbucketHost: forgeGitlabHost,
       giteaPath: forgePath,
       giteaHost: forgeGitlabHost,
       currentBranch: forgeCurrentBranch,

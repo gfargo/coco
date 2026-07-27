@@ -5,7 +5,7 @@ import {
   getBitbucketProject,
   getBitbucketStatus,
   type BitbucketRunner,
-  defaultBitbucketRunner,
+  makeBitbucketRunner,
 } from './bitbucketCli'
 import { loadForgeList, loadForgeOverview, paginate } from './forgeLoad'
 import type { IssueListFilter, IssueListItem, IssueListOverview } from './issuesListData'
@@ -25,7 +25,10 @@ import {
  * Bitbucket list loaders. These produce the SAME overview shapes as the
  * GitHub and GitLab loaders so the triage surfaces and command handlers
  * consume them identically. Data is fetched via the Bitbucket REST API v2
- * using a runner that reads credentials from environment variables.
+ * using a runner bound to the detected repository's host (mirroring Gitea's
+ * per-host `runnerFactory`) — only `bitbucket.org` reaches the Cloud API; any
+ * other `*bitbucket*` host gets an explicit "not supported" refusal instead
+ * of silently addressing Atlassian's cloud (#1899, see `makeBitbucketRunner`).
  *
  * Field-mapping notes:
  *  - `author.nickname` → author (Bitbucket uses nickname, not login)
@@ -33,6 +36,8 @@ import {
  *  - Pull requests have no labels in Bitbucket Cloud; `labels` is omitted.
  *  - Issues use `kind` (bug/enhancement/proposal/task) as labels.
  */
+
+type RunnerFactory = (host: string) => BitbucketRunner
 
 type BitbucketPagedResponse<T> = {
   pagelen: number
@@ -200,12 +205,12 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
 export async function getBitbucketPullRequestList(
   git: SimpleGit,
   filter: PullRequestListFilter = {},
-  runner: BitbucketRunner = defaultBitbucketRunner
+  runnerFactory: RunnerFactory = makeBitbucketRunner
 ): Promise<PullRequestListOverview> {
   return loadForgeList({
     detect: () => getBitbucketProject(git),
     notDetectedMessage: 'No Bitbucket remote detected.',
-    probe: () => getBitbucketStatus(runner),
+    probe: (project) => getBitbucketStatus(runnerFactory(project.host)),
     describeStatus: describeBitbucketStatus,
     repository: (project) => ({ owner: project.owner, name: project.name }),
     filter,
@@ -214,6 +219,7 @@ export async function getBitbucketPullRequestList(
         throw new Error('Pull request labels are not supported on Bitbucket Cloud.')
       }
 
+      const runner = runnerFactory(project.host)
       const want = filter.limit ?? 30
       let pullRequests: PullRequestListItem[] = []
 
@@ -317,16 +323,17 @@ function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
 export async function getBitbucketIssueList(
   git: SimpleGit,
   filter: IssueListFilter = {},
-  runner: BitbucketRunner = defaultBitbucketRunner
+  runnerFactory: RunnerFactory = makeBitbucketRunner
 ): Promise<IssueListOverview> {
   return loadForgeList({
     detect: () => getBitbucketProject(git),
     notDetectedMessage: 'No Bitbucket remote detected.',
-    probe: () => getBitbucketStatus(runner),
+    probe: (project) => getBitbucketStatus(runnerFactory(project.host)),
     describeStatus: describeBitbucketStatus,
     repository: (project) => ({ owner: project.owner, name: project.name }),
     filter,
     fetch: async (project) => {
+      const runner = runnerFactory(project.host)
       const want = filter.limit ?? 30
 
       // Resolve '@me' BEFORE building the endpoint so the nickname lands in
@@ -389,17 +396,18 @@ export async function findOpenBitbucketPullRequestForBranch(
 
 export async function getBitbucketPullRequestOverview(
   git: SimpleGit,
-  runner: BitbucketRunner = defaultBitbucketRunner
+  runnerFactory: RunnerFactory = makeBitbucketRunner
 ): Promise<PullRequestOverview> {
   return loadForgeOverview({
     git,
     detect: () => getBitbucketProject(git),
     notDetectedMessage: 'No Bitbucket remote detected.',
-    probe: () => getBitbucketStatus(runner),
+    probe: (project) => getBitbucketStatus(runnerFactory(project.host)),
     describeStatus: describeBitbucketStatus,
     repository: (project) => ({ owner: project.owner, name: project.name }),
     requireCurrentBranch: true,
     fetch: async (project, currentBranch) => {
+      const runner = runnerFactory(project.host)
       const pr = await findOpenBitbucketPullRequestForBranch(project.path, currentBranch as string, runner)
       return {
         currentPullRequest: pr ? sanitizePullRequestInfo(prToPullRequestInfo(pr)) : undefined,

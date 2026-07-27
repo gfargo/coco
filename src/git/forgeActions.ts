@@ -103,6 +103,7 @@ import {
   closeBitbucketIssue,
   reopenBitbucketIssue,
 } from './bitbucketIssueActions'
+import { makeBitbucketRunner } from './bitbucketCli'
 
 // Gitea / Forgejo implementations.
 import { getGiteaPullRequestList, getGiteaIssueList, getGiteaPullRequestOverview } from './giteaListData'
@@ -252,54 +253,63 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
 }
 
 /**
- * Bitbucket facade. `path` is `workspace/repo_slug`; `currentBranch` is the
- * checked-out branch (required for current-branch mutations that can't infer
- * the branch from a CLI binary).
+ * Bitbucket facade. `path` is `workspace/repo_slug`; `host` is the repo's
+ * remote hostname — only `bitbucket.org` (or no host) reaches Bitbucket
+ * Cloud; any other `*bitbucket*` host is Bitbucket Server / Data Center,
+ * which coco doesn't implement, so `makeBitbucketRunner` binds a runner that
+ * refuses with a clear message instead of silently hitting Atlassian's cloud
+ * API with a workspace slug that doesn't exist there (#1899). `currentBranch`
+ * is the checked-out branch (required for current-branch mutations that
+ * can't infer the branch from a CLI binary).
  */
 function bitbucketActions(
   path: string | undefined,
+  host?: string,
   currentBranch?: string
 ): ForgeActions {
+  const runner = makeBitbucketRunner(host)
+
   return {
     getPullRequestList: (git, filter) => getBitbucketPullRequestList(git, filter),
     getIssueList: (git, filter) => getBitbucketIssueList(git, filter),
     getPullRequestDetail: (n) =>
       path
-        ? getBitbucketPullRequestDetail(path, n)
+        ? getBitbucketPullRequestDetail(path, n, runner)
         : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
     getIssueDetail: (n) =>
       path
-        ? getBitbucketIssueDetail(path, n)
+        ? getBitbucketIssueDetail(path, n, runner)
         : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
     // Bitbucket has no CLI patch fetch / checkout — surface the gap as a
     // graceful failure so the diff surface / status line explain it
     // instead of dead-ending (#1363).
     getPullRequestDiffByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request diffs are not supported for Bitbucket yet.' }),
-    commentPullRequestByNumber: (n, body) => commentBitbucketPullRequestByNumber(path ?? '', n, body),
+    commentPullRequestByNumber: (n, body) => commentBitbucketPullRequestByNumber(path ?? '', n, body, runner),
     addPullRequestLabel: () => addBitbucketPullRequestLabel(),
-    addPullRequestAssignee: (n, assignee) => addBitbucketPullRequestReviewer(path ?? '', n, assignee),
-    mergePullRequestByNumber: (n, strategy) => mergeBitbucketPullRequestByNumber(path ?? '', n, strategy),
-    closePullRequestByNumber: (n) => closeBitbucketPullRequestByNumber(path ?? '', n),
-    approvePullRequestByNumber: (n) => approveBitbucketPullRequestByNumber(path ?? '', n),
-    requestChangesPullRequestByNumber: (n, body) => requestChangesBitbucketPullRequestByNumber(path ?? '', n, body),
+    addPullRequestAssignee: (n, assignee) => addBitbucketPullRequestReviewer(path ?? '', n, assignee, runner),
+    mergePullRequestByNumber: (n, strategy) => mergeBitbucketPullRequestByNumber(path ?? '', n, strategy, runner),
+    closePullRequestByNumber: (n) => closeBitbucketPullRequestByNumber(path ?? '', n, runner),
+    approvePullRequestByNumber: (n) => approveBitbucketPullRequestByNumber(path ?? '', n, runner),
+    requestChangesPullRequestByNumber: (n, body) =>
+      requestChangesBitbucketPullRequestByNumber(path ?? '', n, body, runner),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket yet.' }),
-    mergePullRequest: (strategy) => mergeBitbucketPullRequest(path, currentBranch, strategy),
-    closePullRequest: () => closeBitbucketPullRequest(path, currentBranch),
-    approvePullRequest: () => approveBitbucketPullRequest(path, currentBranch),
-    commentPullRequest: (body) => commentBitbucketPullRequest(path, currentBranch, body),
-    requestChangesPullRequest: (body) => requestChangesBitbucketPullRequest(path, currentBranch, body),
+    mergePullRequest: (strategy) => mergeBitbucketPullRequest(path, currentBranch, strategy, runner),
+    closePullRequest: () => closeBitbucketPullRequest(path, currentBranch, runner),
+    approvePullRequest: () => approveBitbucketPullRequest(path, currentBranch, runner),
+    commentPullRequest: (body) => commentBitbucketPullRequest(path, currentBranch, body, runner),
+    requestChangesPullRequest: (body) => requestChangesBitbucketPullRequest(path, currentBranch, body, runner),
     createPullRequest: (input) =>
       path
-        ? createBitbucketPullRequest(path, input)
+        ? createBitbucketPullRequest(path, input, runner)
         : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
     openPullRequest: (url) => Promise.resolve(openBitbucketPullRequest(url)),
-    commentIssue: (n, body) => commentBitbucketIssue(path ?? '', n, body),
+    commentIssue: (n, body) => commentBitbucketIssue(path ?? '', n, body, runner),
     addIssueLabel: () => addBitbucketIssueLabel(),
-    addIssueAssignee: (n, assignee) => addBitbucketIssueAssignee(path ?? '', n, assignee),
-    closeIssue: (n) => closeBitbucketIssue(path ?? '', n),
-    reopenIssue: (n) => reopenBitbucketIssue(path ?? '', n),
+    addIssueAssignee: (n, assignee) => addBitbucketIssueAssignee(path ?? '', n, assignee, runner),
+    closeIssue: (n) => closeBitbucketIssue(path ?? '', n, runner),
+    reopenIssue: (n) => reopenBitbucketIssue(path ?? '', n, runner),
   }
 }
 
@@ -370,10 +380,11 @@ function giteaActions(
  * keeps the GitHub `gh` implementations, preserving existing behavior. For
  * GitLab, pass the project path (`owner/name`) and remote host so error-path
  * auth re-probes hit the right instance. For Bitbucket, pass the
- * workspace/repo path and current branch (needed for current-branch
- * mutations that can't infer the branch from a CLI binary). For Gitea, pass
- * the project path, remote host (the REST API base is per-host), and current
- * branch.
+ * workspace/repo path, remote host (only `bitbucket.org` reaches Bitbucket
+ * Cloud — any other host is refused, see `makeBitbucketRunner`), and current
+ * branch (needed for current-branch mutations that can't infer the branch
+ * from a CLI binary). For Gitea, pass the project path, remote host (the
+ * REST API base is per-host), and current branch.
  */
 export function getForgeActions(
   provider: GitProviderType | undefined,
@@ -381,6 +392,7 @@ export function getForgeActions(
     gitlabPath?: string
     gitlabHost?: string
     bitbucketPath?: string
+    bitbucketHost?: string
     giteaPath?: string
     giteaHost?: string
     /** Current checked-out branch, required for Bitbucket/Gitea current-branch PR mutations. */
@@ -388,7 +400,8 @@ export function getForgeActions(
   } = {}
 ): ForgeActions {
   if (provider === 'gitlab') return gitlabActions(options.gitlabPath, options.gitlabHost)
-  if (provider === 'bitbucket') return bitbucketActions(options.bitbucketPath, options.currentBranch)
+  if (provider === 'bitbucket')
+    return bitbucketActions(options.bitbucketPath, options.bitbucketHost, options.currentBranch)
   if (provider === 'gitea') return giteaActions(options.giteaPath, options.giteaHost, options.currentBranch)
   return githubActions
 }

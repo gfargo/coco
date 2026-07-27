@@ -328,7 +328,7 @@ describe('getBitbucketPullRequestList (1238)', () => {
       if (endpoint === 'user') return '{}'
       return payload
     }
-    const overview = await getBitbucketPullRequestList(fakeGit(), {}, runner)
+    const overview = await getBitbucketPullRequestList(fakeGit(), {}, () => runner)
     expect(overview).toMatchObject({ available: true, authenticated: true, repository: { owner: 'workspace', name: 'repo' } })
     expect(overview.pullRequests).toHaveLength(1)
   }))
@@ -336,7 +336,7 @@ describe('getBitbucketPullRequestList (1238)', () => {
   it('reports no remote when there are no remotes', async () => {
     const git = { getRemotes: async () => [] } as unknown as SimpleGit
     const runner = async () => '{}'
-    const overview = await getBitbucketPullRequestList(git, {}, runner)
+    const overview = await getBitbucketPullRequestList(git, {}, () => runner)
     expect(overview).toMatchObject({ available: false, message: 'No Bitbucket remote detected.' })
   })
 
@@ -346,7 +346,7 @@ describe('getBitbucketPullRequestList (1238)', () => {
       if (endpoint === 'user') return '{}'
       return payload
     }
-    const overview = await getBitbucketPullRequestList(fakeGit(), { label: 'bug' }, runner)
+    const overview = await getBitbucketPullRequestList(fakeGit(), { label: 'bug' }, () => runner)
     expect(overview.message).toContain('not supported on Bitbucket Cloud')
     expect(overview.pullRequests).toBeUndefined()
   }))
@@ -361,7 +361,7 @@ describe('getBitbucketPullRequestList (1238)', () => {
       if (endpoint === 'user') return JSON.stringify({ nickname: 'alice' })
       return payload
     }
-    const overview = await getBitbucketPullRequestList(fakeGit(), { author: '@me' }, runner)
+    const overview = await getBitbucketPullRequestList(fakeGit(), { author: '@me' }, () => runner)
     expect(overview.pullRequests).toHaveLength(1)
     expect(overview.pullRequests?.[0]?.author).toBe('alice')
   }))
@@ -379,7 +379,7 @@ describe('getBitbucketPullRequestList (1238)', () => {
       if (endpoint === 'user') return JSON.stringify({ nickname: 'bob' })
       return payload
     }
-    const overview = await getBitbucketPullRequestList(fakeGit(), { assignee: '@me' }, runner)
+    const overview = await getBitbucketPullRequestList(fakeGit(), { assignee: '@me' }, () => runner)
     expect(overview.pullRequests).toHaveLength(1)
     expect(overview.pullRequests?.[0]?.number).toBe(1)
   }))
@@ -394,7 +394,7 @@ describe('getBitbucketPullRequestList (1238)', () => {
       if (endpoint === 'user') return '{}'
       return payload
     }
-    const overview = await getBitbucketPullRequestList(fakeGit(), { author: 'alice' }, runner)
+    const overview = await getBitbucketPullRequestList(fakeGit(), { author: 'alice' }, () => runner)
     expect(overview.pullRequests).toHaveLength(1)
     expect(overview.pullRequests?.[0]?.author).toBe('alice')
   }))
@@ -405,7 +405,7 @@ describe('getBitbucketPullRequestList (1238)', () => {
       if (endpoint === 'user') return '{}'
       return payload
     }
-    const overview = await getBitbucketPullRequestList(fakeGit(), { author: '@me' }, runner)
+    const overview = await getBitbucketPullRequestList(fakeGit(), { author: '@me' }, () => runner)
     expect(overview.message).toContain('Could not resolve "@me"')
     expect(overview.pullRequests).toBeUndefined()
   }))
@@ -418,13 +418,13 @@ describe('getBitbucketIssueList (1238)', () => {
       if (endpoint === 'user') return '{}'
       return payload
     }
-    const overview = await getBitbucketIssueList(fakeGit(), {}, runner)
+    const overview = await getBitbucketIssueList(fakeGit(), {}, () => runner)
     expect(overview).toMatchObject({ available: true, authenticated: true })
     expect(overview.issues).toHaveLength(1)
   }))
 
   it('surfaces not-authenticated when credentials are missing', withoutCredentials(async () => {
-    const overview = await getBitbucketIssueList(fakeGit(), {}, async () => '{}')
+    const overview = await getBitbucketIssueList(fakeGit(), {}, () => async () => '{}')
     expect(overview.authenticated).toBe(false)
     expect(overview.message).toContain('BITBUCKET_ACCESS_TOKEN')
   }))
@@ -437,7 +437,7 @@ describe('getBitbucketIssueList (1238)', () => {
       if (endpoint === 'user') return JSON.stringify({ nickname: 'erin' })
       return payload
     }
-    const overview = await getBitbucketIssueList(fakeGit(), { assignee: '@me' }, runner)
+    const overview = await getBitbucketIssueList(fakeGit(), { assignee: '@me' }, () => runner)
     expect(overview).toMatchObject({ available: true, authenticated: true })
     expect(overview.issues).toHaveLength(1)
     const issuesEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
@@ -453,7 +453,7 @@ describe('getBitbucketIssueList (1238)', () => {
       if (endpoint === 'user') return JSON.stringify({ nickname: 'erin' })
       return payload
     }
-    const overview = await getBitbucketIssueList(fakeGit(), { author: '@me' }, runner)
+    const overview = await getBitbucketIssueList(fakeGit(), { author: '@me' }, () => runner)
     expect(overview).toMatchObject({ available: true, authenticated: true })
     const issuesEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
     expect(issuesEndpoint).toBeDefined()
@@ -465,7 +465,7 @@ describe('getBitbucketIssueList (1238)', () => {
       if (endpoint === 'user') return '{}'
       return JSON.stringify({ values: [makeIssue()], pagelen: 50, page: 1 })
     }
-    const overview = await getBitbucketIssueList(fakeGit(), { assignee: '@me' }, runner)
+    const overview = await getBitbucketIssueList(fakeGit(), { assignee: '@me' }, () => runner)
     expect(overview.message).toContain('Could not resolve "@me"')
     expect(overview.issues).toBeUndefined()
   }))
@@ -478,7 +478,7 @@ describe('getBitbucketIssueList (1238)', () => {
       if (endpoint === 'user') return JSON.stringify({ nickname: 'erin' })
       return payload
     }
-    const overview = await getBitbucketIssueList(fakeGit(), { assignee: 'alice' }, runner)
+    const overview = await getBitbucketIssueList(fakeGit(), { assignee: 'alice' }, () => runner)
     expect(overview.issues).toHaveLength(1)
     const issuesEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
     expect(decodeURIComponent(issuesEndpoint as string)).toContain('assignee.nickname = "alice"')

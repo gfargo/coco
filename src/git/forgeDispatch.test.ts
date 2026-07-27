@@ -16,6 +16,14 @@ jest.mock('./giteaCli', () => ({
   ...jest.requireActual('./giteaCli'),
   makeGiteaRunner: jest.fn(() => mockGiteaRunner),
 }))
+jest.mock('./bitbucketPullRequestActions')
+jest.mock('./bitbucketIssueActions')
+jest.mock('./bitbucketListData')
+jest.mock('./bitbucketDetailData')
+jest.mock('./bitbucketCli', () => ({
+  ...jest.requireActual('./bitbucketCli'),
+  makeBitbucketRunner: jest.fn(() => mockBitbucketRunner),
+}))
 
 import { SimpleGit } from 'simple-git'
 import * as mr from './mergeRequestActions'
@@ -26,6 +34,10 @@ import * as giteaPR from './giteaPullRequestActions'
 import * as giteaIssues from './giteaIssueActions'
 import * as giteaLists from './giteaListData'
 import * as giteaDetail from './giteaDetailData'
+import * as bitbucketPR from './bitbucketPullRequestActions'
+import * as bitbucketIssues from './bitbucketIssueActions'
+import * as bitbucketLists from './bitbucketListData'
+import * as bitbucketDetail from './bitbucketDetailData'
 import { getForgeActions } from './forgeActions'
 import { defaultGlabRunner } from './glabCli'
 
@@ -35,6 +47,7 @@ const fakeGit = {} as unknown as SimpleGit
 // jest's hoisting allowlist permits `mock`-prefixed identifiers to be
 // referenced before the factory itself is (also hoisted) initialized.
 const mockGiteaRunner = jest.fn()
+const mockBitbucketRunner = jest.fn()
 
 describe('forge GitLab dispatch (#0.70)', () => {
   beforeEach(() => jest.clearAllMocks())
@@ -170,5 +183,65 @@ describe('forge Gitea dispatch (#826)', () => {
     await forge.getPullRequestList(fakeGit, {}).catch(() => undefined)
     expect(giteaLists.getGiteaPullRequestList).not.toHaveBeenCalled()
     expect(giteaPR.mergeGiteaPullRequestByNumber).not.toHaveBeenCalled()
+  })
+})
+
+describe('forge Bitbucket dispatch (#1899)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('routes PR mutations to the bitbucket implementations, binding a host-bound runner', async () => {
+    const forge = getForgeActions('bitbucket', { bitbucketPath: 'ws/repo', bitbucketHost: 'bitbucket.acme.com' })
+    await forge.mergePullRequestByNumber(5, 'squash')
+    await forge.commentPullRequestByNumber(5, 'hi')
+    await forge.addPullRequestAssignee(5, 'bob')
+    await forge.approvePullRequestByNumber(5)
+    await forge.closePullRequestByNumber(5)
+    await forge.requestChangesPullRequestByNumber(5, 'fix')
+    await forge.createPullRequest({ base: 'main', head: 'f', title: 'T', body: 'B' })
+
+    expect(bitbucketPR.mergeBitbucketPullRequestByNumber).toHaveBeenCalledWith('ws/repo', 5, 'squash', mockBitbucketRunner)
+    expect(bitbucketPR.commentBitbucketPullRequestByNumber).toHaveBeenCalledWith('ws/repo', 5, 'hi', mockBitbucketRunner)
+    expect(bitbucketPR.addBitbucketPullRequestReviewer).toHaveBeenCalledWith('ws/repo', 5, 'bob', mockBitbucketRunner)
+    expect(bitbucketPR.approveBitbucketPullRequestByNumber).toHaveBeenCalledWith('ws/repo', 5, mockBitbucketRunner)
+    expect(bitbucketPR.closeBitbucketPullRequestByNumber).toHaveBeenCalledWith('ws/repo', 5, mockBitbucketRunner)
+    expect(bitbucketPR.requestChangesBitbucketPullRequestByNumber).toHaveBeenCalledWith('ws/repo', 5, 'fix', mockBitbucketRunner)
+    expect(bitbucketPR.createBitbucketPullRequest).toHaveBeenCalledWith(
+      'ws/repo',
+      { base: 'main', head: 'f', title: 'T', body: 'B' },
+      mockBitbucketRunner
+    )
+  })
+
+  it('routes issue mutations to the bitbucket implementations, binding a host-bound runner', async () => {
+    const forge = getForgeActions('bitbucket', { bitbucketPath: 'ws/repo', bitbucketHost: 'bitbucket.acme.com' })
+    await forge.commentIssue(7, 'hi')
+    await forge.addIssueAssignee(7, 'bob')
+    await forge.closeIssue(7)
+    await forge.reopenIssue(7)
+
+    expect(bitbucketIssues.commentBitbucketIssue).toHaveBeenCalledWith('ws/repo', 7, 'hi', mockBitbucketRunner)
+    expect(bitbucketIssues.addBitbucketIssueAssignee).toHaveBeenCalledWith('ws/repo', 7, 'bob', mockBitbucketRunner)
+    expect(bitbucketIssues.closeBitbucketIssue).toHaveBeenCalledWith('ws/repo', 7, mockBitbucketRunner)
+    expect(bitbucketIssues.reopenBitbucketIssue).toHaveBeenCalledWith('ws/repo', 7, mockBitbucketRunner)
+  })
+
+  it('routes lists + detail to the bitbucket implementations, binding the project path', async () => {
+    const forge = getForgeActions('bitbucket', { bitbucketPath: 'ws/repo', bitbucketHost: 'bitbucket.acme.com' })
+    await forge.getPullRequestList(fakeGit, {})
+    await forge.getIssueList(fakeGit, {})
+    await forge.getPullRequestDetail(3)
+    await forge.getIssueDetail(4)
+
+    expect(bitbucketLists.getBitbucketPullRequestList).toHaveBeenCalledWith(fakeGit, {})
+    expect(bitbucketLists.getBitbucketIssueList).toHaveBeenCalledWith(fakeGit, {})
+    expect(bitbucketDetail.getBitbucketPullRequestDetail).toHaveBeenCalledWith('ws/repo', 3, mockBitbucketRunner)
+    expect(bitbucketDetail.getBitbucketIssueDetail).toHaveBeenCalledWith('ws/repo', 4, mockBitbucketRunner)
+  })
+
+  it('does not call any bitbucket implementation for a github repo', async () => {
+    const forge = getForgeActions('github')
+    await forge.getPullRequestList(fakeGit, {}).catch(() => undefined)
+    expect(bitbucketLists.getBitbucketPullRequestList).not.toHaveBeenCalled()
+    expect(bitbucketPR.mergeBitbucketPullRequestByNumber).not.toHaveBeenCalled()
   })
 })
