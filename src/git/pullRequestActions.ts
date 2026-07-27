@@ -350,7 +350,10 @@ export function checkoutPullRequestByNumber(
  */
 function isFailedCheck(check: PullRequestStatusCheck): boolean {
   const conclusion = (check.conclusion || '').toUpperCase()
-  return conclusion === 'FAILURE' || conclusion === 'ERROR' || conclusion === 'TIMED_OUT' || conclusion === 'ACTION_REQUIRED'
+  // ACTION_REQUIRED means the run is awaiting manual approval (a deployment
+  // gate or first-time-contributor check) — not a failed job, so
+  // `gh run rerun --failed` can't advance it.
+  return conclusion === 'FAILURE' || conclusion === 'ERROR' || conclusion === 'TIMED_OUT'
 }
 
 export async function rerunFailedChecks(

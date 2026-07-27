@@ -448,6 +448,21 @@ describe('rerunFailedChecks (OSS-1615)', () => {
     })
   })
 
+  it('does not treat ACTION_REQUIRED as a re-runnable failure', async () => {
+    const runner = async (): Promise<string> => rollupJson([
+      {
+        name: 'deploy',
+        conclusion: 'ACTION_REQUIRED',
+        detailsUrl: 'https://github.com/acme/widgets/actions/runs/333/job/4',
+      },
+    ])
+    const result = await rerunFailedChecks(7, runner)
+    expect(result).toEqual({
+      ok: false,
+      message: 'No re-runnable failed checks found for pull request #7.',
+    })
+  })
+
   it('propagates the checks-fetch failure', async () => {
     const runner = async (): Promise<string> => {
       throw new Error('gh: not authenticated')

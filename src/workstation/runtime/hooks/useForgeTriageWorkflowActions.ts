@@ -117,6 +117,17 @@ export function createForgeTriageWorkflowHandlers(
     )
     clearGitHubListCache()
   }
+  // OSS-1615 — drop the cached per-check breakdown after a successful
+  // re-run so `usePullRequestChecksHydration` refetches the updated run
+  // state instead of showing the pre-rerun snapshot until the next full
+  // context refresh.
+  const invalidatePullRequestChecksCache = (): void => {
+    setContext((current) => ({ ...current, pullRequestChecks: undefined }), issuedAtDepth)
+    setContextStatus(
+      (current) => updateLogInkContextStatus(current, 'pullRequestChecks', 'idle'),
+      issuedAtDepth,
+    )
+  }
 
   return {
     // #783 — full PR action panel handlers. Each wraps the matching
@@ -178,7 +189,9 @@ export function createForgeTriageWorkflowHandlers(
     'rerun-pr-checks': async () => {
       const number = context.pullRequest?.currentPullRequest?.number
       if (!number) return { ok: false, message: 'No pull request detected for the current branch.' }
-      return forge.rerunFailedChecks(number)
+      const result = await forge.rerunFailedChecks(number)
+      if (result.ok) invalidatePullRequestChecksCache()
+      return result
     },
     'automerge-pr': async () => {
       const strategy = (payload || 'merge').toLowerCase()
@@ -336,7 +349,9 @@ export function createForgeTriageWorkflowHandlers(
     'triage-pr-rerun-checks': async () => {
       const pr = getSelectedPullRequestTriage(state, context)
       if (!pr) return { ok: false, message: 'No pull request under cursor' }
-      return forge.rerunFailedChecks(pr.number)
+      const result = await forge.rerunFailedChecks(pr.number)
+      if (result.ok) invalidatePullRequestChecksCache()
+      return result
     },
     'triage-pr-automerge': async () => {
       const strategy = payload?.trim()

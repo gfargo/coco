@@ -25,7 +25,7 @@ import type { GitOperationOverview } from '../../git/operationData'
 import type { ProviderOverview } from '../../git/providerData'
 import type { IssueDetail } from '../../git/issueDetailData'
 import type { IssueListOverview } from '../../git/issuesListData'
-import type { PullRequestDetail } from '../../git/pullRequestDetailData'
+import type { PullRequestChecksResult, PullRequestDetail } from '../../git/pullRequestDetailData'
 import type { PullRequestOverview } from '../../git/pullRequestData'
 import type { PullRequestListOverview } from '../../git/pullRequestListData'
 import type { ReflogOverview } from '../../git/reflogData'
@@ -71,6 +71,15 @@ export type LogInkContext = {
   operation?: GitOperationOverview
   provider?: ProviderOverview
   pullRequest?: PullRequestOverview
+  /**
+   * Per-check breakdown for the current branch's PR (OSS-1615). Lazily
+   * hydrated on entry to the `pull-request` view via
+   * `forge.getPullRequestChecks`, richer than `pullRequest`'s
+   * `statusCheckRollup` for GitLab (a real per-job breakdown instead of
+   * one synthetic pipeline row). Cleared after a successful re-run so
+   * the hydration effect refetches the updated run state.
+   */
+  pullRequestChecks?: PullRequestChecksResult
   /**
    * Multi-PR triage list (#882). Hydrated on entry to the
    * `pull-request-triage` view. Distinct from `pullRequest` (single,
