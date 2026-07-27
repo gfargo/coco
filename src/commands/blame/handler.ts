@@ -103,7 +103,7 @@ export const handler: CommandHandler<BlameArgv> = async (argv, logger) => {
     handleMissingApiKey(logger, config, { command: 'blame' })
   }
 
-  if (!range && lines.length > MAX_EXPLAIN_LINES) {
+  if (lines.length > MAX_EXPLAIN_LINES) {
     const message = `--explain covers ${lines.length} lines, which exceeds the ${MAX_EXPLAIN_LINES}-line cap. Narrow the range with --lines a:b and try again.`
     if (argv.json) {
       emitJson({ error: message })
