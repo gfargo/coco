@@ -15,6 +15,7 @@
  *   npm run bench -- --update    # also overwrite the baseline
  *   npm run bench -- --fixture=medium   # narrow to one fixture
  *   npm run bench -- --check     # gate: fail if llmCalls regress vs baseline
+ *                                # (runs latency-scaled for CI speed, ~10x faster)
  *
  * The mock chain uses a deterministic latency model so before/after
  * runs compare apples to apples without paying for real API calls.
@@ -95,6 +96,14 @@ const DEFAULT_OPTIONS: BenchOptions = {
   // (raised from 2048 to 4096 in PR 1 of #845).
   maxTokens: 4096,
 }
+
+// `--check` scales the mock chain's simulated latency down by this factor.
+// The full fixture sweep at DEFAULT_OPTIONS latency is realistic but real
+// wall-clock (~3 minutes of actual setTimeout delay across all fixtures) —
+// fine for a local `npm run bench`, too slow as a per-PR CI gate. llmCalls
+// (the strict gate) is a function of token/chunk counts, not latency, so
+// scaling latency down doesn't affect what --check actually enforces.
+const CHECK_LATENCY_SCALE = 0.1
 
 /**
  * Deterministic hash of the chain input. Used to derive per-call
@@ -322,7 +331,19 @@ async function main(): Promise<void> {
   const fastPath = fastPathArg
     ? Object.fromEntries(fastPathArg.split(',').map((name) => [name.trim(), true]))
     : undefined
-  const runOptions: BenchOptions = { ...DEFAULT_OPTIONS, fastPath }
+  // --check only gates on llmCalls (deterministic, unaffected by the mock
+  // chain's simulated latency) and warns loosely on durationMs — it never
+  // fails on a *shorter* duration. So scale the simulated latency down for
+  // check runs: it cuts the full-fixture-sweep gate from ~3 minutes of real
+  // setTimeout delay to a few seconds without weakening the gate itself.
+  const runOptions: BenchOptions = check
+    ? {
+        ...DEFAULT_OPTIONS,
+        fastPath,
+        baseLatencyMs: DEFAULT_OPTIONS.baseLatencyMs * CHECK_LATENCY_SCALE,
+        perTokenMs: DEFAULT_OPTIONS.perTokenMs * CHECK_LATENCY_SCALE,
+      }
+    : { ...DEFAULT_OPTIONS, fastPath }
 
   const fixtures = fixtureArg
     ? allFixtures.filter((fixture) => fixture.name === fixtureArg)
