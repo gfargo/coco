@@ -36,6 +36,12 @@ describeWithWasm('treeSitterTsParser (.wasm-backed)', () => {
   // race the init promise. The init failure path is now retry-friendly
   // (see `ensureRuntime` in runtime.ts), and we trust the first test in
   // this suite to exercise the init path cleanly.
+  //
+  // The one-time `Parser.init` WASM bootstrap can exceed jest's default
+  // 5000ms on a loaded/slow CI runner (observed on macOS runners); bump
+  // the suite timeout so a slow cold start doesn't fail an otherwise
+  // passing assertion.
+  jest.setTimeout(20000)
 
   it('returns undefined for non-TS / non-JS file paths', async () => {
     expect(await treeSitterTsParser.summarize(fileDiff('README.md', '+x'))).toBeUndefined()
