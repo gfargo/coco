@@ -102,14 +102,33 @@ export async function defaultClipboardRunner(value: string): Promise<void> {
   throw new Error(errors[0] || 'No clipboard command is available.')
 }
 
+function assertOpenableUrl(url: string): void {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error(`Refusing to open invalid URL: ${url}`)
+  }
+
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) {
+    throw new Error(`Refusing to open unsupported URL: ${url}`)
+  }
+}
+
 export async function defaultOpenUrlRunner(url: string): Promise<void> {
+  assertOpenableUrl(url)
+
   if (process.platform === 'darwin') {
     await runCommand('open', [url])
     return
   }
 
   if (process.platform === 'win32') {
-    await runCommand('cmd', ['/c', 'start', '', url])
+    // `cmd /c start` hands the URL to cmd.exe, which parses its own command
+    // line (`&`, `|`, `^`, `>` are shell metacharacters there) even though
+    // execFile itself never invokes a shell. rundll32's URL handler takes the
+    // URL as a plain argv entry, so no shell ever re-parses it.
+    await runCommand('rundll32', ['url.dll,FileProtocolHandler', url])
     return
   }
 
@@ -561,4 +580,5 @@ export const historyActionTestInternals = {
   compactOutputLines,
   getInProgressOperation,
   isHeadCommit,
+  assertOpenableUrl,
 }
