@@ -113,6 +113,24 @@ describe.each(CASES)('provider config forwarding — $provider', (c) => {
         expect((llm.reasoning as { effort?: string } | undefined)?.effort).toBe('high')
     }
   })
+
+  it('omits the default temperature when reasoningEffort is set (Completions path 400s on a non-1 temperature for reasoning models)', async () => {
+    if (c.provider !== 'openai' && c.provider !== 'azure') return
+
+    const llm = await getLlm(c.provider, c.model as LLMModel, makeConfig(c, { reasoningEffort: 'low' }))
+    expect(temperatureOf(llm)).toBeUndefined()
+  })
+
+  it('normalizes away an explicit non-1 temperature when reasoningEffort is set', async () => {
+    if (c.provider !== 'openai' && c.provider !== 'azure') return
+
+    const llm = await getLlm(
+      c.provider,
+      c.model as LLMModel,
+      makeConfig(c, { reasoningEffort: 'low', temperature: 0.9 })
+    )
+    expect(temperatureOf(llm)).toBeUndefined()
+  })
 })
 
 describe('anthropic reasoning effort + prompt caching', () => {
@@ -127,13 +145,22 @@ describe('anthropic reasoning effort + prompt caching', () => {
     expect(temperatureOf(llm)).toBeUndefined()
   })
 
-  it('still respects an explicit temperature alongside reasoningEffort', async () => {
+  it('still respects an explicit temperature of 1 alongside reasoningEffort', async () => {
     const llm = await getLlm(
       'anthropic',
       anthropicCase.model as LLMModel,
       makeConfig(anthropicCase, { reasoningEffort: 'low', temperature: 1 })
     )
     expect(temperatureOf(llm)).toBe(1)
+  })
+
+  it('normalizes away an explicit non-1 temperature when reasoningEffort is set', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase, { reasoningEffort: 'low', temperature: 0.9 })
+    )
+    expect(temperatureOf(llm)).toBeUndefined()
   })
 
   it('binds cache_control as a call option when promptCache is enabled', async () => {

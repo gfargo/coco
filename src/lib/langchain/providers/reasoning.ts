@@ -17,3 +17,19 @@ const GEMINI_THINKING_LEVEL: Record<ReasoningEffort, GeminiThinkingLevel> = {
 export function toGeminiThinkingLevel(effort: ReasoningEffort): GeminiThinkingLevel {
   return GEMINI_THINKING_LEVEL[effort]
 }
+
+/**
+ * Reasoning/extended-thinking models (Anthropic adaptive thinking, OpenAI
+ * o-/gpt-5 series) reject any `temperature` other than `1`. When
+ * `reasoningEffort` is set, omit our own `0.2` default — and normalize away
+ * an explicit non-1 value too — so the SDK's own default applies instead of
+ * the API 400ing. `??` (not `||`) so an explicit `temperature: 0` is
+ * respected when reasoning is off.
+ */
+export function resolveTemperature(
+  reasoningEffort: ReasoningEffort | undefined,
+  temperature: number | undefined
+): number | undefined {
+  if (reasoningEffort) return temperature === 1 ? 1 : undefined
+  return temperature ?? 0.2
+}

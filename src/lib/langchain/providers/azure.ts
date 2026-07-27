@@ -1,6 +1,7 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import type { AzureLLMService } from '../types'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { resolveTemperature } from './reasoning'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 async function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
@@ -12,7 +13,9 @@ async function createAzureLlm({ model, config, apiKey }: CreateLlmArgs): Promise
     azureOpenAIApiInstanceName: svc.instanceName,
     azureOpenAIApiDeploymentName: svc.deploymentName || model,
     azureOpenAIApiVersion: svc.apiVersion,
-    temperature: config.service.temperature ?? 0.2,
+    // Shares the Completions invocation path with OpenAI — same
+    // reasoning-model temperature conflict, same fix. See `resolveTemperature`.
+    temperature: resolveTemperature(config.service.reasoningEffort, config.service.temperature),
     maxConcurrency: config.service.maxConcurrent,
     // Disable LangChain's built-in AsyncCaller retries (#1677).
     maxRetries: config.service.requestOptions?.maxRetries ?? 0,

@@ -140,6 +140,30 @@ describe('executeChain', () => {
       )
     })
 
+    it('captures inputTokens from usage_metadata.input_tokens (the real cache hit-rate denominator)', async () => {
+      const llm = new FakeUsageChatModel('hello world', {
+        input_tokens: 1000,
+        output_tokens: 34,
+        total_tokens: 1034,
+        input_token_details: { cache_read: 800 },
+      })
+      const logger = { verbose: jest.fn() } as unknown as Logger
+
+      await executeChain<string>({
+        llm: asLlm(llm as unknown as FakeListChatModel),
+        prompt,
+        variables,
+        parser: new StringOutputParser(),
+        logger,
+        metadata: { task: 'commit-message' },
+      })
+
+      expect(logger.verbose).toHaveBeenCalledWith(
+        expect.stringContaining('inputTokens=1000'),
+        { color: 'cyan' }
+      )
+    })
+
     it('leaves completionTokens undefined (not 0) when the provider reports no usage metadata', async () => {
       const llm = new FakeListChatModel({ responses: ['no usage here'] })
       const logger = { verbose: jest.fn() } as unknown as Logger

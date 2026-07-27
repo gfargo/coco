@@ -1,5 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { resolveTemperature } from './reasoning'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 async function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
@@ -12,9 +13,10 @@ async function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): Promis
     // are the single retry authority (#1677).
     maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     model,
-    // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
-    // respected instead of being coerced to the 0.2 default.
-    temperature: config.service.temperature ?? 0.2,
+    // Reasoning models (o-/gpt-5 series) reject any temperature other than
+    // 1 — skip our 0.2 default (and normalize an explicit non-1 value away)
+    // whenever reasoningEffort is set. See `resolveTemperature`.
+    temperature: resolveTemperature(config.service.reasoningEffort, config.service.temperature),
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
     ...(config.service.reasoningEffort ? { reasoning: { effort: config.service.reasoningEffort } } : {}),
     ...(config.service.requestOptions?.timeout

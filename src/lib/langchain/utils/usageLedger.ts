@@ -32,6 +32,8 @@ export type UsageRecord = {
   completionTokens?: number
   /** Input tokens served from the provider's prompt cache, when reported. */
   cachedInputTokens?: number
+  /** The provider's own reported total input-token count, when present — see `LlmCallMetadata.inputTokens`. */
+  inputTokens?: number
   elapsedMs?: number
   /** Readable `owner/repo` (or directory name) the call ran against. */
   repo?: string
@@ -43,6 +45,8 @@ export type UsageAggregate = {
   promptTokens: number
   completionTokens: number
   cachedInputTokens: number
+  /** Sum of the provider-reported `inputTokens`, when any records had it. */
+  inputTokens: number
   totalMs: number
   avgMs: number
 }
@@ -135,6 +139,7 @@ export function recordUsage(metadata: LlmCallMetadata): void {
     promptTokens: metadata.promptTokens,
     completionTokens: metadata.completionTokens,
     cachedInputTokens: metadata.cachedInputTokens,
+    inputTokens: metadata.inputTokens,
     elapsedMs: metadata.elapsedMs,
     ...(repoTag ? { repo: repoTag } : {}),
   }
@@ -194,7 +199,14 @@ export function readUsageRecords(filePath: string = getUsageLogPath()): UsageRec
 function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): UsageAggregate[] {
   const byKey = new Map<
     string,
-    { calls: number; promptTokens: number; completionTokens: number; cachedInputTokens: number; totalMs: number }
+    {
+      calls: number
+      promptTokens: number
+      completionTokens: number
+      cachedInputTokens: number
+      inputTokens: number
+      totalMs: number
+    }
   >()
   for (const r of records) {
     const key = keyOf(r) || 'unknown'
@@ -203,12 +215,14 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       promptTokens: 0,
       completionTokens: 0,
       cachedInputTokens: 0,
+      inputTokens: 0,
       totalMs: 0,
     }
     current.calls += 1
     current.promptTokens += r.promptTokens || 0
     current.completionTokens += r.completionTokens || 0
     current.cachedInputTokens += r.cachedInputTokens || 0
+    current.inputTokens += r.inputTokens || 0
     current.totalMs += r.elapsedMs || 0
     byKey.set(key, current)
   }
@@ -219,6 +233,7 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       promptTokens: v.promptTokens,
       completionTokens: v.completionTokens,
       cachedInputTokens: v.cachedInputTokens,
+      inputTokens: v.inputTokens,
       totalMs: v.totalMs,
       avgMs: v.calls > 0 ? Math.round(v.totalMs / v.calls) : 0,
     }))

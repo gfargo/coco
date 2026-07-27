@@ -105,6 +105,7 @@ export const executeChain = async <T>({
     // (never defaulted to 0) when neither is present.
     let completionTokens: number | undefined
     let cachedInputTokens: number | undefined
+    let inputTokens: number | undefined
     const usageCallback = {
       handleLLMEnd: (output: LLMResult) => {
         const generation = output.generations[0]?.[0] as { message?: AIMessage } | undefined
@@ -121,6 +122,11 @@ export const executeChain = async <T>({
         const cacheReadTokens = generation?.message?.usage_metadata?.input_token_details?.cache_read
         if (typeof cacheReadTokens === 'number') {
           cachedInputTokens = cacheReadTokens
+        }
+
+        const reportedInputTokens = generation?.message?.usage_metadata?.input_tokens
+        if (typeof reportedInputTokens === 'number') {
+          inputTokens = reportedInputTokens
         }
       },
     }
@@ -139,6 +145,7 @@ export const executeChain = async <T>({
       promptTokens,
       completionTokens,
       cachedInputTokens,
+      inputTokens,
       elapsedMs,
       ...metadata,
     })

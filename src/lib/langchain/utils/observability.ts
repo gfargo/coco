@@ -35,6 +35,16 @@ export type LlmCallMetadata = {
    * same discipline as `completionTokens` above.
    */
   cachedInputTokens?: number
+  /**
+   * The provider's own reported total input-token count
+   * (`usage_metadata.input_tokens`), when present. This is the correct
+   * denominator for a cache hit-rate — `promptTokens` above is a local
+   * tiktoken estimate (further skewed by each provider's
+   * `tokenCorrectionFactor`) and dividing the provider's real
+   * `cachedInputTokens` by it can yield a misleading ratio. Optional and
+   * left `undefined` (never `0`) when a provider doesn't report it.
+   */
+  inputTokens?: number
   elapsedMs?: number
   inputDocuments?: number
   inputChunks?: number
@@ -140,6 +150,7 @@ export function logLlmCall(logger: Logger | undefined, metadata: LlmCallMetadata
     metadata.promptTokens !== undefined ? `promptTokens=${metadata.promptTokens}` : undefined,
     metadata.completionTokens !== undefined ? `completionTokens=${metadata.completionTokens}` : undefined,
     metadata.cachedInputTokens !== undefined ? `cachedInputTokens=${metadata.cachedInputTokens}` : undefined,
+    metadata.inputTokens !== undefined ? `inputTokens=${metadata.inputTokens}` : undefined,
     metadata.elapsedMs !== undefined ? `elapsedMs=${metadata.elapsedMs}` : undefined,
     metadata.inputDocuments !== undefined ? `inputDocuments=${metadata.inputDocuments}` : undefined,
     metadata.inputChunks !== undefined ? `inputChunks=${metadata.inputChunks}` : undefined,

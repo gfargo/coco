@@ -1,5 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { resolveTemperature } from './reasoning'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
@@ -12,12 +13,11 @@ async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Pro
     // Disable LangChain's built-in AsyncCaller retries (#1677).
     maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     model,
-    // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
-    // respected instead of being coerced to the 0.2 default. Extended
-    // thinking rejects any temperature other than 1 (an *unset* temperature
-    // is fine; an explicit 0.2 default is not), so skip the default
-    // whenever reasoning is requested and let the SDK's own default apply.
-    temperature: reasoningEffort ? config.service.temperature : (config.service.temperature ?? 0.2),
+    // Extended thinking rejects any temperature other than 1 (an *unset*
+    // temperature is fine; an explicit 0.2 default — or any other explicit
+    // non-1 value — is not), so normalize it away whenever reasoning is
+    // requested and let the SDK's own default apply. See `resolveTemperature`.
+    temperature: resolveTemperature(reasoningEffort, config.service.temperature),
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
     // Anthropic has no graded effort levels — any requested effort enables
     // adaptive extended thinking.
