@@ -129,10 +129,30 @@ describe('usageLedger', () => {
 
     const byTask = summarizeUsageByTask(readUsageRecords())
     const summarizeRow = byTask.find((r) => r.key === 'summarize-large-file')
-    expect(summarizeRow).toMatchObject({ calls: 3, cacheHits: 1, cacheLookups: 3 })
+    // Only the 2 misses are real LLM calls — the hit is excluded from `calls`
+    // (and its token/latency accumulators) so it doesn't inflate cost metrics.
+    expect(summarizeRow).toMatchObject({ calls: 2, cacheHits: 1, cacheLookups: 3 })
 
     const commitRow = byTask.find((r) => r.key === 'commit')
     expect(commitRow).toMatchObject({ calls: 1, cacheHits: 0, cacheLookups: 0 })
+  })
+
+  it('excludes cache hits from calls, tokens, and avgMs so a zero-latency hit does not dilute latency', () => {
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false, promptTokens: 100, elapsedMs: 400 })
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false, promptTokens: 100, elapsedMs: 600 })
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: true })
+
+    const summarizeRow = summarizeUsageByTask(readUsageRecords()).find((r) => r.key === 'summarize-large-file')
+    // avgMs is 500 (the two real calls' average) — if the hit were counted as
+    // a call, it would dilute this to 333 (1000ms / 3 calls).
+    expect(summarizeRow).toMatchObject({
+      calls: 2,
+      promptTokens: 200,
+      totalMs: 1000,
+      avgMs: 500,
+      cacheHits: 1,
+      cacheLookups: 3,
+    })
   })
 
   it('omits cacheHit from the serialized record when undefined', () => {

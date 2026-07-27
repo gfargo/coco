@@ -215,10 +215,12 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       cacheHits: 0,
       cacheLookups: 0,
     }
-    current.calls += 1
-    current.promptTokens += r.promptTokens || 0
-    current.completionTokens += r.completionTokens || 0
-    current.totalMs += r.elapsedMs || 0
+    if (r.cacheHit !== true) {
+      current.calls += 1
+      current.promptTokens += r.promptTokens || 0
+      current.completionTokens += r.completionTokens || 0
+      current.totalMs += r.elapsedMs || 0
+    }
     if (typeof r.cacheHit === 'boolean') {
       current.cacheLookups += 1
       if (r.cacheHit) current.cacheHits += 1

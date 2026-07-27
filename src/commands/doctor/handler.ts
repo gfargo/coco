@@ -25,7 +25,7 @@ import { DoctorArgv, DoctorOptions } from './config'
 import { checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
 import { Config } from '../../lib/config/types'
 
-function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
+export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
   return rows.map((row) => {
     const tokens = row.promptTokens > 0 || row.completionTokens > 0
       ? `${row.promptTokens} in / ${row.completionTokens} out tok`
@@ -50,11 +50,13 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
   const bySurface = summarizeUsageBySurface(records)
   const byRepo = summarizeUsageByRepo(records)
   const hasRepoData = byRepo.some((row) => row.key !== 'unknown')
+  const callCount = records.filter((r) => r.cacheHit !== true).length
+  const cacheHitCount = records.length - callCount
 
   if (json) {
     emitJson({
       routing: profile,
-      usage: { records: records.length, byTask, byModel, bySurface, byRepo },
+      usage: { records: records.length, calls: callCount, cacheHits: cacheHitCount, byTask, byModel, bySurface, byRepo },
     })
     return
   }
@@ -81,7 +83,12 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
     return
   }
 
-  logger.log(chalk.bold(`LLM usage`) + chalk.dim(` (${records.length} call(s) · ${getUsageLogPath()})`))
+  logger.log(
+    chalk.bold(`LLM usage`) +
+      chalk.dim(
+        ` (${callCount} call(s)${cacheHitCount ? ` · ${cacheHitCount} cache hit(s)` : ''} · ${getUsageLogPath()})`
+      )
+  )
   logger.log('')
   logger.log(chalk.dim('  By task:'))
   for (const line of renderUsageRows(byTask, 'call')) logger.log(line)
