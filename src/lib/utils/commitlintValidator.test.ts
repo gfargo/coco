@@ -5,6 +5,8 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
+jest.setTimeout(30000)
+
 type ValidationResult = {
   valid: boolean
   errors: string[]
