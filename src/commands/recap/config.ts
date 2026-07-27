@@ -113,7 +113,7 @@ export const builder = (yargs: Argv) => {
         ['--last-week', Boolean(rawArgv['last-week'])],
         ['--last-month', Boolean(rawArgv['last-month'])],
         ['--last-tag', tagRequested],
-        ['--current-branch', Boolean(rawArgv.currentBranch)],
+        ['--currentBranch', Boolean(rawArgv.currentBranch)],
         ['--timeframe', rawArgv.timeframe !== undefined],
       ]
       const activeSelectors = selectors.filter(([, isSet]) => isSet)
