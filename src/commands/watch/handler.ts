@@ -4,6 +4,7 @@ import {
     AgentTaskInputSchema,
     ChangeSource,
     createAgentOperationContext,
+    ResolvedChangeContext,
     resolveAgentRepoRoot,
     resolveChangeSource,
     runAgentOperation,
@@ -103,10 +104,9 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
   async function runOnce(): Promise<void> {
     if (stopped) return
 
-    let digest: string
+    let resolved: ResolvedChangeContext
     try {
-      const resolved = await resolveChangeSource(source, context, { trustRepositoryConfig })
-      digest = resolved.meta.digest
+      resolved = await resolveChangeSource(source, context, { trustRepositoryConfig })
     } catch (error) {
       const normalized = toAgentOperationError(error)
       if (normalized.code === 'NO_CHANGES') {
@@ -114,25 +114,35 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
         emitEvent(argv, logger, { type: 'idle' })
         return
       }
-      emitEvent(argv, logger, { type: 'error', code: normalized.code, message: normalized.message })
+      if (!stopped) {
+        emitEvent(argv, logger, { type: 'error', code: normalized.code, message: normalized.message })
+      }
       return
     }
 
-    if (digest === lastDigest) {
-      emitEvent(argv, logger, { type: 'skipped', reason: 'unchanged', digest })
+    if (resolved.meta.digest === lastDigest) {
+      emitEvent(argv, logger, { type: 'skipped', reason: 'unchanged', digest: resolved.meta.digest })
       return
     }
-    lastDigest = digest
+    lastDigest = resolved.meta.digest
 
     for (const operation of operations) {
       if (stopped) return
       emitEvent(argv, logger, { type: 'running', operation })
       try {
-        const envelope = await runAgentOperation(operation, input, context)
+        // Reuse the digest guard's snapshot so both operations in a
+        // `--review --draft` pass see the exact tree the digest was taken
+        // from, and so a settled change set resolves the diff once.
+        const envelope = await runAgentOperation(operation, input, context, resolved)
         emitEvent(argv, logger, { type: 'result', operation, data: envelope.data, warnings: envelope.warnings })
       } catch (error) {
         const normalized = toAgentOperationError(error)
-        emitEvent(argv, logger, { type: 'error', operation, code: normalized.code, message: normalized.message })
+        // Shutdown may abort an in-flight operation; `stopped` already
+        // emitted the terminal `stopped` event by the time this rejects, so
+        // don't emit a trailing error after it.
+        if (!stopped) {
+          emitEvent(argv, logger, { type: 'error', operation, code: normalized.code, message: normalized.message })
+        }
       }
     }
   }

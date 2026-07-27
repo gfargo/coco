@@ -26,7 +26,7 @@ import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
-import { AgentOperationContext, resolveChangeSource } from './context'
+import { AgentOperationContext, ResolvedChangeContext, resolveChangeSource } from './context'
 import { AgentOperationError } from './errors'
 import {
     AgentOperation,
@@ -160,8 +160,9 @@ function envelope<T>(
 export async function generateAgentCommitDraft(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<CommitDraftData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   const changeContext = asUntrustedChangeContext(resolved.text)
@@ -214,8 +215,9 @@ export async function generateAgentCommitDraft(
 export async function generateAgentReview(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<ReviewData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   const changeContext = asUntrustedChangeContext(resolved.text)
@@ -244,8 +246,9 @@ export async function generateAgentReview(
 export async function generateAgentChangelog(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<ChangelogData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   const changeContext = asUntrustedChangeContext(resolved.text)
@@ -273,8 +276,9 @@ export async function generateAgentChangelog(
 export async function generateAgentRecap(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<RecapData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   const changeContext = asUntrustedChangeContext(resolved.text)
@@ -300,15 +304,16 @@ export async function runAgentOperation(
   operation: AgentOperation,
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ) {
   switch (operation) {
     case 'commit-draft':
-      return generateAgentCommitDraft(input, context)
+      return generateAgentCommitDraft(input, context, preResolved)
     case 'review':
-      return generateAgentReview(input, context)
+      return generateAgentReview(input, context, preResolved)
     case 'changelog':
-      return generateAgentChangelog(input, context)
+      return generateAgentChangelog(input, context, preResolved)
     case 'recap':
-      return generateAgentRecap(input, context)
+      return generateAgentRecap(input, context, preResolved)
   }
 }

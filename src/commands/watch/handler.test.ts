@@ -117,6 +117,12 @@ describe('watch command handler', () => {
     }
   }
 
+  async function waitForCalls(mockFn: jest.Mock, times: number): Promise<void> {
+    for (let attempt = 0; attempt < 50 && mockFn.mock.calls.length < times; attempt += 1) {
+      await Promise.resolve()
+    }
+  }
+
   it('--once resolves the repo, runs the default review operation, and exits', async () => {
     await handler(argv({ once: true }), logger)
 
@@ -131,6 +137,7 @@ describe('watch command handler', () => {
       'review',
       expect.objectContaining({ source: { kind: 'repository', scope: { type: 'worktree' } } }),
       expect.anything(),
+      resolved('sha256:v1'),
     )
     // Never spins up the continuous fs watcher in one-shot mode.
     expect(mockCreateRepoChangeWatcher).not.toHaveBeenCalled()
@@ -151,6 +158,7 @@ describe('watch command handler', () => {
       'commit-draft',
       expect.objectContaining({ source: { kind: 'repository', scope: { type: 'staged' } } }),
       expect.anything(),
+      resolved('sha256:v1'),
     )
     const events = lines()
     expect(events[0]).toMatchObject({ operations: ['commit-draft'], scope: 'staged' })
@@ -161,6 +169,17 @@ describe('watch command handler', () => {
 
     const operationsCalled = mockRunAgentOperation.mock.calls.map((call) => call[0])
     expect(operationsCalled).toEqual(['review', 'commit-draft'])
+  })
+
+  it('resolves the change source once per settle and reuses it across operations (no redundant resolve)', async () => {
+    await handler(argv({ once: true, review: true, draft: true }), logger)
+
+    // One resolve for the digest guard — not one per operation.
+    expect(mockResolveChangeSource).toHaveBeenCalledTimes(1)
+    const resolvedContext = resolved('sha256:v1')
+    for (const call of mockRunAgentOperation.mock.calls) {
+      expect(call[3]).toEqual(resolvedContext)
+    }
   })
 
   it('skips the LLM call when the diff digest is unchanged (cost guard)', async () => {
@@ -218,5 +237,32 @@ describe('watch command handler', () => {
     expect(runnerClose).toHaveBeenCalled()
     const events = lines()
     expect(events[events.length - 1]).toEqual({ type: 'stopped' })
+  })
+
+  it('does not emit an error after the terminal stopped event when SIGINT cancels an in-flight operation', async () => {
+    let rejectOperation: (error: unknown) => void = () => {}
+    mockRunAgentOperation.mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectOperation = reject
+    }))
+    mockCreateRepoChangeWatcher.mockImplementation(({ onChange }: { onChange: (kind: string) => void }) => {
+      void onChange('worktree')
+      return { close: closeMock }
+    })
+
+    const handlerPromise = handler(argv(), logger)
+    await waitForShutdownListener()
+    await waitForCalls(mockRunAgentOperation, 1)
+
+    process.emit('SIGINT' as never)
+    rejectOperation(new AgentOperationError('CANCELLED', 'Operation was cancelled.'))
+
+    await handlerPromise
+    // Flush any pending microtasks from the rejected in-flight operation's
+    // catch handler, to prove it stays suppressed rather than just delayed.
+    for (let i = 0; i < 10; i += 1) await Promise.resolve()
+
+    const events = lines()
+    expect(events[events.length - 1]).toEqual({ type: 'stopped' })
+    expect(events.some((event) => (event as { type: string }).type === 'error')).toBe(false)
   })
 })
