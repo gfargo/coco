@@ -789,6 +789,9 @@ export const schema = {
         },
         "largeDiff": {
           "$ref": "#/definitions/LLMModel"
+        },
+        "blameExplain": {
+          "$ref": "#/definitions/LLMModel"
         }
       },
       "additionalProperties": false

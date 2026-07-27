@@ -10,6 +10,7 @@ export type DynamicModelTask =
   | 'recap'
   | 'repair'
   | 'largeDiff'
+  | 'blameExplain'
 export type DynamicModelPreference = 'cost' | 'balanced' | 'quality'
 
 export type OpenAIModel =
