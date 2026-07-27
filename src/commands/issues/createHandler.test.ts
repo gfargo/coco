@@ -8,16 +8,19 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getProviderOverview } from '../../git/providerData'
 import { getForgeActions } from '../../git/forgeActions'
 import { Logger } from '../../lib/utils/logger'
+import { selectPrompt } from '../../lib/ui/inquirerPrompts'
 
 jest.mock('../utils/applyRepoFlag')
 jest.mock('../../lib/config/utils/loadConfig')
 jest.mock('../../git/providerData')
 jest.mock('../../git/forgeActions')
+jest.mock('../../lib/ui/inquirerPrompts')
 
 const mockApplyRepoFlag = applyRepoFlag as jest.MockedFunction<typeof applyRepoFlag>
 const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
 const mockOverview = getProviderOverview as jest.MockedFunction<typeof getProviderOverview>
 const mockGetForgeActions = getForgeActions as jest.MockedFunction<typeof getForgeActions>
+const mockSelectPrompt = selectPrompt as jest.MockedFunction<typeof selectPrompt>
 
 function okOverview(over: Record<string, unknown> = {}) {
   return {
@@ -28,10 +31,11 @@ function okOverview(over: Record<string, unknown> = {}) {
 }
 
 /** Feeds `raw` to `process.stdin` for the duration of `fn`, mirroring a piped `coco review --json`. */
-async function withStdin<T>(raw: string, fn: () => Promise<T>): Promise<T> {
+async function withStdin<T>(raw: string, fn: () => Promise<T>, isTTY = false): Promise<T> {
   const original = process.stdin
   const fake = {
     setEncoding: jest.fn(),
+    isTTY,
     [Symbol.asyncIterator]: async function* () {
       if (raw) yield raw
     },
@@ -114,6 +118,22 @@ describe('issues create command', () => {
       { title: 'SQL injection', summary: 'Unsanitized input reaches the query.', severity: 9, category: 'security', filePath: 'b.ts' },
     ]
     await withStdin(JSON.stringify(findings), () => handler(argv, logger))
+    expect(mockCreateIssue).toHaveBeenCalledWith({
+      title: 'SQL injection',
+      body: 'Unsanitized input reaches the query.\n\n- Severity: 9\n- Category: security\n- File: `b.ts`',
+    })
+  })
+
+  it('skips the multi-finding picker over a piped (non-TTY) stdin even with --interactive', async () => {
+    argv.fromReview = true
+    argv.interactive = true
+    const findings = [
+      { title: 'Minor nit', summary: 'nit', severity: 2, category: 'style', filePath: 'a.ts' },
+      { title: 'SQL injection', summary: 'Unsanitized input reaches the query.', severity: 9, category: 'security', filePath: 'b.ts' },
+    ]
+    mockSelectPrompt.mockResolvedValue('create')
+    await withStdin(JSON.stringify(findings), () => handler(argv, logger), false)
+    expect(mockSelectPrompt).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'Which finding should become an issue?' }))
     expect(mockCreateIssue).toHaveBeenCalledWith({
       title: 'SQL injection',
       body: 'Unsanitized input reaches the query.\n\n- Severity: 9\n- Category: security\n- File: `b.ts`',

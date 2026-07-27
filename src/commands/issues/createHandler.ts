@@ -68,6 +68,9 @@ export const handler: CommandHandler<IssuesCreateArgv> = async (argv, logger) =>
   let title = argv.title?.trim() || ''
   let body = argv.body?.trim() || ''
 
+  // Per-field merge: --from-review only fills in whichever of title/body
+  // wasn't explicitly passed, so supplying just --title still drafts a body
+  // from the piped finding (and vice versa). Pass both to skip stdin.
   if ((!title || !body) && argv.fromReview) {
     const raw = (await readStdin()).trim()
     if (!raw) {
@@ -97,8 +100,11 @@ export const handler: CommandHandler<IssuesCreateArgv> = async (argv, logger) =>
 
     const findings = [...parsed.data].sort((a, b) => b.severity - a.severity)
 
+    // stdin was just fully drained to read the findings above, so it's not a
+    // TTY the picker could read keystrokes from — only offer it when stdin
+    // itself is interactive (findings piped in some other way, e.g. tests).
     let selected = findings[0]
-    if (findings.length > 1 && INTERACTIVE) {
+    if (findings.length > 1 && INTERACTIVE && process.stdin.isTTY) {
       selected = await selectPrompt<ReviewFeedbackItem>({
         message: 'Which finding should become an issue?',
         choices: findings.map((finding) => ({
