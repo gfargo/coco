@@ -161,6 +161,17 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
   }
 
   // --fix: reword non-conforming subjects via an interactive rebase.
+  // Check whether there's anything to do before running any of the
+  // destructive-history safety guards below — a conforming range should
+  // never be refused for being dirty/pushed/mid-operation since we won't
+  // touch it.
+  const failingForReword = results.filter((commit) => commit.status === 'fail')
+  if (failingForReword.length === 0) {
+    logger.log('Nothing to fix — no commit has a commitlint error.', { color: 'green' })
+    commandExit(exitCode)
+    return
+  }
+
   // Refuse on anything that makes rewriting history unsafe unless the
   // user explicitly opts in with --force. Reaching the root commit is
   // never forceable — `executeRebasePlan` has no `--root` support.
@@ -189,13 +200,6 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
     logger.error(`Refusing to --fix: ${reasons.join('; ')}.`, { color: 'red' })
     logger.log('Pass --force to override once you understand the risk.', { color: 'yellow' })
     commandExit(1)
-    return
-  }
-
-  const failingForReword = results.filter((commit) => commit.status === 'fail')
-  if (failingForReword.length === 0) {
-    logger.log('Nothing to fix — no commit has a commitlint error.', { color: 'green' })
-    commandExit(exitCode)
     return
   }
 
@@ -315,6 +319,14 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
   const result = await executeRebasePlan(git, rows)
   if (result.ok) {
     logger.log(`\n${result.message}`, { color: 'green' })
+    const allReworded = rewordBySha.size === failingForReword.length
+    if (!allReworded) {
+      logger.log('Some commits could not be reworded — history still has non-conforming subjects.', {
+        color: 'yellow',
+      })
+    }
+    commandExit(allReworded ? 0 : 1)
+    return
   } else {
     logger.error(`\n${result.message}`, { color: 'red' })
     commandExit(1)

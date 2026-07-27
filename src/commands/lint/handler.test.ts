@@ -244,13 +244,45 @@ describe('lint command handler', () => {
       mockExecuteChain.mockResolvedValue({ subject: 'fix: a conforming subject' })
       mockExecuteRebasePlan.mockResolvedValue({ ok: true, message: 'Rebase applied — 1 of 1 commits kept' })
 
-      await handler({ ...baseArgv, fix: true }, logger)
+      await expect(handler({ ...baseArgv, fix: true }, logger)).rejects.toMatchObject({ code: 0 })
 
       expect(mockExecuteRebasePlan).toHaveBeenCalledTimes(1)
       const rows = mockExecuteRebasePlan.mock.calls[0][1]
       expect(rows).toEqual([
         expect.objectContaining({ sha: 'sha1', action: 'reword', newMessage: 'fix: a conforming subject' }),
       ])
+    })
+
+    it('exits 0 without consulting safety guards when the range is already conforming', async () => {
+      const log = record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'feat: add thing', ''])
+      mockApplyRepoFlag.mockReturnValue(makeGit({ log }))
+      mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+      // Would trigger the "already refuses" guard if it were consulted.
+      mockGetInProgressOperationType.mockResolvedValue('rebase')
+
+      await expect(handler({ ...baseArgv, fix: true }, logger)).rejects.toMatchObject({ code: 0 })
+
+      expect(mockGetInProgressOperationType).not.toHaveBeenCalled()
+      expect(mockExecuteRebasePlan).not.toHaveBeenCalled()
+    })
+
+    it('exits 1 when only some failing commits could be reworded', async () => {
+      const log =
+        record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'bad message 1', '']) +
+        record(['sha2', 'sha2', '', 'Jane', '2026-01-02', 'bad message 2', ''])
+      mockApplyRepoFlag.mockReturnValue(makeGit({ log }))
+      mockValidateCommitMessage
+        .mockResolvedValueOnce({ valid: false, errors: ['type may not be empty'], warnings: [] }) // sha1 lint
+        .mockResolvedValueOnce({ valid: false, errors: ['type may not be empty'], warnings: [] }) // sha2 lint
+        .mockResolvedValueOnce({ valid: true, errors: [], warnings: [] }) // sha1 reword succeeds
+        .mockResolvedValueOnce({ valid: false, errors: ['still bad'], warnings: [] }) // sha2 attempt 1 fails
+        .mockResolvedValueOnce({ valid: false, errors: ['still bad'], warnings: [] }) // sha2 attempt 2 fails
+      mockExecuteChain.mockResolvedValue({ subject: 'fix: a conforming subject' })
+      mockExecuteRebasePlan.mockResolvedValue({ ok: true, message: 'Rebase applied — 1 of 2 commits reworded' })
+
+      await expect(handler({ ...baseArgv, fix: true }, logger)).rejects.toMatchObject({ code: 1 })
+
+      expect(mockExecuteRebasePlan).toHaveBeenCalledTimes(1)
     })
   })
 })
