@@ -362,16 +362,46 @@ describe('init command', () => {
       } as never)
       jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('lmstudio')
       jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('local-model')
+      jest.spyOn(questions, 'inputOptionalBaseURL').mockResolvedValue(undefined)
 
       await handler(createArgv({ scope: 'global' }), logger)
 
       expect(questions.inputApiKey).not.toHaveBeenCalled()
+      expect(questions.inputOptionalBaseURL).toHaveBeenCalledWith('LM Studio', 'http://localhost:1234/v1')
       expect(mockAppendToGitConfig).toHaveBeenCalledWith(
         '/home/coco/.gitconfig',
         expect.objectContaining({
           service: expect.objectContaining({
             provider: 'lmstudio',
             authentication: { type: 'None', credentials: undefined },
+          }),
+        })
+      )
+      // Leaving the prompt blank keeps the registry default rather than
+      // stamping an explicit (redundant) baseURL onto the written config.
+      const [, writtenConfig] = mockAppendToGitConfig.mock.calls[0]
+      expect(writtenConfig.service).not.toHaveProperty('baseURL')
+    })
+
+    it('lets a direct lmstudio/vllm pick override the default port', async () => {
+      mockGetDefaultServiceConfigFromAlias.mockReturnValue({
+        provider: 'vllm',
+        model: 'local-model',
+        authentication: { type: 'None', credentials: undefined },
+      } as never)
+      jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('vllm')
+      jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('local-model')
+      jest.spyOn(questions, 'inputOptionalBaseURL').mockResolvedValue('http://localhost:9000/v1')
+
+      await handler(createArgv({ scope: 'global' }), logger)
+
+      expect(questions.inputOptionalBaseURL).toHaveBeenCalledWith('vLLM', 'http://localhost:8000/v1')
+      expect(mockAppendToGitConfig).toHaveBeenCalledWith(
+        '/home/coco/.gitconfig',
+        expect.objectContaining({
+          service: expect.objectContaining({
+            provider: 'vllm',
+            baseURL: 'http://localhost:9000/v1',
           }),
         })
       )

@@ -42,6 +42,13 @@ export type ProviderDefinition = {
    */
   resolveEndpoint?: (config: Config) => string | undefined
   /**
+   * Endpoint used when `service.baseURL` is unset — the same value
+   * `resolveEndpoint` falls back to. Exposed directly (rather than making
+   * callers synthesize a `Config` to probe `resolveEndpoint`) so the init
+   * wizard can show/offer-to-override it before a `Config` exists yet.
+   */
+  defaultBaseURL?: string
+  /**
    * Multiplier applied to the gpt-4o tiktoken baseline count when this
    * provider has no synchronous local tokenizer of its own. Undefined (the
    * OpenAI/Azure case, whose tokenizer *is* tiktoken-family) means no

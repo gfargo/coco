@@ -52,6 +52,7 @@ export function createOpenAiCompatibleProvider(
     createLlm: (args: CreateLlmArgs): Promise<BaseChatModel> =>
       createOpenAiLlm(args, opts.defaultBaseURL),
     resolveEndpoint: (config: Config) => resolveBaseURL(config, opts.defaultBaseURL),
+    defaultBaseURL: opts.defaultBaseURL,
     tokenCorrectionFactor: opts.tokenCorrectionFactor,
   }
 }

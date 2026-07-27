@@ -183,7 +183,7 @@ export function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
       diagnostics.push({
         severity: 'warn',
         message: 'API key appears to be a placeholder or empty. Coco may fall back to environment variables.',
-        fix: `Set the API key in your config or via environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY, GEMINI_API_KEY, or MISTRAL_API_KEY).`,
+        fix: `Set the API key in your config or via environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY, GEMINI_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, XAI_API_KEY, TOGETHER_API_KEY, FIREWORKS_API_KEY, or OPENROUTER_API_KEY).`,
       })
     }
   }

@@ -11,7 +11,8 @@ import { installNpmPackage } from '../../lib/utils/installPackage'
 
 import { ConfigWithServiceObject } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
-import { LLMModel, LLMProvider, OllamaLLMService, OpenAILLMService } from '../../lib/langchain/types'
+import { LLMModel, LLMProvider, LmStudioLLMService, OllamaLLMService, OpenAILLMService, VllmLLMService } from '../../lib/langchain/types'
+import { findProviderDefinition } from '../../lib/langchain/providers/registry'
 import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
 import { OllamaNotReadyError } from '../../lib/langchain/utils/ollamaStatus'
 import { CommandHandler } from '../../lib/types'
@@ -88,6 +89,24 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // OpenAILLMService here.
   if (compatiblePreset?.baseURL) {
     (service as OpenAILLMService).baseURL = compatiblePreset.baseURL
+  }
+
+  // Direct-select path for local-server providers (LM Studio, vLLM): unlike
+  // "Other OpenAI-compatible endpoint" above, picking these straight from the
+  // main list has no baseURL prompt, so a non-default port would otherwise
+  // require hand-editing config afterward. Offer an override here, defaulting
+  // to the registry's baked-in endpoint when left blank.
+  if (llmProvider === 'lmstudio' || llmProvider === 'vllm') {
+    const defaultBaseURL = findProviderDefinition(llmProvider)?.defaultBaseURL
+    if (defaultBaseURL) {
+      const baseURL = await questions.inputOptionalBaseURL(
+        llmProvider === 'lmstudio' ? 'LM Studio' : 'vLLM',
+        defaultBaseURL
+      )
+      if (baseURL) {
+        (service as LmStudioLLMService | VllmLLMService).baseURL = baseURL
+      }
+    }
   }
 
   const config: ConfigWithServiceObject = {

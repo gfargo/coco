@@ -397,6 +397,23 @@ export const questions = {
     })
   },
 
+  /**
+   * Lets a user picking a local-server provider (LM Studio, vLLM) directly
+   * from the main list override the default port/host — otherwise a
+   * non-default setup silently gets the baked-in `defaultBaseURL` with no
+   * way to change it short of hand-editing config afterward.
+   */
+  inputOptionalBaseURL: async (
+    label: string,
+    defaultBaseURL: string
+  ): Promise<string | undefined> => {
+    const baseURL = await inputPrompt({
+      message: `${label} base URL (leave blank to use ${defaultBaseURL}):`,
+    })
+
+    return baseURL.trim() || undefined
+  },
+
   inputTokenLimit: async (): Promise<number> => {
     const tokenLimit = await inputPrompt({
       message: 'maximum number of tokens for generating commit messages:',
