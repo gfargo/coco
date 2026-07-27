@@ -134,12 +134,16 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
         // `--review --draft` pass see the exact tree the digest was taken
         // from, and so a settled change set resolves the diff once.
         const envelope = await runAgentOperation(operation, input, context, resolved)
-        emitEvent(argv, logger, { type: 'result', operation, data: envelope.data, warnings: envelope.warnings })
+        // Shutdown may land while an operation is resolving successfully;
+        // `stopped` already emitted the terminal `stopped` event by the time
+        // this settles, so don't emit a trailing result after it.
+        if (!stopped) {
+          emitEvent(argv, logger, { type: 'result', operation, data: envelope.data, warnings: envelope.warnings })
+        }
       } catch (error) {
         const normalized = toAgentOperationError(error)
-        // Shutdown may abort an in-flight operation; `stopped` already
-        // emitted the terminal `stopped` event by the time this rejects, so
-        // don't emit a trailing error after it.
+        // Same race on the failure path: an in-flight operation aborted by
+        // shutdown may reject after `stopped` already emitted `stopped`.
         if (!stopped) {
           emitEvent(argv, logger, { type: 'error', operation, code: normalized.code, message: normalized.message })
         }

@@ -265,4 +265,32 @@ describe('watch command handler', () => {
     expect(events[events.length - 1]).toEqual({ type: 'stopped' })
     expect(events.some((event) => (event as { type: string }).type === 'error')).toBe(false)
   })
+
+  it('does not emit a result after the terminal stopped event when SIGINT lands while an operation is resolving successfully', async () => {
+    let resolveOperation: (value: unknown) => void = () => {}
+    mockRunAgentOperation.mockImplementation(() => new Promise((resolve) => {
+      resolveOperation = resolve
+    }))
+    mockCreateRepoChangeWatcher.mockImplementation(({ onChange }: { onChange: (kind: string) => void }) => {
+      void onChange('worktree')
+      return { close: closeMock }
+    })
+
+    const handlerPromise = handler(argv(), logger)
+    await waitForShutdownListener()
+    await waitForCalls(mockRunAgentOperation, 1)
+
+    process.emit('SIGINT' as never)
+    resolveOperation(reviewSuccess)
+
+    await handlerPromise
+    // Flush any pending microtasks from the late-resolving in-flight
+    // operation's `.then` handler, to prove it stays suppressed rather than
+    // just delayed.
+    for (let i = 0; i < 10; i += 1) await Promise.resolve()
+
+    const events = lines()
+    expect(events[events.length - 1]).toEqual({ type: 'stopped' })
+    expect(events.some((event) => (event as { type: string }).type === 'result')).toBe(false)
+  })
 })
