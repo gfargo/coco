@@ -1,4 +1,4 @@
-import { defaultBitbucketRunner, runBitbucketAction, type BitbucketRunner } from './bitbucketCli'
+import { defaultBitbucketRunner, resolveBitbucketActionError, runBitbucketAction, type BitbucketRunner } from './bitbucketCli'
 import { findOpenBitbucketPullRequestForBranch } from './bitbucketListData'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
@@ -152,18 +152,35 @@ export function addBitbucketPullRequestLabel(): Promise<PullRequestActionResult>
  * Promote a draft PR to ready for review (#1933). Unlike GitLab/Gitea,
  * Bitbucket Cloud's pull request resource carries a real `draft` boolean
  * (set on create by `createBitbucketPullRequest`), so this is a direct
- * field update rather than a title rewrite.
+ * field update rather than a title rewrite. Bitbucket's `PUT` is a
+ * full-resource update where `title` is required, so the current title is
+ * fetched first and echoed back alongside `draft: false` to avoid a 400 or
+ * clobbering it.
  */
-export function markBitbucketPullRequestReadyByNumber(
+export async function markBitbucketPullRequestReadyByNumber(
   projectPath: string,
   pullRequestNumber: number,
   runner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<PullRequestActionResult> {
+  let title: string | undefined
+  try {
+    const out = (await runner(`repositories/${projectPath}/pullrequests/${pullRequestNumber}`)).trim()
+    const pr = out ? (JSON.parse(out) as { title?: string }) : undefined
+    title = pr?.title
+  } catch (error) {
+    const { message, details } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
+
+  if (title === undefined) {
+    return { ok: false, message: `Could not fetch pull request #${pullRequestNumber}.` }
+  }
+
   return runBitbucketAction(
     runner,
     `repositories/${projectPath}/pullrequests/${pullRequestNumber}`,
     'PUT',
-    { draft: false },
+    { title, draft: false },
     () => ({ ok: true, message: `Marked pull request #${pullRequestNumber} as ready for review` })
   )
 }

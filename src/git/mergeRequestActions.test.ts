@@ -227,4 +227,11 @@ describe('markMergeRequestReadyByNumber (#1933)', () => {
       expect(result.message).toContain('404 Not Found')
     }
   })
+
+  it('refuses to PUT an empty title when it is only the Draft: prefix', async () => {
+    const runner = jest.fn().mockResolvedValueOnce(JSON.stringify({ title: 'Draft:' }))
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(false)
+  })
 })

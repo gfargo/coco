@@ -385,6 +385,12 @@ export async function markMergeRequestReadyByNumber(
       return { ok: true, message: `Merge request !${mergeRequestNumber} is not a draft` }
     }
     const readyTitle = title.replace(DRAFT_TITLE_PREFIX, '')
+    if (!readyTitle.trim()) {
+      return {
+        ok: false,
+        message: `Cannot mark merge request !${mergeRequestNumber} ready: the title is only the draft prefix. Rename it first.`,
+      }
+    }
     return await runGlabAction(
       runner,
       [

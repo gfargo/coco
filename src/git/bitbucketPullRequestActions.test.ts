@@ -118,13 +118,25 @@ describe('closeBitbucketPullRequestByNumber (1238)', () => {
 })
 
 describe('markBitbucketPullRequestReadyByNumber (#1933)', () => {
-  it('PUTs draft: false to the pull request endpoint', withCredentials(async () => {
-    const { calls, runner } = capturingRunner()
+  it('GETs the current title, then PUTs it back with draft: false', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({
+      'repositories/ws/repo/pullrequests/5': JSON.stringify({ title: 'Add feature' }),
+    })
     const result = await markBitbucketPullRequestReadyByNumber('ws/repo', 5, runner)
     expect(result.ok).toBe(true)
-    expect(calls[0].endpoint).toBe('repositories/ws/repo/pullrequests/5')
-    expect(calls[0].method).toBe('PUT')
-    expect(JSON.parse(calls[0].body ?? '{}').draft).toBe(false)
+    expect(calls[0]).toEqual({ endpoint: 'repositories/ws/repo/pullrequests/5', method: undefined, body: undefined })
+    expect(calls[1].endpoint).toBe('repositories/ws/repo/pullrequests/5')
+    expect(calls[1].method).toBe('PUT')
+    const body = JSON.parse(calls[1].body ?? '{}')
+    expect(body.draft).toBe(false)
+    expect(body.title).toBe('Add feature')
+  }))
+
+  it('reports failure when the pull request cannot be fetched', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({ 'repositories/ws/repo/pullrequests/5': '' })
+    const result = await markBitbucketPullRequestReadyByNumber('ws/repo', 5, runner)
+    expect(result.ok).toBe(false)
+    expect(calls).toHaveLength(1)
   }))
 })
 

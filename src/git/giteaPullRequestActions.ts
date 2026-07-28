@@ -124,22 +124,22 @@ export function reopenGiteaPullRequestByNumber(
  */
 const GITEA_DRAFT_TITLE_PREFIX = /^\s*\[WIP\]\s*/i
 
-async function fetchGiteaPullRequestTitle(
+async function fetchGiteaPullRequest(
   projectPath: string,
   pullRequestNumber: number,
   runner: GiteaRunner
-): Promise<string | undefined> {
+): Promise<{ draft?: boolean; title?: string } | undefined> {
   const out = (await runner(`repos/${projectPath}/pulls/${pullRequestNumber}`)).trim()
-  const pr = out ? (JSON.parse(out) as { title?: string }) : undefined
-  return pr?.title
+  return out ? (JSON.parse(out) as { draft?: boolean; title?: string }) : undefined
 }
 
 /**
  * Promote a draft PR to ready for review (#1933), the Gitea counterpart of
- * `gh pr ready`. Mirrors `createGiteaPullRequest`'s draft convention: fetch
- * the current title and strip a leading `[WIP]` prefix, rather than setting
- * a `draft` field the create path never writes. A title with no prefix is
- * left untouched (already ready).
+ * `gh pr ready`. Mirrors `isDraftPR()` (`giteaListData.ts`): newer
+ * Gitea/Forgejo expose a real `draft` boolean, so that takes precedence;
+ * only when it's absent does this fall back to stripping the legacy `[WIP]`
+ * title prefix `createGiteaPullRequest` writes. A title with no prefix (and
+ * no `draft` field) is left untouched (already ready).
  */
 export async function markGiteaPullRequestReadyByNumber(
   projectPath: string,
@@ -147,14 +147,35 @@ export async function markGiteaPullRequestReadyByNumber(
   runner: GiteaRunner
 ): Promise<PullRequestActionResult> {
   try {
-    const title = await fetchGiteaPullRequestTitle(projectPath, pullRequestNumber, runner)
-    if (title === undefined) {
+    const pr = await fetchGiteaPullRequest(projectPath, pullRequestNumber, runner)
+    if (pr === undefined) {
       return { ok: false, message: `Could not fetch pull request #${pullRequestNumber}.` }
     }
+
+    if (typeof pr.draft === 'boolean') {
+      if (!pr.draft) {
+        return { ok: true, message: `Pull request #${pullRequestNumber} is not a draft` }
+      }
+      return await runGiteaAction(
+        runner,
+        `repos/${projectPath}/pulls/${pullRequestNumber}`,
+        'PATCH',
+        { draft: false },
+        () => ({ ok: true, message: `Marked pull request #${pullRequestNumber} as ready for review` })
+      )
+    }
+
+    const title = pr.title ?? ''
     if (!GITEA_DRAFT_TITLE_PREFIX.test(title)) {
       return { ok: true, message: `Pull request #${pullRequestNumber} is not a draft` }
     }
     const readyTitle = title.replace(GITEA_DRAFT_TITLE_PREFIX, '')
+    if (!readyTitle.trim()) {
+      return {
+        ok: false,
+        message: `Cannot mark pull request #${pullRequestNumber} ready: the title is only the draft prefix. Rename it first.`,
+      }
+    }
     return await runGiteaAction(
       runner,
       `repos/${projectPath}/pulls/${pullRequestNumber}`,
