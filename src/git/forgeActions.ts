@@ -79,7 +79,11 @@ import { defaultGlabRunner } from './glabCli'
 
 // Bitbucket implementations.
 import { getBitbucketPullRequestList, getBitbucketIssueList, getBitbucketPullRequestOverview } from './bitbucketListData'
-import { getBitbucketPullRequestDetail, getBitbucketIssueDetail } from './bitbucketDetailData'
+import {
+  getBitbucketPullRequestDetail,
+  getBitbucketIssueDetail,
+  getBitbucketPullRequestDiff,
+} from './bitbucketDetailData'
 import {
   createBitbucketPullRequest,
   openBitbucketPullRequest,
@@ -149,8 +153,7 @@ export type ForgeActions = {
   getIssueDetail: (n: number) => Promise<IssueDetailResult>
   /**
    * Unified patch for a PR / MR by number (#1363). Backs the triage
-   * Enter → diff drill-in. Bitbucket has no CLI patch fetch, so its
-   * facade returns a graceful `{ ok: false }` explaining the gap.
+   * Enter → diff drill-in.
    */
   getPullRequestDiffByNumber: (n: number) => Promise<PullRequestDiffResult>
   // Pull-request / merge-request mutations by number (triage)
@@ -271,11 +274,10 @@ function bitbucketActions(
       path
         ? getBitbucketIssueDetail(path, n)
         : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
-    // Bitbucket has no CLI patch fetch / checkout — surface the gap as a
-    // graceful failure so the diff surface / status line explain it
-    // instead of dead-ending (#1363).
-    getPullRequestDiffByNumber: () =>
-      Promise.resolve({ ok: false, message: 'Pull request diffs are not supported for Bitbucket yet.' }),
+    getPullRequestDiffByNumber: (n) =>
+      path
+        ? getBitbucketPullRequestDiff(path, n)
+        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
     commentPullRequestByNumber: (n, body) => commentBitbucketPullRequestByNumber(path ?? '', n, body),
     addPullRequestLabel: () => addBitbucketPullRequestLabel(),
     addPullRequestAssignee: (n, assignee) => addBitbucketPullRequestReviewer(path ?? '', n, assignee),

@@ -1,4 +1,9 @@
-import { getBitbucketPullRequestDetail, getBitbucketIssueDetail, __test } from './bitbucketDetailData'
+import {
+  getBitbucketPullRequestDetail,
+  getBitbucketIssueDetail,
+  getBitbucketPullRequestDiff,
+  __test,
+} from './bitbucketDetailData'
 
 const { mapComments, parseParticipantsAsReviews, normalizeBitbucketBuildStatus } = __test
 
@@ -113,6 +118,26 @@ describe('getBitbucketIssueDetail (1238)', () => {
 
   it('returns ok: false when the issue is not found', async () => {
     const result = await getBitbucketIssueDetail('ws/repo', 999, async () => '')
+    expect(result.ok).toBe(false)
+  })
+})
+
+describe('getBitbucketPullRequestDiff (#1938)', () => {
+  it('splits a raw diff into lines', async () => {
+    const runner = async (endpoint: string) => {
+      expect(endpoint).toBe('repositories/ws/repo/pullrequests/1/diff')
+      return 'diff --git a/x b/x\n+added\n'
+    }
+    const result = await getBitbucketPullRequestDiff('ws/repo', 1, runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.lines).toEqual(['diff --git a/x b/x', '+added'])
+  })
+
+  it('returns ok: false on runner error', async () => {
+    const result = await getBitbucketPullRequestDiff('ws/repo', 1, async () => {
+      throw new Error('not found')
+    })
     expect(result.ok).toBe(false)
   })
 })
