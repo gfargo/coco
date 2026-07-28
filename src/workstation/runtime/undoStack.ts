@@ -6,7 +6,8 @@
  *
  * Only actions with a real git-level inverse are eligible: branch
  * delete (recreate at the recorded sha), stash drop (`git stash store`
- * the recorded hash), reset (`reset --hard` back to the recorded HEAD),
+ * the recorded hash), reset (reset back to the recorded HEAD using the
+ * ORIGINAL reset's mode, not always `--hard` — see `restorePreviousHead`),
  * and tag delete (recreate at the recorded sha). PR/issue close and
  * anything that rewrites already-pushed history are deliberately never
  * pushed here — see the callers in `hooks/useWorkflowAction.ts`.
@@ -28,14 +29,14 @@ import { SimpleGit } from 'simple-git'
 import { restoreDeletedBranch } from '../../git/branchActions'
 import { restoreDeletedTag } from '../../git/tagActions'
 import { restoreStash } from '../../git/stashActions'
-import { restorePreviousHead } from '../../git/historyActions'
+import { restorePreviousHead, ResetMode } from '../../git/historyActions'
 
 export const MAX_UNDO_STACK_SIZE = 20
 
 export type UndoEntry =
   | { kind: 'delete-branch'; label: string; depth: number; name: string; sha: string }
   | { kind: 'drop-stash'; label: string; depth: number; hash: string; message: string }
-  | { kind: 'reset-to-commit'; label: string; depth: number; previousSha: string }
+  | { kind: 'reset-to-commit'; label: string; depth: number; previousSha: string; mode: ResetMode }
   | { kind: 'delete-tag'; label: string; depth: number; name: string; sha: string }
 
 export type UndoActionResult = { ok: boolean; message: string }
@@ -60,7 +61,7 @@ export function performUndo(git: SimpleGit, entry: UndoEntry): Promise<UndoActio
     case 'drop-stash':
       return restoreStash(git, entry.hash, entry.message)
     case 'reset-to-commit':
-      return restorePreviousHead(git, entry.previousSha)
+      return restorePreviousHead(git, entry.previousSha, entry.mode)
     case 'delete-tag':
       return restoreDeletedTag(git, entry.name, entry.sha)
   }

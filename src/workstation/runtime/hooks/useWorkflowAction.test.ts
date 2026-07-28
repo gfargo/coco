@@ -1432,7 +1432,7 @@ describe('undo stack (OSS-1606)', () => {
     await runWorkflowAction('reset-to-commit', 'hard')
     expect(dispatch).toHaveBeenCalledWith({
       type: 'pushUndoEntry',
-      value: { kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234' },
+      value: { kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234', mode: 'hard' },
     })
 
     dispatch.mockClear()
@@ -1442,11 +1442,36 @@ describe('undo stack (OSS-1606)', () => {
       git: git as never,
       state: {
         ...createLogInkState([]),
-        undoStack: [{ kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234' }],
+        undoStack: [{
+          kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234', mode: 'hard',
+        }],
       } as never,
     }))
     await runUndo('undo-last-action')
     expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'deadbeef1234'])
+    expect(dispatch).toHaveBeenCalledWith({ type: 'popUndoEntry' })
+  })
+
+  it('reset-to-commit undo mirrors a --soft original reset instead of forcing --hard', async () => {
+    const dispatch = jest.fn()
+    const git = {
+      revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction: runUndo } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{
+          kind: 'reset-to-commit', label: 'reset --soft to c0', depth: 0, previousSha: 'deadbeef1234', mode: 'soft',
+        }],
+      } as never,
+    }))
+    await runUndo('undo-last-action')
+    expect(git.raw).toHaveBeenCalledWith(['reset', '--soft', 'deadbeef1234'])
     expect(dispatch).toHaveBeenCalledWith({ type: 'popUndoEntry' })
   })
 

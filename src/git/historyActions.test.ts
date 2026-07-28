@@ -327,7 +327,7 @@ describe('log history actions', () => {
   })
 
   describe('restorePreviousHead (OSS-1606 undo-stack inverse for resetToCommit)', () => {
-    it('resets --hard back to the recorded sha', async () => {
+    it('defaults to --hard when no mode is given', async () => {
       const git = {
         revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
         raw: jest.fn().mockResolvedValue(''),
@@ -339,6 +339,22 @@ describe('log history actions', () => {
       })
       expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'abcdef1234567890'])
     })
+
+    it.each(['soft', 'mixed', 'hard'] as const)(
+      'mirrors a %s original reset with the matching mode',
+      async (mode) => {
+        const git = {
+          revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+          raw: jest.fn().mockResolvedValue(''),
+        }
+
+        await expect(restorePreviousHead(git as never, 'abcdef1234567890', mode)).resolves.toEqual({
+          ok: true,
+          message: 'Restored HEAD to abcdef1',
+        })
+        expect(git.raw).toHaveBeenCalledWith(['reset', `--${mode}`, 'abcdef1234567890'])
+      }
+    )
 
     it('blocks while another git operation is in progress', async () => {
       const tempDir = mkdtempSync(join(tmpdir(), 'coco-history-restore-'))

@@ -66,7 +66,7 @@ describe('undo stack (OSS-1606)', () => {
       expect(git.raw).toHaveBeenCalledWith(['stash', 'store', '-m', 'WIP on main', 'deadbeef'])
     })
 
-    it('resets --hard back to the recorded previous HEAD', async () => {
+    it('resets --hard back to the recorded previous HEAD when the original reset was --hard', async () => {
       const git = {
         revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
         raw: jest.fn().mockResolvedValue(''),
@@ -76,10 +76,28 @@ describe('undo stack (OSS-1606)', () => {
         label: 'reset --hard to abc1234',
         depth: 0,
         previousSha: 'deadbeef1234',
+        mode: 'hard',
       }
       const result = await performUndo(git as never, entry)
       expect(result).toEqual({ ok: true, message: 'Restored HEAD to deadbee' })
       expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'deadbeef1234'])
+    })
+
+    it('mirrors a --soft/--mixed original reset instead of forcing --hard', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      const entry: UndoEntry = {
+        kind: 'reset-to-commit',
+        label: 'reset --soft to abc1234',
+        depth: 0,
+        previousSha: 'deadbeef1234',
+        mode: 'soft',
+      }
+      const result = await performUndo(git as never, entry)
+      expect(result).toEqual({ ok: true, message: 'Restored HEAD to deadbee' })
+      expect(git.raw).toHaveBeenCalledWith(['reset', '--soft', 'deadbeef1234'])
     })
 
     it('recreates a deleted tag at its recorded sha', async () => {

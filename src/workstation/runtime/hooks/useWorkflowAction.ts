@@ -859,9 +859,10 @@ export function useWorkflowAction(
           return { ok: false, message: `Unknown reset mode: ${raw}. Use soft, mixed, or hard.` }
         }
         // Capture the pre-reset HEAD so a successful reset can be pushed
-        // onto the undo stack — the inverse is `reset --hard` back to
-        // this sha (OSS-1606). Best-effort: if revparse fails for any
-        // reason, the reset still proceeds, it just isn't undoable.
+        // onto the undo stack — the inverse is a reset back to this sha
+        // using the SAME mode (`raw`), not always `--hard` (OSS-1606).
+        // Best-effort: if revparse fails for any reason, the reset still
+        // proceeds, it just isn't undoable.
         const previousHead = await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
         // Reflog "time machine" (#0.67): when the reflog view is active the
         // target is the cursored reflog entry, not a history commit.
@@ -876,6 +877,7 @@ export function useWorkflowAction(
               label: `reset --${raw} to ${entry.hash}`,
               depth: issuedAtDepth,
               previousSha: previousHead,
+              mode: raw as ResetMode,
             }]
           }
           return resetToCommit(git, {
@@ -892,6 +894,7 @@ export function useWorkflowAction(
             label: `reset --${raw} to ${commit.shortHash}`,
             depth: issuedAtDepth,
             previousSha: previousHead,
+            mode: raw as ResetMode,
           }]
         }
         return resetToCommit(git, {

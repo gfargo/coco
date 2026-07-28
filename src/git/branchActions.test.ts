@@ -234,6 +234,16 @@ describe('log branch actions', () => {
       })
       expect(git.raw).toHaveBeenCalledWith(['branch', 'feature/test', 'abc1234'])
     })
+
+    it('rejects a flag-like branch name', async () => {
+      const git = { raw: jest.fn() }
+
+      await expect(restoreDeletedBranch(git as never, '--force', 'abc1234')).resolves.toEqual({
+        ok: false,
+        message: "Branch name '--force' cannot start with '-'.",
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
   })
 
   // #1361 — batch delete for multi-select.

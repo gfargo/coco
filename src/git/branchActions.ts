@@ -226,6 +226,9 @@ export function restoreDeletedBranch(
   name: string,
   sha: string
 ): Promise<BranchActionResult> {
+  const nameError = rejectFlagLike(name, `Branch name '${name}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
   return runAction(
     () => git.raw(['branch', name, sha]),
     `Restored branch ${name}`
