@@ -146,4 +146,48 @@ describe('executeChainWithSchema', () => {
     expect(fallbackParser).toHaveBeenCalledWith('fallback raw text')
     expect(result).toEqual({ foo: 'parsed:fallback raw text' })
   })
+
+  it('never binds withStructuredOutput for an array-root schema, even on a json-schema provider', async () => {
+    const arraySchema = z.array(z.object({ foo: z.string() }))
+    const model = new FakeListChatModel({ responses: ['[{"foo":"bar"}]'] })
+    recordLlmMetadata(model, { provider: 'openai' })
+    const spy = jest.spyOn(model, 'withStructuredOutput')
+
+    const result = await executeChainWithSchema(arraySchema, asLlm(model), prompt, variables, {
+      logger: silentLogger(),
+    })
+
+    expect(result).toEqual([{ foo: 'bar' }])
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('never binds withStructuredOutput for a z.preprocess-wrapped array schema (the review feedback shape)', async () => {
+    const preprocessedArraySchema = z.preprocess(
+      (value) => (Array.isArray(value) ? value : [value]),
+      z.array(z.object({ foo: z.string() }))
+    )
+    const model = new FakeListChatModel({ responses: ['{"foo":"bar"}'] })
+    recordLlmMetadata(model, { provider: 'openai' })
+    const spy = jest.spyOn(model, 'withStructuredOutput')
+
+    const result = await executeChainWithSchema(preprocessedArraySchema, asLlm(model), prompt, variables, {
+      logger: silentLogger(),
+    })
+
+    expect(result).toEqual([{ foo: 'bar' }])
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('degrades to the legacy text parser when native structured output fails and no fallbackParser was supplied', async () => {
+    const model = new FakeStructuredChatModel('{"foo":"bar"}')
+    withFakeStructuredOutput(model, { foo: 'bar' }, true)
+    recordLlmMetadata(model, { provider: 'openai' })
+
+    const result = await executeChainWithSchema(schema, asLlm(model), prompt, variables, {
+      logger: silentLogger(),
+      retryOptions: { maxAttempts: 1 },
+    })
+
+    expect(result).toEqual({ foo: 'bar' })
+  })
 })
