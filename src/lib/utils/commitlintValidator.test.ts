@@ -5,6 +5,10 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
+// Spawns a fresh `node --import tsx` subprocess per test; cold-start can
+// exceed Jest's 5s default on loaded CI runners (observed on macos-latest).
+jest.setTimeout(20000)
+
 type ValidationResult = {
   valid: boolean
   errors: string[]
