@@ -18,6 +18,14 @@ function parseCreatedIssueUrl(output: string): string | undefined {
     .find((line) => line.startsWith('https://'))
 }
 
+/**
+ * Unlike `gh issue create` (`issueActions.ts`), `glab issue create` has no
+ * `--body-file`/`--description-file` equivalent — its `-d/--description` flag
+ * either takes the value directly or, given `-`, opens an interactive editor
+ * (unusable here). So the body travels via argv; `runGlabAction` shells out
+ * through `execFile` (no shell), so there's no injection risk, just the OS
+ * argv-length ceiling for unusually large AI-drafted bodies.
+ */
 export function createGitLabIssue(
   input: CreateIssueInput,
   runner: GlabRunner = defaultGlabRunner,
