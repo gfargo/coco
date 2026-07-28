@@ -278,6 +278,112 @@ describe('diffSummaryCache (#845, PR 5)', () => {
     })
   })
 
+  describe('flush merges with concurrent on-disk state (#1923 review)', () => {
+    it('preserves an entry written by another process instead of overwriting it', () => {
+      const repoPath = '/repo/concurrent'
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary(repoPath, key, { summary: 'mine', model: 'gpt', tokens: 1 })
+
+      // Simulate a second coco process flushing its own entry to the
+      // same cache file after this process loaded its envelope but
+      // before this process flushes.
+      const cachePath = getDiffSummaryCachePath(repoPath)
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true })
+      const otherKey = diffSummaryKey('other diff', 'gpt', 'p')
+      fs.writeFileSync(
+        cachePath,
+        JSON.stringify({
+          version: 1,
+          savedAt: new Date().toISOString(),
+          entries: {
+            [otherKey]: {
+              summary: 'from another process',
+              model: 'gpt',
+              tokens: 2,
+              lastAccessedAt: new Date().toISOString(),
+            },
+          },
+        })
+      )
+
+      flushDiffSummaryCache()
+
+      const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { summary: string }>
+      }
+      expect(raw.entries[key].summary).toBe('mine')
+      expect(raw.entries[otherKey].summary).toBe('from another process')
+    })
+
+    it('keeps whichever entry has the newer lastAccessedAt when both processes touched the same key', () => {
+      const repoPath = '/repo/conflict'
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary(repoPath, key, { summary: 'stale', model: 'gpt', tokens: 1 })
+
+      const cachePath = getDiffSummaryCachePath(repoPath)
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true })
+      const future = new Date(Date.now() + 60_000).toISOString()
+      fs.writeFileSync(
+        cachePath,
+        JSON.stringify({
+          version: 1,
+          savedAt: future,
+          entries: {
+            [key]: { summary: 'fresher', model: 'gpt', tokens: 9, lastAccessedAt: future },
+          },
+        })
+      )
+
+      flushDiffSummaryCache()
+
+      const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { summary: string }>
+      }
+      expect(raw.entries[key].summary).toBe('fresher')
+    })
+
+    it('a second flush in the same process still has the other process entry merged in', () => {
+      const repoPath = '/repo/repeat-flush'
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary(repoPath, key, { summary: 'mine', model: 'gpt', tokens: 1 })
+
+      const cachePath = getDiffSummaryCachePath(repoPath)
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true })
+      const otherKey = diffSummaryKey('other diff', 'gpt', 'p')
+      fs.writeFileSync(
+        cachePath,
+        JSON.stringify({
+          version: 1,
+          savedAt: new Date().toISOString(),
+          entries: {
+            [otherKey]: {
+              summary: 'from another process',
+              model: 'gpt',
+              tokens: 2,
+              lastAccessedAt: new Date().toISOString(),
+            },
+          },
+        })
+      )
+      flushDiffSummaryCache()
+
+      // A later write + flush in this same process must not drop the
+      // other process's entry it already merged in.
+      writeDiffSummary(repoPath, diffSummaryKey('yet another', 'gpt', 'p'), {
+        summary: 'second write',
+        model: 'gpt',
+        tokens: 3,
+      })
+      flushDiffSummaryCache()
+
+      const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { summary: string }>
+      }
+      expect(raw.entries[otherKey].summary).toBe('from another process')
+      expect(raw.entries[key].summary).toBe('mine')
+    })
+  })
+
   describe('resolveDiffSummaryCacheRepoPath (#1463)', () => {
     it('resolves a subdirectory to the same toplevel as the repo root', () => {
       const repoRoot = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'coco-diff-repo-')))

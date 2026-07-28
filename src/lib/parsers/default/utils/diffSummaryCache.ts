@@ -132,6 +132,31 @@ function getEnvelope(filePath: string): CacheEnvelope {
 }
 
 /**
+ * Merge this process's in-memory entries into whatever is currently
+ * on disk, keyed by `lastAccessedAt` (newest wins per key). A flush
+ * that instead blindly overwrote the file would, for two coco
+ * processes running concurrently (the `coco ui` + CLI run scenario
+ * the work item cites), silently discard whichever process's entire
+ * session flushed first (#1923 review) — a wider lost-update window
+ * than the read-modify-write this replaced. Merging bounds the loss
+ * to "an entry another process wrote got evicted by the cap," not
+ * "an entire process's session vanished."
+ */
+function mergeEnvelopeForFlush(filePath: string, inMemory: CacheEnvelope): CacheEnvelope {
+  const onDisk = readEnvelope(filePath)
+  const merged: Record<string, DiffSummaryCacheEntry> = { ...(onDisk?.entries ?? {}) }
+  for (const [key, entry] of Object.entries(inMemory.entries)) {
+    const existing = merged[key]
+    if (!existing || Date.parse(entry.lastAccessedAt) >= Date.parse(existing.lastAccessedAt)) {
+      merged[key] = entry
+    }
+  }
+  const evicted = enforceHardCap(merged)
+  for (const key of evicted) delete merged[key]
+  return { version: CACHE_SCHEMA_VERSION, savedAt: new Date().toISOString(), entries: merged }
+}
+
+/**
  * Flush every dirty in-memory envelope to disk, atomically. Installed
  * as an exit/signal handler (best-effort, swallowed) so a normal
  * process end persists the process-lifetime cache exactly once,
@@ -142,8 +167,14 @@ export function flushDiffSummaryCache(): void {
     const envelope = envelopes.get(filePath)
     if (!envelope) continue
     try {
+      const merged = mergeEnvelopeForFlush(filePath, envelope)
       fs.mkdirSync(path.dirname(filePath), { recursive: true })
-      writeFileAtomic(filePath, JSON.stringify(envelope))
+      writeFileAtomic(filePath, JSON.stringify(merged))
+      // Keep the in-memory envelope in sync with what landed on disk
+      // so a later flush in this same process merges against the
+      // fuller picture (including entries another process wrote)
+      // instead of re-deriving it from a stale snapshot.
+      envelopes.set(filePath, merged)
     } catch {
       // Best-effort persistence; swallow.
     }
