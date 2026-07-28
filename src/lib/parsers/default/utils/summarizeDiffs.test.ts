@@ -114,6 +114,7 @@ describe('summarizeDirectoryDiff', () => {
 
   describe('diff-summary cache hit/miss reporting (#1958)', () => {
     const summarizeMock = jest.requireMock('../../../langchain/chains/summarize').summarize
+    const cacheHitLogger = { verbose: jest.fn() }
 
     let cacheDir: string
     let usageDir: string
@@ -156,6 +157,7 @@ describe('summarizeDirectoryDiff', () => {
         chain: mockChain,
         textSplitter: mockTextSplitter,
         tokenizer: mockTokenizer,
+        logger: cacheHitLogger as never,
         metadata: { model },
       })
 
@@ -165,6 +167,30 @@ describe('summarizeDirectoryDiff', () => {
       const records = readUsageRecords(usageLogPath)
       expect(records).toHaveLength(1)
       expect(records[0]).toMatchObject({ task: 'summarize-directory-diff', model, cacheHit: true })
+    })
+
+    it('does not record a cache-hit usage entry when no logger is provided', async () => {
+      const model = 'gpt-4o'
+      const directory = {
+        path: 'src/components-no-logger',
+        diffs: [{ file: 'src/components/B.tsx', diff: 'b'.repeat(400), summary: 'B', tokenCount: 100 }],
+        tokenCount: 100,
+      }
+      const payload = directory.diffs.map((d) => `${d.file}\x1e${d.diff}`).join('\x1d')
+      const repo = resolveDiffSummaryCacheRepoPath()
+      const key = diffSummaryKey(payload, model, SUMMARIZE_PROMPT_HASH)
+      writeDiffSummary(repo, key, { summary: 'cached directory summary', model, tokens: 5 })
+
+      const result = await summarizeDirectoryDiff(directory, {
+        chain: mockChain,
+        textSplitter: mockTextSplitter,
+        tokenizer: mockTokenizer,
+        metadata: { model },
+      })
+
+      expect(result.summary).toBe('cached directory summary')
+      expect(summarizeMock).not.toHaveBeenCalled()
+      expect(readUsageRecords(usageLogPath)).toHaveLength(0)
     })
 
     it('marks the downstream LLM call cacheHit:false on a cache miss', async () => {

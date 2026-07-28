@@ -81,7 +81,9 @@ export async function summarizeDirectoryDiff(
         { color: 'cyan' }
       )
       touchDiffSummary(cacheRepo, cacheKey)
-      if (metadata?.recordUsage !== false) {
+      // Mirror logLlmCall's no-op-without-a-logger behavior (observability.ts)
+      // so a logger-less caller can't record hits while dropping misses.
+      if (logger && metadata?.recordUsage !== false) {
         recordUsage({
           ...metadata,
           task: 'summarize-directory-diff',
