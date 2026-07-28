@@ -11,7 +11,8 @@ import {
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
     createCondenseDiffInputJsonSchema,
-    MAX_AGENT_CONTEXT_BYTES
+    MAX_AGENT_CONTEXT_BYTES,
+    MAX_CONDENSE_BUDGET_TOKENS
 } from './schemas'
 
 const meta = {
@@ -196,10 +197,10 @@ describe('CondenseDiffRequestSchema', () => {
     expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: 0 } }).success).toBe(false)
   })
 
-  it('enforces budget.tokens min=1 and max=MAX_AGENT_CONTEXT_BYTES', () => {
+  it('enforces budget.tokens min=1 and max=MAX_CONDENSE_BUDGET_TOKENS', () => {
     expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: 1 } }).success).toBe(true)
-    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: MAX_AGENT_CONTEXT_BYTES } }).success).toBe(true)
-    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: MAX_AGENT_CONTEXT_BYTES + 1 } }).success).toBe(false)
+    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: MAX_CONDENSE_BUDGET_TOKENS } }).success).toBe(true)
+    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: MAX_CONDENSE_BUDGET_TOKENS + 1 } }).success).toBe(false)
   })
 
   it('rejects unknown fields (strict)', () => {

@@ -12,7 +12,13 @@
  * - Metrics token definitions are consistent with runStructuralExtractEval usage
  */
 
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
+import simpleGit from 'simple-git'
+
 import type { AgentOperationContext } from './context'
+import { createAgentOperationContext } from './context'
 import { runCondenseDiff } from './generate'
 import type { CondenseDiffRequest } from './schemas'
 
@@ -302,5 +308,48 @@ describe('runCondenseDiff', () => {
     const serializedTokens = Math.ceil(result.data.condensed.length / 4)
     expect(serializedTokens).toBeLessThanOrEqual(budget)
     expect(result.data.metrics.filesOmitted).toBeGreaterThan(0)
+  })
+
+  describe('with a `repository` scope source', () => {
+    let tempRoot: string
+    let repoRoot: string
+
+    beforeEach(async () => {
+      tempRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'coco-condense-diff-')))
+      repoRoot = path.join(tempRoot, 'repo')
+      fs.mkdirSync(repoRoot, { recursive: true })
+      const git = simpleGit(repoRoot)
+      await git.init()
+      await git.addConfig('user.name', 'Agent Test')
+      await git.addConfig('user.email', 'agent@example.test')
+      fs.writeFileSync(path.join(repoRoot, 'main.py'), 'def hello():\n    pass\n')
+      await git.add('main.py')
+      await git.commit('initial')
+    })
+
+    afterEach(() => {
+      fs.rmSync(tempRoot, { recursive: true, force: true })
+    })
+
+    it('condenses a real staged diff resolved via `resolveChangeSource`', async () => {
+      fs.writeFileSync(path.join(repoRoot, 'main.py'), 'def hello(name: str):\n    pass\n')
+      await simpleGit(repoRoot).add('main.py')
+      const context = await createAgentOperationContext({ repoRoot })
+
+      const result = await runCondenseDiff({
+        version: 1,
+        source: { kind: 'repository', scope: { type: 'staged' } },
+        budget: { tokens: 99999 },
+        mode: 'structural',
+        trustRepositoryConfig: false,
+      }, context)
+
+      expect(result.ok).toBe(true)
+      expect(result.data.files).toHaveLength(1)
+      expect(result.data.files[0].path).toBe('main.py')
+      expect(result.data.condensed).toContain('diff --git')
+      expect(result.data.metrics.filesIncluded).toBe(1)
+      expect(result.data.metrics.filesOmitted).toBe(0)
+    })
   })
 })

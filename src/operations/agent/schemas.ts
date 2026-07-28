@@ -4,6 +4,14 @@ import { ReviewFeedbackItemSchema } from '../../commands/review/config'
 
 export const AGENT_PROTOCOL_VERSION = 1 as const
 export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
+/**
+ * Upper bound for `condense-diff`'s `budget.tokens`. Tokens and bytes are
+ * different units (a token is ~3-4 bytes for English/code text), so this is
+ * deliberately its own constant rather than a reuse of the byte-oriented
+ * `MAX_AGENT_CONTEXT_BYTES` — it just happens to use the same generous
+ * order-of-magnitude ceiling to reject obviously-invalid requests.
+ */
+export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 
 export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff'])
 
@@ -254,7 +262,7 @@ export const CondenseDiffRequestSchema = z.object({
   repo: z.string().min(1).optional(),
   source: ChangeSourceSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
   budget: z.object({
-    tokens: z.number().int().min(1).max(MAX_AGENT_CONTEXT_BYTES),
+    tokens: z.number().int().min(1).max(MAX_CONDENSE_BUDGET_TOKENS),
   }).strict(),
   /**
    * `structural` (default): use tree-sitter / regex extractors — deterministic,
