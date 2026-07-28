@@ -1531,6 +1531,22 @@
     "@aws-sdk/client-kendra" "^3.1059.0"
     "@aws-sdk/credential-provider-node" "^3.972.49"
 
+"@langchain/classic@^1.0.27":
+  version "1.0.40"
+  resolved "https://registry.yarnpkg.com/@langchain/classic/-/classic-1.0.40.tgz#e0b699f3ff83849de3619d8a8917f9bd7719c845"
+  integrity sha512-Ip0GqU9zgy7cu0ao5o6SNS7r8UplTJNtA2mXS9f+nm+8CAO0kH9T0iHcggawrpinDlWwhL8U5e4+cIRd9JX+QA==
+  dependencies:
+    "@langchain/openai" "1.5.5"
+    "@langchain/textsplitters" "1.0.1"
+    handlebars "^4.7.9"
+    js-yaml "^5.1.0"
+    jsonpointer "^5.0.1"
+    openapi-types "^12.1.3"
+    yaml "^2.9.0"
+    zod "^3.25.76 || ^4"
+  optionalDependencies:
+    langsmith ">=0.4.0 <1.0.0"
+
 "@langchain/core@^1.1.34":
   version "1.2.3"
   resolved "https://registry.yarnpkg.com/@langchain/core/-/core-1.2.3.tgz#27ef4951b3226d7f25a753f28c72ff9d1ab67feb"
@@ -1565,6 +1581,15 @@
   dependencies:
     ollama "^0.6.3"
 
+"@langchain/openai@1.5.5":
+  version "1.5.5"
+  resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-1.5.5.tgz#b2f6bd17f368df1515737e0053e2cc410b55c360"
+  integrity sha512-wX7dwb9z4nf5FHXlIl/X2mk08pzonvRHCt1D4+s1zXLP0duYDC95j7dulPIQJ6fmhbyYQc9Ki8mEhY/D1lB8kw==
+  dependencies:
+    js-tiktoken "^1.0.12"
+    openai "^6.41.0"
+    zod "^3.25.76 || ^4"
+
 "@langchain/openai@^1.4.5":
   version "1.4.7"
   resolved "https://registry.yarnpkg.com/@langchain/openai/-/openai-1.4.7.tgz#8af279497ead6f5ac3a97dd0f4f5faccf2b31614"
@@ -1573,6 +1598,13 @@
     js-tiktoken "^1.0.12"
     openai "^6.37.0"
     zod "^3.25.76 || ^4"
+
+"@langchain/textsplitters@1.0.1", "@langchain/textsplitters@^1.0.1":
+  version "1.0.1"
+  resolved "https://registry.yarnpkg.com/@langchain/textsplitters/-/textsplitters-1.0.1.tgz#292f9c93239178c248b3338acf7b68aa47aa9830"
+  integrity sha512-rheJlB01iVtrOUzttscutRgLybPH9qR79EyzBEbf1u97ljWyuxQfCwIWK+SjoQTM9O8M7GGLLRBSYE26Jmcoww==
+  dependencies:
+    js-tiktoken "^1.0.12"
 
 "@mistralai/mistralai@2.2.1":
   version "2.2.1"
@@ -4670,7 +4702,7 @@ js-tokens@^4.0.0:
   resolved "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz"
   integrity sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==
 
-js-yaml@^3.13.1, js-yaml@^4.1.0, js-yaml@^4.2.0:
+js-yaml@^3.13.1, js-yaml@^4.1.0, js-yaml@^4.2.0, js-yaml@^5.1.0:
   version "4.3.0"
   resolved "https://registry.yarnpkg.com/js-yaml/-/js-yaml-4.3.0.tgz#d1900572a7f7cf0b5f540c83673e60bad3436592"
   integrity sha512-1td788aAnnZ5qs7V2QIRl1owjtYpbKt749Y3xauqQgwIIGF/xXWz1wMTEBx5O3LK3lXLVuqXPdPxj2BoFHaW9Q==
@@ -4739,12 +4771,24 @@ jsonfile@^6.0.1:
   optionalDependencies:
     graceful-fs "^4.1.6"
 
+jsonpointer@^5.0.1:
+  version "5.0.1"
+  resolved "https://registry.yarnpkg.com/jsonpointer/-/jsonpointer-5.0.1.tgz#2110e0af0900fd37467b5907ecd13a7884a1b559"
+  integrity sha512-p/nXbhSEcu3pZRdkW1OfJhpsVtW1gd4Wa1fnQc9YLiTfAjn0312eMKimbdIQzuZl9aa9xUGaRlP9T/CJE/ditQ==
+
 keyv@^4.5.3:
   version "4.5.4"
   resolved "https://registry.npmjs.org/keyv/-/keyv-4.5.4.tgz"
   integrity sha512-oxVHkHR/EJf2CNXnWxRLW6mg7JyCCUcG0DtEGmL2ctUo1PNTin1PUil+r/+4r5MpVgC/fn1kjsx7mjSujKqIpw==
   dependencies:
     json-buffer "3.0.1"
+
+"langsmith@>=0.4.0 <1.0.0":
+  version "0.8.7"
+  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.8.7.tgz#1152855dc77890c9190461b6eb3583a8a97b12e3"
+  integrity sha512-QWcc7JwmGy+sPRJwqCf9xLiiSIhwc/i7oVwjQezkx6UzyFlokME3Wxy80qKqirTyJvWG1S9ylqtxBDpFRpas5g==
+  dependencies:
+    p-queue "6.6.2"
 
 "langsmith@>=0.5.0 <1.0.0":
   version "0.7.1"
@@ -5162,6 +5206,16 @@ openai@^6.37.0:
   version "6.42.0"
   resolved "https://registry.yarnpkg.com/openai/-/openai-6.42.0.tgz#497bb98294a2aadcc90a655736c1d43c32ffd5d9"
   integrity sha512-1WFEt/uXMXOLhYRNkgJWo08Y2YNvNwpVU72K7ibrWgWpNOXd4VojXLbe6SQ4bLiUQ3Y8jz4IiyVkylJCL1DtZg==
+
+openai@^6.41.0:
+  version "6.49.0"
+  resolved "https://registry.yarnpkg.com/openai/-/openai-6.49.0.tgz#6e9f798e146935ed38d955b43d57d6796cee5e6b"
+  integrity sha512-aYCc0C6L864eR6WSYIwQGyXriw/nIyZx0ObvhzOEVuk0zoBDpynjSbrionWI7q65B5H8jJX0DXR9snEzM6bfPg==
+
+openapi-types@^12.1.3:
+  version "12.1.3"
+  resolved "https://registry.yarnpkg.com/openapi-types/-/openapi-types-12.1.3.tgz#471995eb26c4b97b7bd356aacf7b91b73e777dd3"
+  integrity sha512-N4YtSYJqghVu4iek2ZUvcN/0aqH1kRDuNqzcycDxhOUpg7GdvLa2F3DgS6yBNhInhv2r/6I0Flkn7CqL8+nIcw==
 
 optionator@^0.9.3:
   version "0.9.4"
@@ -6632,6 +6686,11 @@ yallist@^3.0.2:
   version "3.1.1"
   resolved "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz"
   integrity sha512-a4UGQaWPH59mOXUYnAG2ewncQS4i4F43Tv3JoAM+s2VDAmS9NsK8GpDMLrCHPksFT7h3K6TOoUNn2pb7RoXx4g==
+
+yaml@^2.9.0:
+  version "2.9.0"
+  resolved "https://registry.yarnpkg.com/yaml/-/yaml-2.9.0.tgz#78274afd93598a1dfdd6130df6a566defcbf9aa4"
+  integrity sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==
 
 yargs-parser@22.0.0, yargs-parser@^22.0.0:
   version "22.0.0"
