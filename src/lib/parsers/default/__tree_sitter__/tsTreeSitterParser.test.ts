@@ -43,6 +43,11 @@ describeWithWasm('treeSitterTsParser (.wasm-backed)', () => {
   })
 
   it('names a top-level export function (matches regex output)', async () => {
+    // This is the first test to actually invoke the parser, so it pays
+    // the one-time WASM `Parser.init()` cold-start cost. That cost is
+    // usually well under a second, but can exceed Jest's default 5000ms
+    // timeout on a loaded/cold CI runner (observed on macos-latest) —
+    // bump the timeout rather than risk a flaky failure here.
     const diff = [
       '@@ -1,1 +1,1 @@',
       '-export function legacyParse() {}',
@@ -52,7 +57,7 @@ describeWithWasm('treeSitterTsParser (.wasm-backed)', () => {
     expect(out).toContain('Updated TypeScript `src/p.ts`')
     expect(out).toContain('parseRequest()')
     expect(out).toContain('legacyParse()')
-  })
+  }, 20_000)
 
   it('classifies an arrow-function export as a function, not a const (regex miss)', async () => {
     // Regex extractor returns `const handler` for this line because
@@ -68,7 +73,7 @@ describeWithWasm('treeSitterTsParser (.wasm-backed)', () => {
     expect(out).toContain('Updated TypeScript `src/api.ts`')
     expect(out).toMatch(/handler\(\)/)
     expect(out).not.toMatch(/const handler/)
-  })
+  }, 20_000)
 
   it('returns undefined for body-only edits (no structural signal)', async () => {
     const diff = [
