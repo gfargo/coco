@@ -11,6 +11,7 @@ import { createPullRequest, openPullRequest } from '../../git/pullRequestActions
 import { createMergeRequest, openMergeRequest } from '../../git/mergeRequestActions'
 import { createBitbucketPullRequest, openBitbucketPullRequest } from '../../git/bitbucketPullRequestActions'
 import { defaultGlabRunner } from '../../git/glabCli'
+import { defaultBitbucketRunner } from '../../git/bitbucketCli'
 import { Logger } from '../../lib/utils/logger'
 
 jest.mock('../utils/applyRepoFlag')
@@ -163,7 +164,8 @@ describe('pr create command', () => {
     await handler(argv, logger)
     expect(mockCreateBitbucketPr).toHaveBeenCalledWith(
       'b/p',
-      expect.objectContaining({ base: 'main', head: 'feature/x', title: 'feat: add x' })
+      expect.objectContaining({ base: 'main', head: 'feature/x', title: 'feat: add x' }),
+      defaultBitbucketRunner
     )
     expect(mockOpenBitbucketPr).toHaveBeenCalledWith('https://bb/pr/1')
     expect(mockCreatePr).not.toHaveBeenCalled()
