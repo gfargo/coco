@@ -241,6 +241,13 @@ export const CondenseDiffLanguageSchema = z.enum([
  * because condense carries extra fields (budget, mode, languages, model) that
  * the four generation operations do not need, and those operations carry an
  * `options` bag that condense does not use.
+ *
+ * `source` reuses the full `ChangeSourceSchema` (so digest/provenance metadata
+ * behaves identically across operations), but only the `repository` and
+ * `patch` kinds carry per-file unified-diff text that can be structurally
+ * condensed. `runCondenseDiff` rejects `summary`/`files` sources at runtime
+ * with `UNSUPPORTED_SOURCE` rather than silently misparsing their prose/
+ * metadata shape as diff content.
  */
 export const CondenseDiffRequestSchema = z.object({
   version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),

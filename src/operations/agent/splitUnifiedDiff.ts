@@ -28,13 +28,24 @@ import type { TokenCounter } from '../../lib/utils/tokenizer'
  * deleted) we fall back to the `a/` side.
  */
 function pathFromDiffGitHeader(line: string): string | undefined {
-  // Pattern: diff --git a/<src> b/<dst>
-  // The paths can contain spaces, which is why we can't simply split on
-  // whitespace. We use a greedy `a/(.+) b/(.+)` regex and rely on the
-  // convention that both paths are present and symmetric in length for
-  // the common case; for asymmetric renames we still get a reasonable
-  // answer from the destination side.
-  const match = /^diff --git a\/(.+) b\/(.+)$/.exec(line)
+  const prefix = 'diff --git a/'
+  if (!line.startsWith(prefix)) return undefined
+  const rest = line.slice(prefix.length)
+
+  // Common case (no rename): the a/ and b/ sides are identical, so try every
+  // ' b/' occurrence and prefer the split where both sides match exactly.
+  // This resolves correctly even when the path itself contains the literal
+  // substring ' b/' (which a purely greedy regex mis-splits on).
+  const marker = ' b/'
+  for (let idx = rest.indexOf(marker); idx !== -1; idx = rest.indexOf(marker, idx + 1)) {
+    const src = rest.slice(0, idx)
+    const dst = rest.slice(idx + marker.length)
+    if (src === dst) return src
+  }
+
+  // No exact match (rename, or a genuinely ambiguous path) — fall back to a
+  // greedy split from the last ' b/' occurrence.
+  const match = /^(.+) b\/(.+)$/.exec(rest)
   if (!match) return undefined
   const src = match[1].trim()
   const dst = match[2].trim()

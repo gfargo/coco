@@ -132,6 +132,22 @@ describe('splitUnifiedDiff', () => {
     expect(result[0].file).toBe('new/path.ts')
   })
 
+  it('resolves a path containing a literal " b/" substring (non-rename)', () => {
+    // "diff --git a/has b/bar.ts b/has b/bar.ts" — a purely greedy regex
+    // backtracks to the LAST ' b/' occurrence and mis-splits the path.
+    const diff = `\
+diff --git a/has b/bar.ts b/has b/bar.ts
+index abc..def 100644
+--- a/has b/bar.ts
++++ b/has b/bar.ts
+@@ -1 +1 @@
+-old
++new`
+    const result = splitUnifiedDiff(diff, SIMPLE_TOKENIZER)
+    expect(result).toHaveLength(1)
+    expect(result[0].file).toBe('has b/bar.ts')
+  })
+
   it('handles a binary file change', () => {
     const result = splitUnifiedDiff(BINARY_DIFF, SIMPLE_TOKENIZER)
     expect(result).toHaveLength(1)

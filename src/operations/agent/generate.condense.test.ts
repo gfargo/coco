@@ -252,4 +252,55 @@ describe('runCondenseDiff', () => {
 
     expect(result.warnings.some((w) => w.toLowerCase().includes('lossy'))).toBe(true)
   })
+
+  it('rejects a `summary` source with UNSUPPORTED_SOURCE instead of a misleading NO_CHANGES', async () => {
+    await expect(
+      runCondenseDiff({
+        ...makeRequest(TS_FILE_DIFF, 99999),
+        source: { kind: 'summary', summary: 'Refactored the foo module.' },
+      }, makeContext())
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE' })
+  })
+
+  it('rejects a `files` source with UNSUPPORTED_SOURCE instead of merging records under one path', async () => {
+    await expect(
+      runCondenseDiff({
+        ...makeRequest(TS_FILE_DIFF, 99999),
+        source: {
+          kind: 'files',
+          files: [{ path: 'src/foo.ts', status: 'modified', patch: TS_FILE_DIFF }],
+        },
+      }, makeContext())
+    ).rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE' })
+  })
+
+  it('accounts for join-separator tokens so the serialized `condensed` string fits the budget', async () => {
+    // Three equal-size files, each a multiple of 4 chars (so per-file token
+    // counts have zero rounding slack under the suite's `ceil(len/4)`
+    // tokenizer). Budget is set to exactly the sum of their outputTokens —
+    // with no headroom for the two '\n\n' join separators the final
+    // `condensed` string adds. A drop loop that ignores separator cost would
+    // report "within budget" while the real serialized output exceeds it.
+    mockDetectStructuralLanguageId.mockReturnValue(undefined)
+    mockSummarizeTrivialDiff.mockReturnValue(undefined)
+
+    const makeFile = (name: string) =>
+      `diff --git a/${name} b/${name}\nindex 1..2 100644\n--- a/${name}\n+++ b/${name}\n@@ -1 +1 @@\n-xxx\n+y`
+    const fileA = makeFile('a.txt')
+    const fileB = makeFile('b.txt')
+    const fileC = makeFile('c.txt')
+    expect(fileA.length % 4).toBe(0) // guards the zero-rounding-slack assumption above
+    const patch = [fileA, fileB, fileC].join('\n')
+
+    const perFileTokens = fileA.length / 4
+    const budget = perFileTokens * 3 // exactly the sum, no separator headroom
+
+    const result = await runCondenseDiff(makeRequest(patch, budget), makeContext())
+
+    // Re-tokenize the actual serialized output the same way the suite's mock
+    // tokenizer would, to assert it truly fits within budget.
+    const serializedTokens = Math.ceil(result.data.condensed.length / 4)
+    expect(serializedTokens).toBeLessThanOrEqual(budget)
+    expect(result.data.metrics.filesOmitted).toBeGreaterThan(0)
+  })
 })

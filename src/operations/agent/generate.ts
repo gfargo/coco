@@ -335,7 +335,7 @@ export async function runAgentOperation(
 async function condenseFileDiff(
   fileDiff: import('../../lib/types').FileDiff,
   languages: readonly string[] | undefined,
-): Promise<{ condensed: string; applied: CondenseDiffFileResult['applied'] }> {
+): Promise<{ condensed: string; applied: CondenseDiffFileResult['applied']; langId: StructuralLanguageId | undefined }> {
   const langId = detectStructuralLanguageId(fileDiff.file) as StructuralLanguageId | undefined
 
   // Check language filter: if caller specified specific languages, skip
@@ -346,7 +346,7 @@ async function condenseFileDiff(
     try {
       const structural = await dispatchStructuralParser(langId, fileDiff)
       if (structural !== undefined) {
-        return { condensed: structural, applied: 'structural' }
+        return { condensed: structural, applied: 'structural', langId }
       }
     } catch {
       // Parser surrendered — fall through to next strategy.
@@ -356,11 +356,11 @@ async function condenseFileDiff(
   // Try trivial-diff shortcut (pure add/delete/rename/binary).
   const trivial = summarizeTrivialDiff(fileDiff)
   if (trivial !== undefined) {
-    return { condensed: trivial, applied: 'trivial' }
+    return { condensed: trivial, applied: 'trivial', langId }
   }
 
   // No structural extraction; keep the raw diff (line-based).
-  return { condensed: fileDiff.diff, applied: 'line-based' }
+  return { condensed: fileDiff.diff, applied: 'line-based', langId }
 }
 
 /**
@@ -384,6 +384,14 @@ export async function runCondenseDiff(
     throw new AgentOperationError(
       'UNSUPPORTED_MODE',
       'The "summary" mode (LLM-based prose condensation) is not yet available. Use mode "structural" (the default).',
+      false,
+    )
+  }
+
+  if (input.source.kind === 'summary' || input.source.kind === 'files') {
+    throw new AgentOperationError(
+      'UNSUPPORTED_SOURCE',
+      `condense-diff requires a diff-shaped source ('repository' scope or 'patch'). The '${input.source.kind}' source kind carries prose/metadata rather than per-file unified-diff text and cannot be structurally condensed.`,
       false,
     )
   }
@@ -413,9 +421,8 @@ export async function runCondenseDiff(
   let totalInputTokens = 0
   for (const fd of fileDiffs) {
     totalInputTokens += fd.tokenCount
-    const { condensed, applied } = await condenseFileDiff(fd, languages)
+    const { condensed, applied, langId } = await condenseFileDiff(fd, languages)
     const outputTokens = tokenizer(condensed)
-    const langId = detectStructuralLanguageId(fd.file)
     fileResults.push({
       path: fd.file,
       language: langId ?? undefined,
@@ -434,13 +441,23 @@ export async function runCondenseDiff(
     .map((_, i) => i)
     .sort((a, b) => fileResults[b].outputTokens - fileResults[a].outputTokens)
 
+  // The final `condensed` string joins included parts with this separator, whose
+  // tokens are real cost that per-file outputTokens sums don't capture. Account
+  // for it here so the drop loop actually converges the *serialized* output
+  // within budget, not just the sum of per-file counts.
+  const JOIN_SEPARATOR = '\n\n'
+  const separatorTokens = tokenizer(JOIN_SEPARATOR)
+
   let currentTokens = fileResults.reduce((sum, f) => sum + f.outputTokens, 0)
+  let currentIncluded = fileResults.length
+  const serializedTokens = () => currentTokens + Math.max(0, currentIncluded - 1) * separatorTokens
 
   // Mark files as omitted when their removal is needed to reach budget.
   for (const idx of sortedIndices) {
-    if (currentTokens <= budgetTokens) break
+    if (serializedTokens() <= budgetTokens) break
     if (fileResults[idx].applied === 'omitted') continue
     currentTokens -= fileResults[idx].outputTokens
+    currentIncluded--
     fileResults[idx] = { ...fileResults[idx], applied: 'omitted', outputTokens: 0 }
   }
 
@@ -461,7 +478,7 @@ export async function runCondenseDiff(
     }
   }
 
-  const condensed = includedParts.join('\n\n')
+  const condensed = includedParts.join(JOIN_SEPARATOR)
 
   const reductionRatio = totalInputTokens > 0
     ? Math.max(0, 1 - totalOutputTokens / totalInputTokens)
