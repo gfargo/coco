@@ -40,26 +40,34 @@ class FakeStructuredChatModel extends BaseChatModel {
  * class override can't satisfy for an arbitrary fake result — so the fake
  * is patched on as an untyped instance property instead of overridden in
  * the class body.
+ *
+ * Tracks two distinct counters: `bindCalls` (how many times
+ * `withStructuredOutput` itself was called — once per `executeChainWithSchema`
+ * invocation) and `invocations` (how many times the *returned runnable* was
+ * actually invoked — i.e. how many native LLM calls were made). The two
+ * diverged after the native path stopped retrying internally.
  */
 function withFakeStructuredOutput(
   model: FakeStructuredChatModel,
   structuredResult: unknown,
   failStructured = false
-): Array<{ schema: unknown; config: unknown }> {
-  const calls: Array<{ schema: unknown; config: unknown }> = []
+): { bindCalls: Array<{ schema: unknown; config: unknown }>; invocationCount: () => number } {
+  const bindCalls: Array<{ schema: unknown; config: unknown }> = []
+  let invocations = 0
   ;(model as unknown as { withStructuredOutput: unknown }).withStructuredOutput = (
     schema: unknown,
     config?: unknown
   ) => {
-    calls.push({ schema, config })
+    bindCalls.push({ schema, config })
     return RunnableLambda.from(async () => {
+      invocations++
       if (failStructured) {
         throw new Error('provider rejected native structured output')
       }
       return structuredResult
     })
   }
-  return calls
+  return { bindCalls, invocationCount: () => invocations }
 }
 
 const schema = z.object({ foo: z.string() })
@@ -78,7 +86,7 @@ function asLlm(model: BaseChatModel): Awaited<ReturnType<typeof getLlm>> {
 describe('executeChainWithSchema', () => {
   it('binds the schema via withStructuredOutput when the provider advertises json-schema support', async () => {
     const model = new FakeStructuredChatModel('unused')
-    const calls = withFakeStructuredOutput(model, { foo: 'bar' })
+    const { bindCalls } = withFakeStructuredOutput(model, { foo: 'bar' })
     recordLlmMetadata(model, { provider: 'openai' })
 
     const result = await executeChainWithSchema(schema, asLlm(model), prompt, variables, {
@@ -86,13 +94,13 @@ describe('executeChainWithSchema', () => {
     })
 
     expect(result).toEqual({ foo: 'bar' })
-    expect(calls).toHaveLength(1)
-    expect(calls[0].config).toEqual({ method: 'jsonSchema' })
+    expect(bindCalls).toHaveLength(1)
+    expect(bindCalls[0].config).toEqual({ method: 'jsonSchema' })
   })
 
   it('binds the schema via withStructuredOutput with jsonMode for a json-mode provider (ollama)', async () => {
     const model = new FakeStructuredChatModel('unused')
-    const calls = withFakeStructuredOutput(model, { foo: 'bar' })
+    const { bindCalls } = withFakeStructuredOutput(model, { foo: 'bar' })
     recordLlmMetadata(model, { provider: 'ollama' })
 
     const result = await executeChainWithSchema(schema, asLlm(model), prompt, variables, {
@@ -100,7 +108,7 @@ describe('executeChainWithSchema', () => {
     })
 
     expect(result).toEqual({ foo: 'bar' })
-    expect(calls[0].config).toEqual({ method: 'jsonMode' })
+    expect(bindCalls[0].config).toEqual({ method: 'jsonMode' })
   })
 
   it('falls back to the text StructuredOutputParser when the provider has no native support', async () => {
@@ -130,7 +138,7 @@ describe('executeChainWithSchema', () => {
 
   it('still uses the fallbackParser (against the original llm) when native structured output fails', async () => {
     const model = new FakeStructuredChatModel('fallback raw text')
-    withFakeStructuredOutput(model, { foo: 'bar' }, true)
+    const { invocationCount } = withFakeStructuredOutput(model, { foo: 'bar' }, true)
     recordLlmMetadata(model, { provider: 'openai' })
     const onFallback = jest.fn()
     const fallbackParser = jest.fn((text: string) => ({ foo: `parsed:${text}` }))
@@ -145,6 +153,7 @@ describe('executeChainWithSchema', () => {
     expect(onFallback).toHaveBeenCalledTimes(1)
     expect(fallbackParser).toHaveBeenCalledWith('fallback raw text')
     expect(result).toEqual({ foo: 'parsed:fallback raw text' })
+    expect(invocationCount()).toBe(1)
   })
 
   it('never binds withStructuredOutput for an array-root schema, even on a json-schema provider', async () => {
@@ -186,6 +195,40 @@ describe('executeChainWithSchema', () => {
     const result = await executeChainWithSchema(schema, asLlm(model), prompt, variables, {
       logger: silentLogger(),
       retryOptions: { maxAttempts: 1 },
+    })
+
+    expect(result).toEqual({ foo: 'bar' })
+  })
+
+  it('makes exactly one native attempt before degrading, even when retryOptions allows multiple attempts', async () => {
+    const model = new FakeStructuredChatModel('{"foo":"bar"}')
+    const { invocationCount } = withFakeStructuredOutput(model, { foo: 'bar' }, true)
+    recordLlmMetadata(model, { provider: 'openai' })
+
+    const result = await executeChainWithSchema(schema, asLlm(model), prompt, variables, {
+      logger: silentLogger(),
+      // A native structured-output rejection is structural, so it must not
+      // retry 3x on the native probe even though the legacy fallback below
+      // gets the full retry budget.
+      retryOptions: { maxAttempts: 3, backoffMs: 0 },
+    })
+
+    expect(result).toEqual({ foo: 'bar' })
+    expect(invocationCount()).toBe(1)
+  })
+
+  it('degrades to the legacy path without an extra LLM call when the provider advertises support but the resolved model lacks withStructuredOutput', async () => {
+    const model = new FakeListChatModel({ responses: ['{"foo":"bar"}'] })
+    recordLlmMetadata(model, { provider: 'openai' })
+    // Simulate a provider capability/model mismatch: `openai` advertises
+    // `supportsStructuredOutput`, but this resolved model instance has no
+    // `withStructuredOutput` method at all. Assigning `undefined` as an own
+    // property shadows `BaseChatModel.prototype.withStructuredOutput`
+    // (`delete` alone wouldn't, since the method lives on the prototype).
+    ;(model as unknown as { withStructuredOutput?: unknown }).withStructuredOutput = undefined
+
+    const result = await executeChainWithSchema(schema, asLlm(model), prompt, variables, {
+      logger: silentLogger(),
     })
 
     expect(result).toEqual({ foo: 'bar' })

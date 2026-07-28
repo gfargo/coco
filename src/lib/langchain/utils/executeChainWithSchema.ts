@@ -71,6 +71,21 @@ function isObjectRootSchema(schema: z.ZodTypeAny): boolean {
 }
 
 /**
+ * Narrows `llm` to one whose `withStructuredOutput` is actually callable at
+ * runtime. `ProviderDefinition.supportsStructuredOutput` is a static,
+ * provider-level capability flag — it doesn't guarantee the *specific
+ * resolved model instance* implements the method (e.g. a future provider
+ * misconfiguration, or a base class used as a stand-in in tests). Checking
+ * here means a mismatch degrades straight to the legacy path instead of
+ * throwing deep inside `withStructuredOutput` itself.
+ */
+function supportsNativeStructuredOutput(llm: unknown): llm is {
+  withStructuredOutput: (schema: unknown, config: { method: string }) => unknown
+} {
+  return typeof (llm as { withStructuredOutput?: unknown }).withStructuredOutput === 'function'
+}
+
+/**
  * High-level function that combines chain execution with schema-based parsing
  * Includes automatic retry logic and graceful degradation
  * @param schema - Zod schema for the expected output structure
@@ -137,44 +152,44 @@ export async function executeChainWithSchema<T>(
     return withRetry(operation, retryOptions)
   }
 
-  if (useStructured) {
+  if (useStructured && supportsNativeStructuredOutput(llm)) {
     try {
       const method = structuredOutputSupport === 'json-schema' ? 'jsonSchema' : 'jsonMode'
-      // `as never`/`Function` casts: the resolved provider's chat model overrides
+      // `schema as never`: the resolved provider's chat model overrides
       // `withStructuredOutput`, but that isn't reflected in the narrow
       // `Awaited<ReturnType<typeof getLlm>>` union `executeChainWithSchema` is
       // typed against (same rationale as `createSchemaParser.ts:54`).
-      const structuredLlm = (
-        llm as unknown as { withStructuredOutput: (schema: unknown, config: { method: string }) => unknown }
-      ).withStructuredOutput(schema as never, { method }) as Awaited<ReturnType<typeof getLlm>>
+      const structuredLlm = llm.withStructuredOutput(schema as never, { method }) as Awaited<
+        ReturnType<typeof getLlm>
+      >
       // The model now returns the schema-shaped object directly — no text to
       // parse, so the chain's parser stage is an identity passthrough.
       const parser = new RunnablePassthrough()
 
-      let attempt = 0
-      const operation = async (): Promise<T> => {
-        attempt++
-        const result = await executeChain({
-          llm: structuredLlm,
-          prompt,
-          variables,
-          parser,
-          provider: llmInfo.provider,
-          endpoint: llmInfo.endpoint,
-          logger,
-          tokenizer,
-          signal,
-          metadata: {
-            task: 'schema-chain',
-            ...metadata,
-            retryAttempt: attempt,
-          },
-        })
+      // A native structured-output rejection is structural (the provider
+      // won't honor the schema for this input), not transient — retrying the
+      // identical request 3x wastes paid calls for no benefit. This is a
+      // single probe; on failure we degrade to the legacy text-parser path
+      // below, which still gets its own full `retryOptions` budget (and
+      // handles genuinely transient errors, e.g. a 429, there instead).
+      const result = await executeChain({
+        llm: structuredLlm,
+        prompt,
+        variables,
+        parser,
+        provider: llmInfo.provider,
+        endpoint: llmInfo.endpoint,
+        logger,
+        tokenizer,
+        signal,
+        metadata: {
+          task: 'schema-chain',
+          ...metadata,
+          retryAttempt: 1,
+        },
+      })
 
-        return result as T
-      }
-
-      return await withRetry(operation, retryOptions)
+      return result as T
     } catch (error) {
       // A user abort is intent, not a parse failure — never degrade it
       // into the legacy/fallback path (which would fire ANOTHER llm call
