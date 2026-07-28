@@ -397,7 +397,7 @@ describe('recap rejects conflicting timeframe selectors (#1898)', () => {
     expect(failMessage).toMatch(/Only one timeframe selector/)
   })
 
-  it('rejects --current-branch combined with --timeframe', () => {
+  it('rejects --currentBranch combined with --timeframe', () => {
     const { failMessage } = parseWithStrict(recapBuilder, ['--currentBranch', '--timeframe', 'last-tag'])
     expect(failMessage).toMatch(/Only one timeframe selector/)
   })
