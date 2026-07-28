@@ -55,11 +55,12 @@ export async function createBitbucketServerPullRequest(
   const parts = splitBitbucketServerPath(projectPath)
   if (!parts) return { ok: false, message: 'No Bitbucket Server project resolved' }
 
+  const repository = { slug: parts.repoSlug, project: { key: parts.projectKey } }
   const body: Record<string, unknown> = {
     title: input.title,
     description: input.body,
-    fromRef: { id: `refs/heads/${input.head}` },
-    toRef: { id: `refs/heads/${input.base}` },
+    fromRef: { id: `refs/heads/${input.head}`, repository },
+    toRef: { id: `refs/heads/${input.base}`, repository },
   }
   if (input.draft) body.draft = true
 

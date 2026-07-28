@@ -30,8 +30,14 @@ describe('createBitbucketServerPullRequest', () => {
     const [endpoint, options] = runner.mock.calls[0]
     expect(endpoint).toBe('projects/TEAM/repos/repo/pull-requests')
     const body = JSON.parse((options as { body: string }).body)
-    expect(body.fromRef).toEqual({ id: 'refs/heads/feature/x' })
-    expect(body.toRef).toEqual({ id: 'refs/heads/main' })
+    expect(body.fromRef).toEqual({
+      id: 'refs/heads/feature/x',
+      repository: { slug: 'repo', project: { key: 'TEAM' } },
+    })
+    expect(body.toRef).toEqual({
+      id: 'refs/heads/main',
+      repository: { slug: 'repo', project: { key: 'TEAM' } },
+    })
   })
 
   it('rejects a flag-like branch name', async () => {
