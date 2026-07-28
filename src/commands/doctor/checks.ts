@@ -1,6 +1,10 @@
 import * as fs from 'fs'
 import { Config } from '../../lib/config/types'
-import { resolveDynamicModel } from '../../lib/langchain/utils/dynamicModels'
+import {
+  DYNAMIC_MODEL_TASKS,
+  providerSupportsDynamicModel,
+  resolveDynamicModel,
+} from '../../lib/langchain/utils/dynamicModels'
 import { DEFAULT_OLLAMA_ENDPOINT, getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
 import { DEPRECATED_MODELS, detectProviderMismatch } from '../../lib/langchain/modelValidity'
 import { LLMProvider } from '../../lib/langchain/types'
@@ -233,7 +237,7 @@ function checkModeConfig(config: Config, diagnostics: Diagnostic[]) {
   }
 }
 
-function checkDynamicRouting(config: Config, diagnostics: Diagnostic[]) {
+export function checkDynamicRouting(config: Config, diagnostics: Diagnostic[]) {
   if (!config.service) return
 
   if (config.service.model === 'dynamic') {
@@ -258,10 +262,24 @@ function checkDynamicRouting(config: Config, diagnostics: Diagnostic[]) {
       }
     }
 
-    diagnostics.push({
-      severity: 'info',
-      message: 'Dynamic model routing is active. Coco will select models per task based on your preference.',
-    })
+    const provider = config.service.provider as LLMProvider | undefined
+    const uncoveredTasks =
+      provider && !providerSupportsDynamicModel(provider)
+        ? DYNAMIC_MODEL_TASKS.filter((task) => !config.service?.dynamicModels?.[task])
+        : []
+
+    if (uncoveredTasks.length > 0) {
+      diagnostics.push({
+        severity: 'error',
+        message: `Provider "${provider}" has no tracked model catalog for model: "dynamic", so ${uncoveredTasks.join(', ')} will throw at runtime instead of routing.`,
+        fix: `Set service.model to a concrete model id, or add service.dynamicModels overrides for: ${uncoveredTasks.join(', ')}.`,
+      })
+    } else {
+      diagnostics.push({
+        severity: 'info',
+        message: 'Dynamic model routing is active. Coco will select models per task based on your preference.',
+      })
+    }
   } else {
     diagnostics.push({
       severity: 'info',

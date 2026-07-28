@@ -2,6 +2,7 @@ import { Config } from '../../lib/config/types'
 import { getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
 import {
     checkAuthentication,
+    checkDynamicRouting,
     checkEndpointSupport,
     checkOllamaLiveness,
     checkProviderValidity,
@@ -351,5 +352,62 @@ describe('checkOllamaLiveness', () => {
     // balanced commit tier for ollama is qwen2.5-coder:14b
     expect(diagnostic.message).toContain('qwen2.5-coder:14b')
     expect(diagnostic.message).toContain('dynamic → commit')
+  })
+})
+
+describe('checkDynamicRouting', () => {
+  it('reports the routing-active info for a provider with a tracked catalog', () => {
+    const diagnostics: Diagnostic[] = []
+    checkDynamicRouting(
+      { service: { provider: 'anthropic', model: 'dynamic' } } as unknown as Config,
+      diagnostics
+    )
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ severity: 'info', message: expect.stringContaining('routing is active') })
+    )
+  })
+
+  // #OSS-1623 — DeepSeek/Groq/etc. have no DYNAMIC_DEFAULTS row, so
+  // `resolveDynamicModel` throws at runtime for any uncovered task. Doctor
+  // must surface that before the user's first `coco commit`, not report a
+  // false-positive "routing is active".
+  it('flags an error for a first-class preset with no tracked catalog and no overrides', () => {
+    const diagnostics: Diagnostic[] = []
+    checkDynamicRouting(
+      { service: { provider: 'deepseek', model: 'dynamic' } } as unknown as Config,
+      diagnostics
+    )
+    const error = diagnostics.find((d) => d.severity === 'error')
+    expect(error).toBeDefined()
+    expect(error!.message).toContain('deepseek')
+    expect(error!.message).toContain('commit')
+    expect(diagnostics.some((d) => d.message.includes('routing is active'))).toBe(false)
+  })
+
+  it('does not flag an error when every task has a dynamicModels override', () => {
+    const diagnostics: Diagnostic[] = []
+    checkDynamicRouting(
+      {
+        service: {
+          provider: 'deepseek',
+          model: 'dynamic',
+          dynamicModels: {
+            summarize: 'deepseek-chat',
+            commit: 'deepseek-chat',
+            commitSplit: 'deepseek-chat',
+            changelog: 'deepseek-chat',
+            review: 'deepseek-chat',
+            recap: 'deepseek-chat',
+            repair: 'deepseek-chat',
+            largeDiff: 'deepseek-chat',
+          },
+        },
+      } as unknown as Config,
+      diagnostics
+    )
+    expect(diagnostics.some((d) => d.severity === 'error')).toBe(false)
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ severity: 'info', message: expect.stringContaining('routing is active') })
+    )
   })
 })

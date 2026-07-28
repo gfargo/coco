@@ -406,6 +406,36 @@ describe('init command', () => {
         })
       )
     })
+
+    it('warns that a direct lmstudio/vllm baseURL override is dropped on load for project scope', async () => {
+      // Same trust boundary as the compat-preset case above (OSS-1003): a
+      // direct-select lmstudio/vllm baseURL override isn't in
+      // TRUSTED_PROJECT_SERVICE_KEYS either, so it's silently stripped from
+      // a repo-committed config. The user should get the same steer.
+      mockLoadConfig.mockReturnValue({
+        scope: 'project',
+        dryRun: false,
+      } as unknown as Config)
+      mockGetDefaultServiceConfigFromAlias.mockReturnValue({
+        provider: 'vllm',
+        model: 'local-model',
+        authentication: { type: 'None', credentials: undefined },
+      } as never)
+      jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('vllm')
+      jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('local-model')
+      jest.spyOn(questions, 'inputOptionalBaseURL').mockResolvedValue('http://localhost:9000/v1')
+
+      await handler(createArgv({ scope: 'project' }), logger)
+
+      expect(logger.log).toHaveBeenCalledWith(
+        chalk.dim(
+          `Note: project scope can't persist a custom endpoint (http://localhost:9000/v1) — ` +
+          `it will be dropped on load. Use \`coco init --scope global\`, or set COCO_SERVICE_BASE_URL via env var.`
+        )
+      )
+      const [, writtenConfig] = mockAppendToProjectJsonConfig.mock.calls[0]
+      expect(writtenConfig.service).not.toHaveProperty('baseURL')
+    })
   })
 
   it('skips the custom Ollama endpoint prompt for project scope', async () => {

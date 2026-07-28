@@ -319,3 +319,11 @@ export function resolveDynamicService(config: Config, task: DynamicModelTask): L
 export function getDynamicModelDefaults(provider: LLMProvider, preference: DynamicModelPreference = 'balanced') {
   return DYNAMIC_DEFAULTS[provider]?.[preference]
 }
+
+// True when `provider` has a DYNAMIC_DEFAULTS row, i.e. `model: "dynamic"`
+// resolves without a per-task override. Providers without one (the
+// OpenAI-compatible presets) still throw from `resolveDynamicModel` per-task,
+// unless every task is covered by `service.dynamicModels`.
+export function providerSupportsDynamicModel(provider: LLMProvider): boolean {
+  return provider in DYNAMIC_DEFAULTS
+}

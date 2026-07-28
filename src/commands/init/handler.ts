@@ -96,6 +96,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
   // main list has no baseURL prompt, so a non-default port would otherwise
   // require hand-editing config afterward. Offer an override here, defaulting
   // to the registry's baked-in endpoint when left blank.
+  let directLocalServerBaseURL: string | undefined
   if (llmProvider === 'lmstudio' || llmProvider === 'vllm') {
     const defaultBaseURL = findProviderDefinition(llmProvider)?.defaultBaseURL
     if (defaultBaseURL) {
@@ -105,6 +106,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       )
       if (baseURL) {
         (service as LmStudioLLMService | VllmLLMService).baseURL = baseURL
+        directLocalServerBaseURL = baseURL
       }
     }
   }
@@ -138,6 +140,19 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       )
     )
   }
+
+  if (isProjectScope && directLocalServerBaseURL) {
+    // Same trust boundary as the compat-preset note above: baseURL isn't in
+    // TRUSTED_PROJECT_SERVICE_KEYS, so a repo-committed config silently falls
+    // back to the registry default on load.
+    logger.log(
+      chalk.dim(
+        `Note: project scope can't persist a custom endpoint (${directLocalServerBaseURL}) — ` +
+        `it will be dropped on load. Use \`coco init --scope global\`, or set COCO_SERVICE_BASE_URL via env var.`
+      )
+    )
+  }
+
   // lmstudio/vllm are deliberately absent here, same as ollama/bedrock — all
   // four are typically no-auth (local/self-hosted or credential-chain-based)
   // providers, so the wizard skips the API-key prompt entirely rather than
