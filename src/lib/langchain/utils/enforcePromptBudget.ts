@@ -56,9 +56,13 @@ function countFileBullets(blockText: string): number {
 }
 
 function buildOmittedMarker(omittedFileCount: number, omittedDirectoryCount: number): string {
-  return omittedFileCount > 0
-    ? `\n\n[${omittedFileCount} files across ${omittedDirectoryCount} directories omitted for length]\n`
-    : ''
+  if (omittedFileCount === 0 && omittedDirectoryCount === 0) {
+    return ''
+  }
+
+  const files = `${omittedFileCount} ${omittedFileCount === 1 ? 'file' : 'files'}`
+  const directories = `${omittedDirectoryCount} ${omittedDirectoryCount === 1 ? 'directory' : 'directories'}`
+  return `\n\n[${files} across ${directories} omitted for length]\n`
 }
 
 /**

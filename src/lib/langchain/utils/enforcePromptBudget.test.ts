@@ -78,7 +78,7 @@ describe('enforcePromptBudget', () => {
 
     // The budget that exactly fits the small block (plus omission marker) alone.
     const smallBlockOnlySummary =
-      `${DIRECTORY_BLOCK_SEPARATOR}${smallBlockBody}\n\n[1 files across 1 directories omitted for length]\n`
+      `${DIRECTORY_BLOCK_SEPARATOR}${smallBlockBody}\n\n[1 file across 1 directory omitted for length]\n`
     const smallBlockOnlyTokenCount = tokenizer(
       await prompt.format({ summary: smallBlockOnlySummary, additional_context: additionalContext })
     )
@@ -95,7 +95,7 @@ describe('enforcePromptBudget', () => {
     expect(result.truncated).toBe(true)
     expect(result.variables.summary).toContain('fix auth token bug')
     expect(result.variables.summary).not.toContain('x'.repeat(300))
-    expect(result.variables.summary).toContain('[1 files across 1 directories omitted for length]')
+    expect(result.variables.summary).toContain('[1 file across 1 directory omitted for length]')
     expect(
       tokenizer(await prompt.format(renderVariables(result.variables)))
     ).toBeLessThanOrEqual(maxTokens - responseTokenReserve)
@@ -135,6 +135,40 @@ describe('enforcePromptBudget', () => {
     expect(result.variables.summary).toContain('[3 files across 2 directories omitted for length]')
   })
 
+  it('marks the omission even when the dropped block has zero file bullets', async () => {
+    const bigBlockBody = `* changes in "/generated"\n\n${'x'.repeat(300)}\n\n`
+    const smallBlockBody = `* changes in "/src/auth"\n\n${FILE_BULLET_PREFIX}fix auth token bug\n\n`
+    const summary =
+      `${DIRECTORY_BLOCK_SEPARATOR}${bigBlockBody}` +
+      `${DIRECTORY_BLOCK_SEPARATOR}${smallBlockBody}`
+
+    const additionalContext = 'context'
+    const responseTokenReserve = 10
+
+    // The dropped big block has no FILE_BULLET_PREFIX lines, so the omission
+    // count is "0 files" -- but the directory itself was still dropped and
+    // must still be reported.
+    const smallBlockOnlySummary =
+      `${DIRECTORY_BLOCK_SEPARATOR}${smallBlockBody}\n\n[0 files across 1 directory omitted for length]\n`
+    const smallBlockOnlyTokenCount = tokenizer(
+      await prompt.format({ summary: smallBlockOnlySummary, additional_context: additionalContext })
+    )
+    const maxTokens = smallBlockOnlyTokenCount + responseTokenReserve
+
+    const result = await enforcePromptBudget({
+      prompt,
+      variables: { summary, additional_context: additionalContext },
+      tokenizer,
+      maxTokens,
+      responseTokenReserve,
+    })
+
+    expect(result.truncated).toBe(true)
+    expect(result.variables.summary).toContain('fix auth token bug')
+    expect(result.variables.summary).not.toContain('x'.repeat(300))
+    expect(result.variables.summary).toContain('[0 files across 1 directory omitted for length]')
+  })
+
   it('char-slices the last remaining block when it alone still exceeds budget after dropping others', async () => {
     const bigBlockBody = `* changes in "/generated"\n\n${FILE_BULLET_PREFIX}${'x'.repeat(300)}\n\n`
     const smallBlockBody = `* changes in "/src/auth"\n\n${FILE_BULLET_PREFIX}${'y'.repeat(100)}\n\n`
@@ -144,7 +178,7 @@ describe('enforcePromptBudget', () => {
 
     const additionalContext = 'context'
     const responseTokenReserve = 10
-    const marker = '\n\n[1 files across 1 directories omitted for length]\n'
+    const marker = '\n\n[1 file across 1 directory omitted for length]\n'
 
     const emptyLastBlockTokenCount = tokenizer(
       await prompt.format({
@@ -173,7 +207,7 @@ describe('enforcePromptBudget', () => {
     })
 
     expect(result.truncated).toBe(true)
-    expect(result.variables.summary).toContain('[1 files across 1 directories omitted for length]')
+    expect(result.variables.summary).toContain('[1 file across 1 directory omitted for length]')
     expect(result.variables.summary.length).toBeLessThan(fullLastBlockCandidate.length)
     expect(result.variables.summary).not.toContain('y'.repeat(100))
     expect(
@@ -219,7 +253,7 @@ describe('enforcePromptBudget', () => {
 
     const additionalContext = 'context'
     const responseTokenReserve = 10
-    const marker = '\n\n[1 files across 1 directories omitted for length]\n'
+    const marker = '\n\n[1 file across 1 directory omitted for length]\n'
 
     const emptyLastBlockTokenCount = tokenizer(
       await prompt.format({
