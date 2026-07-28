@@ -185,6 +185,38 @@ describe('lint command handler', () => {
     expect(mockValidateCommitMessage).not.toHaveBeenCalled()
   })
 
+  it('writes only "[]" to stdout for an empty range under --json', async () => {
+    mockApplyRepoFlag.mockReturnValue(makeGit({ log: '' }))
+
+    const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await expect(handler({ ...baseArgv, json: true }, logger)).rejects.toMatchObject({ code: 0 })
+      expect(logger.setConfig).toHaveBeenCalledWith({ quiet: true })
+      const written = writeSpy.mock.calls.map((call) => call[0]).join('')
+      expect(JSON.parse(written)).toEqual([])
+    } finally {
+      writeSpy.mockRestore()
+    }
+  })
+
+  it('emits a JSON error payload when the range read fails under --json', async () => {
+    const git = makeGit({ log: '' })
+    ;(git.raw as jest.Mock).mockImplementation(async (args: string[]) => {
+      if (args[0] === 'log') throw new Error('fatal: bad revision')
+      return ''
+    })
+    mockApplyRepoFlag.mockReturnValue(git)
+
+    const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true)
+    try {
+      await expect(handler({ ...baseArgv, json: true }, logger)).rejects.toMatchObject({ code: 1 })
+      const written = writeSpy.mock.calls.map((call) => call[0]).join('')
+      expect(JSON.parse(written)).toEqual({ error: expect.stringContaining('fatal: bad revision') })
+    } finally {
+      writeSpy.mockRestore()
+    }
+  })
+
   describe('--fix guards', () => {
     it('refuses when a rebase is already in progress, without --force', async () => {
       const log = record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'bad message', ''])
@@ -281,6 +313,54 @@ describe('lint command handler', () => {
       mockExecuteRebasePlan.mockResolvedValue({ ok: true, message: 'Rebase applied — 1 of 2 commits reworded' })
 
       await expect(handler({ ...baseArgv, fix: true }, logger)).rejects.toMatchObject({ code: 1 })
+
+      expect(mockExecuteRebasePlan).toHaveBeenCalledTimes(1)
+    })
+
+    it('writes only the results JSON to stdout for --json --fix', async () => {
+      const log = record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'bad message', ''])
+      mockApplyRepoFlag.mockReturnValue(makeGit({ log }))
+      mockValidateCommitMessage
+        .mockResolvedValueOnce({ valid: false, errors: ['type may not be empty'], warnings: [] })
+        .mockResolvedValueOnce({ valid: true, errors: [], warnings: [] })
+      mockExecuteChain.mockResolvedValue({ subject: 'fix: a conforming subject' })
+      mockExecuteRebasePlan.mockResolvedValue({ ok: true, message: 'Rebase applied — 1 of 1 commits kept' })
+
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      try {
+        await expect(handler({ ...baseArgv, json: true, fix: true }, logger)).rejects.toMatchObject({ code: 0 })
+        expect(logger.setConfig).toHaveBeenCalledWith({ quiet: true })
+        const written = writeSpy.mock.calls.map((call) => call[0]).join('')
+        expect(JSON.parse(written)).toEqual([
+          {
+            sha: 'sha1',
+            shortSha: 'sha1',
+            subject: 'bad message',
+            status: 'fail',
+            errors: ['type may not be empty'],
+            warnings: [],
+          },
+        ])
+      } finally {
+        writeSpy.mockRestore()
+      }
+    })
+
+    it('exits 1 when a warn commit remains after --fix under --severity warning', async () => {
+      const log =
+        record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'bad message', '']) +
+        record(['sha2', 'sha2', '', 'Jane', '2026-01-02', 'feat: a warn-only subject', ''])
+      mockApplyRepoFlag.mockReturnValue(makeGit({ log }))
+      mockValidateCommitMessage
+        .mockResolvedValueOnce({ valid: false, errors: ['type may not be empty'], warnings: [] }) // sha1 lint: fail
+        .mockResolvedValueOnce({ valid: true, errors: [], warnings: ['subject too long'] }) // sha2 lint: warn
+        .mockResolvedValueOnce({ valid: true, errors: [], warnings: [] }) // sha1 reword succeeds
+      mockExecuteChain.mockResolvedValue({ subject: 'fix: a conforming subject' })
+      mockExecuteRebasePlan.mockResolvedValue({ ok: true, message: 'Rebase applied — 1 of 1 commits reworded' })
+
+      await expect(
+        handler({ ...baseArgv, fix: true, severity: 'warning' }, logger)
+      ).rejects.toMatchObject({ code: 1 })
 
       expect(mockExecuteRebasePlan).toHaveBeenCalledTimes(1)
     })

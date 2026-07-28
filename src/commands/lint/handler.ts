@@ -78,16 +78,21 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
   const git = applyRepoFlag(argv)
   const config = loadConfig<LintOptions, LintArgv>(argv)
 
+  if (argv.json) {
+    // JSON output is data on stdout; silence human log lines so they can't
+    // pollute the machine-readable payload (mirrors recap/review #1586).
+    logger.setConfig({ quiet: true })
+  }
+
   const range = resolveLintRange(argv, config.defaultBranch || 'main')
 
   let commits: LintLogCommit[]
   try {
     commits = await loadRangeCommits(git, range)
   } catch (error) {
-    logger.error(
-      `Failed to read commit range '${range}': ${(error as Error).message.split('\n')[0]}`,
-      { color: 'red' }
-    )
+    const message = `Failed to read commit range '${range}': ${(error as Error).message.split('\n')[0]}`
+    logger.error(message, { color: 'red' })
+    if (argv.json) emitJson({ error: message })
     commandExit(1)
     return
   }
@@ -325,7 +330,13 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
         color: 'yellow',
       })
     }
-    commandExit(allReworded ? 0 : 1)
+    // Reworded `fail` commits now pass; anything else that counted toward
+    // `failing` under the active --severity is still there after the rebase.
+    const remaining = results.filter((commit) => {
+      if (commit.status === 'fail') return !rewordBySha.has(commit.sha)
+      return severity === 'warning' && commit.status === 'warn'
+    })
+    commandExit(remaining.length === 0 ? 0 : 1)
     return
   } else {
     logger.error(`\n${result.message}`, { color: 'red' })
