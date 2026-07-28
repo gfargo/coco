@@ -92,7 +92,9 @@ async function trimSummaryByBlocks(
     .split(DIRECTORY_BLOCK_SEPARATOR)
     .filter(Boolean)
     .map((text, index) => ({ index, text }))
-  const dropQueue = [...blocks].sort((a, b) => tokenizer(b.text) - tokenizer(a.text))
+  const dropQueue = blocks
+    .map((block) => ({ ...block, tokens: tokenizer(block.text) }))
+    .sort((a, b) => b.tokens - a.tokens)
 
   const render = async (candidateSummary: string): Promise<number> => {
     const candidateVariables = { ...variables, [summaryKey]: candidateSummary }
