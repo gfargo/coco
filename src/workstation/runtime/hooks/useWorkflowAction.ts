@@ -28,9 +28,7 @@
  *
  * The two module-level helpers the callback owns (`REMOTE_OP_LOADERS` and
  * `resolvePendingItemAction`) are used ONLY by `runWorkflowAction`, so they
- * move here alongside it. `lastDroppedStashRef` is likewise read only by
- * this callback (the `drop-stash` / `undo-drop-stash` flows), so its
- * `React.useRef` is declared INSIDE the hook at its original relative slot.
+ * move here alongside it.
  *
  * The action functions the handlers call are imported directly here rather
  * than threaded; `git` / `dispatch` / the three refresh callbacks / the
@@ -113,7 +111,7 @@ import { applyStatusFilterMask } from '../../../git/statusData'
 import { bisectBad, bisectGood, bisectReset, bisectRun, bisectSkip, bisectStart, extractBisectRemainingHint } from '../../../git/bisectActions'
 import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
 import { executeRebasePlan } from '../../../git/rebasePlanActions'
-import { performUndo, type UndoEntry } from '../undoStack'
+import { findMostRecentUndoEntry, performUndo, type UndoEntry } from '../undoStack'
 import { createSubmoduleRemoteWorkflowHandlers } from './useSubmoduleRemoteWorkflowActions'
 import { createForgeTriageWorkflowHandlers } from './useForgeTriageWorkflowActions'
 import type { RepoStackRuntimes } from '../repoStackRuntime'
@@ -359,20 +357,6 @@ export function useWorkflowAction(
   const depsRef = React.useRef(deps)
   depsRef.current = deps
 
-  // Last dropped stash {hash, message, depth}, captured before `drop-stash`
-  // runs so `undo-drop-stash` can re-store it. The dropped commit survives
-  // in the object DB until gc, so the hash is enough to bring it back. Owned
-  // exclusively by `runWorkflowAction` (the `drop-stash` / `undo-drop-stash`
-  // flows) — declared inside the hook at its original relative slot.
-  //
-  // `depth` (#1607) is the repo-frame depth `drop-stash` captured the hash
-  // at. This ref lives outside the reducer, so it missed the reducer's
-  // push/pop sweep that clears every other piece of cross-repo state —
-  // without the depth tag, drilling into a submodule after a parent-repo
-  // drop and running undo-drop-stash would run `restoreStash` with the
-  // PARENT's hash against the CHILD's git.
-  const lastDroppedStashRef = React.useRef<{ hash: string; message: string; depth: number } | null>(null)
-
   // Last fixup target {hash, shortHash, message}, captured when
   // `fixup-into-commit` succeeds so the follow-up `autosquash-rebase`
   // (offered via choice prompt, which carries no payload) knows which
@@ -418,6 +402,12 @@ export function useWorkflowAction(
     // cleared by the parent frame's completion — the write lands on the
     // issuing frame, or silently drops if that frame was popped.
     const issuedAtDepth = runtimes.length - 1
+    // OSS-1606 — depth alone isn't a stable frame identity: popping out
+    // of a submodule and drilling into a *different* sibling submodule
+    // lands back at the same depth with a different `git` handle. Undo
+    // entries also carry the frame's `workdir` so the guard can tell
+    // "same depth, same repo" apart from "same depth, different repo."
+    const issuedAtWorkdir = state.repoStack[issuedAtDepth]?.workdir
 
     // `worktreeDirty` is a pure derivation of the (already-threaded) whole
     // `context.worktree` — derived from the same live snapshot.
@@ -492,6 +482,7 @@ export function useWorkflowAction(
           kind: 'delete-branch' as const,
           label: `delete branch ${branch.shortName}`,
           depth: issuedAtDepth,
+          workdir: issuedAtWorkdir,
           name: branch.shortName,
           sha: branch.hash,
         }))
@@ -504,6 +495,7 @@ export function useWorkflowAction(
           kind: 'delete-branch' as const,
           label: `force-delete branch ${branch.shortName}`,
           depth: issuedAtDepth,
+          workdir: issuedAtWorkdir,
           name: branch.shortName,
           sha: branch.hash,
         }))
@@ -537,6 +529,7 @@ export function useWorkflowAction(
           kind: 'delete-tag',
           label: `delete tag ${tag.name}`,
           depth: issuedAtDepth,
+          workdir: issuedAtWorkdir,
           name: tag.name,
           sha: tag.hash,
         }]
@@ -549,20 +542,12 @@ export function useWorkflowAction(
       },
       // #1361 — batch-capable (`targets: 'multi'`): resolves the range →
       // marks → cursor ladder and drops every target, continuing past
-      // per-stash refusals with a summary. `undo-drop-stash` only ever
-      // remembers one stash, so a batch captures the MOST RECENT one in
-      // the set (lowest stash@{N}) — the single-drop case is unaffected
-      // (batch of one).
+      // per-stash refusals with a summary. Every dropped stash gets its
+      // own `drop-stash` undo entry on the shared stack below — batch of
+      // one degrades to the old single-drop behavior.
       'drop-stash': async () => {
         const stashes = getSelectedStashBatch(state, context)
         if (stashes.length === 0) return { ok: false, message: 'No stash selected' }
-        const mostRecent = [...stashes].sort((a, b) => {
-          const parse = (ref: string) => Number(ref.match(/^stash@\{(\d+)\}$/)?.[1] ?? Infinity)
-          return parse(a.ref) - parse(b.ref)
-        })[0]
-        if (mostRecent.hash) {
-          lastDroppedStashRef.current = { hash: mostRecent.hash, message: mostRecent.message, depth: issuedAtDepth }
-        }
         // #1361 aggregate `ok` only fires when EVERY stash in the batch
         // dropped successfully (same guarantee `delete-branch` relies
         // on above), so staging one undo entry per stash here is safe.
@@ -572,22 +557,34 @@ export function useWorkflowAction(
             kind: 'drop-stash' as const,
             label: `drop ${stash.ref}`,
             depth: issuedAtDepth,
+            workdir: issuedAtWorkdir,
             hash: stash.hash,
             message: stash.message,
           }))
         return dropStashes(git, stashes)
       },
+      // `u` on the stash surface — a shortcut for "undo my last drop"
+      // specifically. Resolves against `state.undoStack`, the SAME stack
+      // `gu` (`undo-last-action`) pops from: earlier revisions tracked a
+      // second, independent pointer here (`lastDroppedStashRef`) that
+      // never stayed in sync with stack pops made via `gu`, so undoing
+      // through one path could leave the other stale and re-apply an
+      // already-consumed inverse. One source of truth now — see
+      // `undoStack.ts`'s module doc.
       'undo-drop-stash': async () => {
-        const dropped = lastDroppedStashRef.current
-        // #1607 — a drop captured at a different repo-frame depth belongs
-        // to a different repo's git; refuse rather than retry its hash
-        // against this frame's git (wrong-repo restore, or a confusing
-        // raw git failure).
-        if (!dropped || dropped.depth !== issuedAtDepth) {
+        const dropped = findMostRecentUndoEntry(state.undoStack, 'drop-stash')
+        if (!dropped) {
+          return { ok: false, message: 'Nothing to undo — no stash dropped this session' }
+        }
+        // #1607 — depth AND workdir must both match: a drop captured at
+        // the same depth in a DIFFERENT sibling repo frame (e.g. a
+        // different submodule) belongs to a different `git` handle, and
+        // depth alone can't tell the two apart.
+        if (dropped.depth !== issuedAtDepth || dropped.workdir !== issuedAtWorkdir) {
           return { ok: false, message: 'Nothing to undo — no stash dropped this session' }
         }
         const result = await restoreStash(git, dropped.hash, dropped.message)
-        if (result.ok) lastDroppedStashRef.current = null
+        if (result.ok) dispatch({ type: 'removeUndoEntry', value: dropped })
         return result
       },
       'apply-stash': async () => {
@@ -876,6 +873,7 @@ export function useWorkflowAction(
               kind: 'reset-to-commit',
               label: `reset --${raw} to ${entry.hash}`,
               depth: issuedAtDepth,
+              workdir: issuedAtWorkdir,
               previousSha: previousHead,
               mode: raw as ResetMode,
             }]
@@ -893,6 +891,7 @@ export function useWorkflowAction(
             kind: 'reset-to-commit',
             label: `reset --${raw} to ${commit.shortHash}`,
             depth: issuedAtDepth,
+            workdir: issuedAtWorkdir,
             previousSha: previousHead,
             mode: raw as ResetMode,
           }]
@@ -958,9 +957,12 @@ export function useWorkflowAction(
         const entry = state.undoStack[state.undoStack.length - 1]
         if (!entry) return { ok: false, message: 'Nothing to undo.' }
         // #1607-style guard — an entry captured in a different repo
-        // frame belongs to a different `git` handle; refuse rather
-        // than apply it against the wrong repo.
-        if (entry.depth !== issuedAtDepth) {
+        // frame belongs to a different `git` handle; refuse rather than
+        // apply it against the wrong repo. Depth alone isn't a stable
+        // frame identity (popping out of a submodule and drilling into
+        // a *different* sibling submodule lands back at the same depth
+        // with a different `git` handle), so `workdir` must match too.
+        if (entry.depth !== issuedAtDepth || entry.workdir !== issuedAtWorkdir) {
           return { ok: false, message: 'Nothing to undo at this repo level.' }
         }
         const result = await performUndo(git, entry)
@@ -1783,10 +1785,10 @@ export function useWorkflowAction(
       }
     }
     // Identity-stable by design: the body reads exclusively through
-    // `depsRef` / `lastDroppedStashRef`, so there is nothing render-scoped
-    // to invalidate on. (Do NOT re-add state fields here — the enumerated
-    // array drifted out of sync with the body once already and shipped
-    // wrong-target destructive actions.)
+    // `depsRef`, so there is nothing render-scoped to invalidate on. (Do
+    // NOT re-add state fields here — the enumerated array drifted out of
+    // sync with the body once already and shipped wrong-target
+    // destructive actions.)
   }, [])
 
   return {

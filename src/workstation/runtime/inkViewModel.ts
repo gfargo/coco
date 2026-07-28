@@ -72,7 +72,7 @@ import {
     cycleBranchSort,
     cycleTagSort,
 } from '../chrome/sorting'
-import { pushUndoEntry, popUndoEntry, type UndoEntry } from './undoStack'
+import { pushUndoEntry, popUndoEntry, removeUndoEntry, type UndoEntry } from './undoStack'
 export type { UndoEntry } from './undoStack'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
@@ -1179,6 +1179,7 @@ export type LogInkAction =
   | { type: 'setPendingKey'; value?: string }
   | { type: 'pushUndoEntry'; value: UndoEntry }
   | { type: 'popUndoEntry' }
+  | { type: 'removeUndoEntry'; value: UndoEntry }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
   | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' | 'warning'; loading?: boolean; ttl?: 'echo' | 'result' | 'advisory' }
@@ -2846,6 +2847,11 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         undoStack: popUndoEntry(state.undoStack).stack,
+      }
+    case 'removeUndoEntry':
+      return {
+        ...state,
+        undoStack: removeUndoEntry(state.undoStack, action.value),
       }
     case 'setSidebarTab':
       return {

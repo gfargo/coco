@@ -124,6 +124,7 @@ the which-key overlay lists them live when you press `g`.
 | `g T` | **Create tag** at the cursored commit (history view; name prompt) — *not* changelog; the changelog opens with `L` from history/branches |
 | `g H` | Apply cursored hunk to index (`git apply --cached`) |
 | `g C` | Theme picker (overlay) |
+| `g u` | **Undo last action** (action, not nav) — pops the session-scoped undo stack and reverses the top entry: branch delete (recreate at recorded sha), stash drop (`git stash store`), reset (reset back to the recorded HEAD using the *original* mode), or tag delete (recreate at recorded sha). Not every destructive action is invertible — only these four push an entry. Never touches pushed/remote history; the footer shows a count (`gu undo (N)`) when the stack is non-empty. |
 | `g k` / `g K` | Open the project / global coco config in `$EDITOR` |
 | `g ?` | **Which-key strip** (overlay, not nav) — surfaces the *single-key* actions available in the current view (the deliberate overloads below), sourced live from `LOG_INK_KEY_BINDINGS`. `?` from the strip expands to the full help; `Esc` closes. The per-view counterpart to this very `g`-chord menu. |
 

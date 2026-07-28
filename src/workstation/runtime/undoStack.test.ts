@@ -1,4 +1,12 @@
-import { MAX_UNDO_STACK_SIZE, performUndo, popUndoEntry, pushUndoEntry, type UndoEntry } from './undoStack'
+import {
+  MAX_UNDO_STACK_SIZE,
+  findMostRecentUndoEntry,
+  performUndo,
+  popUndoEntry,
+  pushUndoEntry,
+  removeUndoEntry,
+  type UndoEntry,
+} from './undoStack'
 
 function branchEntry(overrides: Partial<Extract<UndoEntry, { kind: 'delete-branch' }>> = {}): UndoEntry {
   return {
@@ -41,6 +49,35 @@ describe('undo stack (OSS-1606)', () => {
       expect(stack[stack.length - 1]).toEqual(
         branchEntry({ name: `branch-${MAX_UNDO_STACK_SIZE + 4}` })
       )
+    })
+  })
+
+  describe('removeUndoEntry', () => {
+    it('removes a specific entry by identity, even when it is not on top of the stack', () => {
+      const bottom = branchEntry({ name: 'bottom' })
+      const middle = branchEntry({ name: 'middle' })
+      const top = branchEntry({ name: 'top' })
+      const stack = [bottom, middle, top]
+
+      expect(removeUndoEntry(stack, middle)).toEqual([bottom, top])
+    })
+
+    it('is a no-op when the entry is not present', () => {
+      const stack = [branchEntry({ name: 'a' })]
+      expect(removeUndoEntry(stack, branchEntry({ name: 'b' }))).toEqual(stack)
+    })
+  })
+
+  describe('findMostRecentUndoEntry', () => {
+    it('finds the most recently pushed entry of a given kind, ignoring other kinds pushed after it', () => {
+      const drop = { kind: 'drop-stash' as const, label: 'drop stash@{0}', depth: 0, hash: 'deadbeef', message: 'WIP' }
+      const stack: UndoEntry[] = [drop, branchEntry({ name: 'a' })]
+
+      expect(findMostRecentUndoEntry(stack, 'drop-stash')).toEqual(drop)
+    })
+
+    it('returns undefined when no entry of that kind is on the stack', () => {
+      expect(findMostRecentUndoEntry([branchEntry()], 'drop-stash')).toBeUndefined()
     })
   })
 

@@ -1136,7 +1136,7 @@ const stashEntry = {
   files: ['src/app.ts'],
 }
 
-describe('undo-drop-stash frame guard (#1607)', () => {
+describe('undo-drop-stash reconciled onto the shared undo stack (OSS-1606 / #1607)', () => {
   beforeEach(() => {
     dropStashesMock.mockReset()
     restoreStashMock.mockReset()
@@ -1144,29 +1144,42 @@ describe('undo-drop-stash frame guard (#1607)', () => {
     restoreStashMock.mockResolvedValue({ ok: true, message: 'Restored stash' })
   })
 
-  it('refuses undo-drop-stash when the repo frame changed since the drop, instead of restoring the parent hash against the child git', async () => {
-    const harness = createHookHarness()
+  it('resolves the most recent drop-stash entry off state.undoStack — the same stack `gu` pops from', async () => {
     const dispatch = jest.fn()
+    const harness = createHookHarness()
     harness.beginRender()
     const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
       dispatch,
-      context: { stashes: { stashes: [stashEntry] } } as never,
-      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{
+          kind: 'drop-stash', label: 'drop stash@{0}', depth: 0, hash: stashEntry.hash, message: stashEntry.message,
+        }],
+      } as never,
     }))
 
-    await runWorkflowAction('drop-stash')
-    expect(dropStashesMock).toHaveBeenCalledTimes(1)
+    await runWorkflowAction('undo-drop-stash')
 
-    // Simulate drilling into a submodule — a deeper runtimes stack —
-    // after the drop, before undo-drop-stash runs.
+    expect(restoreStashMock).toHaveBeenCalledWith(expect.anything(), stashEntry.hash, stashEntry.message)
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'removeUndoEntry',
+      value: { kind: 'drop-stash', label: 'drop stash@{0}', depth: 0, hash: stashEntry.hash, message: stashEntry.message },
+    })
+  })
+
+  it('refuses when no drop-stash entry is on the stack', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
     harness.beginRender()
-    const { runWorkflowAction: runInChildFrame } = useWorkflowAction(harness.React, createDeps({
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
       dispatch,
-      context: { stashes: { stashes: [] } } as never,
-      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{ kind: 'delete-tag', label: 'delete tag v1', depth: 0, name: 'v1', sha: 'abc' }],
+      } as never,
     }))
 
-    await runInChildFrame('undo-drop-stash')
+    await runWorkflowAction('undo-drop-stash')
 
     expect(restoreStashMock).not.toHaveBeenCalled()
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
@@ -1175,20 +1188,88 @@ describe('undo-drop-stash frame guard (#1607)', () => {
     }))
   })
 
-  it('still restores normally when undo-drop-stash runs in the same repo frame', async () => {
-    const harness = createHookHarness()
+  it('refuses when the entry was captured in a different repo frame (deeper runtimes stack, #1607)', async () => {
     const dispatch = jest.fn()
+    const harness = createHookHarness()
     harness.beginRender()
     const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
       dispatch,
-      context: { stashes: { stashes: [stashEntry] } } as never,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{
+          kind: 'drop-stash', label: 'drop stash@{0}', depth: 0, hash: stashEntry.hash, message: stashEntry.message,
+        }],
+      } as never,
+      // Drilled into a submodule since the drop — a deeper runtimes stack.
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    await runWorkflowAction('undo-drop-stash')
+
+    expect(restoreStashMock).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Nothing to undo — no stash dropped this session',
+    }))
+  })
+
+  // A depth-only guard can't tell two SIBLING repo frames apart — popping
+  // out of one submodule and drilling into a different one lands back at
+  // the same depth with a different `git` handle. `workdir` is the actual
+  // frame identity; the guard must refuse even though depth matches here.
+  it('refuses when depth matches but the entry was captured in a sibling repo frame (different workdir)', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        repoStack: [{ label: 'submodule-b', workdir: '/repo/submodule-b' }],
+        undoStack: [{
+          kind: 'drop-stash', label: 'drop stash@{0}', depth: 0, workdir: '/repo/submodule-a',
+          hash: stashEntry.hash, message: stashEntry.message,
+        }],
+      } as never,
       runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
     }))
 
-    await runWorkflowAction('drop-stash')
     await runWorkflowAction('undo-drop-stash')
 
-    expect(restoreStashMock).toHaveBeenCalledWith(expect.anything(), stashEntry.hash, stashEntry.message)
+    expect(restoreStashMock).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Nothing to undo — no stash dropped this session',
+    }))
+  })
+
+  it('drop-stash stages a workdir-tagged undo entry so a later undo can tell sibling repo frames apart', async () => {
+    dropStashesMock.mockResolvedValueOnce({ ok: true, message: 'Dropped stash@{0}' })
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        repoStack: [{ label: 'submodule-a', workdir: '/repo/submodule-a' }],
+      } as never,
+      context: { stashes: { stashes: [stashEntry] } } as never,
+    }))
+
+    await runWorkflowAction('drop-stash')
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: {
+        kind: 'drop-stash',
+        label: 'drop stash@{0}',
+        depth: 0,
+        workdir: '/repo/submodule-a',
+        hash: stashEntry.hash,
+        message: stashEntry.message,
+      },
+    })
   })
 })
 

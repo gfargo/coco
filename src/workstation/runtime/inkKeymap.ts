@@ -1115,6 +1115,10 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',
+  // The undo safety net (OSS-1606) belongs with the other essentials, not
+  // `edit` (compose-surface authoring) — it's a global recovery action,
+  // not a commit-message key, and its whole point is to be easy to find.
+  workflowUndoLastAction: 'essentials',
   // ── Navigation: focus + view jumps. The g-prefix navigation chords
   //    cluster here so users learn them as a set.
   focusNext: 'navigation',
@@ -1164,7 +1168,6 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   editCommitExternal: 'edit',
   commitSplit: 'edit',
   revertSelection: 'edit',
-  workflowUndoLastAction: 'edit',
   // ── Mutate: destructive / AI workflows that fire from anywhere
   //    (hence the global confirmation gating).
   workflowDeleteBranch: 'mutate',
