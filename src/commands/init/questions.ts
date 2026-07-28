@@ -19,7 +19,7 @@ import {
 import { ProjectConfigFileName } from '../../lib/utils/getProjectConfigFilePath'
 import { COMMIT_PROMPT } from '../commit/prompt'
 import { InstallationScope } from './config'
-import { OPENAI_COMPATIBLE_PRESETS, OpenAiCompatiblePreset } from './openAiCompatiblePresets'
+import { findOpenAiCompatiblePreset, OpenAiCompatiblePreset } from './openAiCompatiblePresets'
 
 /** Sentinel returned by `selectLLMProvider` for the compat-endpoint branch. */
 export const OPENAI_COMPATIBLE_SENTINEL = 'openai-compatible' as const
@@ -212,24 +212,15 @@ export const questions = {
     }),
 
   selectOpenAiCompatiblePreset: async (): Promise<OpenAiCompatiblePreset> => {
-    const presetId = await selectPrompt<OpenAiCompatiblePreset['id']>({
-      message: 'select OpenAI-compatible endpoint:',
-      choices: OPENAI_COMPATIBLE_PRESETS.map((preset) => ({
-        name: preset.label,
-        value: preset.id,
-        description: preset.baseURL ? preset.baseURL : 'you provide the base URL',
-      })),
-    })
-    const preset = OPENAI_COMPATIBLE_PRESETS.find((p) => p.id === presetId)
+    // Only one entry (`custom`) remains here now that OpenRouter/Groq/LM
+    // Studio/vLLM are first-class providers (#OSS-1623) — skip the
+    // pointless single-choice select and go straight to the base-URL
+    // prompt for it.
+    const preset = findOpenAiCompatiblePreset('custom')
     if (!preset) {
-      throw new Error(`selectOpenAiCompatiblePreset: unknown preset id '${presetId}'`)
+      throw new Error("selectOpenAiCompatiblePreset: missing the 'custom' preset")
     }
 
-    if (preset.baseURL) {
-      return preset
-    }
-
-    // vLLM / custom: no fixed endpoint, ask for one.
     const baseURL = await inputPrompt({
       message: `${preset.label} base URL (e.g. http://localhost:8000/v1):`,
       validate(input) {
