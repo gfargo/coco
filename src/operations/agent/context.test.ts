@@ -271,6 +271,23 @@ describe('resolveProjectConventions', () => {
     expect(Buffer.byteLength(conventions!.text, 'utf8')).toBeLessThanOrEqual(MAX_CONVENTIONS_BYTES)
   })
 
+  it('honors the byte budget when joining several small files that individually fit', () => {
+    // The first two files are tiny, leaving most of the budget for the third.
+    // Its content is large enough to be truncated to exactly fill whatever
+    // budget remains -- so if the '\n\n' join separators between all three
+    // sections aren't reserved up front, the final joined text overflows
+    // MAX_CONVENTIONS_BYTES by the separator bytes.
+    fs.writeFileSync(path.join(repoRoot, 'AGENTS.md'), 'a')
+    fs.writeFileSync(path.join(repoRoot, 'CLAUDE.md'), 'b')
+    fs.writeFileSync(path.join(repoRoot, 'CONTRIBUTING.md'), 'c'.repeat(MAX_CONVENTIONS_BYTES))
+
+    const conventions = resolveProjectConventions(repoRoot)
+
+    expect(conventions).not.toBeNull()
+    expect(conventions!.files).toEqual(['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md'])
+    expect(Buffer.byteLength(conventions!.text, 'utf8')).toBeLessThanOrEqual(MAX_CONVENTIONS_BYTES)
+  })
+
   it('excludes a symlinked steering file that escapes the repository root', () => {
     const outside = path.join(tempRoot, 'outside.md')
     fs.writeFileSync(outside, 'Should not be read.')
@@ -300,19 +317,25 @@ describe('getConventionsContext', () => {
     fs.rmSync(tempRoot, { recursive: true, force: true })
   })
 
-  it('returns an empty string when repository configuration is not trusted', () => {
-    expect(getConventionsContext(repoRoot, false)).toBe('')
-    expect(getConventionsContext(repoRoot, undefined)).toBe('')
+  it('returns empty text and null provenance when repository configuration is not trusted', () => {
+    expect(getConventionsContext(repoRoot, false)).toEqual({ text: '', provenance: null })
+    expect(getConventionsContext(repoRoot, undefined)).toEqual({ text: '', provenance: null })
   })
 
-  it('returns non-empty guidance text when trusted and conventions exist', () => {
+  it('returns non-empty guidance text and matching provenance when trusted and conventions exist', () => {
     const result = getConventionsContext(repoRoot, true)
-    expect(result).toContain('House style.')
+    const conventions = resolveProjectConventions(repoRoot)
+
+    expect(result.text).toContain('House style.')
+    expect(result.provenance).not.toBeNull()
+    expect(result.provenance!.digest).toBe(conventions!.digest)
+    expect(result.provenance!.digest).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(result.provenance!.files).toEqual(conventions!.files)
   })
 
-  it('returns an empty string when trusted but no convention files exist', () => {
+  it('returns empty text and null provenance when trusted but no convention files exist', () => {
     const emptyRoot = path.join(tempRoot, 'empty-repo')
     fs.mkdirSync(emptyRoot, { recursive: true })
-    expect(getConventionsContext(emptyRoot, true)).toBe('')
+    expect(getConventionsContext(emptyRoot, true)).toEqual({ text: '', provenance: null })
   })
 })

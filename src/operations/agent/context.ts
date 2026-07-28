@@ -159,6 +159,9 @@ function listSteeringFiles(root: string): string[] {
  * can't crowd out the diff in the downstream prompt budget. Callers gate
  * this behind `trustRepositoryConfig` -- see `getConventionsContext`.
  */
+const CONVENTIONS_SECTION_SEPARATOR = '\n\n'
+const CONVENTIONS_SECTION_SEPARATOR_BYTES = Buffer.byteLength(CONVENTIONS_SECTION_SEPARATOR, 'utf8')
+
 export function resolveProjectConventions(root: string): ProjectConventions | null {
   const relativePaths = [...CONVENTION_FILE_ALLOWLIST, ...listSteeringFiles(root)]
   const parts: string[] = []
@@ -166,7 +169,10 @@ export function resolveProjectConventions(root: string): ProjectConventions | nu
   let remainingBytes = MAX_CONVENTIONS_BYTES
 
   for (const relativePath of relativePaths) {
-    if (remainingBytes <= 0) break
+    // Every section after the first costs an extra separator when joined below,
+    // so that cost must be reserved from the budget before truncating the section.
+    const separatorBytes = parts.length > 0 ? CONVENTIONS_SECTION_SEPARATOR_BYTES : 0
+    if (remainingBytes <= separatorBytes) break
 
     const candidate = path.join(root, relativePath)
     if (!isPathWithinRoot(candidate, root)) continue
@@ -187,17 +193,17 @@ export function resolveProjectConventions(root: string): ProjectConventions | nu
     }
 
     const posixPath = relativePath.split(path.sep).join('/')
-    const section = truncateToByteBudget(`## ${posixPath}\n\n${content.trim()}`, remainingBytes)
+    const section = truncateToByteBudget(`## ${posixPath}\n\n${content.trim()}`, remainingBytes - separatorBytes)
     if (!section.trim()) continue
 
     parts.push(section)
     files.push(posixPath)
-    remainingBytes -= Buffer.byteLength(section, 'utf8')
+    remainingBytes -= separatorBytes + Buffer.byteLength(section, 'utf8')
   }
 
   if (parts.length === 0) return null
 
-  const text = parts.join('\n\n')
+  const text = parts.join(CONVENTIONS_SECTION_SEPARATOR)
   return {
     text,
     digest: `sha256:${createHash('sha256').update(text).digest('hex')}`,
@@ -205,21 +211,35 @@ export function resolveProjectConventions(root: string): ProjectConventions | nu
   }
 }
 
+export type ConventionsProvenance = {
+  digest: string
+  files: string[]
+}
+
+export type ConventionsContext = {
+  text: string
+  provenance: ConventionsProvenance | null
+}
+
 /**
  * Builds the `conventions_context` prompt variable (#1956). Repository
  * convention files are repository-controlled text entering the prompt, so
  * this only reads them when the caller has explicitly trusted repository
  * configuration -- MCP tools reject `trustRepositoryConfig`, so they never
- * reach this path. Empty string when untrusted or nothing was found,
- * mirroring how `language_context` and `branch_name_context` degrade.
+ * reach this path. `provenance` is null (and `text` is `''`) when untrusted
+ * or nothing was found, mirroring how `language_context` and
+ * `branch_name_context` degrade to an empty string.
  */
-export function getConventionsContext(root: string, trustRepositoryConfig: boolean | undefined): string {
-  if (!trustRepositoryConfig) return ''
+export function getConventionsContext(root: string, trustRepositoryConfig: boolean | undefined): ConventionsContext {
+  if (!trustRepositoryConfig) return { text: '', provenance: null }
 
   const conventions = resolveProjectConventions(root)
-  if (!conventions) return ''
+  if (!conventions) return { text: '', provenance: null }
 
-  return `Follow these project conventions where they apply:\n\n${conventions.text}`
+  return {
+    text: `Follow these project conventions where they apply:\n\n${conventions.text}`,
+    provenance: { digest: conventions.digest, files: conventions.files },
+  }
 }
 
 export function resolveAgentDirectoryRoot(directory: string): string {

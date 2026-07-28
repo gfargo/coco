@@ -26,7 +26,7 @@ import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
-import { AgentOperationContext, getConventionsContext, resolveChangeSource } from './context'
+import { AgentOperationContext, ConventionsProvenance, getConventionsContext, resolveChangeSource } from './context'
 import { AgentOperationError } from './errors'
 import {
     AgentOperation,
@@ -145,6 +145,7 @@ function envelope<T>(
   data: T,
   warnings: string[],
   meta: Awaited<ReturnType<typeof resolveChangeSource>>['meta'],
+  conventions?: ConventionsProvenance | null,
 ): AgentSuccessEnvelope<T> {
   return {
     version: AGENT_PROTOCOL_VERSION,
@@ -153,7 +154,7 @@ function envelope<T>(
     status: 'completed',
     data,
     warnings,
-    meta,
+    meta: conventions ? { ...meta, conventions } : meta,
   }
 }
 
@@ -166,6 +167,7 @@ export async function generateAgentCommitDraft(
   })
   const changeContext = asUntrustedChangeContext(resolved.text)
   const options = input.options
+  const conventions = getConventionsContext(context.repoRoot, options.trustRepositoryConfig)
   const argv = {
     ...baseArgv(options),
     ignoredFiles: [],
@@ -192,7 +194,7 @@ export async function generateAgentCommitDraft(
     signal: context.signal,
     preparedSummary: changeContext,
     trustRepositoryConfig: options.trustRepositoryConfig,
-    conventionsContext: getConventionsContext(context.repoRoot, options.trustRepositoryConfig),
+    conventionsContext: conventions.text,
     usageSurface: context.surface,
   })
   if (result.cancelled) {
@@ -209,7 +211,7 @@ export async function generateAgentCommitDraft(
   return envelope('commit-draft', {
     ...result.message,
     validationErrors: result.validationErrors,
-  }, result.warnings, resolved.meta)
+  }, result.warnings, resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentReview(
@@ -224,6 +226,7 @@ export async function generateAgentReview(
     (value) => (Array.isArray(value) ? value : [value]),
     ReviewFeedbackItemArraySchema,
   )
+  const conventions = getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig)
   const findings = await executeStructured<ReviewFeedbackItem[]>({
     operation: 'review',
     task: 'review',
@@ -236,11 +239,11 @@ export async function generateAgentReview(
       changes: changeContext,
       format_instructions: 'Return a JSON array of findings with title, summary, severity (1-10), category, and filePath.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'code review feedback' }),
-      conventions_context: getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig),
+      conventions_context: conventions.text,
     },
   })
   findings.sort((a, b) => b.severity - a.severity)
-  return envelope('review', { findings }, [], resolved.meta)
+  return envelope('review', { findings }, [], resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentChangelog(
@@ -251,6 +254,7 @@ export async function generateAgentChangelog(
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   const changeContext = asUntrustedChangeContext(resolved.text)
+  const conventions = getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig)
   const result = await executeStructured<ChangelogResponse>({
     operation: 'changelog',
     task: 'changelog',
@@ -267,10 +271,10 @@ export async function generateAgentChangelog(
         ? 'Include author attribution when it is present in the supplied context.'
         : 'Do not invent author attribution; include commit references only when present.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'changelog' }),
-      conventions_context: getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig),
+      conventions_context: conventions.text,
     },
   })
-  return envelope('changelog', result, [], resolved.meta)
+  return envelope('changelog', result, [], resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentRecap(
@@ -281,6 +285,7 @@ export async function generateAgentRecap(
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   const changeContext = asUntrustedChangeContext(resolved.text)
+  const conventions = getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig)
   const result = await executeStructured<RecapData>({
     operation: 'recap',
     task: 'recap',
@@ -294,10 +299,10 @@ export async function generateAgentRecap(
       timeframe: input.options.timeframe || 'provided change context',
       format_instructions: 'Return a JSON object with string fields title and summary.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'summary' }),
-      conventions_context: getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig),
+      conventions_context: conventions.text,
     },
   })
-  return envelope('recap', result, [], resolved.meta)
+  return envelope('recap', result, [], resolved.meta, conventions.provenance)
 }
 
 export async function runAgentOperation(
