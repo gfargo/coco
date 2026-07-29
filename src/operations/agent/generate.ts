@@ -28,7 +28,7 @@ import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
-import { AgentOperationContext, resolveChangeSource } from './context'
+import { AgentOperationContext, ConventionsProvenance, getConventionsContext, resolveChangeSource } from './context'
 import { AgentOperationError } from './errors'
 import {
     AgentOperation,
@@ -77,6 +77,24 @@ function report(context: AgentOperationContext, message: string, fraction?: numb
     context.onProgress({ message, fraction })
   } catch {
     // Progress reporting is best-effort; never let it break generation.
+  }
+}
+
+const CHUNK_PROGRESS_MIN_INTERVAL_MS = 250
+
+/**
+ * Wraps a chunk-tick callback so it forwards to `report` at most once per
+ * `CHUNK_PROGRESS_MIN_INTERVAL_MS`. Raw streaming chunks arrive far faster
+ * than any client needs a liveness signal, so without this a long
+ * generation floods the notification channel with thousands of ticks.
+ */
+function throttledChunkReporter(context: AgentOperationContext, message: string): () => void {
+  let lastTickAt = 0
+  return () => {
+    const now = Date.now()
+    if (now - lastTickAt < CHUNK_PROGRESS_MIN_INTERVAL_MS) return
+    lastTickAt = now
+    report(context, message)
   }
 }
 
@@ -146,7 +164,8 @@ async function executeStructured<T>(input: {
     surface: input.context.surface,
   }
 
-  if (input.context.onProgress) {
+  const streamingEnabled = Boolean(input.context.onProgress && runtime.config.service.streaming?.enabled)
+  if (streamingEnabled) {
     try {
       return await executeChainStreaming<T>({
         llm: runtime.llm,
@@ -156,7 +175,7 @@ async function executeStructured<T>(input: {
         // Chunk-level ticks are just a liveness signal for this
         // single dominant call — no fractional progress is derivable
         // from raw text length, so only the message is forwarded.
-        onChunk: () => report(input.context, `Generating ${input.task}…`),
+        onChunk: throttledChunkReporter(input.context, `Generating ${input.task}…`),
         logger: input.context.logger,
         tokenizer: runtime.tokenizer,
         signal: input.context.signal,
@@ -167,6 +186,12 @@ async function executeStructured<T>(input: {
       // Streaming failed for a non-cancellation reason (unsupported
       // provider/model, transient error): fall back to the
       // non-streaming call so output/resilience is unchanged.
+      input.context.logger.verbose(
+        `Streaming attempt for ${input.task} failed: ${
+          error instanceof Error ? error.message : String(error)
+        }. Falling back to non-streaming.`,
+        { color: 'yellow' },
+      )
     }
   }
 
@@ -187,6 +212,7 @@ function envelope<T>(
   data: T,
   warnings: string[],
   meta: Awaited<ReturnType<typeof resolveChangeSource>>['meta'],
+  conventions?: ConventionsProvenance | null,
 ): AgentSuccessEnvelope<T> {
   return {
     version: AGENT_PROTOCOL_VERSION,
@@ -195,7 +221,7 @@ function envelope<T>(
     status: 'completed',
     data,
     warnings,
-    meta,
+    meta: conventions ? { ...meta, conventions } : meta,
   }
 }
 
@@ -206,9 +232,10 @@ export async function generateAgentCommitDraft(
   const resolved = await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
-  report(context, 'Resolved changes')
+  report(context, 'Resolved changes', 0.2)
   const changeContext = asUntrustedChangeContext(resolved.text)
   const options = input.options
+  const conventions = getConventionsContext(context.repoRoot, options.trustRepositoryConfig)
   const argv = {
     ...baseArgv(options),
     ignoredFiles: [],
@@ -228,7 +255,7 @@ export async function generateAgentCommitDraft(
     printMessage: true,
     openInEditor: false,
   } as unknown as Arguments<CommitOptions>
-  report(context, 'Generating commit-draft…')
+  report(context, 'Generating commit-draft…', 0.4)
   const result = await generateCommitDraft({
     git: context.git,
     argv,
@@ -236,9 +263,10 @@ export async function generateAgentCommitDraft(
     signal: context.signal,
     preparedSummary: changeContext,
     trustRepositoryConfig: options.trustRepositoryConfig,
+    conventionsContext: conventions.text,
     usageSurface: context.surface,
     onStreamChunk: context.onProgress
-      ? () => report(context, 'Generating commit-draft…')
+      ? throttledChunkReporter(context, 'Generating commit-draft…')
       : undefined,
   })
   if (result.cancelled) {
@@ -252,11 +280,11 @@ export async function generateAgentCommitDraft(
       { validationErrors: result.validationErrors },
     )
   }
-  report(context, 'Completed')
+  report(context, 'Completed', 1)
   return envelope('commit-draft', {
     ...result.message,
     validationErrors: result.validationErrors,
-  }, result.warnings, resolved.meta)
+  }, result.warnings, resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentReview(
@@ -266,13 +294,14 @@ export async function generateAgentReview(
   const resolved = await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
-  report(context, 'Resolved changes')
+  report(context, 'Resolved changes', 0.2)
   const changeContext = asUntrustedChangeContext(resolved.text)
   const schema = z.preprocess(
     (value) => (Array.isArray(value) ? value : [value]),
     ReviewFeedbackItemArraySchema,
   )
-  report(context, 'Generating review…')
+  const conventions = getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig)
+  report(context, 'Generating review…', 0.4)
   const findings = await executeStructured<ReviewFeedbackItem[]>({
     operation: 'review',
     task: 'review',
@@ -285,11 +314,12 @@ export async function generateAgentReview(
       changes: changeContext,
       format_instructions: 'Return a JSON array of findings with title, summary, severity (1-10), category, and filePath.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'code review feedback' }),
+      conventions_context: conventions.text,
     },
   })
   findings.sort((a, b) => b.severity - a.severity)
-  report(context, 'Completed')
-  return envelope('review', { findings }, [], resolved.meta)
+  report(context, 'Completed', 1)
+  return envelope('review', { findings }, [], resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentChangelog(
@@ -299,9 +329,10 @@ export async function generateAgentChangelog(
   const resolved = await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
-  report(context, 'Resolved changes')
+  report(context, 'Resolved changes', 0.2)
   const changeContext = asUntrustedChangeContext(resolved.text)
-  report(context, 'Generating changelog…')
+  const conventions = getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig)
+  report(context, 'Generating changelog…', 0.4)
   const result = await executeStructured<ChangelogResponse>({
     operation: 'changelog',
     task: 'changelog',
@@ -318,10 +349,11 @@ export async function generateAgentChangelog(
         ? 'Include author attribution when it is present in the supplied context.'
         : 'Do not invent author attribution; include commit references only when present.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'changelog' }),
+      conventions_context: conventions.text,
     },
   })
-  report(context, 'Completed')
-  return envelope('changelog', result, [], resolved.meta)
+  report(context, 'Completed', 1)
+  return envelope('changelog', result, [], resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentRecap(
@@ -331,9 +363,10 @@ export async function generateAgentRecap(
   const resolved = await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
-  report(context, 'Resolved changes')
+  report(context, 'Resolved changes', 0.2)
   const changeContext = asUntrustedChangeContext(resolved.text)
-  report(context, 'Generating recap…')
+  const conventions = getConventionsContext(context.repoRoot, input.options.trustRepositoryConfig)
+  report(context, 'Generating recap…', 0.4)
   const result = await executeStructured<RecapData>({
     operation: 'recap',
     task: 'recap',
@@ -347,10 +380,11 @@ export async function generateAgentRecap(
       timeframe: input.options.timeframe || 'provided change context',
       format_instructions: 'Return a JSON object with string fields title and summary.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'summary' }),
+      conventions_context: conventions.text,
     },
   })
-  report(context, 'Completed')
-  return envelope('recap', result, [], resolved.meta)
+  report(context, 'Completed', 1)
+  return envelope('recap', result, [], resolved.meta, conventions.provenance)
 }
 
 export async function runAgentOperation(

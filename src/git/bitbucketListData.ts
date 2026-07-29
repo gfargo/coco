@@ -189,6 +189,19 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
     params.q = params.q ? `(${params.q}) AND ${searchQ}` : searchQ
   }
 
+  // '@me' is resolved to a real nickname by the caller before this runs;
+  // the guards keep a literal '@me' (a nickname Bitbucket doesn't know)
+  // out of the query if this is ever called without that resolution.
+  if (filter.author && filter.author !== '@me') {
+    const authorQ = `author.nickname = "${bbqlQuote(filter.author)}"`
+    params.q = params.q ? `(${params.q}) AND ${authorQ}` : authorQ
+  }
+
+  if (filter.assignee && filter.assignee !== '@me') {
+    const assigneeQ = `reviewers.nickname = "${bbqlQuote(filter.assignee)}"`
+    params.q = params.q ? `(${params.q}) AND ${assigneeQ}` : assigneeQ
+  }
+
   const pairs = Object.entries(params)
     .filter(([, v]) => v !== undefined)
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
@@ -215,19 +228,12 @@ export async function getBitbucketPullRequestList(
       }
 
       const want = filter.limit ?? 30
-      let pullRequests: PullRequestListItem[] = []
 
-      const raw = await fetchAllPages<RawBitbucketPR>(
-        runner,
-        buildPullRequestEndpoint(project.path, filter),
-        'pull requests',
-        want
-      )
-
-      pullRequests = raw.map(mapPullRequestItem)
-
-      if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
-
+      // Resolve '@me' BEFORE building the endpoint so the nickname lands in
+      // the BBQL query and Bitbucket filters server-side. Filtering after
+      // the fetch (the old approach) ran against only the first `want` PRs
+      // of the unfiltered list, so a user whose PRs sat past that window
+      // saw them silently dropped.
       const wantsMe = filter.author === '@me' || filter.assignee === '@me'
       const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
       if (wantsMe && !me) {
@@ -235,18 +241,24 @@ export async function getBitbucketPullRequestList(
           'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
         )
       }
+      const effectiveFilter: PullRequestListFilter = wantsMe
+        ? {
+            ...filter,
+            author: filter.author === '@me' ? me : filter.author,
+            assignee: filter.assignee === '@me' ? me : filter.assignee,
+          }
+        : filter
 
-      if (filter.author) {
-        const authorFilter = filter.author === '@me' ? me : filter.author
-        pullRequests = pullRequests.filter((pr) => pr.author === authorFilter)
-      }
+      const raw = await fetchAllPages<RawBitbucketPR>(
+        runner,
+        buildPullRequestEndpoint(project.path, effectiveFilter),
+        'pull requests',
+        want
+      )
 
-      if (filter.assignee) {
-        const assigneeFilter = filter.assignee === '@me' ? me : filter.assignee
-        pullRequests = pullRequests.filter(
-          (pr) => assigneeFilter !== undefined && pr.assignees?.includes(assigneeFilter)
-        )
-      }
+      let pullRequests = raw.map(mapPullRequestItem)
+
+      if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
 
       return { pullRequests: pullRequests.map(sanitizePullRequestListItem) }
     },

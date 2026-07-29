@@ -18,6 +18,7 @@ import { AgentOptionsSchema, AgentTaskInput } from './schemas'
 
 jest.mock('./context', () => ({
   resolveChangeSource: jest.fn(),
+  getConventionsContext: jest.fn().mockReturnValue({ text: '', provenance: null }),
 }))
 jest.mock('../../lib/config/utils/loadConfig')
 jest.mock('../../lib/langchain/utils')
@@ -75,7 +76,7 @@ describe('agent generate progress reporting', () => {
       service: {
         tokenLimit: 100000,
         authentication: { type: 'None' },
-        streaming: { enabled: false },
+        streaming: { enabled: true },
         provider: 'test-provider',
       },
       prompt: undefined,
@@ -111,7 +112,6 @@ describe('agent generate progress reporting', () => {
       const context = makeContext(onProgress)
       mockExecuteChainStreaming.mockImplementation(async ({ onChunk }) => {
         onChunk({ text: 'a', accumulated: 'a' })
-        onChunk({ text: 'b', accumulated: 'ab' })
         return [{
           title: 'finding',
           summary: 'summary',
@@ -131,9 +131,64 @@ describe('agent generate progress reporting', () => {
         'Resolved changes',
         'Generating review…',
         'Generating review…',
-        'Generating review…',
         'Completed',
       ])
+    })
+
+    it('throttles rapid chunk ticks to at most one notification per interval', async () => {
+      const onProgress = jest.fn()
+      const context = makeContext(onProgress)
+      const realNow = Date.now
+      let now = 1_000_000
+      jest.spyOn(Date, 'now').mockImplementation(() => now)
+      try {
+        mockExecuteChainStreaming.mockImplementation(async ({ onChunk }) => {
+          onChunk({ text: 'a', accumulated: 'a' })
+          onChunk({ text: 'b', accumulated: 'ab' }) // within the throttle window: suppressed
+          now += 300 // advance past the throttle window
+          onChunk({ text: 'c', accumulated: 'abc' })
+          return [{
+            title: 'finding',
+            summary: 'summary',
+            severity: 5,
+            category: 'bug',
+            filePath: 'a.ts',
+          }] as never
+        })
+
+        await generateAgentReview(baseInput, context)
+
+        const messages = onProgress.mock.calls.map((call) => call[0].message)
+        expect(messages).toEqual([
+          'Resolved changes',
+          'Generating review…',
+          'Generating review…',
+          'Generating review…',
+          'Completed',
+        ])
+      } finally {
+        jest.spyOn(Date, 'now').mockImplementation(realNow)
+      }
+    })
+
+    it('does not stream when the streaming master switch is disabled, even with onProgress set', async () => {
+      mockLoadConfig.mockReturnValue({
+        service: {
+          tokenLimit: 100000,
+          authentication: { type: 'None' },
+          streaming: { enabled: false },
+          provider: 'test-provider',
+        },
+        prompt: undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+      const onProgress = jest.fn()
+      const context = makeContext(onProgress)
+
+      await generateAgentReview(baseInput, context)
+
+      expect(mockExecuteChainStreaming).not.toHaveBeenCalled()
+      expect(mockExecuteChain).toHaveBeenCalledTimes(1)
     })
 
     it('falls back to executeChain when streaming fails for a non-cancellation reason', async () => {

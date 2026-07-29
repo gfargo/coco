@@ -49,4 +49,13 @@ export type ProviderDefinition = {
    * Bedrock hosts multiple model families under one provider).
    */
   tokenCorrectionFactor?: number | ((model: string) => number)
+  /**
+   * How this provider natively constrains output to a schema, if at all.
+   * `'json-schema'` binds the caller's zod schema via constrained decoding
+   * (OpenAI/Azure `response_format`, Gemini `responseSchema`, Mistral tool
+   * binding); `'json-mode'` is plain unconstrained JSON mode (Ollama
+   * `format=json`). Undefined means no native support — callers fall back
+   * to the text `StructuredOutputParser` + repair path.
+   */
+  supportsStructuredOutput?: 'json-schema' | 'json-mode'
 }

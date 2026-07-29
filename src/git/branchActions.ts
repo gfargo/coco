@@ -117,6 +117,8 @@ export function createBranch(
 export function checkoutBranchByName(git: SimpleGit, name: string): Promise<BranchActionResult> {
   const trimmed = name.trim()
   if (!trimmed) return Promise.resolve({ ok: false, message: 'Branch name required' })
+  const nameError = rejectFlagLike(trimmed, `Branch name '${trimmed}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
   return runAction(() => git.raw(['switch', trimmed]), `Checked out ${trimmed}`)
 }
 
