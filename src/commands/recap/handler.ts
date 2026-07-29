@@ -322,7 +322,7 @@ ${errorMessage}
   const MODE =
     (INTERACTIVE && 'interactive') || (config.recap && 'interactive') || config?.mode || 'stdout' // Default to stdout
 
-  handleResult({
+  await handleResult({
     result: recapResult,
     interactiveModeCallback: async () => {
       logSuccess()
