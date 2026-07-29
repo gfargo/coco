@@ -367,6 +367,29 @@ describe('checkUsageBudget', () => {
     expect(diagnostics).toEqual([])
   })
 
+  it('warns on any priced spend when monthlyUsd is 0 (not treated as disabled)', () => {
+    recordUsage({ task: 'commit', model: 'gpt-5.5', promptTokens: 1_000, completionTokens: 1_000 })
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget(budgetConfig(0), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].message).toContain('$0')
+  })
+
+  it('is a no-op when monthlyUsd is 0 and there is no priced spend yet', () => {
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget(budgetConfig(0), diagnostics)
+    expect(diagnostics).toEqual([])
+  })
+
+  it('warns on any priced spend when monthlyUsd is negative', () => {
+    recordUsage({ task: 'commit', model: 'gpt-5.5', promptTokens: 1_000, completionTokens: 1_000 })
+    const diagnostics: Diagnostic[] = []
+    checkUsageBudget(budgetConfig(-10), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+  })
+
   it('ignores records outside the current calendar month', () => {
     const oldTimestamp = new Date('2020-01-01T00:00:00Z').getTime()
     fs.writeFileSync(

@@ -313,7 +313,7 @@ function checkTokenLimits(config: Config, diagnostics: Diagnostic[]) {
  */
 export function checkUsageBudget(config: Config, diagnostics: Diagnostic[]) {
   const budget = config.telemetry?.budget
-  if (!budget?.monthlyUsd) return
+  if (budget?.monthlyUsd === undefined) return
 
   const now = new Date()
   const records = readUsageRecords().filter((r) => {
@@ -323,6 +323,20 @@ export function checkUsageBudget(config: Config, diagnostics: Diagnostic[]) {
 
   const { totalCostUsd, pricedCalls } = totalUsageCost(records)
   if (pricedCalls === 0) return
+
+  // A zero or negative cap can't be expressed as a percentage of itself, so
+  // treat it as "warn on any priced spend" rather than silently no-op'ing
+  // (which `!budget.monthlyUsd` used to do for the common `monthlyUsd: 0` case).
+  if (budget.monthlyUsd <= 0) {
+    if (totalCostUsd > 0) {
+      diagnostics.push({
+        severity: 'warn',
+        message: `Estimated spend this month is $${totalCostUsd.toFixed(2)}, exceeding your telemetry.budget.monthlyUsd cap ($${budget.monthlyUsd}).`,
+        fix: 'Raise telemetry.budget.monthlyUsd above 0, or lower cost by setting service.dynamicModelPreference to "cost" (or a cheaper fixed service.model).',
+      })
+    }
+    return
+  }
 
   const warnAtPercent = budget.warnAtPercent ?? 80
   const percentSpent = (totalCostUsd / budget.monthlyUsd) * 100

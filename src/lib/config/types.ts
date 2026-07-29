@@ -220,7 +220,8 @@ type BaseConfig = {
     budget?: {
       /**
        * Monthly estimated-spend cap in USD. Leave unset to disable the
-       * budget check entirely.
+       * budget check entirely. `0` (or a negative value) is treated as
+       * "warn on any priced spend" rather than disabling the check.
        */
       monthlyUsd?: number
 
