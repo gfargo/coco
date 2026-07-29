@@ -18,13 +18,16 @@ jest.mock('./context')
 
 // Pull in the mocked function so we can control its return value
 import { generateCommitDraft } from '../../commands/commit/generateCommitDraft'
-import { resolveChangeSource } from './context'
+import { getConventionsContext, resolveChangeSource } from './context'
 
 const mockGenerateCommitDraft = generateCommitDraft as jest.MockedFunction<
   typeof generateCommitDraft
 >
 const mockResolveChangeSource = resolveChangeSource as jest.MockedFunction<
   typeof resolveChangeSource
+>
+const mockGetConventionsContext = getConventionsContext as jest.MockedFunction<
+  typeof getConventionsContext
 >
 
 function makeContext(): AgentOperationContext {
@@ -69,6 +72,7 @@ describe('generateAgentCommitDraft — retryable flag (OSS-1326 / #1854)', () =>
         verification: 'repository-derived',
       },
     })
+    mockGetConventionsContext.mockReturnValue({ text: '', provenance: null })
   })
 
   it('throws AgentOperationError with retryable:true when validation errors are present', async () => {

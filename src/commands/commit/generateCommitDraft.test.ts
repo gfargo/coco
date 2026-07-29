@@ -16,6 +16,7 @@ import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import {
     checkCommitlintAvailability,
+    getBuiltInConventionalRulesContext,
     validateCommitMessage,
     validateConventionalCommitMessage,
 } from '../../lib/utils/commitlintValidator'
@@ -63,6 +64,9 @@ const mockValidateCommitMessage = validateCommitMessage as jest.MockedFunction<
 >
 const mockValidateConventionalCommitMessage = validateConventionalCommitMessage as jest.MockedFunction<
   typeof validateConventionalCommitMessage
+>
+const mockGetBuiltInConventionalRulesContext = getBuiltInConventionalRulesContext as jest.MockedFunction<
+  typeof getBuiltInConventionalRulesContext
 >
 const mockExecuteChainWithSchema = executeChainWithSchema as jest.MockedFunction<
   typeof executeChainWithSchema
@@ -140,6 +144,7 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
     mockCheckCommitlintAvailability.mockReturnValue({ available: true, missingPackages: [] })
     mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
     mockValidateConventionalCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockGetBuiltInConventionalRulesContext.mockReturnValue('')
     mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
   })
 
@@ -251,6 +256,45 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
     )
     expect(mockValidateCommitMessage).not.toHaveBeenCalled()
   })
+
+  it('injects the built-in commitlint rules into the prompt for untrusted conventional generation (OSS-1326 / #1854)', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+    mockGetBuiltInConventionalRulesContext.mockReturnValue(
+      '## Commitlint Rules\nYour commit message must follow these project-specific rules:\n- Body lines must be 100 characters or less (including spaces)\n'
+    )
+
+    await generateCommitDraft({
+      git,
+      argv: buildArgv({ conventional: true }),
+      preparedSummary: 'Changed the agent transport.',
+      trustRepositoryConfig: false,
+    })
+
+    expect(mockGetBuiltInConventionalRulesContext).toHaveBeenCalled()
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as {
+      commitlint_rules_context: string
+    }
+    expect(variables.commitlint_rules_context).toContain(
+      'Body lines must be 100 characters or less'
+    )
+  })
+
+  it('does not inject built-in commitlint rules when conventional mode is off', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+
+    await generateCommitDraft({
+      git,
+      argv: buildArgv({ conventional: false }),
+      preparedSummary: 'Changed the agent transport.',
+      trustRepositoryConfig: false,
+    })
+
+    expect(mockGetBuiltInConventionalRulesContext).not.toHaveBeenCalled()
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as {
+      commitlint_rules_context: string
+    }
+    expect(variables.commitlint_rules_context).toBe('')
+  })
 })
 
 describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)', () => {
@@ -282,6 +326,7 @@ describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)
     mockCheckCommitlintAvailability.mockReturnValue({ available: true, missingPackages: [] })
     mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
     mockValidateConventionalCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockGetBuiltInConventionalRulesContext.mockReturnValue('')
     mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
     mockFileChangeParser.mockResolvedValue('a short summary')
   })
@@ -349,6 +394,7 @@ describe('generateCommitDraft — repair pass on validation failure (OSS-1326 / 
     mockCheckCommitlintAvailability.mockReturnValue({ available: true, missingPackages: [] })
     mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
     mockValidateConventionalCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockGetBuiltInConventionalRulesContext.mockReturnValue('')
     mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
     mockFileChangeParser.mockResolvedValue('a short summary')
   })

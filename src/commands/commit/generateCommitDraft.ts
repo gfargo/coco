@@ -387,6 +387,15 @@ export async function generateCommitDraft({
     } else {
       commitlintRulesContext = await getCommitlintRulesContext()
     }
+  } else if (useSafeBuiltInValidation) {
+    // Repository commitlint config is never read on this path (untrusted),
+    // so constrain generation with the same hardcoded rules
+    // `validateConventionalCommitMessage` enforces, rather than only
+    // validating after the fact.
+    const { getBuiltInConventionalRulesContext } = await import(
+      '../../lib/utils/commitlintValidator'
+    )
+    commitlintRulesContext = getBuiltInConventionalRulesContext()
   }
 
   const baseVariables: Record<string, string> = {

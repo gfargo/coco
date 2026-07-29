@@ -170,7 +170,9 @@ export async function loadCommitlintConfig(): Promise<QualifiedConfig> {
 /**
  * Format commitlint rules into a human-readable string for AI prompts
  */
-export function formatCommitlintRulesForPrompt(config: QualifiedConfig): string {
+export function formatCommitlintRulesForPrompt(
+  config: Pick<QualifiedConfig, 'rules'> & Partial<Pick<QualifiedConfig, 'extends'>>
+): string {
   if (!config.rules || Object.keys(config.rules).length === 0) {
     return ''
   }
@@ -259,6 +261,16 @@ export function formatCommitlintRulesForPrompt(config: QualifiedConfig): string 
   return ruleDescriptions.length > 0 
     ? `## Commitlint Rules\nYour commit message must follow these project-specific rules:\n${ruleDescriptions.map(rule => `- ${rule}`).join('\n')}\n`
     : ''
+}
+
+/**
+ * Format the hardcoded built-in conventional rules for the prompt. Used on the
+ * untrusted (`trustRepositoryConfig: false`) path so generation is constrained
+ * by the same rules `validateConventionalCommitMessage` enforces, instead of
+ * repository commitlint config which is never read on that path.
+ */
+export function getBuiltInConventionalRulesContext(): string {
+  return formatCommitlintRulesForPrompt({ rules: BUILT_IN_CONVENTIONAL_RULES })
 }
 
 /**
