@@ -72,4 +72,44 @@ describe('recap config validation (#1898)', () => {
       /--tag on recap takes no value/
     )
   })
+
+  describe('flag naming reflects the alias the user actually typed', () => {
+    // yargs syncs alias values onto every name (`--tag` also sets `last-tag`
+    // in the parsed argv), so the check can't tell which alias was typed from
+    // argv alone — it falls back to scanning `process.argv`. Simulate that by
+    // overriding it for the duration of each test.
+    const withRawArgv = (rawArgs: string[], fn: () => void) => {
+      const original = process.argv
+      process.argv = ['node', 'coco', ...rawArgs]
+      try {
+        fn()
+      } finally {
+        process.argv = original
+      }
+    }
+
+    it('names --tag when that is the alias the user typed', () => {
+      withRawArgv(['recap', '--tag', '--yesterday'], () => {
+        expect(() => check({ tag: true, 'last-tag': true, yesterday: true, _: ['recap'] })).toThrow(
+          'Only one timeframe selector may be used at a time — got --yesterday, --tag.'
+        )
+      })
+    })
+
+    it('names --last-tag when that is the alias the user typed', () => {
+      withRawArgv(['recap', '--last-tag', '--yesterday'], () => {
+        expect(() => check({ tag: true, 'last-tag': true, yesterday: true, _: ['recap'] })).toThrow(
+          'Only one timeframe selector may be used at a time — got --yesterday, --last-tag.'
+        )
+      })
+    })
+
+    it('names --week when that is the alias the user typed', () => {
+      withRawArgv(['recap', '--week', '--yesterday'], () => {
+        expect(() =>
+          check({ 'last-week': true, yesterday: true, _: ['recap'] })
+        ).toThrow('Only one timeframe selector may be used at a time — got --yesterday, --week.')
+      })
+    })
+  })
 })

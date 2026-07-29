@@ -108,13 +108,29 @@ export const builder = (yargs: Argv) => {
       // shortcuts before ever looking at `--timeframe` — so e.g. `--yesterday
       // --timeframe last-week` silently recapped yesterday with no warning
       // about the conflict (#1898). Reject ambiguous combinations up front.
+      //
+      // yargs syncs alias values onto every name (`--tag` sets both `tag`
+      // and `last-tag` in argv), so the parsed argv can't tell us which
+      // alias the user actually typed. Fall back to scanning the raw argv
+      // so aliased flags (`--tag`/`--week`/`--month`) are named the way the
+      // user wrote them instead of always showing the canonical form.
+      const rawArgs = process.argv.slice(2)
+      const flagLabel = (canonical: string, aliases: string[] = []): string => {
+        for (const name of [canonical, ...aliases]) {
+          if (rawArgs.some((arg) => arg === `--${name}` || arg.startsWith(`--${name}=`))) {
+            return `--${name}`
+          }
+        }
+        return `--${canonical}`
+      }
+
       const selectors: Array<[string, boolean]> = [
-        ['--yesterday', Boolean(rawArgv.yesterday)],
-        ['--last-week', Boolean(rawArgv['last-week'])],
-        ['--last-month', Boolean(rawArgv['last-month'])],
-        ['--last-tag', tagRequested],
-        ['--currentBranch', Boolean(rawArgv.currentBranch)],
-        ['--timeframe', rawArgv.timeframe !== undefined],
+        [flagLabel('yesterday'), Boolean(rawArgv.yesterday)],
+        [flagLabel('last-week', ['week']), Boolean(rawArgv['last-week'])],
+        [flagLabel('last-month', ['month']), Boolean(rawArgv['last-month'])],
+        [flagLabel('last-tag', ['tag']), tagRequested],
+        [flagLabel('currentBranch'), Boolean(rawArgv.currentBranch)],
+        [flagLabel('timeframe'), rawArgv.timeframe !== undefined],
       ]
       const activeSelectors = selectors.filter(([, isSet]) => isSet)
       if (activeSelectors.length > 1) {
