@@ -224,6 +224,52 @@ describe('watch command handler', () => {
     )
   })
 
+  it('retries the same digest after a failed operation instead of permanently skipping it', async () => {
+    mockRunAgentOperation.mockRejectedValueOnce(new Error('provider unavailable'))
+
+    const handlerPromise = handler(argv(), logger)
+    await waitForShutdownListener()
+
+    // Same digest both times: the first pass fails, so the guard must not
+    // have committed it — the second trigger should re-run rather than skip.
+    await capturedRun?.()
+    await capturedRun?.()
+
+    process.emit('SIGINT' as never)
+    await handlerPromise
+
+    expect(mockRunAgentOperation).toHaveBeenCalledTimes(2)
+    const events = lines()
+    expect(events.some((event) => (event as { type: string }).type === 'skipped')).toBe(false)
+  })
+
+  it('does not emit idle after the terminal stopped event when NO_CHANGES resolves after shutdown', async () => {
+    let rejectResolve: (error: unknown) => void = () => {}
+    mockResolveChangeSource.mockImplementation(() => new Promise((_resolve, reject) => {
+      rejectResolve = reject
+    }))
+    mockCreateRepoChangeWatcher.mockImplementation(({ onChange }: { onChange: (kind: string) => void }) => {
+      void onChange('worktree')
+      return { close: closeMock }
+    })
+
+    const handlerPromise = handler(argv(), logger)
+    await waitForShutdownListener()
+    await waitForCalls(mockResolveChangeSource, 1)
+
+    process.emit('SIGINT' as never)
+    rejectResolve(new AgentOperationError('NO_CHANGES', 'No changes were found.'))
+
+    await handlerPromise
+    // Flush any pending microtasks from the late-rejecting resolve, to prove
+    // the idle event stays suppressed rather than just delayed.
+    for (let i = 0; i < 10; i += 1) await Promise.resolve()
+
+    const events = lines()
+    expect(events[events.length - 1]).toEqual({ type: 'stopped' })
+    expect(events.some((event) => (event as { type: string }).type === 'idle')).toBe(false)
+  })
+
   it('closes the watcher and throttled runner on SIGINT', async () => {
     const runnerClose = jest.fn()
     mockCreateThrottledRunner.mockReturnValue({ trigger: jest.fn(), close: runnerClose })

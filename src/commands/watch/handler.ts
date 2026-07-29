@@ -111,7 +111,9 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
       const normalized = toAgentOperationError(error)
       if (normalized.code === 'NO_CHANGES') {
         lastDigest = undefined
-        emitEvent(argv, logger, { type: 'idle' })
+        if (!stopped) {
+          emitEvent(argv, logger, { type: 'idle' })
+        }
         return
       }
       if (!stopped) {
@@ -124,7 +126,13 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
       emitEvent(argv, logger, { type: 'skipped', reason: 'unchanged', digest: resolved.meta.digest })
       return
     }
-    lastDigest = resolved.meta.digest
+
+    // Only mark this digest "seen" once every operation in the pass has
+    // completed cleanly. Committing it up front would permanently retire a
+    // digest whose operation failed transiently (e.g. a network error),
+    // silently skipping it on every future settle even though nothing about
+    // the change set ever succeeded.
+    let allSucceeded = true
 
     for (const operation of operations) {
       if (stopped) return
@@ -141,6 +149,7 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
           emitEvent(argv, logger, { type: 'result', operation, data: envelope.data, warnings: envelope.warnings })
         }
       } catch (error) {
+        allSucceeded = false
         const normalized = toAgentOperationError(error)
         // Same race on the failure path: an in-flight operation aborted by
         // shutdown may reject after `stopped` already emitted `stopped`.
@@ -148,6 +157,10 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
           emitEvent(argv, logger, { type: 'error', operation, code: normalized.code, message: normalized.message })
         }
       }
+    }
+
+    if (allSucceeded && !stopped) {
+      lastDigest = resolved.meta.digest
     }
   }
 
