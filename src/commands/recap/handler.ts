@@ -62,6 +62,11 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
 
   const { 'last-month': lastMonth, 'last-tag': lastTag, yesterday, 'last-week': lastWeek } = argv
 
+  // CLI shortcut flags win outright (mutually exclusive with each other and
+  // with `--timeframe`, enforced by the `.check()` in config.ts). Below that,
+  // an explicit `--timeframe` must beat config-file values — otherwise a
+  // config with `currentBranch: true` silently overrides a CLI `--timeframe`
+  // the same way the shortcut flags used to (#1898).
   const timeframe = lastMonth
     ? 'last-month'
     : lastTag
@@ -70,9 +75,9 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
     ? 'yesterday'
     : lastWeek
     ? 'last-week'
-    : argv.currentBranch || config.currentBranch
+    : argv.currentBranch
     ? 'currentBranch'
-    : argv.timeframe ?? config.timeframe ?? 'current'
+    : argv.timeframe ?? (config.currentBranch ? 'currentBranch' : undefined) ?? config.timeframe ?? 'current'
 
   logger.log(`Generating recap for timeframe: ${timeframe}`)
 
