@@ -41,4 +41,5 @@ export const openaiProvider: ProviderDefinition = {
   createLlm: createOpenAiLlm,
   resolveEndpoint: (config) =>
     'baseURL' in config.service ? config.service.baseURL : undefined,
+  supportsStructuredOutput: 'json-schema',
 }

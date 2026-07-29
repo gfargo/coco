@@ -129,6 +129,22 @@ describe('buildPullRequestEndpoint (1238)', () => {
     const e = buildPullRequestEndpoint('ws/repo', { search: 'x" OR state != "' })
     expect(decodeURIComponent(e)).toContain('title ~ "x\\" OR state != \\""')
   })
+
+  it('filters by author nickname', () => {
+    const e = buildPullRequestEndpoint('ws/repo', { author: 'alice' })
+    expect(decodeURIComponent(e)).toContain('author.nickname = "alice"')
+  })
+
+  it('filters by assignee via reviewers.nickname', () => {
+    const e = buildPullRequestEndpoint('ws/repo', { assignee: 'alice' })
+    expect(decodeURIComponent(e)).toContain('reviewers.nickname = "alice"')
+  })
+
+  it('does not add a raw author.nickname/reviewers.nickname clause for a literal @me (resolved before this is called)', () => {
+    const e = buildPullRequestEndpoint('ws/repo', { author: '@me', assignee: '@me' })
+    expect(e).not.toContain('author.nickname')
+    expect(e).not.toContain('reviewers.nickname')
+  })
 })
 
 describe('buildIssueEndpoint (1238)', () => {
@@ -351,52 +367,65 @@ describe('getBitbucketPullRequestList (1238)', () => {
     expect(overview.pullRequests).toBeUndefined()
   }))
 
-  it('resolves author=@me to the authenticated nickname and filters by it', withCredentials(async () => {
+  it('resolves author=@me to the authenticated nickname and scopes the query server-side', withCredentials(async () => {
     const payload = JSON.stringify({
-      values: [makePR({ id: 1, author: { nickname: 'alice' } }), makePR({ id: 2, author: { nickname: 'bob' } })],
+      values: [makePR({ id: 1, author: { nickname: 'alice' } })],
       pagelen: 50,
       page: 1,
     })
+    const seenEndpoints: string[] = []
     const runner = async (endpoint: string) => {
+      seenEndpoints.push(endpoint)
       if (endpoint === 'user') return JSON.stringify({ nickname: 'alice' })
       return payload
     }
     const overview = await getBitbucketPullRequestList(fakeGit(), { author: '@me' }, runner)
     expect(overview.pullRequests).toHaveLength(1)
     expect(overview.pullRequests?.[0]?.author).toBe('alice')
+    const prEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
+    expect(prEndpoint).toBeDefined()
+    expect(decodeURIComponent(prEndpoint as string)).toContain('author.nickname = "alice"')
   }))
 
-  it('resolves assignee=@me to the authenticated nickname and filters by reviewer', withCredentials(async () => {
+  it('resolves assignee=@me to the authenticated nickname and scopes the query server-side via reviewers.nickname', withCredentials(async () => {
     const payload = JSON.stringify({
-      values: [
-        makePR({ id: 1, reviewers: [{ nickname: 'bob' }] }),
-        makePR({ id: 2, reviewers: [{ nickname: 'carol' }] }),
-      ],
+      values: [makePR({ id: 1, reviewers: [{ nickname: 'bob' }] })],
       pagelen: 50,
       page: 1,
     })
+    const seenEndpoints: string[] = []
     const runner = async (endpoint: string) => {
+      seenEndpoints.push(endpoint)
       if (endpoint === 'user') return JSON.stringify({ nickname: 'bob' })
       return payload
     }
     const overview = await getBitbucketPullRequestList(fakeGit(), { assignee: '@me' }, runner)
     expect(overview.pullRequests).toHaveLength(1)
     expect(overview.pullRequests?.[0]?.number).toBe(1)
+    const prEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
+    expect(prEndpoint).toBeDefined()
+    expect(decodeURIComponent(prEndpoint as string)).toContain('reviewers.nickname = "bob"')
   }))
 
-  it('still filters literal author values by exact match', withCredentials(async () => {
+  it('sends a literal author filter as a server-side author.nickname clause', withCredentials(async () => {
     const payload = JSON.stringify({
-      values: [makePR({ id: 1, author: { nickname: 'alice' } }), makePR({ id: 2, author: { nickname: 'bob' } })],
+      values: [makePR({ id: 1, author: { nickname: 'alice' } })],
       pagelen: 50,
       page: 1,
     })
+    const seenEndpoints: string[] = []
     const runner = async (endpoint: string) => {
+      seenEndpoints.push(endpoint)
       if (endpoint === 'user') return '{}'
       return payload
     }
     const overview = await getBitbucketPullRequestList(fakeGit(), { author: 'alice' }, runner)
     expect(overview.pullRequests).toHaveLength(1)
     expect(overview.pullRequests?.[0]?.author).toBe('alice')
+    const prEndpoint = seenEndpoints.find((e) => e.startsWith('repositories/'))
+    expect(decodeURIComponent(prEndpoint as string)).toContain('author.nickname = "alice"')
+    // 'user' is hit once for the loadForgeList auth probe, never again for a named (non-@me) filter.
+    expect(seenEndpoints.filter((e) => e === 'user')).toHaveLength(1)
   }))
 
   it('surfaces an explicit message when @me cannot be resolved', withCredentials(async () => {

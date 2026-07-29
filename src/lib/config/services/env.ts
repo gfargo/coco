@@ -22,7 +22,7 @@ type ValuesTypes = Config[keyof Config]
  * one's when both env vars are set, so `OPENAI_API_KEY` must stay
  * declared after `OPEN_AI_KEY` for it to win.
  */
-const PROVIDER_API_KEY_ENV_VARS: Record<string, LLMProvider> = {
+export const PROVIDER_API_KEY_ENV_VARS: Record<string, LLMProvider> = {
   OPEN_AI_KEY: 'openai',
   OPENAI_API_KEY: 'openai',
   ANTHROPIC_API_KEY: 'anthropic',

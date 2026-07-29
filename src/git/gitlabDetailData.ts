@@ -1,4 +1,4 @@
-import { defaultGlabRunner, type GlabRunner } from './glabCli'
+import { defaultGlabRunner, resolveGlabActionError, type GlabRunner } from './glabCli'
 import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
@@ -85,6 +85,12 @@ async function safeJson<T>(runner: GlabRunner, endpoint: string): Promise<T | un
   }
 }
 
+/** Fetch and parse a primary MR/issue object, letting fetch errors propagate. */
+async function requireJson<T>(runner: GlabRunner, endpoint: string): Promise<T | undefined> {
+  const out = (await runner(['api', endpoint])).trim()
+  return out ? (JSON.parse(out) as T) : undefined
+}
+
 function parseApprovalsAsReviews(approvals: unknown): PullRequestReview[] {
   const approvedBy = (approvals as { approved_by?: Array<{ user?: { username?: string } }> })?.approved_by
   if (!Array.isArray(approvedBy)) return []
@@ -141,7 +147,7 @@ export async function getMergeRequestDetail(
   try {
     const base = `projects/${enc(projectPath)}/merge_requests/${mergeRequestNumber}`
     const [mr, comments, approvals] = await Promise.all([
-      safeJson<{ description?: string; head_pipeline?: unknown }>(runner, base),
+      requireJson<{ description?: string; head_pipeline?: unknown }>(runner, base),
       fetchAllNotes(runner, base),
       safeJson<unknown>(runner, `${base}/approvals`),
     ])
@@ -159,7 +165,8 @@ export async function getMergeRequestDetail(
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveGlabActionError(error, runner)
+    return { ok: false, message }
   }
 }
 
@@ -171,7 +178,7 @@ export async function getGitLabIssueDetail(
   try {
     const base = `projects/${enc(projectPath)}/issues/${issueNumber}`
     const [issue, comments] = await Promise.all([
-      safeJson<{ description?: string }>(runner, base),
+      requireJson<{ description?: string }>(runner, base),
       fetchAllNotes(runner, base),
     ])
 
@@ -186,7 +193,8 @@ export async function getGitLabIssueDetail(
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveGlabActionError(error, runner)
+    return { ok: false, message }
   }
 }
 
