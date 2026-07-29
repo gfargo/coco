@@ -116,14 +116,30 @@ export function stashBranch(git: SimpleGit, stash: StashEntry, branchName: strin
  * `store` actually re-adds it — landing at `stash@{0}` with the new
  * message. The commit is captured by hash beforehand, so the drop→store
  * window can't lose it.
+ *
+ * Failure handling: the two steps are run sequentially with distinct
+ * error paths so a failure is never silent:
+ * - Drop fails → return the raw git error immediately; `store` is never
+ *   called, so the original stash entry is intact and nothing was lost.
+ * - Store fails AFTER a successful drop → the commit object still exists
+ *   in git's object database (git gc has not run), but it is no longer
+ *   reachable via `git stash list`. The returned failure message includes
+ *   `stash.hash` and a ready-to-run `git stash store` recovery command
+ *   that the user can copy-paste to re-add the entry manually. The same
+ *   recovery command also lands in `details[]` for consumers that surface
+ *   that field.
  */
-export function renameStash(git: SimpleGit, stash: StashEntry, newMessage: string): Promise<BranchActionResult> {
+export async function renameStash(
+  git: SimpleGit,
+  stash: StashEntry,
+  newMessage: string
+): Promise<BranchActionResult> {
   const trimmed = newMessage.trim()
   if (!trimmed) {
-    return Promise.resolve({ ok: false, message: 'Rename cancelled: empty message.' })
+    return { ok: false, message: 'Rename cancelled: empty message.' }
   }
   if (!stash.hash) {
-    return Promise.resolve({ ok: false, message: 'Cannot rename: stash commit hash unavailable.' })
+    return { ok: false, message: 'Cannot rename: stash commit hash unavailable.' }
   }
 
   // Preserve git's `On <branch>: <subject>` convention so the renamed
@@ -134,10 +150,31 @@ export function renameStash(git: SimpleGit, stash: StashEntry, newMessage: strin
   const branch = stash.branch && stash.branch !== '<unknown>' ? stash.branch : ''
   const storedMessage = branch ? `On ${branch}: ${trimmed}` : trimmed
 
-  return runAction(async () => {
+  // Step 1: drop the existing reflog entry. If this fails, the original
+  // stash entry is untouched — return the raw git error and stop.
+  try {
     await git.raw(['stash', 'drop', stash.ref])
+  } catch (dropError) {
+    return { ok: false, message: (dropError as Error).message }
+  }
+
+  // Step 2: re-store the same commit under the new message. The commit
+  // object still exists in git's object database even though the reflog
+  // entry was just removed, so the recovery command below is valid until
+  // `git gc` runs. Quote storedMessage so the copy-paste form handles
+  // spaces and colons (e.g. "On main: better name") without shell splitting.
+  try {
     await git.raw(['stash', 'store', '-m', storedMessage, stash.hash])
-  }, `Renamed ${stash.ref} → ${trimmed}`)
+  } catch (storeError) {
+    const recovery = `git stash store -m "${storedMessage}" ${stash.hash}`
+    return {
+      ok: false,
+      message: `Rename failed after dropping ${stash.ref}; stash preserved as commit ${stash.hash}. Recover: ${recovery}`,
+      details: [(storeError as Error).message, `Recover with: ${recovery}`],
+    }
+  }
+
+  return { ok: true, message: `Renamed ${stash.ref} → ${trimmed}` }
 }
 
 /**

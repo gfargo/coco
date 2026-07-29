@@ -133,6 +133,48 @@ describe('log stash actions', () => {
     expect(git.raw).not.toHaveBeenCalled()
   })
 
+  it('returns a recoverable failure (with hash + copy-paste command) when store fails after drop', async () => {
+    const git = {
+      raw: jest
+        .fn()
+        .mockResolvedValueOnce('') // drop succeeds
+        .mockRejectedValueOnce(new Error('store: refused')), // store fails
+    }
+    const at2: StashEntry = { ...stash, ref: 'stash@{2}', hash: 'deadbeef', branch: 'main' }
+
+    const result = await renameStash(git as never, at2, 'better name')
+
+    expect(result.ok).toBe(false)
+    // message must include the hash so the user can recover without spelunking reflog
+    expect(result.message).toContain('deadbeef')
+    // message must include a ready-to-run git stash store command
+    expect(result.message).toContain('git stash store')
+    // ref that was dropped is named so the user knows which stash was affected
+    expect(result.message).toContain('stash@{2}')
+    // details carries the raw git error and the recovery command
+    expect(result.details).toBeDefined()
+    expect(result.details!.some((d) => d.includes('store: refused'))).toBe(true)
+    expect(result.details!.some((d) => d.includes('deadbeef'))).toBe(true)
+    // both drop and store were invoked (drop first)
+    expect(git.raw).toHaveBeenCalledTimes(2)
+    expect(git.raw).toHaveBeenNthCalledWith(1, ['stash', 'drop', 'stash@{2}'])
+    expect(git.raw).toHaveBeenNthCalledWith(2, ['stash', 'store', '-m', 'On main: better name', 'deadbeef'])
+  })
+
+  it('returns the raw git error and does NOT call store when drop fails', async () => {
+    const git = {
+      raw: jest.fn().mockRejectedValueOnce(new Error('fatal: could not drop stash')),
+    }
+    const at2: StashEntry = { ...stash, ref: 'stash@{2}', hash: 'deadbeef' }
+
+    const result = await renameStash(git as never, at2, 'better name')
+
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('fatal: could not drop stash')
+    // store must NOT have been attempted — original entry is intact
+    expect(git.raw).toHaveBeenCalledTimes(1)
+  })
+
   it('restores a dropped stash by hash (undo)', async () => {
     const git = { raw: jest.fn().mockResolvedValue('') }
     await expect(restoreStash(git as never, 'abc123', 'save docs')).resolves.toMatchObject({ ok: true })
