@@ -103,6 +103,42 @@ index 1111111..2222222 100644
 +  print("ready")
  end`
 
+/**
+ * A plain unified diff (e.g. from `diff -u`) with NO `diff --git` headers —
+ * only `--- a/`/`+++ b/` pairs. Two files back to back; a splitter that only
+ * boundaries on `diff --git` collapses this into one segment (see PR #1961
+ * review).
+ */
+const HEADERLESS_TWO_FILE_DIFF = `\
+--- a/src/foo.ts
++++ b/src/foo.ts
+@@ -1,3 +1,4 @@
+ export function foo() {
++  return 42
+ }
+--- a/src/bar.ts
++++ b/src/bar.ts
+@@ -1,2 +1,2 @@
+-export const x = 1
++export const x = 2`
+
+/**
+ * Headerless plain diff touching a SQL file whose comment lines render as
+ * deleted/added content beginning with `--`/`+--`. Must not falsely trigger
+ * the headerless-boundary pairing (#1699-adjacent).
+ */
+const HEADERLESS_SQL_WITH_COMMENT_DIFF = `\
+--- a/db/schema.sql
++++ b/db/schema.sql
+@@ -1,5 +1,5 @@
+--- This is a top-level SQL comment
++-- Updated SQL comment
+ CREATE TABLE users (
+-  id SERIAL PRIMARY KEY,
++  id UUID PRIMARY KEY,
+   name TEXT NOT NULL
+ );`
+
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('splitUnifiedDiff', () => {
@@ -192,6 +228,25 @@ index abc..def 100644
     for (const fd of result) {
       expect(fd.summary).toBe('')
     }
+  })
+
+  // ── headerless plain-diff coverage (PR #1961 review) ─────────────────────
+
+  it('splits a headerless plain unified diff (no `diff --git`) into per-file records', () => {
+    const result = splitUnifiedDiff(HEADERLESS_TWO_FILE_DIFF, SIMPLE_TOKENIZER)
+    expect(result).toHaveLength(2)
+    expect(result[0].file).toBe('src/foo.ts')
+    expect(result[0].diff).toContain('+  return 42')
+    expect(result[1].file).toBe('src/bar.ts')
+    expect(result[1].diff).toContain('+export const x = 2')
+  })
+
+  it('does NOT split a headerless diff on SQL `-- comment` lines (#1699)', () => {
+    const result = splitUnifiedDiff(HEADERLESS_SQL_WITH_COMMENT_DIFF, SIMPLE_TOKENIZER)
+    expect(result).toHaveLength(1)
+    expect(result[0].file).toBe('db/schema.sql')
+    expect(result[0].diff).toContain('-- This is a top-level SQL comment')
+    expect(result[0].diff).toContain('-- Updated SQL comment')
   })
 
   it('handles a multi-file diff with mixed file types without phantom splits', () => {

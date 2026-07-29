@@ -25,6 +25,7 @@ import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
+import type { FileDiff } from '../../lib/types'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { dispatchStructuralParser, type StructuralLanguageId } from '../../lib/parsers/default/utils/structuralParserRegistry'
 import { detectStructuralLanguageId } from '../../lib/parsers/default/utils/summarizeLargeFiles'
@@ -333,7 +334,7 @@ export async function runAgentOperation(
  * diff text and the strategy used.
  */
 async function condenseFileDiff(
-  fileDiff: import('../../lib/types').FileDiff,
+  fileDiff: FileDiff,
   languages: readonly string[] | undefined,
 ): Promise<{ condensed: string; applied: CondenseDiffFileResult['applied']; langId: StructuralLanguageId | undefined }> {
   const langId = detectStructuralLanguageId(fileDiff.file) as StructuralLanguageId | undefined
@@ -416,7 +417,7 @@ export async function runCondenseDiff(
 
   // Phase 1: apply per-file condensation strategy.
   const fileResults: CondenseDiffFileResult[] = []
-  const condensedDiffs: Array<{ fileDiff: import('../../lib/types').FileDiff; condensed: string; applied: CondenseDiffFileResult['applied'] }> = []
+  const condensedDiffs: Array<{ fileDiff: FileDiff; condensed: string; applied: CondenseDiffFileResult['applied'] }> = []
 
   let totalInputTokens = 0
   for (const fd of fileDiffs) {
