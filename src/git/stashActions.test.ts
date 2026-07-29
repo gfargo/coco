@@ -103,6 +103,15 @@ describe('log stash actions', () => {
     expect(git.raw).not.toHaveBeenCalled()
   })
 
+  it('rejects a flag-like stash-branch name to avoid arg injection', async () => {
+    const git = { raw: jest.fn() }
+    await expect(stashBranch(git as never, stash, '--force')).resolves.toEqual({
+      ok: false,
+      message: "Branch name '--force' cannot start with '-'.",
+    })
+    expect(git.raw).not.toHaveBeenCalled()
+  })
+
   it('renames a stash: drop the original entry first, then re-store the commit under the new message', async () => {
     const git = { raw: jest.fn().mockResolvedValue('') }
     const at2: StashEntry = { ...stash, ref: 'stash@{2}', hash: 'deadbeef' }
