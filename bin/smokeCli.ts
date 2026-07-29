@@ -3,6 +3,7 @@ import { join } from 'path'
 import { tmpdir } from 'os'
 import { ChildProcess, spawn, spawnSync } from 'child_process'
 import { pathToFileURL } from 'url'
+import { PROVIDER_API_KEY_ENV_VARS } from '../src/lib/config/services/env'
 
 type CommandCheck = {
   command: string
@@ -143,7 +144,12 @@ function createJsonRpcStdioClient(child: ChildProcess) {
     throw new Error('MCP server child process did not expose piped stdio')
   }
   const stdin = child.stdin
-  const stdoutMessages: JsonRpcMessage[] = []
+  // Every non-empty stdout line, whether or not it parsed as JSON-RPC — the
+  // source of truth for the end-of-run purity check. A malformed line that
+  // arrives with nothing pending (no request awaiting a reply) never
+  // resolves or rejects anything in-band, so it must be re-checked here
+  // rather than relying on already-parsed messages.
+  const rawStdoutLines: string[] = []
   const pendingRequests = new Map<number, { resolve: (message: JsonRpcMessage) => void; reject: (error: Error) => void }>()
   const requestHandlers = new Map<string, (message: JsonRpcMessage) => void>()
   let buffer = ''
@@ -167,9 +173,9 @@ function createJsonRpcStdioClient(child: ChildProcess) {
       const line = buffer.slice(0, newlineIndex).replace(/\r$/, '')
       buffer = buffer.slice(newlineIndex + 1)
       if (line.length > 0) {
+        rawStdoutLines.push(line)
         try {
           const message = JSON.parse(line) as JsonRpcMessage
-          stdoutMessages.push(message)
           if (message.jsonrpc !== '2.0') {
             failAll(new Error(`MCP server wrote non-JSON-RPC data to stdout: ${line}`))
           } else if (typeof message.id !== 'undefined' && ('result' in message || 'error' in message)) {
@@ -233,7 +239,7 @@ function createJsonRpcStdioClient(child: ChildProcess) {
     requestHandlers.set(method, handler)
   }
 
-  return { request, notify, respond, onRequest, stdoutMessages }
+  return { request, notify, respond, onRequest, rawStdoutLines }
 }
 
 /**
@@ -260,11 +266,15 @@ async function runMcpHandshakeSmoke(): Promise<void> {
     const repo = createSmokeRepo(scenarioRoot)
 
     const env = { ...process.env }
-    delete env.ANTHROPIC_API_KEY
-    delete env.OPENAI_API_KEY
+    // Strip every provider-scoped API key env var coco recognizes (single
+    // source of truth: PROVIDER_API_KEY_ENV_VARS in env.ts) plus the
+    // non-key service vars that could otherwise point the server at a live
+    // provider, so this smoke test can never make a real network call.
+    for (const key of Object.keys(PROVIDER_API_KEY_ENV_VARS)) {
+      delete env[key]
+    }
     delete env.OPENAI_API_BASE
     delete env.OLLAMA_HOST
-    delete env.GOOGLE_API_KEY
     env.NO_COLOR = '1'
 
     child = spawn(process.execPath, [join(process.cwd(), 'dist/index.js'), 'mcp'], {
@@ -351,9 +361,19 @@ async function runMcpHandshakeSmoke(): Promise<void> {
     }
     console.log('✓ MCP tools/call dispatch (coco_review, summary source)')
 
-    const impureLine = client.stdoutMessages.find((message) => message.jsonrpc !== '2.0')
-    if (impureLine) {
-      throw new Error(`Non-JSON-RPC data reached stdout: ${JSON.stringify(impureLine)}`)
+    // Re-validate every raw stdout line the server ever wrote, including
+    // any that failed to parse — a malformed (non-JSON) line is exactly the
+    // failure this assertion exists to catch.
+    for (const line of client.rawStdoutLines) {
+      let message: JsonRpcMessage
+      try {
+        message = JSON.parse(line) as JsonRpcMessage
+      } catch {
+        throw new Error(`Non-JSON-RPC data reached stdout: ${line}`)
+      }
+      if (message.jsonrpc !== '2.0') {
+        throw new Error(`Non-JSON-RPC data reached stdout: ${line}`)
+      }
     }
     console.log('✓ MCP stdout carries only JSON-RPC')
   } finally {
