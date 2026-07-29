@@ -45,6 +45,16 @@ describe('provider registry', () => {
     expect(findProviderDefinition('openai')?.id).toBe('openai')
     expect(findProviderDefinition('mystery')).toBeUndefined()
   })
+
+  it('advertises native structured-output support only for providers that implement it', async () => {
+    expect(findProviderDefinition('openai')?.supportsStructuredOutput).toBe('json-schema')
+    expect(findProviderDefinition('azure')?.supportsStructuredOutput).toBe('json-schema')
+    expect(findProviderDefinition('gemini')?.supportsStructuredOutput).toBe('json-schema')
+    expect(findProviderDefinition('mistral')?.supportsStructuredOutput).toBe('json-schema')
+    expect(findProviderDefinition('ollama')?.supportsStructuredOutput).toBe('json-mode')
+    expect(findProviderDefinition('anthropic')?.supportsStructuredOutput).toBeUndefined()
+    expect(findProviderDefinition('bedrock')?.supportsStructuredOutput).toBeUndefined()
+  })
 })
 
 describe('getLlm via registry', () => {

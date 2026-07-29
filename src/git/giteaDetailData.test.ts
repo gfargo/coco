@@ -2,6 +2,16 @@ import { getGiteaPullRequestDetail, getGiteaIssueDetail, getGiteaPullRequestDiff
 
 const { mapComments, parseReviews, normalizeGiteaBuildStatus } = __test
 
+const ORIGINAL_ENV = { ...process.env }
+
+beforeEach(() => {
+  delete process.env.GITEA_TOKEN
+})
+
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV }
+})
+
 describe('mapComments (#826)', () => {
   it('maps non-empty comments to IssueComment', () => {
     const raw = [
@@ -75,15 +85,30 @@ describe('getGiteaPullRequestDetail (#826)', () => {
   it('returns ok: false when the PR is not found', async () => {
     const result = await getGiteaPullRequestDetail('owner/repo', 999, async () => '')
     expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toBe('Empty response from Gitea for pull request #999')
   })
 
-  it('returns ok: false on runner error', async () => {
+  it('returns ok: false on runner error, resolved via the auth-aware error path', async () => {
     const result = await getGiteaPullRequestDetail('owner/repo', 1, async () => {
       throw new Error('network error')
     })
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.message).toContain('pull request #1')
+    expect(result.message).not.toContain('Empty response')
+    expect(result.message).toContain('Not authenticated to Gitea')
+  })
+
+  it('surfaces the underlying error when credentials are present but the request still fails', async () => {
+    process.env.GITEA_TOKEN = 'token'
+    const result = await getGiteaPullRequestDetail('owner/repo', 1, async (endpoint) => {
+      if (endpoint === 'user') return '{}'
+      throw new Error('pull request 1 not found')
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).not.toContain('Empty response')
+    expect(result.message).toContain('pull request 1 not found')
   })
 })
 
@@ -108,6 +133,18 @@ describe('getGiteaIssueDetail (#826)', () => {
   it('returns ok: false when the issue is not found', async () => {
     const result = await getGiteaIssueDetail('owner/repo', 999, async () => '')
     expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toBe('Empty response from Gitea for issue #999')
+  })
+
+  it('returns ok: false on runner error, resolved via the auth-aware error path', async () => {
+    const result = await getGiteaIssueDetail('owner/repo', 7, async () => {
+      throw new Error('network error')
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).not.toContain('Empty response')
+    expect(result.message).toContain('Not authenticated to Gitea')
   })
 })
 

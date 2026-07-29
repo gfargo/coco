@@ -50,6 +50,19 @@ export function forgeNouns(provider: GitProviderType | undefined): ForgeNouns {
       name: 'Bitbucket',
     }
   }
+  if (provider === 'bitbucket-server') {
+    return {
+      abbrev: 'PR',
+      singular: 'Pull request',
+      plural: 'Pull requests',
+      singularLower: 'pull request',
+      pluralLower: 'pull requests',
+      // No CLI dependency — Bitbucket Server auth is env vars, not a binary.
+      cli: 'bitbucket-server',
+      name: 'Bitbucket Server',
+      authHint: 'Set BITBUCKET_SERVER_TOKEN (or BITBUCKET_SERVER_USERNAME + BITBUCKET_SERVER_PASSWORD) to enable triage.',
+    }
+  }
   if (provider === 'gitea') {
     return {
       abbrev: 'PR',

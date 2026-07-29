@@ -224,7 +224,6 @@ return { ok: true, message: firstLine(text), text }
 Worked examples:
 
 - `runCommitDraftWorkflow` → drives `coco commit` AI-draft generation from the compose surface's `I` keystroke (`src/git/commitWorkflowActions.ts`)
-- `runCommitWorkflow({ action: 'commit' | 'split-plan' | 'split-apply' })` → drives `coco commit` and its `--split` modes (`src/git/commitWorkflowActions.ts`)
 - `runChangelogTextWorkflow({ branch | sinceLastTag | tag | range })` → drives `coco changelog` via `generateChangelogResult` and returns raw text (`src/git/aiActions.ts`)
 - `runPullRequestBodyWorkflow({ baseBranch })` → uses `generateChangelogResult` to seed a PR title + body (`src/git/aiActions.ts`)
 
