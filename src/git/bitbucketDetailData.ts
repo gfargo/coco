@@ -1,4 +1,8 @@
-import { defaultBitbucketRunner, type BitbucketRunner } from './bitbucketCli'
+import {
+  defaultBitbucketRunner,
+  resolveBitbucketActionError,
+  type BitbucketRunner,
+} from './bitbucketCli'
 import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
@@ -53,13 +57,10 @@ function mapComments(comments: BitbucketComment[]): IssueComment[] {
     }))
 }
 
-async function safeJson<T>(runner: BitbucketRunner, endpoint: string): Promise<T | undefined> {
-  try {
-    const out = (await runner(endpoint)).trim()
-    return out ? (JSON.parse(out) as T) : undefined
-  } catch {
-    return undefined
-  }
+/** Fetch and parse a primary PR/issue object, letting fetch errors propagate. */
+async function requireJson<T>(runner: BitbucketRunner, endpoint: string): Promise<T | undefined> {
+  const out = (await runner(endpoint)).trim()
+  return out ? (JSON.parse(out) as T) : undefined
 }
 
 async function fetchAllComments(
@@ -137,7 +138,7 @@ export async function getBitbucketPullRequestDetail(
 ): Promise<PullRequestDetailResult> {
   try {
     const base = `repositories/${projectPath}/pullrequests/${pullRequestNumber}`
-    const pr = await safeJson<{
+    const pr = await requireJson<{
       description?: string
       participants?: unknown
       source?: { commit?: { hash?: string } }
@@ -161,7 +162,8 @@ export async function getBitbucketPullRequestDetail(
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message }
   }
 }
 
@@ -172,7 +174,7 @@ export async function getBitbucketIssueDetail(
 ): Promise<IssueDetailResult> {
   try {
     const base = `repositories/${projectPath}/issues/${issueNumber}`
-    const issue = await safeJson<{
+    const issue = await requireJson<{
       content?: { raw?: string }
     }>(runner, base)
 
@@ -189,7 +191,8 @@ export async function getBitbucketIssueDetail(
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message }
   }
 }
 

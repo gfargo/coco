@@ -7,6 +7,18 @@ import {
 
 const { mapComments, parseParticipantsAsReviews, normalizeBitbucketBuildStatus } = __test
 
+const ORIGINAL_ENV = { ...process.env }
+
+beforeEach(() => {
+  delete process.env.BITBUCKET_ACCESS_TOKEN
+  delete process.env.BITBUCKET_USERNAME
+  delete process.env.BITBUCKET_APP_PASSWORD
+})
+
+afterEach(() => {
+  process.env = { ...ORIGINAL_ENV }
+})
+
 describe('mapComments (1238)', () => {
   it('maps non-deleted comments to IssueComment', () => {
     const raw = [
@@ -84,15 +96,30 @@ describe('getBitbucketPullRequestDetail (1238)', () => {
   it('returns ok: false when the PR is not found', async () => {
     const result = await getBitbucketPullRequestDetail('ws/repo', 999, async () => '')
     expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toBe('Empty response from Bitbucket for pull request #999')
   })
 
-  it('returns ok: false on runner error', async () => {
+  it('returns ok: false on runner error, resolved via the auth-aware error path', async () => {
     const result = await getBitbucketPullRequestDetail('ws/repo', 1, async () => {
       throw new Error('network error')
     })
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.message).toContain('pull request #1')
+    expect(result.message).not.toContain('Empty response')
+    expect(result.message).toContain('Not authenticated to Bitbucket')
+  })
+
+  it('surfaces the underlying error when credentials are present but the request still fails', async () => {
+    process.env.BITBUCKET_ACCESS_TOKEN = 'token'
+    const result = await getBitbucketPullRequestDetail('ws/repo', 1, async (endpoint) => {
+      if (endpoint === 'user') return '{}'
+      throw new Error('pull request 1 not found')
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).not.toContain('Empty response')
+    expect(result.message).toContain('pull request 1 not found')
   })
 })
 
@@ -119,6 +146,18 @@ describe('getBitbucketIssueDetail (1238)', () => {
   it('returns ok: false when the issue is not found', async () => {
     const result = await getBitbucketIssueDetail('ws/repo', 999, async () => '')
     expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toBe('Empty response from Bitbucket for issue #999')
+  })
+
+  it('returns ok: false on runner error, resolved via the auth-aware error path', async () => {
+    const result = await getBitbucketIssueDetail('ws/repo', 7, async () => {
+      throw new Error('network error')
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).not.toContain('Empty response')
+    expect(result.message).toContain('Not authenticated to Bitbucket')
   })
 })
 

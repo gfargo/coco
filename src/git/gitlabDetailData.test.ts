@@ -107,4 +107,38 @@ describe('getMergeRequestDetail / getGitLabIssueDetail (#0.70)', () => {
       detail: { number: 7, body: 'issue body', comments: [{ author: 'a', body: 'hi', createdAt: 't' }] },
     })
   })
+
+  it('returns ok: false when the MR is not found (empty body preserved)', async () => {
+    const result = await getMergeRequestDetail('group/proj', 999, async () => '')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toBe('Empty response from glab for merge request !999')
+  })
+
+  it('returns ok: false when the issue is not found (empty body preserved)', async () => {
+    const result = await getGitLabIssueDetail('group/proj', 999, async () => '')
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).toBe('Empty response from glab for issue #999')
+  })
+
+  it('returns ok: false on MR runner error, resolved via the auth-aware error path', async () => {
+    const result = await getMergeRequestDetail('group/proj', 42, async () => {
+      throw new Error('network error')
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).not.toContain('Empty response')
+    expect(result.message).toContain('GitLab CLI returned an unexpected error')
+  })
+
+  it('returns ok: false on issue runner error, resolved via the auth-aware error path', async () => {
+    const result = await getGitLabIssueDetail('group/proj', 7, async () => {
+      throw new Error('network error')
+    })
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.message).not.toContain('Empty response')
+    expect(result.message).toContain('GitLab CLI returned an unexpected error')
+  })
 })
