@@ -198,7 +198,7 @@ describe('getWorkspacePullRequestCounts', () => {
     // Confirm the -R arg was the full GHE URL, not a bare owner/name slug
     const prCall = runner.mock.calls.find((c) => c[0][0] === 'pr')
     expect(prCall).toBeDefined()
-    const repoArg = prCall![0][args_indexOf_R_plus_one(prCall![0])]
+    const repoArg = prCall![0][indexAfterRepoFlag(prCall![0])]
     expect(repoArg).toBe('https://github.acme.com/owner/ghe-repo')
   })
 
@@ -237,9 +237,38 @@ describe('getWorkspacePullRequestCounts', () => {
     expect(prCalls).toHaveLength(1)
     expect(prCalls[0][0][prCalls[0][0].indexOf('-R') + 1]).toBe('owner/gh-repo')
   })
+
+  it('probes github.com and reports auth status for an all-non-GitHub workspace', async () => {
+    const remoteUrls = new Map<string, string>([['/tmp/gl', 'git@gitlab.com:owner/repo.git']])
+    const authed = jest.fn(async (args: string[]) => (args[0] === 'auth' ? 'ok' : ''))
+    const onRepoComplete = jest.fn()
+
+    const okResult = await getWorkspacePullRequestCounts(['/tmp/gl'], {
+      ghRunner: authed,
+      remoteUrls,
+      onRepoComplete,
+    })
+
+    expect(okResult).toEqual({ authenticated: true, counts: {} })
+    // No `pr list` — the sole gh call is the github.com auth probe.
+    expect(authed.mock.calls.every((c) => c[0][0] === 'auth')).toBe(true)
+    expect(onRepoComplete).toHaveBeenCalledWith('/tmp/gl', undefined)
+
+    const denied = jest.fn(async (args: string[]) => {
+      if (args[0] === 'auth') throw new Error('not logged in')
+      return ''
+    })
+
+    const failResult = await getWorkspacePullRequestCounts(['/tmp/gl'], {
+      ghRunner: denied,
+      remoteUrls,
+    })
+
+    expect(failResult).toEqual({ authenticated: false, counts: {} })
+  })
 })
 
 /** Helper: find the index after -R in an args array. */
-function args_indexOf_R_plus_one(args: string[]): number {
+function indexAfterRepoFlag(args: string[]): number {
   return args.indexOf('-R') + 1
 }

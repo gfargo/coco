@@ -218,20 +218,23 @@ export async function getWorkspacePullRequestCounts(
     // Non-GitHub repos will be handled below with onRepoComplete(undefined)
   }
 
-  // Step 2: Probe auth once per unique GitHub host (memoized).
-  // This replaces the single github.com-hardcoded isGhAuthenticated probe.
+  // Step 2: Probe auth once per unique GitHub host (memoized). When the
+  // workspace has no GitHub-hosted repos, fall back to a github.com probe
+  // so `authenticated` still reflects real gh status (pre-#1609 behavior)
+  // rather than unconditionally reporting true.
   const uniqueHosts = [...new Set(fetchable.map((e) => e.repo.host!))]
+  const hostsToProbe = uniqueHosts.length > 0 ? uniqueHosts : ['github.com']
   const hostAuthMap = new Map<string, boolean>()
-  for (const host of uniqueHosts) {
+  for (const host of hostsToProbe) {
     const status = await getGhStatus(runner, host)
     hostAuthMap.set(host, status.kind === 'ok')
   }
 
   // Overall authenticated = true if any relevant GitHub host authenticated.
   // Repos on unauthenticated hosts still get onRepoComplete(undefined).
-  const anyAuthenticated = uniqueHosts.length > 0 && uniqueHosts.some((h) => hostAuthMap.get(h))
+  const anyAuthenticated = hostsToProbe.some((h) => hostAuthMap.get(h))
 
-  if (!anyAuthenticated && uniqueHosts.length > 0) {
+  if (!anyAuthenticated) {
     // Fire onRepoComplete for all repos (including non-GitHub ones)
     for (const repoPath of repoPaths) {
       options.onRepoComplete?.(repoPath, undefined)
@@ -266,5 +269,5 @@ export async function getWorkspacePullRequestCounts(
     }
   }
 
-  return { authenticated: anyAuthenticated || uniqueHosts.length === 0, counts }
+  return { authenticated: true, counts }
 }
