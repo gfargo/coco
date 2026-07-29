@@ -65,6 +65,44 @@ describe('repairDraftAgainstValidationErrors', () => {
     })
   })
 
+  describe('header-max-length repair', () => {
+    it('truncates a header that exceeds 72 characters at a word boundary', () => {
+      const longTitle = `feat(agent): ${'word '.repeat(15).trimEnd()}` // well over 72 chars
+      const draft = `${longTitle}\n\nBody text.`
+      const result = repairDraftAgainstValidationErrors(draft, [
+        'header must not be longer than 72 characters',
+      ])
+      const title = result.split('\n\n')[0]
+      expect(title.length).toBeLessThanOrEqual(72)
+      expect(longTitle.startsWith(title)).toBe(true)
+    })
+
+    it('respects the limit extracted from the error message', () => {
+      const longTitle = `chore: ${'x '.repeat(30).trimEnd()}`
+      const result = repairDraftAgainstValidationErrors(longTitle, [
+        'header must not be longer than 40 characters',
+      ])
+      expect(result.length).toBeLessThanOrEqual(40)
+    })
+
+    it('does not alter a header that is already within the limit', () => {
+      const draft = 'chore: test\n\nShort body.'
+      const result = repairDraftAgainstValidationErrors(draft, [
+        'header must not be longer than 72 characters',
+      ])
+      expect(result).toBe(draft)
+    })
+
+    it('does not cut into a single very long token', () => {
+      const longToken = 'a'.repeat(90)
+      const draft = `chore: ${longToken}`
+      const result = repairDraftAgainstValidationErrors(draft, [
+        'header must not be longer than 72 characters',
+      ])
+      expect(result.length).toBeLessThanOrEqual(72)
+    })
+  })
+
   describe('subject-case repair', () => {
     it('lowercases the first character of an uppercase subject', () => {
       const draft = 'feat(auth): Add OAuth support\n\nImplements the flow.'

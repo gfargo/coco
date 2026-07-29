@@ -184,9 +184,24 @@ function wrapLine(line: string, maxLen: number): string {
 }
 
 /**
+ * Truncate a single-line header to the given max column width at the last
+ * word boundary that fits, so the conventional `type(scope):` prefix is
+ * never cut into. Falls back to a hard cut if there is no word boundary
+ * (e.g. a single very long token).
+ */
+function truncateHeader(header: string, maxLen: number): string {
+  if (header.length <= maxLen) return header
+
+  const truncated = header.slice(0, maxLen)
+  const lastSpace = truncated.lastIndexOf(' ')
+  const cut = lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated
+  return cut.trimEnd()
+}
+
+/**
  * Attempt to mechanically repair a commit message to satisfy commitlint rules
- * that coco itself chose and generated text for. Handles the two most common
- * self-inflicted violations:
+ * that coco itself chose and generated text for. Handles the three most
+ * common self-inflicted violations:
  *
  *   1. `body-max-line-length` — hard-wraps over-length body lines at word
  *      boundaries using the limit extracted from the error message (defaults
@@ -195,6 +210,9 @@ function wrapLine(line: string, maxLen: number): string {
  *      when the violation is one of the case rules coco sets by default. Only
  *      applies the normalisation when *every* case allowed is a lower-case
  *      form (sentence-case, lower-case) and the fix is unambiguous.
+ *   3. `header-max-length` — truncates the title at the last word boundary
+ *      that fits within the limit extracted from the error message (defaults
+ *      to 72 if no number is found).
  *
  * Returns the repaired message string, or the original when no repair rule
  * applies (so callers can always call this unconditionally).
@@ -210,6 +228,13 @@ export function repairDraftAgainstValidationErrors(
   let body = separatorIndex === -1 ? '' : draft.slice(separatorIndex + 2)
 
   for (const error of validationErrors) {
+    // --- header-max-length ---
+    if (/header.{0,30}longer than/i.test(error) || /header-max-length/i.test(error)) {
+      const limitMatch = error.match(/\b(\d+)\b/)
+      const limit = limitMatch ? parseInt(limitMatch[1], 10) : 72
+      title = truncateHeader(title, limit)
+    }
+
     // --- body-max-line-length ---
     if (/body.{0,30}lines?.{0,30}longer than/i.test(error) || /body-max-line-length/i.test(error)) {
       const limitMatch = error.match(/\b(\d+)\b/)
