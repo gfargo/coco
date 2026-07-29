@@ -148,6 +148,21 @@ describe('loadEnvConfig', () => {
     delete process.env.COCO_SERVICE_BASE_URL
   })
 
+  // OSS-1623: COCO_SERVICE_BASE_URL used to only apply to `openai` — a
+  // self-hosted LM Studio/vLLM user pointing coco at a non-default host/port
+  // via env var had no way to do so for the first-class compat providers.
+  it('applies COCO_SERVICE_BASE_URL to an OpenAI-compatible provider (lmstudio)', () => {
+    process.env.COCO_SERVICE_PROVIDER = 'lmstudio'
+    process.env.COCO_SERVICE_BASE_URL = 'http://localhost:9999/v1'
+    const config = loadEnvConfig(defaultConfig)
+    expect(config.service.provider).toBe('lmstudio')
+    if (config.service.provider === 'lmstudio') {
+      expect(config.service.baseURL).toBe('http://localhost:9999/v1')
+    }
+    delete process.env.COCO_SERVICE_PROVIDER
+    delete process.env.COCO_SERVICE_BASE_URL
+  })
+
   describe('provider API keys from the environment', () => {
     // Every provider-key env var this suite touches. A test that only sets
     // (and restores) the one var it's exercising still reads through to
@@ -166,6 +181,12 @@ describe('loadEnvConfig', () => {
       'GOOGLE_API_KEY',
       'MISTRAL_API_KEY',
       'AZURE_OPENAI_API_KEY',
+      'DEEPSEEK_API_KEY',
+      'GROQ_API_KEY',
+      'XAI_API_KEY',
+      'TOGETHER_API_KEY',
+      'FIREWORKS_API_KEY',
+      'OPENROUTER_API_KEY',
     ] as const
 
     let savedEnv: Record<string, string | undefined>
@@ -192,7 +213,7 @@ describe('loadEnvConfig', () => {
     // (OPEN_AI_KEY, GEMINI_API_KEY, ...) must be read verbatim, not rewritten
     // to COCO__O_P_E_N__A_I__K_E_Y. Each key only applies to its provider.
     const cases: Array<{
-      provider: 'openai' | 'anthropic' | 'gemini' | 'mistral' | 'azure'
+      provider: 'openai' | 'anthropic' | 'gemini' | 'mistral' | 'azure' | 'deepseek' | 'groq' | 'xai' | 'together' | 'fireworks' | 'openrouter'
       envVar: string
     }> = [
       { provider: 'openai', envVar: 'OPEN_AI_KEY' },
@@ -202,6 +223,12 @@ describe('loadEnvConfig', () => {
       { provider: 'gemini', envVar: 'GOOGLE_API_KEY' },
       { provider: 'mistral', envVar: 'MISTRAL_API_KEY' },
       { provider: 'azure', envVar: 'AZURE_OPENAI_API_KEY' },
+      { provider: 'deepseek', envVar: 'DEEPSEEK_API_KEY' },
+      { provider: 'groq', envVar: 'GROQ_API_KEY' },
+      { provider: 'xai', envVar: 'XAI_API_KEY' },
+      { provider: 'together', envVar: 'TOGETHER_API_KEY' },
+      { provider: 'fireworks', envVar: 'FIREWORKS_API_KEY' },
+      { provider: 'openrouter', envVar: 'OPENROUTER_API_KEY' },
     ]
 
     it.each(cases)('reads $envVar into the $provider service auth', ({ provider, envVar }) => {
