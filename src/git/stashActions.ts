@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
+import { rejectFlagLike } from './forgeArgGuards'
 import { checkoutOrDeleteFromRef } from './historyActions'
 import { StashEntry } from './stashData'
 
@@ -98,6 +99,9 @@ export function stashBranch(git: SimpleGit, stash: StashEntry, branchName: strin
   if (!trimmed) {
     return Promise.resolve({ ok: false, message: 'Cancelled: empty branch name.' })
   }
+  const nameError = rejectFlagLike(trimmed, `Branch name '${trimmed}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
   return runAction(
     () => git.raw(['stash', 'branch', trimmed, stash.ref]),
     `Created branch ${trimmed} from ${stash.ref}`
