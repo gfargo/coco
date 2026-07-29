@@ -7,8 +7,8 @@ import { Config } from '../types'
 
 import { DEFAULT_CONFIG, DEFAULT_IGNORED_FILES, DEFAULT_IGNORED_EXTENSIONS } from '../constants'
 import { BaseCommandOptions } from '../../../commands/types'
+import { mergeIgnoreLists, unionPreservingOrder } from './mergeIgnoreLists'
 import { removeUndefined } from '../../utils/removeUndefined'
-import { mergeIgnoreLists } from './mergeIgnoreLists'
 
 export type ConfigSource =
   | 'default'
@@ -94,24 +94,38 @@ export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} 
 
   _lastConfigSources = sources
 
-  // Strip yargs bookkeeping (`_`, `$0`) and any explicitly-`undefined`
-  // argv values before merging, mirroring the sanitization the env/git
-  // loaders already do — an unset argv flag must never clobber a
-  // resolved config value with `undefined` (#1922).
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { _: _positional, $0: _bin, ...argvRest } = argv as Record<string, unknown>
-  const cleanedArgv = removeUndefined(argvRest)
-  const merged = { ...config, ...cleanedArgv } as Config & ConfigType & ArgvType
+  // Strip yargs' positional/meta keys and any undefined values before
+  // applying argv over config, so an omitted flag doesn't clobber a
+  // config-sourced value (#1437) and `_`/`$0` don't leak into Config.
+  const restArgv: Record<string, unknown> = { ...(argv as Record<string, unknown>) }
+  delete restArgv._
+  delete restArgv.$0
+  const cleanedArgv = removeUndefined(restArgv)
+
+  // argv wins for everything *except* the ignore lists: those are unioned
+  // against the fully-resolved (defaults + gitignore + loader) list so a
+  // narrowing `--ignoredFiles`/`--ignoredExtensions` extends rather than
+  // replaces it — otherwise it silently re-admits lockfiles, node_modules,
+  // and gitignore-derived secrets like `.env` into the diff (#1921).
+  const merged = { ...config, ...cleanedArgv }
+  merged.ignoredFiles = unionPreservingOrder(
+    config.ignoredFiles ?? [],
+    cleanedArgv.ignoredFiles as string[] | string | undefined
+  )
+  merged.ignoredExtensions = unionPreservingOrder(
+    config.ignoredExtensions ?? [],
+    cleanedArgv.ignoredExtensions as string[] | string | undefined
+  )
 
   // Deep-merge `service` rather than letting the shallow top-level spread
-  // replace it wholesale, matching services/env.ts.
+  // replace it wholesale, matching services/env.ts (#1922).
   const argvService = (cleanedArgv as { service?: unknown }).service
   if (argvService && config.service) {
-    ;(merged as Config).service = {
+    merged.service = {
       ...(config.service as object),
       ...(argvService as object),
     } as Config['service']
   }
 
-  return merged
+  return merged as Config & ConfigType & ArgvType
 }

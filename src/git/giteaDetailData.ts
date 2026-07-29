@@ -1,4 +1,4 @@
-import type { GiteaRunner } from './giteaCli'
+import { resolveGiteaActionError, type GiteaRunner } from './giteaCli'
 import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
@@ -59,6 +59,12 @@ async function safeJson<T>(runner: GiteaRunner, endpoint: string): Promise<T | u
   } catch {
     return undefined
   }
+}
+
+/** Fetch and parse a primary PR/issue object, letting fetch errors propagate. */
+async function requireJson<T>(runner: GiteaRunner, endpoint: string): Promise<T | undefined> {
+  const out = (await runner(endpoint)).trim()
+  return out ? (JSON.parse(out) as T) : undefined
 }
 
 async function fetchAllComments(
@@ -136,7 +142,7 @@ export async function getGiteaPullRequestDetail(
   runner: GiteaRunner
 ): Promise<PullRequestDetailResult> {
   try {
-    const pr = await safeJson<{ body?: string; head?: { sha?: string } }>(
+    const pr = await requireJson<{ body?: string; head?: { sha?: string } }>(
       runner,
       `repos/${projectPath}/pulls/${pullRequestNumber}`
     )
@@ -160,7 +166,8 @@ export async function getGiteaPullRequestDetail(
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveGiteaActionError(error, runner)
+    return { ok: false, message }
   }
 }
 
@@ -170,7 +177,7 @@ export async function getGiteaIssueDetail(
   runner: GiteaRunner
 ): Promise<IssueDetailResult> {
   try {
-    const issue = await safeJson<{ body?: string }>(runner, `repos/${projectPath}/issues/${issueNumber}`)
+    const issue = await requireJson<{ body?: string }>(runner, `repos/${projectPath}/issues/${issueNumber}`)
 
     if (!issue) {
       return { ok: false, message: `Empty response from Gitea for issue #${issueNumber}` }
@@ -185,7 +192,8 @@ export async function getGiteaIssueDetail(
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveGiteaActionError(error, runner)
+    return { ok: false, message }
   }
 }
 

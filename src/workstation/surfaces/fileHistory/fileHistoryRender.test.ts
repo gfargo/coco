@@ -94,6 +94,7 @@ describe('renderFileHistorySurface', () => {
     const history: FileHistoryResult = {
       ok: true,
       path: 'src/example.ts',
+      truncated: false,
       commits: [
         makeCommit(),
         makeCommit({ shortHash: '99887766', subject: 'fix: correct calc', author: 'Grace Hopper' }),
@@ -103,7 +104,7 @@ describe('renderFileHistorySurface', () => {
   })
 
   it('reflects focus state via border color', () => {
-    const history: FileHistoryResult = { ok: true, path: 'src/example.ts', commits: [makeCommit()] }
+    const history: FileHistoryResult = { ok: true, path: 'src/example.ts', truncated: false, commits: [makeCommit()] }
     const focused = render(makeState({ focus: 'commits' }), { history, loading: false })
     const blurred = render(makeState({ focus: 'sidebar' }), { history, loading: false })
     expect((focused.props as StubProps).borderColor).not.toBe(
@@ -138,6 +139,7 @@ describe('renderFileHistorySurface', () => {
     const history: FileHistoryResult = {
       ok: true,
       path: 'src/example.ts',
+      truncated: false,
       commits: [
         makeCommit(),
         makeCommit({
@@ -160,6 +162,32 @@ describe('renderFileHistorySurface', () => {
     expect(text).toContain('99887766')
     expect(text).toContain('Grace Hopper')
     expect(text).toContain('fix: correct calculation')
+  })
+
+  it('structural snapshot — truncated result shows cap hint', () => {
+    const history: FileHistoryResult = {
+      ok: true,
+      path: 'src/example.ts',
+      truncated: true,
+      commits: [
+        makeCommit(),
+        makeCommit({
+          shortHash: '99887766',
+          hash: '9988776655443322110099887766554433221100',
+          author: 'Grace Hopper',
+          subject: 'fix: correct calculation',
+          authorTime: 1710000000,
+        }),
+      ],
+    }
+    const tree = render(makeState(), { history, loading: false })
+    expect(tree.type).toBe(Box)
+    const text = collectText(tree)
+    expect(text).toContain('File History')
+    // Truncated header should indicate cap AND preserve the selected position
+    expect(text).toContain('first 2 commits')
+    expect(text).toContain('showing 1')
+    expect(text).not.toContain('1/2 commits')
   })
 })
 
