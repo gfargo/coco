@@ -85,7 +85,7 @@ export function renderFileHistorySurface(
     ? 'Loading history…'
     : commits.length
       ? truncated
-        ? `first ${commits.length} commits`
+        ? `first ${commits.length} commits (showing ${selected + 1})`
         : `${selected + 1}/${commits.length} commits`
       : '0 commits'
 

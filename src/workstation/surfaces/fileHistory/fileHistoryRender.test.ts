@@ -184,8 +184,9 @@ describe('renderFileHistorySurface', () => {
     expect(tree.type).toBe(Box)
     const text = collectText(tree)
     expect(text).toContain('File History')
-    // Truncated header should indicate cap rather than selected/total
+    // Truncated header should indicate cap AND preserve the selected position
     expect(text).toContain('first 2 commits')
+    expect(text).toContain('showing 1')
     expect(text).not.toContain('1/2 commits')
   })
 })
