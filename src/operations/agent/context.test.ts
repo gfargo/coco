@@ -126,6 +126,20 @@ describe('agent repository context', () => {
     })
   })
 
+  it('fails closed when the clean filter probe cannot be verified due to a git config error', async () => {
+    fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), 'unstaged\n')
+    const context = await createAgentOperationContext({ repoRoot })
+    fs.appendFileSync(path.join(repoRoot, '.git', 'config'), '[bad\n')
+
+    await expect(resolveChangeSource(
+      { kind: 'repository', scope: { type: 'worktree' } },
+      context,
+    )).rejects.toMatchObject({
+      code: 'UNSAFE_SOURCE',
+      message: expect.stringContaining('Could not verify'),
+    })
+  })
+
   it('allows worktree inspection when a clean filter is configured but not assigned to any path', async () => {
     configureCleanFilter(repoRoot, 'secret', 'cat')
     fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), 'unstaged\n')

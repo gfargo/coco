@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, ExecFileException } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { realpathSync, statSync } from 'node:fs'
 import * as path from 'node:path'
@@ -192,6 +192,7 @@ async function resolveCommitRevision(
 }
 
 const CLEAN_FILTER_CONFIG_PATTERN = String.raw`^filter\..*\.clean$`
+const CLEAN_FILTER_CONFIG_KEY_PATTERN = /^filter\.(.+)\.clean$/
 const CHECK_ATTR_BATCH_SIZE = 200
 
 // Determines whether the repository defines a `clean` filter AND assigns it to a tracked
@@ -204,9 +205,17 @@ async function probeCleanFilters(context: AgentOperationContext): Promise<CleanF
     configOutput = await runAgentGit(context, ['config', '--get-regexp', CLEAN_FILTER_CONFIG_PATTERN])
   } catch (error) {
     if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
-    // `git config --get-regexp` exits with status 1 when nothing matches, which
-    // execFile surfaces as a thrown error rather than empty output.
-    return { blocked: false }
+    // `git config --get-regexp` exits with status 1 specifically when nothing matches;
+    // that is the only exit code execFile surfaces as an error that we can treat as
+    // "no filters configured". Any other failure (corrupted config, git binary issues,
+    // unexpected git version behavior) means we could not verify safety, so fail closed
+    // instead of silently allowing the worktree diff to proceed.
+    const exitCode = (error as ExecFileException)?.code
+    if (exitCode === 1) return { blocked: false }
+    throw new AgentOperationError(
+      'UNSAFE_SOURCE',
+      `Could not verify the repository is free of clean filters (${error instanceof Error ? error.message : String(error)}). Supply a patch/summary or explicitly trust repository configuration in the one-shot agent CLI.`,
+    )
   }
 
   const configuredFilters = new Map<string, string>()
@@ -214,8 +223,8 @@ async function probeCleanFilters(context: AgentOperationContext): Promise<CleanF
     const spaceIndex = line.indexOf(' ')
     if (spaceIndex === -1) continue
     const key = line.slice(0, spaceIndex)
-    const filterName = key.slice('filter.'.length, key.length - '.clean'.length)
-    if (filterName) configuredFilters.set(filterName, key)
+    const match = CLEAN_FILTER_CONFIG_KEY_PATTERN.exec(key)
+    if (match) configuredFilters.set(match[1], key)
   }
   if (configuredFilters.size === 0) return { blocked: false }
 
