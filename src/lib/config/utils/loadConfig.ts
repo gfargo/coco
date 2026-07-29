@@ -118,12 +118,16 @@ export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} 
   )
 
   // Deep-merge `service` rather than letting the shallow top-level spread
-  // replace it wholesale, matching services/env.ts (#1922).
+  // replace it wholesale, matching services/env.ts (#1922). The nested
+  // object needs its own `undefined` leaves stripped too — a synthetic
+  // argv like `{ service: { model: undefined } }` (the shape
+  // defaultRouter.ts hand-builds) would otherwise clobber a resolved
+  // `service.model` the same way the untreated top-level argv used to.
   const argvService = (cleanedArgv as { service?: unknown }).service
   if (argvService && config.service) {
     merged.service = {
       ...(config.service as object),
-      ...(argvService as object),
+      ...removeUndefined(argvService as Record<string, unknown>),
     } as Config['service']
   }
 

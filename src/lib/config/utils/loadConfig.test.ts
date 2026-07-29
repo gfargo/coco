@@ -217,6 +217,25 @@ describe('loadConfig', () => {
     expect(config.service.model).toBe(getDefaultServiceConfigFromAlias('ollama').model)
   })
 
+  it('does not let an explicitly-undefined field inside argv.service clobber a resolved service field (#1922)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama') })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      service: { provider: 'anthropic', model: undefined },
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.service.provider).toBe('anthropic')
+    expect(config.service.model).toBe(getDefaultServiceConfigFromAlias('ollama').model)
+  })
+
   it('does not mutate the shared DEFAULT_CONFIG singleton across calls (#1695)', () => {
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
       return filepath ? ['.gitignore'].includes(filepath.toString()) : false
