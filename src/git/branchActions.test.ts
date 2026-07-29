@@ -192,6 +192,13 @@ describe('log branch actions', () => {
       expect(result).toEqual({ ok: false, message: 'Branch name required' })
       expect(git.raw).not.toHaveBeenCalled()
     })
+
+    it('rejects a flag-like name to avoid arg injection', async () => {
+      const git = { raw: jest.fn() }
+      const result = await checkoutBranchByName(git as never, '--detach')
+      expect(result).toEqual({ ok: false, message: "Branch name '--detach' cannot start with '-'." })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
   })
 
   describe('deleteBranch force', () => {
