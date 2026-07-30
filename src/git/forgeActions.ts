@@ -33,9 +33,11 @@ import {
   commentPullRequest,
   commentPullRequestByNumber,
   createPullRequest,
+  markPullRequestReadyByNumber,
   mergePullRequest,
   mergePullRequestByNumber,
   openPullRequest,
+  reopenPullRequestByNumber,
   requestChangesPullRequest,
   requestChangesPullRequestByNumber,
 } from './pullRequestActions'
@@ -63,9 +65,11 @@ import {
   commentMergeRequestByNumber,
   createMergeRequest,
   getMergeRequestDiff,
+  markMergeRequestReadyByNumber,
   mergeMergeRequest,
   mergeMergeRequestByNumber,
   openMergeRequest,
+  reopenMergeRequestByNumber,
   requestChangesMergeRequest,
   requestChangesMergeRequestByNumber,
 } from './mergeRequestActions'
@@ -96,6 +100,8 @@ import {
   requestChangesBitbucketPullRequestByNumber,
   addBitbucketPullRequestLabel,
   addBitbucketPullRequestReviewer,
+  markBitbucketPullRequestReadyByNumber,
+  reopenBitbucketPullRequestByNumber,
   mergeBitbucketPullRequest,
   closeBitbucketPullRequest,
   approveBitbucketPullRequest,
@@ -124,6 +130,8 @@ import {
   requestChangesGiteaPullRequestByNumber,
   addGiteaPullRequestLabel,
   addGiteaPullRequestReviewer,
+  markGiteaPullRequestReadyByNumber,
+  reopenGiteaPullRequestByNumber,
   mergeGiteaPullRequest,
   closeGiteaPullRequest,
   approveGiteaPullRequest,
@@ -207,6 +215,21 @@ export type ForgeActions = {
    * counterpart, so its facade returns a graceful `{ ok: false }`.
    */
   checkoutPullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
+  /**
+   * Promote a draft PR/MR to ready for review (#1933), the counterpart
+   * to `pr create -d/--draft`. GitHub/Bitbucket flip a real `draft`
+   * flag; GitLab/Gitea's draft state is a title convention, so their
+   * facades rewrite the title instead.
+   */
+  markPullRequestReadyByNumber: (n: number) => Promise<PullRequestActionResult>
+  /**
+   * Reopen a closed PR/MR by number (#1933) — the PR/MR counterpart of
+   * `reopenIssue`, recovering from the one-keystroke
+   * `closePullRequestByNumber` triage action. Bitbucket's REST API has
+   * no reopen endpoint for a declined PR, so its facade returns a
+   * graceful `{ ok: false }`.
+   */
+  reopenPullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
   // Current-branch PR / MR mutations
   mergePullRequest: (strategy: PullRequestMergeStrategy) => Promise<PullRequestActionResult>
   closePullRequest: () => Promise<PullRequestActionResult>
@@ -238,6 +261,8 @@ const githubActions: ForgeActions = {
   approvePullRequestByNumber,
   requestChangesPullRequestByNumber,
   checkoutPullRequestByNumber,
+  markPullRequestReadyByNumber,
+  reopenPullRequestByNumber,
   mergePullRequest,
   closePullRequest,
   approvePullRequest,
@@ -278,6 +303,11 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
     approvePullRequestByNumber: (n) => approveMergeRequestByNumber(n, defaultGlabRunner, host),
     requestChangesPullRequestByNumber: (n, body) => requestChangesMergeRequestByNumber(n, body, defaultGlabRunner, host),
     checkoutPullRequestByNumber: (n) => checkoutMergeRequestByNumber(n, defaultGlabRunner, host),
+    markPullRequestReadyByNumber: (n) =>
+      path
+        ? markMergeRequestReadyByNumber(path, n, defaultGlabRunner, host)
+        : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
+    reopenPullRequestByNumber: (n) => reopenMergeRequestByNumber(n, defaultGlabRunner, host),
     mergePullRequest: (strategy) => mergeMergeRequest(strategy, defaultGlabRunner, host),
     closePullRequest: () => closeMergeRequest(defaultGlabRunner, host),
     approvePullRequest: () => approveMergeRequest(defaultGlabRunner, host),
@@ -323,6 +353,8 @@ function bitbucketActions(
       path ? requestChangesBitbucketPullRequestByNumber(path, n, body) : noProject(),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket yet.' }),
+    markPullRequestReadyByNumber: (n) => markBitbucketPullRequestReadyByNumber(path ?? '', n),
+    reopenPullRequestByNumber: () => reopenBitbucketPullRequestByNumber(),
     mergePullRequest: (strategy) => mergeBitbucketPullRequest(path, currentBranch, strategy),
     closePullRequest: () => closeBitbucketPullRequest(path, currentBranch),
     approvePullRequest: () => approveBitbucketPullRequest(path, currentBranch),
@@ -382,6 +414,10 @@ function giteaActions(
     // of dead-ending (mirrors the Bitbucket facade, #1363).
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Gitea yet.' }),
+    markPullRequestReadyByNumber: (n) =>
+      path && runner ? markGiteaPullRequestReadyByNumber(path, n, runner) : noProject(),
+    reopenPullRequestByNumber: (n) =>
+      path && runner ? reopenGiteaPullRequestByNumber(path, n, runner) : noProject(),
     mergePullRequest: (strategy) =>
       path && runner ? mergeGiteaPullRequest(path, currentBranch, strategy, runner) : noProject(),
     closePullRequest: () => (path && runner ? closeGiteaPullRequest(path, currentBranch, runner) : noProject()),
@@ -439,6 +475,10 @@ function bitbucketServerActions(
       requestChangesBitbucketServerPullRequestByNumber(path ?? '', n, body, runner),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket Server yet.' }),
+    markPullRequestReadyByNumber: () =>
+      Promise.resolve({ ok: false, message: 'Marking a pull request ready for review is not supported for Bitbucket Server yet.' }),
+    reopenPullRequestByNumber: () =>
+      Promise.resolve({ ok: false, message: 'Reopening a pull request is not supported for Bitbucket Server yet.' }),
     mergePullRequest: (strategy) => mergeBitbucketServerPullRequest(path, currentBranch, strategy, runner),
     closePullRequest: () => closeBitbucketServerPullRequest(path, currentBranch, runner),
     approvePullRequest: () => approveBitbucketServerPullRequest(path, currentBranch, runner),

@@ -76,6 +76,12 @@ const emptyContext = (): LogInkContext =>
     pullRequestList: { pullRequests: [] },
   }) as unknown as LogInkContext
 
+const contextWithCurrentPullRequest = (): LogInkContext =>
+  ({
+    ...contextWithEntries(),
+    provider: { repository: { defaultBranch: 'main' }, currentPullRequest: pr },
+  }) as unknown as LogInkContext
+
 function createForgeMock(): ForgeActions {
   return {
     getPullRequestList: jest.fn(),
@@ -91,6 +97,8 @@ function createForgeMock(): ForgeActions {
     approvePullRequestByNumber: jest.fn().mockResolvedValue({ ok: true, message: 'approved' }),
     requestChangesPullRequestByNumber: jest.fn().mockResolvedValue({ ok: true, message: 'requested changes' }),
     checkoutPullRequestByNumber: jest.fn().mockResolvedValue({ ok: true, message: 'checked out' }),
+    markPullRequestReadyByNumber: jest.fn().mockResolvedValue({ ok: true, message: 'marked ready' }),
+    reopenPullRequestByNumber: jest.fn().mockResolvedValue({ ok: true, message: 'reopened' }),
     mergePullRequest: jest.fn().mockResolvedValue({ ok: true, message: 'merged' }),
     closePullRequest: jest.fn().mockResolvedValue({ ok: true, message: 'closed' }),
     approvePullRequest: jest.fn().mockResolvedValue({ ok: true, message: 'approved' }),
@@ -230,5 +238,79 @@ describe('triage mutations', () => {
       message: `Opened ${pr.url}`,
     })
     expect(defaultOpenUrlRunnerMock).toHaveBeenCalledWith(pr.url)
+  })
+
+  it('marks the cursored PR ready and invalidates its caches on success (#1933)', async () => {
+    const forge = createForgeMock()
+    const handlers = createForgeTriageWorkflowHandlers(createBaseDeps({ forge }))
+
+    const result = await handlers['triage-pr-ready']()
+
+    expect(forge.markPullRequestReadyByNumber).toHaveBeenCalledWith(pr.number)
+    expect(result).toEqual({ ok: true, message: 'marked ready' })
+  })
+
+  it('reopens the cursored PR and invalidates its caches on success (#1933)', async () => {
+    const forge = createForgeMock()
+    const handlers = createForgeTriageWorkflowHandlers(createBaseDeps({ forge }))
+
+    const result = await handlers['triage-pr-reopen']()
+
+    expect(forge.reopenPullRequestByNumber).toHaveBeenCalledWith(pr.number)
+    expect(result).toEqual({ ok: true, message: 'reopened' })
+  })
+
+  it('rejects triage-pr-ready / triage-pr-reopen when nothing is under the cursor', async () => {
+    const handlers = createForgeTriageWorkflowHandlers(
+      createBaseDeps({ state: emptyState(), context: emptyContext() })
+    )
+
+    await expect(handlers['triage-pr-ready']()).resolves.toEqual({
+      ok: false,
+      message: 'No pull request under cursor',
+    })
+    await expect(handlers['triage-pr-reopen']()).resolves.toEqual({
+      ok: false,
+      message: 'No pull request under cursor',
+    })
+  })
+})
+
+describe('ready-pr / reopen-pr (current-branch, #1933)', () => {
+  it('marks the current branch\'s PR ready by number', async () => {
+    const forge = createForgeMock()
+    const handlers = createForgeTriageWorkflowHandlers(
+      createBaseDeps({ forge, context: contextWithCurrentPullRequest() })
+    )
+
+    const result = await handlers['ready-pr']()
+
+    expect(forge.markPullRequestReadyByNumber).toHaveBeenCalledWith(pr.number)
+    expect(result).toEqual({ ok: true, message: 'marked ready' })
+  })
+
+  it('reopens the current branch\'s PR by number', async () => {
+    const forge = createForgeMock()
+    const handlers = createForgeTriageWorkflowHandlers(
+      createBaseDeps({ forge, context: contextWithCurrentPullRequest() })
+    )
+
+    const result = await handlers['reopen-pr']()
+
+    expect(forge.reopenPullRequestByNumber).toHaveBeenCalledWith(pr.number)
+    expect(result).toEqual({ ok: true, message: 'reopened' })
+  })
+
+  it('rejects ready-pr / reopen-pr when there is no current pull request', async () => {
+    const handlers = createForgeTriageWorkflowHandlers(createBaseDeps({ context: contextWithEntries() }))
+
+    await expect(handlers['ready-pr']()).resolves.toEqual({
+      ok: false,
+      message: 'No pull request found for the current branch.',
+    })
+    await expect(handlers['reopen-pr']()).resolves.toEqual({
+      ok: false,
+      message: 'No pull request found for the current branch.',
+    })
   })
 })

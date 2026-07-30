@@ -3534,6 +3534,14 @@ export function getLogInkInputEvents(
       multiline: true,
     })]
   }
+  // #1933 — draft→ready and reopen, gated through the same y-confirm
+  // path as `approve-pr` (rewrites publicly-visible forge state).
+  if (inputValue === 'd' && state.activeView === 'pull-request') {
+    return [action({ type: 'setPendingConfirmation', value: 'ready-pr' })]
+  }
+  if (inputValue === 'X' && state.activeView === 'pull-request') {
+    return [action({ type: 'setPendingConfirmation', value: 'reopen-pr' })]
+  }
 
   // #882 phase 4 — issue triage per-row actions. Scoped to the
   // `'issues'` view + commits focus so the single-letter keys stay
@@ -3660,6 +3668,14 @@ export function getLogInkInputEvents(
         label: 'Request changes — review body (Enter newline · Ctrl+D submit)',
         multiline: true,
       })]
+    }
+    // #1933 — draft→ready and reopen, mirroring the single-PR panel's
+    // `d` / `X` keys (see above) at their by-number triage equivalents.
+    if (inputValue === 'd' && context.pullRequestTriageCount) {
+      return [action({ type: 'setPendingConfirmation', value: 'triage-pr-ready' })]
+    }
+    if (inputValue === 'X' && context.pullRequestTriageCount) {
+      return [action({ type: 'setPendingConfirmation', value: 'triage-pr-reopen' })]
     }
     // #882 phase 6 — cycle the canned filter preset (open → draft
     // → mine → assigned → closed → merged → open). The effect in

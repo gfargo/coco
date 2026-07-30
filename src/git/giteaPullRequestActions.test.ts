@@ -4,6 +4,8 @@ import {
   mergeGiteaPullRequestByNumber,
   approveGiteaPullRequestByNumber,
   closeGiteaPullRequestByNumber,
+  reopenGiteaPullRequestByNumber,
+  markGiteaPullRequestReadyByNumber,
   commentGiteaPullRequestByNumber,
   requestChangesGiteaPullRequestByNumber,
   addGiteaPullRequestLabel,
@@ -134,6 +136,69 @@ describe('closeGiteaPullRequestByNumber (#826)', () => {
     expect(calls[0].endpoint).toBe('repos/owner/repo/pulls/5')
     expect(calls[0].method).toBe('PATCH')
     expect(JSON.parse(calls[0].body ?? '{}').state).toBe('closed')
+  })
+})
+
+describe('reopenGiteaPullRequestByNumber (#1933)', () => {
+  it('PATCHes state=open', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await reopenGiteaPullRequestByNumber('owner/repo', 5, runner)
+    expect(result.ok).toBe(true)
+    expect(calls[0].endpoint).toBe('repos/owner/repo/pulls/5')
+    expect(calls[0].method).toBe('PATCH')
+    expect(JSON.parse(calls[0].body ?? '{}').state).toBe('open')
+  })
+})
+
+describe('markGiteaPullRequestReadyByNumber (#1933)', () => {
+  it('PATCHes draft: false when the PR has a real draft boolean set', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ draft: true, title: 'Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls[1].endpoint).toBe('repos/owner/repo/pulls/5')
+    expect(calls[1].method).toBe('PATCH')
+    expect(JSON.parse(calls[1].body ?? '{}').draft).toBe(false)
+    expect(result).toEqual({ ok: true, message: 'Marked pull request #5 as ready for review' })
+  })
+
+  it('is a no-op when draft: false is set, even if the title has a [WIP] prefix', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ draft: false, title: '[WIP] Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls).toHaveLength(1)
+    expect(result).toEqual({ ok: true, message: 'Pull request #5 is not a draft' })
+  })
+
+  it('falls back to stripping the [WIP] title prefix when there is no draft boolean', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ title: '[WIP] Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls[0]).toEqual({ endpoint: 'repos/owner/repo/pulls/5', method: undefined, body: undefined })
+    expect(calls[1].endpoint).toBe('repos/owner/repo/pulls/5')
+    expect(calls[1].method).toBe('PATCH')
+    expect(JSON.parse(calls[1].body ?? '{}').title).toBe('Add feature')
+    expect(result).toEqual({ ok: true, message: 'Marked pull request #5 as ready for review' })
+  })
+
+  it('is a no-op when there is no draft boolean and the title has no [WIP] prefix', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ title: 'Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls).toHaveLength(1)
+    expect(result).toEqual({ ok: true, message: 'Pull request #5 is not a draft' })
+  })
+
+  it('refuses to PATCH an empty title when it is only the [WIP] prefix', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ title: '[WIP]' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls).toHaveLength(1)
+    expect(result.ok).toBe(false)
   })
 })
 
