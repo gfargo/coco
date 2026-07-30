@@ -198,6 +198,26 @@ function calcSidebarAtRestWidth(columns: number, density: LogInkLayoutDensity): 
   return Math.max(config.min, Math.min(config.max, Math.floor(columns * config.fraction)))
 }
 
+// Budgets detail + sidebar against `columns` so the main panel keeps its
+// floor and the three widths always sum to `columns`. Detail is clamped
+// first (it's what the help overlay / focused inspector is trying to make
+// readable); the sidebar — lower priority — takes whatever budget remains,
+// down to 0.
+function allocateThreePaneWidths(
+  columns: number,
+  detailWidth: number,
+  sidebarWidth: number,
+): { sidebarWidth: number; mainPanelWidth: number; detailWidth: number } {
+  const sideBudget = columns - LAYOUT_MAIN_PANEL_MIN_WIDTH
+  const allocDetailWidth = Math.min(detailWidth, sideBudget)
+  const allocSidebarWidth = Math.min(sidebarWidth, Math.max(0, sideBudget - allocDetailWidth))
+  return {
+    sidebarWidth: allocSidebarWidth,
+    mainPanelWidth: columns - allocSidebarWidth - allocDetailWidth,
+    detailWidth: allocDetailWidth,
+  }
+}
+
 export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const columns = input.columns || LOG_INK_DEFAULT_COLUMNS
   const rows = input.rows || LOG_INK_DEFAULT_ROWS
@@ -262,27 +282,14 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
 
   // Single-pane mode: exactly one pane renders, full-width; the other
   // two are hidden (width 0), not railed. Above the breakpoint the
-  // three panels tile flush across the terminal.
-  //
-  // Three-pane mode budgets the side panes against the terminal so the
-  // main panel keeps its floor and the three always sum to `columns`.
-  // Detail is clamped first (it's what the help overlay / focused
-  // inspector is trying to make readable); the sidebar — lower
-  // priority — takes whatever budget remains, down to 0.
-  const sideBudget = columns - LAYOUT_MAIN_PANEL_MIN_WIDTH
-  const allocDetailWidth = Math.min(detailWidth, sideBudget)
-  const allocSidebarWidth = Math.min(sidebarWidth, Math.max(0, sideBudget - allocDetailWidth))
+  // three panels tile flush across the terminal via `allocateThreePaneWidths`.
   const paneWidths = singlePane
     ? {
         sidebarWidth: visiblePane === 'sidebar' ? columns : 0,
         mainPanelWidth: visiblePane === 'main' ? columns : 0,
         detailWidth: visiblePane === 'inspector' ? columns : 0,
       }
-    : {
-        sidebarWidth: allocSidebarWidth,
-        mainPanelWidth: columns - allocSidebarWidth - allocDetailWidth,
-        detailWidth: allocDetailWidth,
-      }
+    : allocateThreePaneWidths(columns, detailWidth, sidebarWidth)
 
   return {
     bodyRows: Math.max(8, rows - 5),
