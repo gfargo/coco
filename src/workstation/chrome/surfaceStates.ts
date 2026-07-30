@@ -156,6 +156,17 @@ export function formatLogInkBlameEmpty({ path, failureMessage }: LogInkBlameEmpt
   return `No blame data for ${path ?? 'this file'} (empty or untracked). Press esc to go back.`
 }
 
+/**
+ * Empty-state copy for the history detail surface's [Notes] tab
+ * (#OSS-2057) — no `refs/notes/commits` note is loaded for the cursored
+ * commit. v1 only reads notes already fetched locally (it never fetches
+ * `refs/notes/commits` from the remote), so this deliberately doesn't
+ * claim the commit has no note anywhere — only that none is loaded here.
+ */
+export function formatLogInkNotesEmpty(): string {
+  return 'No note on this commit. Press enter to add one.'
+}
+
 export type LogInkIssuesEmptyArgs = {
   filter: string
 }

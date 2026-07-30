@@ -5181,32 +5181,55 @@ describe('log Ink input interactions', () => {
     // hint read as "press the / key" — which collides with the global
     // filter trigger and was confusing users. Arrow keys are
     // unambiguous + match the sidebar's existing left/right tab axis.
-    it('← on detail focus switches to the Inspector tab', () => {
+    //
+    // #OSS-2057 — a third [Notes] tab joined [Inspector]/[Actions], so
+    // ←/→ now cycle (wrapping) rather than jumping to a fixed tab.
+    it('← on detail focus cycles the inspector tab backward', () => {
       const events = getLogInkInputEvents(
         actionsFocusState(),
         '',
         { leftArrow: true },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'setInspectorTab', value: 'inspector' } },
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: -1 } },
       ])
     })
 
-    it('→ on detail focus switches to the Actions tab', () => {
+    it('→ on detail focus cycles the inspector tab forward', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorTab: 'inspector' }),
         '',
         { rightArrow: true },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'setInspectorTab', value: 'actions' } },
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: 1 } },
       ])
+    })
+
+    it('→ cycles through all three tabs (Inspector → Actions → Notes → Inspector)', () => {
+      let state = actionsFocusState({ inspectorTab: 'inspector' })
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('actions')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('notes')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('inspector')
+    })
+
+    it('← wraps backward through all three tabs (Inspector → Notes → Actions → Inspector)', () => {
+      let state = actionsFocusState({ inspectorTab: 'inspector' })
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('notes')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('actions')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('inspector')
     })
 
     it('←/→ on detail focus does not affect the global filter trigger', () => {
       // The original `[/] switch` chrome hint suggested pressing `/` —
       // which fires the global filter, not the inspector tab swap.
-      // ←/→ should fire setInspectorTab and nothing else; the global
+      // ←/→ should fire cycleInspectorTab and nothing else; the global
       // filter event (`toggleFilterMode`) must not appear in the
       // dispatch list.
       const left = getLogInkInputEvents(actionsFocusState(), '', { leftArrow: true })

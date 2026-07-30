@@ -98,6 +98,7 @@ import {
     rewordHeadCommit,
 } from '../../../git/historyActions'
 import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStashes, popStash, renameStash, restoreStash, stashBranch } from '../../../git/stashActions'
+import { addOrEditCommitNote } from '../../../git/notesActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
 import { removeWorktree, removeWorktreeAndBranch } from '../../../git/worktreeActions'
 import { rebaseOnto } from '../../../git/rebaseActions'
@@ -760,6 +761,31 @@ export function useWorkflowAction(
           initial: subject,
         })
         return { ok: true, message: 'Reword HEAD — edit the message, enter to apply, esc cancels.' }
+      },
+      // #OSS-2057 — add/edit the cursored commit's `refs/notes/commits`
+      // note. The [Notes] tab's Enter handler opens the prompt (seeded
+      // with the current note, if loaded); submission lands here with the
+      // typed body as payload. On success, write straight into the
+      // `commitNoteByHash` cache instead of waiting on the hydration
+      // effect to re-fetch — the note we just wrote IS the fresh value,
+      // and `git notes add -f` doesn't move the commit hash the cache
+      // effect keys off, so nothing else would invalidate it.
+      'edit-commit-note': async () => {
+        const selected = getSelectedInkCommit(state)
+        if (!selected) return { ok: false, message: 'No commit selected' }
+        const body = payload?.trim()
+        if (!body) return { ok: false, message: 'Note body required' }
+        const result = await addOrEditCommitNote(git, selected.hash, body)
+        if (result.ok) {
+          setContext(
+            (current) => ({
+              ...current,
+              commitNoteByHash: new Map(current.commitNoteByHash || []).set(selected.hash, body),
+            }),
+            issuedAtDepth,
+          )
+        }
+        return result
       },
       'execute-rebase-plan': async () => {
         const plan = state.rebasePlan
