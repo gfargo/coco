@@ -132,22 +132,20 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
   )
   const exitCode = failing.length > 0 ? 1 : 0
 
-  if (argv.json) {
-    emitJson(
-      results.map(({ sha, shortSha, subject, status, errors, warnings }) => ({
-        sha,
-        shortSha,
-        subject,
-        status,
-        errors,
-        warnings,
-      }))
-    )
-    if (!argv.fix) {
-      commandExit(exitCode)
-      return
-    }
-  } else {
+  // Under --json --fix, the payload must reflect the *final* outcome (post-rebase),
+  // not this pre-fix snapshot — so emission is deferred to each exit point below via
+  // this helper, rather than emitted once here.
+  const toJsonPayload = (list: LintCommitResult[]) =>
+    list.map(({ sha, shortSha, subject, status, errors, warnings }) => ({
+      sha,
+      shortSha,
+      subject,
+      status,
+      errors,
+      warnings,
+    }))
+
+  if (!argv.json) {
     logger.log(`Linting ${results.length} commit(s) in ${range}\n`)
     for (const line of formatCommitReport(results)) logger.log(line)
 
@@ -161,6 +159,7 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
   }
 
   if (!argv.fix) {
+    if (argv.json) emitJson(toJsonPayload(results))
     commandExit(exitCode)
     return
   }
@@ -172,7 +171,12 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
   // touch it.
   const failingForReword = results.filter((commit) => commit.status === 'fail')
   if (failingForReword.length === 0) {
-    logger.log('Nothing to fix — no commit has a commitlint error.', { color: 'green' })
+    const message =
+      exitCode === 0
+        ? 'Nothing to fix — no commit has a commitlint error.'
+        : 'Nothing to fix — no commit has a commitlint error, but warning(s) still fail --severity warning.'
+    logger.log(message, { color: exitCode === 0 ? 'green' : 'yellow' })
+    if (argv.json) emitJson(toJsonPayload(results))
     commandExit(exitCode)
     return
   }
@@ -184,6 +188,7 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
     await git.raw(['rev-parse', '--verify', `${commits[0].sha}^`])
   } catch {
     logger.error('Cannot --fix a range that reaches the root commit.', { color: 'red' })
+    if (argv.json) emitJson(toJsonPayload(results))
     commandExit(1)
     return
   }
@@ -204,6 +209,7 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
   if (reasons.length > 0 && !argv.force) {
     logger.error(`Refusing to --fix: ${reasons.join('; ')}.`, { color: 'red' })
     logger.log('Pass --force to override once you understand the risk.', { color: 'yellow' })
+    if (argv.json) emitJson(toJsonPayload(results))
     commandExit(1)
     return
   }
@@ -285,6 +291,7 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
 
   if (rewordBySha.size === 0) {
     logger.error('No commit could be reworded into a conforming subject.', { color: 'red' })
+    if (argv.json) emitJson(toJsonPayload(results))
     commandExit(1)
     return
   }
@@ -332,14 +339,20 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
     }
     // Reworded `fail` commits now pass; anything else that counted toward
     // `failing` under the active --severity is still there after the rebase.
-    const remaining = results.filter((commit) => {
-      if (commit.status === 'fail') return !rewordBySha.has(commit.sha)
-      return severity === 'warning' && commit.status === 'warn'
-    })
+    // `finalResults` is what --json reports, so it must reflect this same
+    // post-rebase state rather than the pre-fix snapshot taken above.
+    const finalResults = results.map((commit) =>
+      rewordBySha.has(commit.sha) ? { ...commit, status: 'pass' as const, errors: [] } : commit
+    )
+    const remaining = finalResults.filter(
+      (commit) => commit.status === 'fail' || (severity === 'warning' && commit.status === 'warn')
+    )
+    if (argv.json) emitJson(toJsonPayload(finalResults))
     commandExit(remaining.length === 0 ? 0 : 1)
     return
   } else {
     logger.error(`\n${result.message}`, { color: 'red' })
+    if (argv.json) emitJson(toJsonPayload(results))
     commandExit(1)
     return
   }
