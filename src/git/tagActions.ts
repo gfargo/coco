@@ -47,6 +47,23 @@ export function deleteLocalTag(git: SimpleGit, tagName: string): Promise<TagActi
   )
 }
 
+/**
+ * Recreate a tag previously deleted at its recorded sha — the undo-stack
+ * inverse (OSS-1606). Always recreates as a lightweight tag: if the
+ * deleted tag was annotated, the tag object (message/tagger metadata)
+ * was deleted along with the ref, so only the commit it pointed to can
+ * be restored — the annotation itself is gone.
+ */
+export function restoreDeletedTag(git: SimpleGit, tagName: string, sha: string): Promise<TagActionResult> {
+  const nameError = rejectFlagLike(tagName, `Tag name '${tagName}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
+  return runAction(
+    () => git.raw(['tag', tagName, sha]),
+    `Restored tag ${tagName}`
+  )
+}
+
 export async function pushTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
   const remote = await resolveDefaultRemoteName(git)
   if (!remote) {

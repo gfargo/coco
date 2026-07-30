@@ -1061,6 +1061,18 @@ describe('log Ink input interactions', () => {
     expect(state.statusMessage).toBe('jumped to reflog')
   })
 
+  it('dispatches undo-last-action with the gu chord and clears pendingKey (OSS-1606)', () => {
+    let state = createLogInkState(rows)
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
+
+    const events = getLogInkInputEvents(state, 'u', {}, {})
+    expect(events).toEqual([
+      { type: 'action', action: { type: 'setPendingKey', value: undefined } },
+      { type: 'runWorkflowAction', id: 'undo-last-action' },
+    ])
+  })
+
   it('moves the selected reflog entry with arrow keys when in reflog view (#781)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'reflog' })
