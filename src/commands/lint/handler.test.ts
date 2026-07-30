@@ -46,7 +46,13 @@ function record(fields: string[]): string {
 
 type RawHandlers = Record<string, (args: string[]) => Promise<string>>
 
-function makeGit(overrides: { log: string; status?: Partial<StatusResult>; extra?: RawHandlers }): SimpleGit {
+function makeGit(overrides: {
+  log: string
+  /** Returned for `log` calls after the first — simulates history rewritten by a rebase. */
+  postFixLog?: string
+  status?: Partial<StatusResult>
+  extra?: RawHandlers
+}): SimpleGit {
   const status: StatusResult = {
     not_added: [],
     conflicted: [],
@@ -65,8 +71,13 @@ function makeGit(overrides: { log: string; status?: Partial<StatusResult>; extra
     ...overrides.status,
   } as StatusResult
 
+  let logCallCount = 0
   const raw = jest.fn(async (args: string[]) => {
-    if (args[0] === 'log') return overrides.log
+    if (args[0] === 'log') {
+      logCallCount += 1
+      if (logCallCount > 1 && overrides.postFixLog !== undefined) return overrides.postFixLog
+      return overrides.log
+    }
     if (args[0] === 'rev-parse' && args.includes('--verify')) return 'ok'
     if (args[0] === 'rev-parse' && args.includes('@{upstream}')) throw new Error('no upstream')
     if (args[0] === 'merge-base') throw new Error('not an ancestor')
@@ -335,7 +346,8 @@ describe('lint command handler', () => {
 
     it('writes only the post-fix results JSON to stdout for --json --fix', async () => {
       const log = record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'bad message', ''])
-      mockApplyRepoFlag.mockReturnValue(makeGit({ log }))
+      const postFixLog = record(['sha1new', 'sha1new', '', 'Jane', '2026-01-01', 'fix: a conforming subject', ''])
+      mockApplyRepoFlag.mockReturnValue(makeGit({ log, postFixLog }))
       mockValidateCommitMessage
         .mockResolvedValueOnce({ valid: false, errors: ['type may not be empty'], warnings: [] })
         .mockResolvedValueOnce({ valid: true, errors: [], warnings: [] })
@@ -347,8 +359,50 @@ describe('lint command handler', () => {
         await expect(handler({ ...baseArgv, json: true, fix: true }, logger)).rejects.toMatchObject({ code: 0 })
         expect(logger.setConfig).toHaveBeenCalledWith({ quiet: true })
         const written = writeSpy.mock.calls.map((call) => call[0]).join('')
-        // The reworded commit now reports its post-fix outcome (pass, no errors),
-        // matching the exit code — not the pre-fix snapshot from before the rebase ran.
+        // The reworded commit reports its post-fix outcome (pass, no errors) AND
+        // its post-rebase sha/subject — not the pre-fix snapshot from before the
+        // rebase rewrote it.
+        expect(JSON.parse(written)).toEqual([
+          {
+            sha: 'sha1new',
+            shortSha: 'sha1new',
+            subject: 'fix: a conforming subject',
+            status: 'pass',
+            errors: [],
+            warnings: [],
+          },
+        ])
+      } finally {
+        writeSpy.mockRestore()
+      }
+    })
+
+    it('falls back to the pre-fix snapshot if re-reading history after the rebase fails', async () => {
+      const log = record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'bad message', ''])
+      const git = makeGit({ log })
+      let logCallCount = 0
+      ;(git.raw as jest.Mock).mockImplementation(async (args: string[]) => {
+        if (args[0] === 'log') {
+          logCallCount += 1
+          if (logCallCount > 1) throw new Error('fatal: bad revision')
+          return log
+        }
+        if (args[0] === 'rev-parse' && args.includes('--verify')) return 'ok'
+        if (args[0] === 'rev-parse' && args.includes('@{upstream}')) throw new Error('no upstream')
+        if (args[0] === 'merge-base') throw new Error('not an ancestor')
+        return ''
+      })
+      mockApplyRepoFlag.mockReturnValue(git)
+      mockValidateCommitMessage
+        .mockResolvedValueOnce({ valid: false, errors: ['type may not be empty'], warnings: [] })
+        .mockResolvedValueOnce({ valid: true, errors: [], warnings: [] })
+      mockExecuteChain.mockResolvedValue({ subject: 'fix: a conforming subject' })
+      mockExecuteRebasePlan.mockResolvedValue({ ok: true, message: 'Rebase applied — 1 of 1 commits kept' })
+
+      const writeSpy = jest.spyOn(process.stdout, 'write').mockImplementation(() => true)
+      try {
+        await expect(handler({ ...baseArgv, json: true, fix: true }, logger)).rejects.toMatchObject({ code: 0 })
+        const written = writeSpy.mock.calls.map((call) => call[0]).join('')
         expect(JSON.parse(written)).toEqual([
           {
             sha: 'sha1',

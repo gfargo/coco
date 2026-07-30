@@ -337,13 +337,31 @@ export const handler: CommandHandler<LintArgv> = async (argv, logger) => {
         color: 'yellow',
       })
     }
-    // Reworded `fail` commits now pass; anything else that counted toward
-    // `failing` under the active --severity is still there after the rebase.
-    // `finalResults` is what --json reports, so it must reflect this same
-    // post-rebase state rather than the pre-fix snapshot taken above.
-    const finalResults = results.map((commit) =>
+    // The rebase rewrites every commit from the earliest touched one forward
+    // — even untouched `pick` rows get new shas — so `sha`/`shortSha`/`subject`
+    // in `results` are now stale for the whole range, not just reworded rows.
+    // Re-read the rewritten history and merge it in by position (rebase never
+    // reorders or drops rows here, so position lines up with the pre-fix list)
+    // so `finalResults` — what --json reports — reflects the real post-rebase
+    // state rather than a pre-fix snapshot.
+    let finalResults = results.map((commit) =>
       rewordBySha.has(commit.sha) ? { ...commit, status: 'pass' as const, errors: [] } : commit
     )
+    try {
+      const rewrittenCommits = await loadRangeCommits(git, `${commits[0].sha}^..HEAD`)
+      if (rewrittenCommits.length === finalResults.length) {
+        finalResults = finalResults.map((commit, index) => ({
+          ...commit,
+          sha: rewrittenCommits[index].sha,
+          shortSha: rewrittenCommits[index].shortSha,
+          subject: rewrittenCommits[index].subject,
+          body: rewrittenCommits[index].body,
+        }))
+      }
+    } catch {
+      // Best effort — a stale sha/subject is still better than crashing
+      // after a rebase that already succeeded.
+    }
     const remaining = finalResults.filter(
       (commit) => commit.status === 'fail' || (severity === 'warning' && commit.status === 'warn')
     )
