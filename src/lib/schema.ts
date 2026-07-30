@@ -2322,6 +2322,16 @@ export const schema = {
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
         },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
           "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
@@ -2532,6 +2542,16 @@ export const schema = {
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
         },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
           "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
@@ -2740,6 +2760,16 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
         },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
@@ -2950,6 +2980,16 @@ export const schema = {
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
         },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
           "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
@@ -3159,6 +3199,16 @@ export const schema = {
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
         },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
           "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
@@ -3367,6 +3417,16 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
         },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
@@ -3578,6 +3638,16 @@ export const schema = {
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
         },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
           "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
@@ -3787,6 +3857,16 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
         },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
