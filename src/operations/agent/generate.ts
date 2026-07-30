@@ -288,10 +288,19 @@ export async function generateAgentCommitDraft(
     throw new AgentOperationError('CANCELLED', 'Commit draft generation was cancelled.')
   }
   if (!result.ok || !result.message) {
+    // Determine retryability: validation failures are self-inflicted (coco
+    // chose the rules and generated the text) and a fresh sampling attempt
+    // would likely produce a passing message — exactly what happened in the
+    // bug report (call 3 succeeded without any input change). Mark these as
+    // retryable so well-behaved agent callers don't give up prematurely.
+    // Other failure modes (no changes, empty summary, API key missing) are
+    // genuinely non-retryable without caller action.
+    const hasValidationErrors = result.validationErrors && result.validationErrors.length > 0
+    const retryable = hasValidationErrors
     throw new AgentOperationError(
       'GENERATION_FAILED',
       [...result.warnings, ...result.validationErrors].join('; ') || 'Failed to generate a commit draft.',
-      false,
+      retryable,
       { validationErrors: result.validationErrors },
     )
   }
