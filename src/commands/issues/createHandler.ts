@@ -10,6 +10,7 @@ import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { selectPrompt, editorPrompt } from '../../lib/ui/inquirerPrompts'
 import { ReviewFeedbackItem, ReviewFeedbackItemArraySchema } from '../review/config'
 import { IssuesCreateArgv, IssuesCreateOptions } from './createConfig'
+import { findingToIssue } from './findingToIssue'
 
 function splitTitleBody(text: string): { title: string; body: string } {
   const trimmed = text.trim()
@@ -25,13 +26,6 @@ async function readStdin(): Promise<string> {
   const chunks: string[] = []
   for await (const chunk of process.stdin) chunks.push(String(chunk))
   return chunks.join('')
-}
-
-function findingToIssue(finding: ReviewFeedbackItem): { title: string; body: string } {
-  return {
-    title: finding.title,
-    body: `${finding.summary}\n\n- Severity: ${finding.severity}\n- Category: ${finding.category}\n- File: \`${finding.filePath}\``,
-  }
 }
 
 export const handler: CommandHandler<IssuesCreateArgv> = async (argv, logger) => {
