@@ -25,11 +25,19 @@ export async function fileChangeParser({
 }: FileChangeParserInput): Promise<string> {
   const textSplitter = new RecursiveCharacterTextSplitter({ chunkSize: 10000, chunkOverlap: 250 })
 
-  const summarizationChain = loadSummarizationChain(model, {
-    type: 'map_reduce',
-    combineMapPrompt: SUMMARIZE_PROMPT,
-    combinePrompt: SUMMARIZE_PROMPT,
-  })
+  const summarizationChain = loadSummarizationChain(
+    // `loadSummarizationChain` types `llm` as the full `BaseLanguageModelInterface`,
+    // but its `LLMChain` only calls `generatePrompt` when present and otherwise falls
+    // back to plain `.invoke()` — so the `Runnable` that `getLlm` can hand back (e.g.
+    // Anthropic with `promptCache` enabled, which wraps the model via `withConfig`)
+    // works fine here despite not satisfying the stricter declared type.
+    model as unknown as Parameters<typeof loadSummarizationChain>[0],
+    {
+      type: 'map_reduce',
+      combineMapPrompt: SUMMARIZE_PROMPT,
+      combinePrompt: SUMMARIZE_PROMPT,
+    }
+  )
 
   logger.startTimer()
   const rootTreeNode = createDiffTree(changes)
