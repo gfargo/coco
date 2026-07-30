@@ -104,6 +104,7 @@ describe.each(CASES)('provider config forwarding — $provider', (c) => {
         break
       case 'anthropic':
         expect((llm.thinking as { type?: string } | undefined)?.type).toBe('adaptive')
+        expect((llm.outputConfig as { effort?: string } | undefined)?.effort).toBe('high')
         break
       case 'mistral':
         // No `supportsReasoningEffort` flag — the option is silently ignored, never throws.
@@ -161,6 +162,24 @@ describe('anthropic reasoning effort + prompt caching', () => {
       makeConfig(anthropicCase, { reasoningEffort: 'low', temperature: 0.9 })
     )
     expect(temperatureOf(llm)).toBeUndefined()
+  })
+
+  it('grades outputConfig.effort per reasoningEffort tier, mapping minimal down to low', async () => {
+    const cases: Array<['minimal' | 'low' | 'medium' | 'high', string]> = [
+      ['minimal', 'low'],
+      ['low', 'low'],
+      ['medium', 'medium'],
+      ['high', 'high'],
+    ]
+
+    for (const [reasoningEffort, expected] of cases) {
+      const llm = (await getLlm(
+        'anthropic',
+        anthropicCase.model as LLMModel,
+        makeConfig(anthropicCase, { reasoningEffort })
+      )) as unknown as { outputConfig?: { effort?: string } }
+      expect(llm.outputConfig?.effort).toBe(expected)
+    }
   })
 
   it('binds cache_control as a call option when promptCache is enabled', async () => {

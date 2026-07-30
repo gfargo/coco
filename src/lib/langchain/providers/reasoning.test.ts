@@ -1,4 +1,4 @@
-import { resolveTemperature, toGeminiThinkingLevel } from './reasoning'
+import { resolveTemperature, toAnthropicEffort, toGeminiThinkingLevel } from './reasoning'
 
 describe('resolveTemperature', () => {
   it('defaults to 0.2 when neither reasoningEffort nor temperature is set', () => {
@@ -31,5 +31,17 @@ describe('toGeminiThinkingLevel', () => {
   it('maps medium and high 1:1', () => {
     expect(toGeminiThinkingLevel('medium')).toBe('MEDIUM')
     expect(toGeminiThinkingLevel('high')).toBe('HIGH')
+  })
+})
+
+describe('toAnthropicEffort', () => {
+  it('maps minimal down to low (Anthropic has no minimal tier)', () => {
+    expect(toAnthropicEffort('minimal')).toBe('low')
+  })
+
+  it('maps low, medium, and high 1:1', () => {
+    expect(toAnthropicEffort('low')).toBe('low')
+    expect(toAnthropicEffort('medium')).toBe('medium')
+    expect(toAnthropicEffort('high')).toBe('high')
   })
 })

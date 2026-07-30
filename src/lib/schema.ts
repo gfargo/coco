@@ -781,7 +781,7 @@ export const schema = {
         "medium",
         "high"
       ],
-      "description": "Reasoning/thinking effort for providers with a graded reasoning dial. Applied only by providers whose `ProviderDefinition` sets `supportsReasoningEffort` (OpenAI, Azure, Gemini, Anthropic); silently ignored elsewhere. Gemini has no `minimal` level and maps it to `LOW`. Anthropic has no graded levels — any value here enables adaptive extended thinking rather than selecting a tier."
+      "description": "Reasoning/thinking effort for providers with a graded reasoning dial. Applied only by providers whose `ProviderDefinition` sets `supportsReasoningEffort` (OpenAI, Azure, Gemini, Anthropic); silently ignored elsewhere. Gemini and Anthropic have no `minimal` level and map it down to their lowest tier (`LOW` / `low` respectively)."
     },
     "DynamicModelProfile": {
       "type": "object",

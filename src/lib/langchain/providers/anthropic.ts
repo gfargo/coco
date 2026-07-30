@@ -1,6 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
-import { resolveTemperature } from './reasoning'
+import { resolveTemperature, toAnthropicEffort } from './reasoning'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
 async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
@@ -19,9 +19,15 @@ async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Pro
     // requested and let the SDK's own default apply. See `resolveTemperature`.
     temperature: resolveTemperature(reasoningEffort, config.service.temperature),
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
-    // Anthropic has no graded effort levels — any requested effort enables
-    // adaptive extended thinking.
-    ...(reasoningEffort ? { thinking: { type: 'adaptive' as const } } : {}),
+    // Extended thinking is graded via `outputConfig.effort`, not just
+    // toggled — `thinking: adaptive` enables it, `outputConfig.effort` sets
+    // how many tokens it's allowed to spend.
+    ...(reasoningEffort
+      ? {
+          thinking: { type: 'adaptive' as const },
+          outputConfig: { effort: toAnthropicEffort(reasoningEffort) },
+        }
+      : {}),
     ...(config.service.requestOptions?.timeout
       ? { clientOptions: { timeout: config.service.requestOptions.timeout } }
       : {}),

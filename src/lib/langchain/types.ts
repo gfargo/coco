@@ -15,9 +15,8 @@ export type DynamicModelPreference = 'cost' | 'balanced' | 'quality'
  * Reasoning/thinking effort for providers with a graded reasoning dial.
  * Applied only by providers whose `ProviderDefinition` sets
  * `supportsReasoningEffort` (OpenAI, Azure, Gemini, Anthropic); silently
- * ignored elsewhere. Gemini has no `minimal` level and maps it to `LOW`.
- * Anthropic has no graded levels — any value here enables adaptive
- * extended thinking rather than selecting a tier.
+ * ignored elsewhere. Gemini and Anthropic have no `minimal` level and map
+ * it down to their lowest tier (`LOW` / `low` respectively).
  */
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
 

@@ -18,6 +18,25 @@ export function toGeminiThinkingLevel(effort: ReasoningEffort): GeminiThinkingLe
   return GEMINI_THINKING_LEVEL[effort]
 }
 
+export type AnthropicEffort = 'low' | 'medium' | 'high'
+
+/**
+ * `@langchain/anthropic`'s `outputConfig.effort` grades extended thinking
+ * (low/medium/high/xhigh/max) rather than just toggling it on. coco's shared
+ * `ReasoningEffort` scale has no `'minimal'` tier for Anthropic to undershoot
+ * to, so map it down to `'low'` — the same undershoot Gemini's mapping does.
+ */
+const ANTHROPIC_EFFORT: Record<ReasoningEffort, AnthropicEffort> = {
+  minimal: 'low',
+  low: 'low',
+  medium: 'medium',
+  high: 'high',
+}
+
+export function toAnthropicEffort(effort: ReasoningEffort): AnthropicEffort {
+  return ANTHROPIC_EFFORT[effort]
+}
+
 /**
  * Reasoning/extended-thinking models (Anthropic adaptive thinking, OpenAI
  * o-/gpt-5 series) reject any `temperature` other than `1`. When
