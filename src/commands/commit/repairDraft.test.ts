@@ -100,6 +100,10 @@ describe('repairDraftAgainstValidationErrors', () => {
         'header must not be longer than 72 characters',
       ])
       expect(result.length).toBeLessThanOrEqual(72)
+      // The subject must survive the hard cut rather than being collapsed
+      // down to just the `type(scope):` prefix.
+      expect(result).not.toBe('chore:')
+      expect(result.startsWith('chore: a')).toBe(true)
     })
   })
 

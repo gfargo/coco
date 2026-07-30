@@ -62,7 +62,7 @@ describe('getBuiltInConventionalRulesContext (OSS-1326 / #1854)', () => {
     expect(context).toContain('Header (title) must be 72 characters or less')
     expect(context).toContain('Body lines must be 100 characters or less')
     expect(context).toContain(
-      'Subject must be one of sentence-case, start-case, pascal-case, upper-case or lower-case case',
+      'Subject must be one of sentence-case, start-case, pascal-case, upper-case or lower-case',
     )
     expect(context).not.toContain('sentence-case,start-case')
   })

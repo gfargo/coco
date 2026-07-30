@@ -240,14 +240,14 @@ export function formatCommitlintRulesForPrompt(
   if (rules['type-case']) {
     const [level, , caseType] = rules['type-case']
     if (level > 0) {
-      ruleDescriptions.push(`Type must be ${formatCaseType(caseType)} case`)
+      ruleDescriptions.push(`Type must be ${formatCaseType(caseType)}`)
     }
   }
 
   if (rules['subject-case']) {
     const [level, , caseType] = rules['subject-case']
     if (level > 0) {
-      ruleDescriptions.push(`Subject must be ${formatCaseType(caseType)} case`)
+      ruleDescriptions.push(`Subject must be ${formatCaseType(caseType)}`)
     }
   }
 

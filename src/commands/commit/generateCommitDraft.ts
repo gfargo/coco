@@ -187,14 +187,19 @@ function wrapLine(line: string, maxLen: number): string {
  * Truncate a single-line header to the given max column width at the last
  * word boundary that fits, so the conventional `type(scope):` prefix is
  * never cut into. Falls back to a hard cut if there is no word boundary
- * (e.g. a single very long token).
+ * (e.g. a single very long token) — the word-boundary search is restricted
+ * to the subject (after the `type(scope): ` prefix) so a long single-word
+ * subject can never be collapsed down to just the prefix.
  */
 function truncateHeader(header: string, maxLen: number): string {
   if (header.length <= maxLen) return header
 
+  const prefixMatch = header.match(/^[a-z]+(?:\([^)]*\))?!?:\s*/)
+  const subjectStart = prefixMatch ? prefixMatch[0].length : 0
+
   const truncated = header.slice(0, maxLen)
   const lastSpace = truncated.lastIndexOf(' ')
-  const cut = lastSpace > 0 ? truncated.slice(0, lastSpace) : truncated
+  const cut = lastSpace >= subjectStart ? truncated.slice(0, lastSpace) : truncated
   return cut.trimEnd()
 }
 
