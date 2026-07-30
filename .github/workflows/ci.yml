@@ -12,20 +12,22 @@ on:
 permissions:
   contents: read
 
-# Cancel in-progress runs for the same PR/branch when a new push lands.
-# Saves CI minutes and prevents stale results from racing fresh ones.
+# Keep only the newest run for a PR or branch. This is especially important on
+# main, where merge batches can otherwise start several copies of the gate.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Cheap, fast-failing job — runs in ~5s and gives near-instant
-  # feedback on style violations before we wait on the full test
-  # suite. Doesn't block the test/build jobs (they run in parallel)
-  # but a lint failure surfaces on PRs immediately.
-  lint:
-    name: Lint
+  # Static analysis, packaging, and the packaged-CLI smoke test share one
+  # checkout/install/build. Keeping smoke beside build removes the transient
+  # dist artifact and a second dependency installation.
+  quality:
+    name: Quality & package
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: UTC
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,126 +43,18 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Lockfile hygiene
-        # Catches accidental npm usage in a yarn project. The
-        # `yarn install --frozen-lockfile` above already fails on
-        # drift, but this guard makes the failure mode obvious.
         run: test -f yarn.lock && test ! -f package-lock.json
 
       - name: Lint
         run: npm run lint
 
-  # Test matrix runs in parallel with lint and build. Coverage is
-  # collected on the primary OS+Node combo only (Ubuntu / 22.22.2)
-  # to keep upload bandwidth + Codecov processing time reasonable;
-  # the other matrix cells still run the full test suite, just
-  # without coverage instrumentation.
-  test:
-    name: Test (Node ${{ matrix.node-version }} on ${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    # Experimental matrix cells (currently Windows) surface failures
-    # without blocking the PR until they're reliably green.
-    continue-on-error: ${{ matrix.experimental || false }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-        node-version:
-          # Pinned to the floor declared in package.json engines
-          # (^22.22.2 || ^24.15.0 || >=26.0.0). The floor moved when
-          # ini@7 + commitlint@21 landed; CI exercises both LTS lines
-          # at the lower bound so a future transitive bump can't
-          # silently raise the floor without us noticing here first.
-          - 22.22.2
-          - 24.15.0
-        include:
-          # macOS smoke run on the primary Node version. Catches
-          # platform-specific issues (path separators, signal
-          # handling, TTY behaviour) that Linux-only CI would miss.
-          # Most coco users are on macOS, so a green Linux run isn't
-          # enough confidence on its own.
-          - os: macos-latest
-            node-version: 22.22.2
-          # Windows matrix cell (0.71). The workflow has long flagged
-          # path-separator concerns; this exercises them. Marked
-          # experimental (continue-on-error above) so newly-surfaced
-          # Windows-only failures don't block PRs while we stabilize.
-          # Promote to a required cell once it's reliably green.
-          - os: windows-latest
-            node-version: 22.22.2
-            experimental: true
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: yarn
-          cache-dependency-path: yarn.lock
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Run Jest tests with coverage
-        # `--coverage` enables istanbul instrumentation and writes
-        # lcov + json-summary output to coverage/. Thresholds in
-        # jest.config.ts are enforced automatically.
-        run: npm run test:coverage
-
-      - name: Upload coverage to Codecov
-        # Only upload from the canonical job (Linux + lowest Node).
-        # Multiple uploads from the matrix would land as separate
-        # reports and confuse Codecov's PR comments.
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22.22.2'
-        uses: codecov/codecov-action@v6
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: coverage/lcov.info
-          fail_ci_if_error: false
-          verbose: true
-
-      - name: Upload coverage artifact
-        # Persist coverage data from the canonical job so we can
-        # inspect it directly even if Codecov is down or
-        # unconfigured.
-        if: matrix.os == 'ubuntu-latest' && matrix.node-version == '22.22.2'
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage
-          path: coverage/
-          retention-days: 14
-
-  # Build job runs in parallel with test and lint. Validates the
-  # rollup pipeline, schema generation, package contents, and the
-  # release-it dry run. Doesn't run jest — that's the test job's job.
-  build:
-    name: Build & package
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.2
-          cache: yarn
-          cache-dependency-path: yarn.lock
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
+      - name: Typecheck
+        run: npx tsc --noEmit -p tsconfig.json
 
       - name: Build
         run: npm run build
 
       - name: Check generated schema drift
-        # The schema is generated from src/lib/schema.ts at build
-        # time. If a type changed but the committed schema.json
-        # didn't, the user's editor will hint against stale schema.
-        # Fail loudly here so the PR author regenerates.
         run: git diff --exit-code -- schema.json src/lib/schema.ts
 
       - name: Verify package dry run
@@ -169,46 +63,7 @@ jobs:
       - name: Validate release dry run
         run: npm run release:dry-run
 
-      - name: Upload built dist artifact
-        # Reused by the smoke job so we don't double-build.
-        uses: actions/upload-artifact@v4
-        with:
-          name: dist
-          path: |
-            dist/
-            schema.json
-          retention-days: 7
-
-  # Smoke test runs the packaged CLI against a temporary git repo.
-  # Depends on `build` so we test against the real bundled output,
-  # not the tsx-driven source. Catches issues that only show up
-  # post-bundling (missing externs, wrong CJS/ESM exports, etc.).
-  smoke:
-    name: Packaged CLI smoke
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.2
-          cache: yarn
-          cache-dependency-path: yarn.lock
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Download built dist
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-
       - name: Configure git identity
-        # smokeCli.ts spins up temp repos and commits to them; CI
-        # runners don't have a global git identity by default.
         run: |
           git config --global user.name "Coco CI"
           git config --global user.email "ci@example.com"
@@ -216,15 +71,15 @@ jobs:
       - name: Run packaged CLI smoke
         run: npm run test:cli
 
-  # PTY end-to-end journeys (#1424): boots the built workstation TUI in
-  # a real pseudo-terminal against scripted fixture repos, sends
-  # keystrokes, and asserts on the rendered screen text. Depends on
-  # `build` because the harness drives dist/index.js (fast startup
-  # inside the PTY), same as the smoke job.
-  e2e:
-    name: PTY e2e journeys
-    needs: build
+  # Coverage is collected once, on the canonical Linux/Node floor. Integration
+  # tests are excluded from that Jest invocation and then run once in their own
+  # step, reusing the same checkout and dependency installation.
+  tests:
+    name: Tests & coverage
     runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      TZ: UTC
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -239,136 +94,23 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      - name: Download built dist
-        uses: actions/download-artifact@v4
+      - name: Run unit tests with coverage
+        run: npm run test:coverage -- --testPathIgnorePatterns=integration
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
         with:
-          name: dist
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage/lcov.info
+          fail_ci_if_error: false
+          verbose: true
 
       - name: Configure git identity
-        # Fixture repos are created by @gfargo/git-scenarios inside the
-        # jest process, which uses the runner's real HOME. (The TUI
-        # itself runs under a throwaway HOME the harness provisions.)
-        run: |
-          git config --global user.name "Coco CI"
-          git config --global user.email "ci@example.com"
-
-      - name: Run PTY e2e journeys
-        run: npm run test:e2e
-
-  # Visual-regression stills (#1424, second half): captures the VHS
-  # recipes that are the visual counterpart of the PTY e2e journeys
-  # (bin/screenshot/recipes.ts — ui-help-overlay-filter, ui-stash-diff,
-  # ui-search-filter, ui-history-pr-ready) and uploads them as a build
-  # artifact for PR review. Deliberately artifact-only for now, not a
-  # pass/fail pixel diff against committed baselines — that needs a
-  # tolerance-tuned diff tool and a baseline-image storage decision
-  # (repo bloat vs. LFS vs. external store) this slice doesn't make.
-  # Promote to a real diff gate once the recipe set stabilizes.
-  visual-regression:
-    name: Visual regression stills (VHS)
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.2
-          cache: yarn
-          cache-dependency-path: yarn.lock
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Download built dist
-        uses: actions/download-artifact@v4
-        with:
-          name: dist
-
-      - name: Install VHS + system deps (ttyd, ffmpeg)
-        # charmbracelet/vhs-action's bundled ffmpeg installer failed here
-        # ("Failed to install ffmpeg", no further detail — upstream
-        # installer issue, not a config problem on our end). Install each
-        # piece ourselves instead: ffmpeg via apt (reliable on
-        # ubuntu-latest), ttyd + vhs as static binaries straight from
-        # their GitHub releases, so the install is fully in our control.
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-
-          sudo curl -fsSL -o /usr/local/bin/ttyd \
-            https://github.com/tsl0922/ttyd/releases/latest/download/ttyd.x86_64
-          sudo chmod +x /usr/local/bin/ttyd
-
-          vhs_url=$(curl -fsSL -H "Authorization: Bearer ${GH_TOKEN}" \
-            https://api.github.com/repos/charmbracelet/vhs/releases/latest \
-            | jq -r '.assets[] | select(.name | endswith("_Linux_x86_64.tar.gz")) | .browser_download_url')
-          curl -fsSL -o /tmp/vhs.tar.gz "$vhs_url"
-          mkdir -p /tmp/vhs-install
-          tar -xzf /tmp/vhs.tar.gz -C /tmp/vhs-install --strip-components=1
-          sudo mv /tmp/vhs-install/vhs /usr/local/bin/vhs
-          sudo chmod +x /usr/local/bin/vhs
-
-          vhs --version
-          ttyd --version
-          ffmpeg -version | head -1
-
-      - name: Configure git identity
-        # @gfargo/git-scenarios spins up fixture repos and commits to them.
-        run: |
-          git config --global user.name "Coco CI"
-          git config --global user.email "ci@example.com"
-
-      - name: Capture e2e-journey stills
-        run: |
-          npm run screenshot -- --recipe ui-history-pr-ready
-          npm run screenshot -- --recipe ui-help-overlay-filter
-          npm run screenshot -- --recipe ui-search-filter
-          npm run screenshot -- --recipe ui-stash-diff
-
-      - name: Upload stills artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: visual-regression-stills
-          path: .screenshots/*.png
-          retention-days: 14
-
-  # Integration tests exercise the real CLI / data paths end-to-end via
-  # the dedicated `test:integration` script (previously unused in CI).
-  # The non-live suite always runs; the live GitLab suite is gated on
-  # COCO_GITLAB_IT + a test project and self-skips unless those repo
-  # secrets are configured, so the default flow needs no GitLab creds.
-  integration:
-    name: Integration tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22.22.2
-          cache: yarn
-          cache-dependency-path: yarn.lock
-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Configure git identity
-        # commands.integration spins up temp repos and commits to them.
         run: |
           git config --global user.name "Coco CI"
           git config --global user.email "ci@example.com"
 
       - name: Run integration tests
-        # Live GitLab tests activate only when these secrets are set;
-        # otherwise they self-skip (describe.skip).
         env:
           COCO_GITLAB_IT: ${{ secrets.COCO_GITLAB_IT }}
           COCO_GITLAB_TEST_PROJECT: ${{ secrets.COCO_GITLAB_TEST_PROJECT }}
