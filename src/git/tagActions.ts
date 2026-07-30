@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { rejectFlagLike } from './forgeArgGuards'
+import { resolveDefaultRemoteName } from './remoteResolution'
 
 export type TagActionResult = {
   ok: boolean
@@ -19,21 +20,6 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
       ok: false,
       message: (error as Error).message,
     }
-  }
-}
-
-/**
- * Resolve the remote to use for tag push/delete operations.
- * Prefers `origin`; falls back to the first configured remote.
- * Returns `undefined` when no remotes are configured.
- */
-async function resolveDefaultRemote(git: SimpleGit): Promise<string | undefined> {
-  try {
-    const remotes = (await git.getRemotes()).map((r) => r.name).filter(Boolean)
-    if (remotes.length === 0) return undefined
-    return remotes.includes('origin') ? 'origin' : remotes[0]
-  } catch {
-    return undefined
   }
 }
 
@@ -62,7 +48,7 @@ export function deleteLocalTag(git: SimpleGit, tagName: string): Promise<TagActi
 }
 
 export async function pushTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
-  const remote = await resolveDefaultRemote(git)
+  const remote = await resolveDefaultRemoteName(git)
   if (!remote) {
     return { ok: false, message: 'No remote configured — cannot push tag.' }
   }
@@ -76,7 +62,7 @@ export async function pushTag(git: SimpleGit, tagName: string): Promise<TagActio
 }
 
 export async function deleteRemoteTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
-  const remote = await resolveDefaultRemote(git)
+  const remote = await resolveDefaultRemoteName(git)
   if (!remote) {
     return { ok: false, message: 'No remote configured — cannot delete remote tag.' }
   }
