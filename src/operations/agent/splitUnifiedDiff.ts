@@ -9,6 +9,15 @@
  * a `+++ b/<path>` line is also treated as a boundary, since the two-line
  * pairing is the actual header signal in the unified-diff format.
  *
+ * The headerless pairing rule is scoped to segments that have no enclosing
+ * `diff --git` header: once a `diff --git` line has opened a segment, that
+ * segment only ends at the next `diff --git` line (or end of input) — a
+ * `--- `/`+++ ` pair appearing anywhere in its body (its own header, or a
+ * coincidental pair inside hunk content, e.g. a file whose text documents
+ * a patch) is never treated as a second boundary. Applying the pairing
+ * heuristic unconditionally throughout a `diff --git` segment previously
+ * caused a phantom split whose orphaned tail was silently dropped.
+ *
  * Neither rule ever treats a lone `---`/`+++`-prefixed line as a boundary
  * on its own. That avoids the #1699 misparse where a SQL or Lua comment
  * (`-- foo`) appears as a deleted content line and its text happens to
@@ -95,10 +104,12 @@ export function splitUnifiedDiff(
   const results: FileDiff[] = []
   let currentLines: string[] = []
   let currentFile: string | undefined
-  // True immediately after a `diff --git` line until its own `--- `/`+++ `
-  // header pair (if any) has been consumed, so that pair isn't mistaken
-  // for a second, headerless file boundary within the same segment.
-  let awaitingGitHeaderBody = false
+  // True for the whole duration of a segment opened by a `diff --git` line
+  // (until the next `diff --git` line or end of input). While true, the
+  // headerless `--- `/`+++ ` pairing rule never fires — the segment is
+  // already unambiguously bounded, so any such pair in the body (its own
+  // header, or coincidental content) is just body content.
+  let inGitHeaderSegment = false
 
   function flush() {
     if (currentLines.length === 0) return
@@ -137,27 +148,23 @@ export function splitUnifiedDiff(
       flush()
       currentLines = [line]
       currentFile = pathFromDiffGitHeader(line)
-      awaitingGitHeaderBody = true
+      inGitHeaderSegment = true
       continue
     }
 
     // A `--- a/<path>` line immediately followed by `+++ b/<path>` is the
     // real unified-diff header pair. Checking both lines together (rather
     // than either line alone) is what keeps this from firing on a lone
-    // `---`/`+++`-prefixed content line (see #1699 note above).
+    // `---`/`+++`-prefixed content line (see #1699 note above). It is only
+    // treated as a segment boundary outside a `diff --git` segment — inside
+    // one, the segment is already bounded by the next `diff --git` line, so
+    // the pair (its own header, or a coincidental one in the body) is just
+    // absorbed as content.
     const isHeaderPair =
       line.startsWith('--- ') && (lines[i + 1] ?? '').startsWith('+++ ')
 
-    if (isHeaderPair && awaitingGitHeaderBody) {
-      // This is the header pair belonging to the `diff --git` segment we
-      // just started — absorb it, don't treat it as a new boundary.
-      awaitingGitHeaderBody = false
-      currentLines.push(line)
-      continue
-    }
-
-    if (isHeaderPair) {
-      // No preceding `diff --git` — this is a headerless plain unified
+    if (isHeaderPair && !inGitHeaderSegment) {
+      // No enclosing `diff --git` — this is a headerless plain unified
       // diff's file boundary.
       flush()
       currentLines = [line]

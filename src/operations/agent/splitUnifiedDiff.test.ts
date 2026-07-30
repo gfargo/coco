@@ -139,6 +139,30 @@ const HEADERLESS_SQL_WITH_COMMENT_DIFF = `\
    name TEXT NOT NULL
  );`
 
+/**
+ * A `diff --git`-bounded file whose hunk body happens to contain a second
+ * `--- a/<path>` / `+++ b/<path>` pair as literal content: a single line
+ * changes from `-- a/foo` to `++ b/foo`, which the unified-diff format
+ * renders as a removed line "--- a/foo" (the `-` prefix plus content
+ * starting with `-- `) immediately followed by an added line "+++ b/foo"
+ * (the `+` prefix plus content starting with `++ `) — textually
+ * indistinguishable from a real headerless boundary pair. The segment is
+ * already unambiguously bounded by the enclosing `diff --git` header, so
+ * this coincidental pair must be absorbed as body content, not mistaken for
+ * a second boundary that would orphan (and silently drop) the remaining
+ * lines (PR #1961 re-review).
+ */
+const GIT_HEADER_WITH_EMBEDDED_PAIR_DIFF = `\
+diff --git a/docs/example.diff b/docs/example.diff
+index aaaaaaa..bbbbbbb 100644
+--- a/docs/example.diff
++++ b/docs/example.diff
+@@ -1,3 +1,3 @@
+ Example unified diff syntax:
+--- a/foo
++++ b/foo
+ See the spec for details.`
+
 // ─── tests ────────────────────────────────────────────────────────────────────
 
 describe('splitUnifiedDiff', () => {
@@ -247,6 +271,17 @@ index abc..def 100644
     expect(result[0].file).toBe('db/schema.sql')
     expect(result[0].diff).toContain('-- This is a top-level SQL comment')
     expect(result[0].diff).toContain('-- Updated SQL comment')
+  })
+
+  it('does NOT split on a coincidental `--- `/`+++ ` pair inside a `diff --git` segment body (PR #1961 re-review)', () => {
+    const result = splitUnifiedDiff(GIT_HEADER_WITH_EMBEDDED_PAIR_DIFF, SIMPLE_TOKENIZER)
+    // Must be exactly one file — the embedded pair must not produce a
+    // phantom split that orphans (and drops) the trailing content.
+    expect(result).toHaveLength(1)
+    expect(result[0].file).toBe('docs/example.diff')
+    expect(result[0].diff).toContain('--- a/foo')
+    expect(result[0].diff).toContain('+++ b/foo')
+    expect(result[0].diff).toContain('See the spec for details.')
   })
 
   it('handles a multi-file diff with mixed file types without phantom splits', () => {
