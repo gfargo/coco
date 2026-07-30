@@ -84,6 +84,7 @@ describe('LOG_INK_KEY_BINDINGS collision guard', () => {
       'push-tag',
       'drop-stash',
       'undo-drop-stash',
+      'undo-last-action',
       'apply-stash',
       'apply-stash-index',
       'pop-stash',

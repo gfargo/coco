@@ -810,6 +810,24 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
         || 'Undo the last git operation using the reflog.',
     },
     {
+      // OSS-1606 — session-scoped undo stack, dispatched by the `gu`
+      // chord (inkInput.ts). Distinct from `global-undo` above (the
+      // reflog-powered single-shot `z` safety net for ANY operation):
+      // this pops MULTIPLE recorded steps, but ONLY the ones the
+      // workstation itself just performed with a known real inverse
+      // (delete-branch, drop-stash, reset-to-commit, delete-tag — see
+      // `capturedUndoEntries` in useWorkflowAction.ts). Restorative by
+      // construction — recreate a ref / restore a stash / reset back to
+      // a recorded sha — so no confirmation gate, same reasoning as
+      // `undo-drop-stash` below.
+      id: 'undo-last-action',
+      key: '',
+      label: 'Undo last action',
+      description: 'Undo the most recent invertible destructive action from this session (branch delete, stash drop, reset, or tag delete).',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // #0.71 — submodule maintenance actions. All three are scoped
       // per-view in inkInput (active only when activeView ===
       // 'submodules') so their single-letter keys (i / u / s) stay free

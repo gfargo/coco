@@ -17,7 +17,10 @@ export const getRepo = (baseDir?: string) => {
   try {
     git = baseDir ? simpleGit(baseDir) : simpleGit()
   } catch (e) {
-    console.log('Error initializing git repo', e)
+    const message = e instanceof Error ? e.message : String(e)
+    process.stderr.write(
+      `Error initializing git repo${baseDir ? ` at ${baseDir}` : ''}: ${message}\n`
+    )
     commandExit(1)
   }
 

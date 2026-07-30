@@ -1,33 +1,23 @@
 import { findOpenAiCompatiblePreset, OPENAI_COMPATIBLE_PRESETS } from './openAiCompatiblePresets'
 
 describe('OPENAI_COMPATIBLE_PRESETS', () => {
-  it('includes OpenRouter, Groq, LM Studio, vLLM, and a custom fallback', () => {
+  // OpenRouter/Groq/LM Studio/vLLM moved out to first-class providers
+  // (#OSS-1623) — only the generic custom-URL fallback remains here.
+  it('only has the custom fallback preset', () => {
     const ids = OPENAI_COMPATIBLE_PRESETS.map((preset) => preset.id)
-    expect(ids).toEqual(['openrouter', 'groq', 'lmstudio', 'vllm', 'custom'])
+    expect(ids).toEqual(['custom'])
   })
 
-  it('gives fixed-endpoint presets a baseURL and self-hosted ones none', () => {
+  it('the custom preset has no fixed baseURL and no required API key', () => {
     const byId = Object.fromEntries(OPENAI_COMPATIBLE_PRESETS.map((p) => [p.id, p]))
-    expect(byId.openrouter.baseURL).toBe('https://openrouter.ai/api/v1')
-    expect(byId.groq.baseURL).toBeTruthy()
-    expect(byId.lmstudio.baseURL).toBe('http://localhost:1234/v1')
-    expect(byId.vllm.baseURL).toBeUndefined()
     expect(byId.custom.baseURL).toBeUndefined()
-  })
-
-  it('only requires an API key for the hosted presets', () => {
-    const byId = Object.fromEntries(OPENAI_COMPATIBLE_PRESETS.map((p) => [p.id, p]))
-    expect(byId.openrouter.requiresApiKey).toBe(true)
-    expect(byId.groq.requiresApiKey).toBe(true)
-    expect(byId.lmstudio.requiresApiKey).toBe(false)
-    expect(byId.vllm.requiresApiKey).toBe(false)
     expect(byId.custom.requiresApiKey).toBe(false)
   })
 })
 
 describe('findOpenAiCompatiblePreset', () => {
   it('finds a preset by id', () => {
-    expect(findOpenAiCompatiblePreset('groq')?.label).toBe('Groq')
+    expect(findOpenAiCompatiblePreset('custom')?.label).toBe('Custom OpenAI-compatible URL')
   })
 
   it('returns undefined for an unknown id', () => {

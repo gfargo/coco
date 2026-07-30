@@ -5,6 +5,11 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 
+// Each test spawns a real Node subprocess that transpiles and imports the
+// validator module via tsx. Under heavy parallel CI load (esp. macOS
+// runners) the default 5s jest timeout is too tight for that cold start.
+jest.setTimeout(15000)
+
 type ValidationResult = {
   valid: boolean
   errors: string[]

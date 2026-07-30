@@ -1,6 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { loadForgeOverview } from './forgeLoad'
 import {
+  compactGhError,
   defaultGhRunner,
   describeGhStatus,
   getGhStatus,
@@ -168,10 +169,36 @@ export async function getPullRequestOverview(
       try {
         const output = await runner(['pr', 'view', '--json', PULL_REQUEST_VIEW_JSON_FIELDS])
         return { currentPullRequest: parsePullRequestInfo(output) }
-      } catch {
-        return {
-          message: currentBranch ? `No pull request found for ${currentBranch}.` : 'No current branch.',
+      } catch (error) {
+        // execFile attaches gh's real stderr complaint here; `.message` just
+        // echoes the command line. Prefer stderr, same precedence as
+        // `resolveForgeActionError` (forgeErrors.ts).
+        const stderr = (error as { stderr?: unknown })?.stderr
+        const raw =
+          (typeof stderr === 'string' && stderr.trim() ? stderr : undefined) ||
+          (error instanceof Error ? error.message : '')
+        // Strip the echoed "Command failed: gh ..." line the same way
+        // `compactCliError` does, so a gh crash with no real stderr (just the
+        // echoed command) counts as "no useful error text" below rather than
+        // being treated as a genuine failure message.
+        const meaningful = raw
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean)
+          .filter((line) => !line.startsWith('Command failed:'))
+          .join('\n')
+        // gh exits non-zero with "no pull requests found for branch ..." (or
+        // just "no pull requests found" in detached HEAD) when the branch
+        // genuinely has no PR — that's the only case that should map to the
+        // friendly message. Every other failure (rate limit, network, auth
+        // loss, gh crash) should surface its real error instead of being
+        // reported as "no PR found".
+        if (!meaningful || /no pull requests found/i.test(meaningful)) {
+          return {
+            message: currentBranch ? `No pull request found for ${currentBranch}.` : 'No current branch.',
+          }
         }
+        return { message: compactGhError(raw).message }
       }
     },
     fetchErrorMessage: (currentBranch) =>

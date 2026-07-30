@@ -16,6 +16,18 @@ jest.mock('./giteaCli', () => ({
   ...jest.requireActual('./giteaCli'),
   makeGiteaRunner: jest.fn(() => mockGiteaRunner),
 }))
+jest.mock('./bitbucketServerPullRequestActions')
+jest.mock('./bitbucketServerIssueActions')
+jest.mock('./bitbucketServerListData', () => ({
+  ...jest.requireActual('./bitbucketServerListData'),
+  getBitbucketServerPullRequestList: jest.fn(),
+  getBitbucketServerIssueList: jest.fn(),
+}))
+jest.mock('./bitbucketServerDetailData')
+jest.mock('./bitbucketServerCli', () => ({
+  ...jest.requireActual('./bitbucketServerCli'),
+  makeBitbucketServerRunner: jest.fn(() => mockBitbucketServerRunner),
+}))
 
 import { SimpleGit } from 'simple-git'
 import * as mr from './mergeRequestActions'
@@ -26,6 +38,10 @@ import * as giteaPR from './giteaPullRequestActions'
 import * as giteaIssues from './giteaIssueActions'
 import * as giteaLists from './giteaListData'
 import * as giteaDetail from './giteaDetailData'
+import * as bbsPR from './bitbucketServerPullRequestActions'
+import * as bbsIssues from './bitbucketServerIssueActions'
+import * as bbsLists from './bitbucketServerListData'
+import * as bbsDetail from './bitbucketServerDetailData'
 import { getForgeActions } from './forgeActions'
 import { defaultGlabRunner } from './glabCli'
 
@@ -35,6 +51,7 @@ const fakeGit = {} as unknown as SimpleGit
 // jest's hoisting allowlist permits `mock`-prefixed identifiers to be
 // referenced before the factory itself is (also hoisted) initialized.
 const mockGiteaRunner = jest.fn()
+const mockBitbucketServerRunner = jest.fn()
 
 describe('forge GitLab dispatch (#0.70)', () => {
   beforeEach(() => jest.clearAllMocks())
@@ -170,5 +187,99 @@ describe('forge Gitea dispatch (#826)', () => {
     await forge.getPullRequestList(fakeGit, {}).catch(() => undefined)
     expect(giteaLists.getGiteaPullRequestList).not.toHaveBeenCalled()
     expect(giteaPR.mergeGiteaPullRequestByNumber).not.toHaveBeenCalled()
+  })
+})
+
+describe('forge Bitbucket Server dispatch (#1616)', () => {
+  beforeEach(() => jest.clearAllMocks())
+
+  it('routes PR mutations to the bitbucket-server implementations, binding a host-bound runner', async () => {
+    const forge = getForgeActions('bitbucket-server', {
+      bitbucketServerPath: 'TEAM/repo',
+      bitbucketServerHost: 'bb.acme.com',
+    })
+    await forge.mergePullRequestByNumber(5, 'squash')
+    await forge.commentPullRequestByNumber(5, 'hi')
+    await forge.addPullRequestLabel(5, 'bug')
+    await forge.addPullRequestAssignee(5, 'bob')
+    await forge.approvePullRequestByNumber(5)
+    await forge.closePullRequestByNumber(5)
+    await forge.requestChangesPullRequestByNumber(5, 'fix')
+    await forge.createPullRequest({ base: 'main', head: 'f', title: 'T', body: 'B' })
+
+    expect(bbsPR.mergeBitbucketServerPullRequestByNumber).toHaveBeenCalledWith(
+      'TEAM/repo', 5, 'squash', mockBitbucketServerRunner
+    )
+    expect(bbsPR.commentBitbucketServerPullRequestByNumber).toHaveBeenCalledWith(
+      'TEAM/repo', 5, 'hi', mockBitbucketServerRunner
+    )
+    expect(bbsPR.addBitbucketServerPullRequestLabel).toHaveBeenCalled()
+    expect(bbsPR.addBitbucketServerPullRequestReviewer).toHaveBeenCalledWith(
+      'TEAM/repo', 5, 'bob', mockBitbucketServerRunner
+    )
+    expect(bbsPR.approveBitbucketServerPullRequestByNumber).toHaveBeenCalledWith(
+      'TEAM/repo', 5, mockBitbucketServerRunner
+    )
+    expect(bbsPR.closeBitbucketServerPullRequestByNumber).toHaveBeenCalledWith(
+      'TEAM/repo', 5, mockBitbucketServerRunner
+    )
+    expect(bbsPR.requestChangesBitbucketServerPullRequestByNumber).toHaveBeenCalledWith(
+      'TEAM/repo', 5, 'fix', mockBitbucketServerRunner
+    )
+    expect(bbsPR.createBitbucketServerPullRequest).toHaveBeenCalledWith(
+      'TEAM/repo',
+      { base: 'main', head: 'f', title: 'T', body: 'B' },
+      mockBitbucketServerRunner
+    )
+  })
+
+  it('surfaces graceful unsupported results for diff fetch and checkout', async () => {
+    const forge = getForgeActions('bitbucket-server', { bitbucketServerPath: 'TEAM/repo' })
+    const diff = await forge.getPullRequestDiffByNumber(5)
+    const checkout = await forge.checkoutPullRequestByNumber(5)
+    expect(diff.ok).toBe(false)
+    expect(checkout.ok).toBe(false)
+  })
+
+  it('routes issue mutations to the bitbucket-server unsupported stubs', async () => {
+    const forge = getForgeActions('bitbucket-server', { bitbucketServerPath: 'TEAM/repo' })
+    await forge.commentIssue(7, 'hi')
+    await forge.addIssueLabel(7, 'bug')
+    await forge.addIssueAssignee(7, 'bob')
+    await forge.closeIssue(7)
+    await forge.reopenIssue(7)
+    await forge.createIssue({ title: 't', body: 'b' })
+
+    expect(bbsIssues.commentBitbucketServerIssue).toHaveBeenCalled()
+    expect(bbsIssues.addBitbucketServerIssueLabel).toHaveBeenCalled()
+    expect(bbsIssues.addBitbucketServerIssueAssignee).toHaveBeenCalled()
+    expect(bbsIssues.closeBitbucketServerIssue).toHaveBeenCalled()
+    expect(bbsIssues.reopenBitbucketServerIssue).toHaveBeenCalled()
+    expect(bbsIssues.createBitbucketServerIssue).toHaveBeenCalled()
+  })
+
+  it('routes lists + detail to the bitbucket-server implementations, binding the project path', async () => {
+    const forge = getForgeActions('bitbucket-server', {
+      bitbucketServerPath: 'TEAM/repo',
+      bitbucketServerHost: 'bb.acme.com',
+    })
+    await forge.getPullRequestList(fakeGit, {})
+    await forge.getIssueList(fakeGit, {})
+    await forge.getPullRequestDetail(3)
+    await forge.getIssueDetail(4)
+
+    expect(bbsLists.getBitbucketServerPullRequestList).toHaveBeenCalledWith(fakeGit, {})
+    expect(bbsLists.getBitbucketServerIssueList).toHaveBeenCalledWith(fakeGit, {})
+    expect(bbsDetail.getBitbucketServerPullRequestDetail).toHaveBeenCalledWith(
+      'TEAM/repo', 3, mockBitbucketServerRunner, 'bb.acme.com'
+    )
+    expect(bbsDetail.getBitbucketServerIssueDetail).toHaveBeenCalled()
+  })
+
+  it('does not call any bitbucket-server implementation for a github repo', async () => {
+    const forge = getForgeActions('github')
+    await forge.getPullRequestList(fakeGit, {}).catch(() => undefined)
+    expect(bbsLists.getBitbucketServerPullRequestList).not.toHaveBeenCalled()
+    expect(bbsPR.mergeBitbucketServerPullRequestByNumber).not.toHaveBeenCalled()
   })
 })

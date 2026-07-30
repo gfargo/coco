@@ -249,6 +249,61 @@ describe('renderHistoryInspector', () => {
       expect(lines.join('\n')).not.toContain('[Actions]')
     })
   })
+
+  describe('Notes tab (#OSS-2057)', () => {
+    function renderNotes(
+      opts: { tabbed: boolean; commitNoteByHash?: Map<string, string | undefined> } = { tabbed: false }
+    ): ReactElement {
+      return renderHistoryInspector(
+        createElement,
+        components,
+        makeState({ inspectorTab: 'notes', selectedFileIndex: 0 }),
+        { commitNoteByHash: opts.commitNoteByHash },
+        createLogInkContextStatus('ready'),
+        HISTORY_DETAIL,
+        false,
+        undefined,
+        false,
+        60,
+        opts.tabbed,
+        theme,
+        true
+      )
+    }
+
+    it('the tab header shows [Notes] alongside [Inspector] and [Actions]', () => {
+      const lines = renderToLines(renderNotes(), Text, Box)
+      const header = lines.find((l) => l.includes('[Notes]'))
+      expect(header).toBeDefined()
+      expect(header).toContain('Inspector')
+      expect(header).toContain('Actions')
+    })
+
+    it('shows a loading placeholder before the note has been fetched (key absent from the cache)', () => {
+      const text = renderToLines(renderNotes({ tabbed: true }), Text, Box).join('\n')
+      expect(text).toContain('Loading note')
+    })
+
+    it('shows the note body once loaded', () => {
+      const cache = new Map([[HISTORY_DETAIL.hash, 'blocked on #42']])
+      const text = renderToLines(renderNotes({ tabbed: true, commitNoteByHash: cache }), Text, Box).join('\n')
+      expect(text).toContain('blocked on #42')
+    })
+
+    it('shows the empty-state copy when the fetch found no note (key present, value undefined)', () => {
+      const cache = new Map<string, string | undefined>([[HISTORY_DETAIL.hash, undefined]])
+      const text = renderToLines(renderNotes({ tabbed: true, commitNoteByHash: cache }), Text, Box).join('\n')
+      expect(text).toContain('No note on this commit')
+    })
+
+    it('tall mode stacks the notes section alongside the inspector and actions sections', () => {
+      const cache = new Map([[HISTORY_DETAIL.hash, 'blocked on #42']])
+      const text = renderToLines(renderNotes({ tabbed: false, commitNoteByHash: cache }), Text, Box).join('\n')
+      expect(text).toContain('blocked on #42')
+      expect(text).toContain('Changed files:')
+      expect(text).toContain('Actions:')
+    })
+  })
 })
 
 describe('renderCommitDiffDetail', () => {

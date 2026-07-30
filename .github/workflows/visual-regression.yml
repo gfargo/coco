@@ -1,0 +1,90 @@
+name: Visual Regression
+
+# Captures are review artifacts, not a pass/fail pixel gate. Generate them only
+# on demand or when a reviewer adds the `visual-ci` label to a pull request.
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-regression-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  capture:
+    name: VHS stills
+    if: github.event_name != 'pull_request' || github.event.label.name == 'visual-ci'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TZ: UTC
+      VHS_VERSION: 0.11.0
+      TTYD_VERSION: 1.7.7
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+          cache: yarn
+          cache-dependency-path: yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Build packaged CLI
+        run: npm run build
+
+      - name: Install pinned VHS dependencies
+        run: |
+          set -euo pipefail
+
+          if ! command -v ffmpeg >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+
+          curl -fsSL -o /tmp/ttyd \
+            "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64"
+          echo "8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55  /tmp/ttyd" \
+            | sha256sum -c -
+          sudo install -m 0755 /tmp/ttyd /usr/local/bin/ttyd
+
+          curl -fsSL -o /tmp/vhs.tar.gz \
+            "https://github.com/charmbracelet/vhs/releases/download/v${VHS_VERSION}/vhs_${VHS_VERSION}_Linux_x86_64.tar.gz"
+          echo "99cb634587eaae0473c1ea377db80c3a048c27f99fe0a7febb1a1e8cb7ee5009  /tmp/vhs.tar.gz" \
+            | sha256sum -c -
+          mkdir -p /tmp/vhs-install
+          tar -xzf /tmp/vhs.tar.gz -C /tmp/vhs-install --strip-components=1
+          sudo install -m 0755 /tmp/vhs-install/vhs /usr/local/bin/vhs
+
+          vhs --version
+          ttyd --version
+          ffmpeg -version
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "Coco CI"
+          git config --global user.email "ci@example.com"
+
+      - name: Capture e2e-journey stills
+        run: |
+          npm run screenshot -- --recipe ui-history-pr-ready
+          npm run screenshot -- --recipe ui-help-overlay-filter
+          npm run screenshot -- --recipe ui-search-filter
+          npm run screenshot -- --recipe ui-stash-diff
+
+      - name: Upload stills artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-regression-stills
+          path: .screenshots/*.png
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 3

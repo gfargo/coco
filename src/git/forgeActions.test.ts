@@ -26,6 +26,7 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
   'addIssueAssignee',
   'closeIssue',
   'reopenIssue',
+  'createIssue',
 ]
 
 describe('getForgeActions (#0.70)', () => {
@@ -54,6 +55,8 @@ describe('getForgeActions (#0.70)', () => {
     const forge = getForgeActions('bitbucket', {})
     expect((await forge.getPullRequestDetail(1)).ok).toBe(false)
     expect((await forge.getIssueDetail(1)).ok).toBe(false)
+    expect((await forge.getPullRequestDiffByNumber(1)).ok).toBe(false)
+    expect((await forge.createIssue({ title: 't', body: 'b' })).ok).toBe(false)
   })
 
   it('Gitea detail loaders fail gracefully without a resolved project path', async () => {
@@ -61,6 +64,7 @@ describe('getForgeActions (#0.70)', () => {
     expect((await forge.getPullRequestDetail(1)).ok).toBe(false)
     expect((await forge.getIssueDetail(1)).ok).toBe(false)
     expect((await forge.getPullRequestDiffByNumber(1)).ok).toBe(false)
+    expect((await forge.createIssue({ title: 't', body: 'b' })).ok).toBe(false)
   })
 
   it('Gitea checkout is a graceful unsupported stub', async () => {
@@ -80,5 +84,53 @@ describe('getForgeActions (#0.70)', () => {
   it('GitLab markPullRequestReadyByNumber fails gracefully without a resolved project path (#1933)', async () => {
     const forge = getForgeActions('gitlab', {})
     expect((await forge.markPullRequestReadyByNumber(1)).ok).toBe(false)
+  })
+
+  it('Bitbucket by-number and issue mutations fail gracefully without a resolved project path', async () => {
+    const forge = getForgeActions('bitbucket', {})
+    const results = await Promise.all([
+      forge.commentPullRequestByNumber(1, 'x'),
+      forge.addPullRequestAssignee(1, 'u'),
+      forge.mergePullRequestByNumber(1, 'merge'),
+      forge.closePullRequestByNumber(1),
+      forge.approvePullRequestByNumber(1),
+      forge.requestChangesPullRequestByNumber(1, 'x'),
+      forge.commentIssue(1, 'x'),
+      forge.addIssueAssignee(1, 'u'),
+      forge.closeIssue(1),
+      forge.reopenIssue(1),
+    ])
+    for (const result of results) {
+      expect(result.ok).toBe(false)
+      expect(result.message).toMatch(/No Bitbucket project resolved/)
+    }
+  })
+
+  it('Gitea by-number and issue mutations fail gracefully without a resolved project path', async () => {
+    const forge = getForgeActions('gitea', {})
+    const results = await Promise.all([
+      forge.commentPullRequestByNumber(1, 'x'),
+      forge.addPullRequestLabel(1, 'l'),
+      forge.addPullRequestAssignee(1, 'u'),
+      forge.mergePullRequestByNumber(1, 'merge'),
+      forge.closePullRequestByNumber(1),
+      forge.approvePullRequestByNumber(1),
+      forge.requestChangesPullRequestByNumber(1, 'x'),
+      forge.commentIssue(1, 'x'),
+      forge.addIssueLabel(1, 'l'),
+      forge.addIssueAssignee(1, 'u'),
+      forge.closeIssue(1),
+      forge.reopenIssue(1),
+    ])
+    for (const result of results) {
+      expect(result.ok).toBe(false)
+      expect(result.message).toMatch(/No Gitea project resolved/)
+    }
+  })
+
+  it('Gitea mutations fail gracefully with a path but no resolved host, without throwing', async () => {
+    const forge = getForgeActions('gitea', { giteaPath: 'o/r' })
+    await expect(forge.mergePullRequestByNumber(1, 'merge')).resolves.toMatchObject({ ok: false })
+    await expect(forge.getPullRequestDetail(1)).resolves.toMatchObject({ ok: false })
   })
 })

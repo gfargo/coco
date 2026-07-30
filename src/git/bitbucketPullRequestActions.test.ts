@@ -69,10 +69,23 @@ describe('createBitbucketPullRequest (1238)', () => {
 })
 
 describe('openBitbucketPullRequest (1238)', () => {
-  it('returns the URL to open in the browser', () => {
-    const result = openBitbucketPullRequest('https://bitbucket.org/ws/repo/pull-requests/1')
-    expect(result.ok).toBe(true)
-    expect(result.url).toBe('https://bitbucket.org/ws/repo/pull-requests/1')
+  it('invokes the opener with the URL and returns ok:true on success', async () => {
+    const opened: string[] = []
+    const runner = async (u: string) => { opened.push(u) }
+    const result = await openBitbucketPullRequest('https://bitbucket.org/ws/repo/pull-requests/1', runner)
+    expect(opened).toEqual(['https://bitbucket.org/ws/repo/pull-requests/1'])
+    expect(result).toEqual({
+      ok: true,
+      message: 'Opened pull request: https://bitbucket.org/ws/repo/pull-requests/1',
+      url: 'https://bitbucket.org/ws/repo/pull-requests/1',
+    })
+  })
+
+  it('returns ok:false when the opener rejects', async () => {
+    const runner = async () => { throw new Error('no browser found') }
+    const result = await openBitbucketPullRequest('https://bitbucket.org/ws/repo/pull-requests/1', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toBe('no browser found')
   })
 })
 

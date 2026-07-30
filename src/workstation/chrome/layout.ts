@@ -146,6 +146,16 @@ export const LAYOUT_RAIL_BELOW = 100
 export const LAYOUT_SINGLE_PANE_BELOW = LAYOUT_RAIL_BELOW
 
 /**
+ * Hard floor for the main panel in three-pane mode. The sidebar and
+ * detail panes are budgeted against `columns - LAYOUT_MAIN_PANEL_MIN_WIDTH`
+ * (sidebar shrinking first, since it's the lower-priority pane) so the
+ * three widths always sum to `columns` — see `getLogInkLayout` (#1855,
+ * the help overlay + focused sidebar combination used to push the sum
+ * past `columns`).
+ */
+export const LAYOUT_MAIN_PANEL_MIN_WIDTH = 20
+
+/**
  * Sidebar at-rest size targets, tier-aware. The sidebar's purpose at
  * rest is to surface enough room for the most common tab content
  * (status / branches / tags / stashes / worktrees) without dominating
@@ -186,6 +196,26 @@ const SIDEBAR_AT_REST_BY_TIER: Record<LogInkLayoutDensity, SidebarAtRestConfig> 
 function calcSidebarAtRestWidth(columns: number, density: LogInkLayoutDensity): number {
   const config = SIDEBAR_AT_REST_BY_TIER[density]
   return Math.max(config.min, Math.min(config.max, Math.floor(columns * config.fraction)))
+}
+
+// Budgets detail + sidebar against `columns` so the main panel keeps its
+// floor and the three widths always sum to `columns`. Detail is clamped
+// first (it's what the help overlay / focused inspector is trying to make
+// readable); the sidebar — lower priority — takes whatever budget remains,
+// down to 0.
+function allocateThreePaneWidths(
+  columns: number,
+  detailWidth: number,
+  sidebarWidth: number,
+): { sidebarWidth: number; mainPanelWidth: number; detailWidth: number } {
+  const sideBudget = columns - LAYOUT_MAIN_PANEL_MIN_WIDTH
+  const allocDetailWidth = Math.min(detailWidth, sideBudget)
+  const allocSidebarWidth = Math.min(sidebarWidth, Math.max(0, sideBudget - allocDetailWidth))
+  return {
+    sidebarWidth: allocSidebarWidth,
+    mainPanelWidth: columns - allocSidebarWidth - allocDetailWidth,
+    detailWidth: allocDetailWidth,
+  }
 }
 
 export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
@@ -252,18 +282,14 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
 
   // Single-pane mode: exactly one pane renders, full-width; the other
   // two are hidden (width 0), not railed. Above the breakpoint the
-  // three panels tile flush across the terminal.
+  // three panels tile flush across the terminal via `allocateThreePaneWidths`.
   const paneWidths = singlePane
     ? {
         sidebarWidth: visiblePane === 'sidebar' ? columns : 0,
         mainPanelWidth: visiblePane === 'main' ? columns : 0,
         detailWidth: visiblePane === 'inspector' ? columns : 0,
       }
-    : {
-        sidebarWidth,
-        mainPanelWidth: Math.max(20, columns - sidebarWidth - detailWidth),
-        detailWidth,
-      }
+    : allocateThreePaneWidths(columns, detailWidth, sidebarWidth)
 
   return {
     bodyRows: Math.max(8, rows - 5),

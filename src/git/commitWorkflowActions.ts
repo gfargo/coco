@@ -1,6 +1,5 @@
 import { Arguments } from 'yargs'
 import { SimpleGit } from 'simple-git'
-import { handler as commitHandler } from '../commands/commit/handler'
 import { CommitOptions } from '../commands/commit/config'
 import { generateCommitDraft } from '../commands/commit/generateCommitDraft'
 import {
@@ -19,7 +18,7 @@ import {
 import { resolveDynamicService } from '../lib/langchain/utils/dynamicModels'
 import { getLlm } from '../lib/langchain/utils/getLlm'
 import { loadConfig } from '../lib/config/utils/loadConfig'
-import { createCommit, PreCommitHookError } from '../lib/simple-git/createCommit'
+import { PreCommitHookError } from '../lib/simple-git/createCommit'
 import { getRepo } from '../lib/simple-git/getRepo'
 import { isCommandExitError } from '../lib/utils/commandExit'
 import { Logger } from '../lib/utils/logger'
@@ -40,12 +39,6 @@ export type CommitWorkflowResult = {
    * confirmation when this is set.
    */
   cancelled?: boolean
-}
-
-type CommitWorkflowInput = {
-  action: CommitWorkflowAction
-  git?: SimpleGit
-  noVerify?: boolean
 }
 
 type CommitWorkflowArgv = Arguments<CommitOptions> & {
@@ -125,56 +118,6 @@ function formatCommitFailure(error: unknown): CommitWorkflowResult {
     ok: false,
     message: details[0] || 'Commit action failed.',
     details: details.slice(1, 6),
-  }
-}
-
-export async function runCommitWorkflow({
-  action,
-  git = getRepo(),
-  noVerify = false,
-}: CommitWorkflowInput): Promise<CommitWorkflowResult> {
-  const argv = createCommitWorkflowArgv(action)
-  argv.noVerify = noVerify
-  const logger = new Logger({ silent: true })
-  const config = loadConfig<CommitOptions, CommitWorkflowArgv>(argv)
-  const originalWrite = process.stdout.write.bind(process.stdout)
-  let output = ''
-
-  process.stdout.write = ((chunk: string | Uint8Array, ...args: unknown[]) => {
-    output += typeof chunk === 'string' ? chunk : chunk.toString()
-
-    const callback = args.find((arg): arg is (error?: Error | null) => void => typeof arg === 'function')
-    callback?.()
-
-    return true
-  }) as typeof process.stdout.write
-
-  try {
-    await commitHandler(argv, logger)
-    const message = output.trim()
-
-    if (action === 'commit' && message) {
-      await createCommit(message, git, undefined, { noVerify: config.noVerify || false })
-    }
-
-    return {
-      ok: true,
-      message: formatCommitWorkflowMessage(action, output),
-    }
-  } catch (error) {
-    if (isCommandExitError(error)) {
-      const lines = compactOutputLines(output || error.message)
-
-      return {
-        ok: error.code === 0,
-        message: lines[0] || error.message,
-        details: lines.slice(1, 6),
-      }
-    }
-
-    return formatCommitFailure(error)
-  } finally {
-    process.stdout.write = originalWrite
   }
 }
 
