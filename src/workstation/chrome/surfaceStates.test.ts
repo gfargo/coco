@@ -4,6 +4,7 @@ import {
     formatLogInkComposeEmpty,
     formatLogInkHistoryEmpty,
     formatLogInkLoading,
+    formatLogInkNotesEmpty,
     formatLogInkPullRequestDiffEmpty,
     formatLogInkPullRequestDiffError,
     formatLogInkStashEmpty,
@@ -100,6 +101,14 @@ describe('log Ink surface states', () => {
       const message = formatLogInkBlameEmpty({ path: 'src/empty.ts' })
       expect(message).toContain('src/empty.ts')
       expect(message).toContain('esc')
+    })
+  })
+
+  describe('formatLogInkNotesEmpty', () => {
+    it('points at the add/edit keybinding', () => {
+      const message = formatLogInkNotesEmpty()
+      expect(message).toContain('No note on this commit')
+      expect(message).toContain('enter')
     })
   })
 

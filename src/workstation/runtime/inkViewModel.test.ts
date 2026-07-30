@@ -1857,12 +1857,16 @@ describe('log Ink view model', () => {
       expect(state.inspectorTab).toBe('inspector')
     })
 
-    it('cycleInspectorTab toggles between inspector and actions', () => {
+    it('cycleInspectorTab cycles through inspector, actions, and notes (#OSS-2057)', () => {
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
       expect(state.inspectorTab).toBe('actions')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('notes')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
       expect(state.inspectorTab).toBe('inspector')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('notes')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
       expect(state.inspectorTab).toBe('actions')
     })

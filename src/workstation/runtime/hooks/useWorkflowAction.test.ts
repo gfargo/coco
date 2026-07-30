@@ -5,6 +5,7 @@ import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../..
 import { checkoutBranch, checkoutBranchByName, deleteBranches, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
 import { cherryPickCommit, cherryPickRange, cherryPickCommits, autosquashRebase } from '../../../git/historyActions'
 import { createStash, dropStashes, restoreStash } from '../../../git/stashActions'
+import { addOrEditCommitNote } from '../../../git/notesActions'
 import { continueOperation } from '../../../git/operationActions'
 import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowAction'
 
@@ -65,6 +66,10 @@ jest.mock('../../../git/operationActions', () => {
     continueOperation: jest.fn(),
   }
 })
+
+jest.mock('../../../git/notesActions', () => ({
+  addOrEditCommitNote: jest.fn(),
+}))
 
 const checkoutReflogEntryMock = checkoutReflogEntry as jest.MockedFunction<
   typeof checkoutReflogEntry
@@ -703,6 +708,75 @@ describe('cherry-pick-commit range handling (#1670)', () => {
     )
     expect(cherryPickRangeMock).not.toHaveBeenCalled()
     expect(cherryPickCommitsMock).not.toHaveBeenCalled()
+  })
+})
+
+const addOrEditCommitNoteMock = addOrEditCommitNote as jest.MockedFunction<typeof addOrEditCommitNote>
+
+describe('edit-commit-note (#OSS-2057)', () => {
+  const noteRow: GitLogRow = {
+    type: 'commit',
+    graph: '*',
+    shortHash: 'n0',
+    hash: 'n0',
+    parents: [],
+    date: '2026-05-01',
+    author: 'Coco',
+    refs: [],
+    message: 'commit n0',
+  }
+
+  beforeEach(() => {
+    addOrEditCommitNoteMock.mockReset()
+  })
+
+  it('guards when no commit is selected', async () => {
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      state: createLogInkState([]),
+    }))
+
+    await runWorkflowAction('edit-commit-note', 'a note')
+    expect(addOrEditCommitNoteMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty note body without calling addOrEditCommitNote', async () => {
+    const state = { ...createLogInkState([noteRow]), selectedIndex: 0 }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state }))
+
+    await runWorkflowAction('edit-commit-note', '   ')
+    expect(addOrEditCommitNoteMock).not.toHaveBeenCalled()
+  })
+
+  it('writes the note and caches it in commitNoteByHash on success', async () => {
+    addOrEditCommitNoteMock.mockResolvedValue({ ok: true, message: 'Saved note on n0' })
+    const state = { ...createLogInkState([noteRow]), selectedIndex: 0 }
+    const setContext = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state, setContext }))
+
+    await runWorkflowAction('edit-commit-note', '  fixed the regression  ')
+    expect(addOrEditCommitNoteMock).toHaveBeenCalledWith(expect.anything(), 'n0', 'fixed the regression')
+    expect(setContext).toHaveBeenCalledTimes(1)
+    const updater = setContext.mock.calls[0][0]
+    expect(updater({}).commitNoteByHash.get('n0')).toBe('fixed the regression')
+  })
+
+  it('does not touch the context cache when the write fails', async () => {
+    addOrEditCommitNoteMock.mockResolvedValue({ ok: false, message: 'fatal: unable to write note object' })
+    const state = { ...createLogInkState([noteRow]), selectedIndex: 0 }
+    const setContext = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state, setContext }))
+
+    await runWorkflowAction('edit-commit-note', 'note body')
+    expect(addOrEditCommitNoteMock).toHaveBeenCalled()
+    expect(setContext).not.toHaveBeenCalled()
   })
 })
 

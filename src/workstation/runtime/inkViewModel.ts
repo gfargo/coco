@@ -359,16 +359,19 @@ export type LogInkCompareRef = {
 export type LogInkDiffViewMode = 'unified' | 'split'
 
 /**
- * Inspector tab (#806 follow-up). On tall terminals the inspector
- * stacks the commit-detail block and the actions block together. On
- * short terminals (rows below the layout's tabbed threshold) only one
- * tab renders at a time and the user toggles between them with `[/]`
- * while the inspector is focused. The field is always present in
- * state so the user can pre-set their preference; the renderer
- * decides whether to honor it (short terminal) or stack both
- * (tall terminal).
+ * Inspector tab (#806 follow-up; extended to a third tab by #OSS-2057). On
+ * tall terminals the inspector stacks the commit-detail block and the
+ * actions block together. On short terminals (rows below the layout's
+ * tabbed threshold) only one tab renders at a time and the user cycles
+ * between them with `[`/`]` (or ←/→) while the inspector is focused. The
+ * field is always present in state so the user can pre-set their
+ * preference; the renderer decides whether to honor it (short terminal) or
+ * stack both (tall terminal).
  */
-export type LogInkInspectorTab = 'inspector' | 'actions'
+export type LogInkInspectorTab = 'inspector' | 'actions' | 'notes'
+
+/** `LogInkInspectorTab` values in cycle order, shared by `cycleInspectorTab`. */
+const INSPECTOR_TAB_ORDER: LogInkInspectorTab[] = ['inspector', 'actions', 'notes']
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
@@ -2277,14 +2280,15 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingKey: undefined,
       }
     case 'cycleInspectorTab': {
-      // Two-tab toggle — `delta` is symmetrical so direction does not
-      // matter, but we keep the action shape consistent with the
-      // sidebar's `nextSidebarTab` / `previousSidebarTab` so callers
-      // can mirror the sidebar pattern verbatim.
-      const next: LogInkInspectorTab = state.inspectorTab === 'inspector' ? 'actions' : 'inspector'
+      // Three-tab cycle (#OSS-2057 — Inspector / Actions / Notes). `delta`
+      // mirrors the sidebar's `nextSidebarTab` / `previousSidebarTab` shape
+      // so callers can dispatch the same way regardless of direction.
+      const currentIndex = INSPECTOR_TAB_ORDER.indexOf(state.inspectorTab)
+      const nextIndex =
+        (currentIndex + action.delta + INSPECTOR_TAB_ORDER.length) % INSPECTOR_TAB_ORDER.length
       return {
         ...state,
-        inspectorTab: next,
+        inspectorTab: INSPECTOR_TAB_ORDER[nextIndex],
         inspectorActionIndex: 0,
         pendingKey: undefined,
       }

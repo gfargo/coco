@@ -61,6 +61,20 @@ export type LogInkContext = {
    * stale logs don't outlive a commit.
    */
   fileHistoryByPath?: Map<string, FileHistoryResult>
+  /**
+   * Per-commit `refs/notes/commits` note cache keyed by full sha
+   * (#OSS-2057). Mirrors `blameByPath` / `fileHistoryByPath`: hydrated
+   * on demand when the history detail surface's [Notes] tab is showing,
+   * keyed by the cursored commit's hash. A present key with `undefined`
+   * value means the fetch ran and found no note (distinct from "not
+   * fetched yet", which is absent from the map entirely).
+   *
+   * v1 scope note: this only ever reflects LOCALLY fetched notes — it
+   * never fetches `refs/notes/commits` from the remote, so an absent
+   * entry after a fetch means "no local note," not "definitely no note
+   * anywhere."
+   */
+  commitNoteByHash?: Map<string, string | undefined>
   branches?: BranchOverview
   /**
    * Repository-wide LFS attribute status (#884). When present, the
