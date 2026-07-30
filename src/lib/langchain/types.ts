@@ -1,6 +1,21 @@
 import { type TiktokenModel } from '@langchain/openai'
 
-export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini' | 'mistral' | 'azure' | 'bedrock'
+export type LLMProvider =
+  | 'openai'
+  | 'ollama'
+  | 'anthropic'
+  | 'gemini'
+  | 'mistral'
+  | 'azure'
+  | 'bedrock'
+  | 'deepseek'
+  | 'groq'
+  | 'xai'
+  | 'together'
+  | 'fireworks'
+  | 'openrouter'
+  | 'lmstudio'
+  | 'vllm'
 export type DynamicModelTask =
   | 'summarize'
   | 'commit'
@@ -471,6 +486,68 @@ export type BedrockLLMService = BaseLLMService & {
   fields?: Record<string, unknown>
 }
 
+/**
+ * The OpenAI-compatible provider presets (DeepSeek, Groq, xAI, Together,
+ * Fireworks, OpenRouter, LM Studio, vLLM) all share the same shape — each is
+ * an open model namespace (unlike OpenAI/Anthropic/Gemini/Mistral's closed,
+ * enumerable catalogs), so `model` is left as the inherited
+ * `ConfiguredLLMModel` (which already accepts any string via Bedrock's
+ * `(string & {})` member) rather than redeclared. Written out one type per
+ * provider (rather than a shared generic) so each still discriminates on
+ * its own `provider` literal for the `LLMService` union and schema
+ * generation.
+ */
+export type DeepSeekLLMService = BaseLLMService & {
+  provider: 'deepseek'
+  /** Custom base URL. Falls back to DeepSeek's default endpoint when unset. */
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type GroqLLMService = BaseLLMService & {
+  provider: 'groq'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type XaiLLMService = BaseLLMService & {
+  provider: 'xai'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type TogetherLLMService = BaseLLMService & {
+  provider: 'together'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type FireworksLLMService = BaseLLMService & {
+  provider: 'fireworks'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type OpenRouterLLMService = BaseLLMService & {
+  provider: 'openrouter'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type LmStudioLLMService = BaseLLMService & {
+  provider: 'lmstudio'
+  /** Custom base URL. Falls back to `http://localhost:1234/v1` when unset. */
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type VllmLLMService = BaseLLMService & {
+  provider: 'vllm'
+  /** Custom base URL. Falls back to `http://localhost:8000/v1` when unset. */
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
 export type LLMService =
   | OpenAILLMService
   | OllamaLLMService
@@ -479,3 +556,11 @@ export type LLMService =
   | MistralLLMService
   | AzureLLMService
   | BedrockLLMService
+  | DeepSeekLLMService
+  | GroqLLMService
+  | XaiLLMService
+  | TogetherLLMService
+  | FireworksLLMService
+  | OpenRouterLLMService
+  | LmStudioLLMService
+  | VllmLLMService

@@ -11,9 +11,11 @@ Breaking down the changes into categories (e.g. bug fixes, new features, etc.) w
 
 {{language_context}}
 
+{{conventions_context}}
+
 """{{changes}}"""`
 
-export const inputVariables = ['timeframe', 'format_instructions', 'changes', 'language_context']
+export const inputVariables = ['timeframe', 'format_instructions', 'changes', 'language_context', 'conventions_context']
 
 export const RECAP_PROMPT = new PromptTemplate({
   template,

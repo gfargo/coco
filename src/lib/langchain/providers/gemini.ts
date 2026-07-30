@@ -35,4 +35,5 @@ export const geminiProvider: ProviderDefinition = {
   // token-counting audit — no synchronous local Gemini tokenizer available.
   tokenCorrectionFactor: 1.1,
   supportsReasoningEffort: true,
+  supportsStructuredOutput: 'json-schema',
 }

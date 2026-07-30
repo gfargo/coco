@@ -31,7 +31,7 @@ const baseConfig = {
   },
 } as Config
 
-const providerServices: Record<LLMProvider, LLMService> = {
+const providerServices: Partial<Record<LLMProvider, LLMService>> = {
   openai: DEFAULT_OPENAI_LLM_SERVICE,
   anthropic: DEFAULT_ANTHROPIC_LLM_SERVICE,
   azure: DEFAULT_AZURE_LLM_SERVICE,
@@ -157,7 +157,7 @@ describe('dynamic model routing', () => {
       expect(resolveDynamicModel(config, 'summarize')).toBe(overrides.summarize)
       expect(resolveDynamicModel(config, 'largeDiff')).toBe(overrides.largeDiff)
       expect(resolveDynamicModel(config, 'commit')).toBe(
-        getDynamicModelDefaults(provider, 'quality').commit
+        getDynamicModelDefaults(provider, 'quality')!.commit
       )
     }
   )
@@ -242,6 +242,49 @@ describe('dynamic model routing', () => {
       summarize: expect.any(String),
       commit: expect.any(String),
       review: expect.any(String),
+    })
+  })
+
+  // #OSS-1623: the OpenAI-compatible presets (DeepSeek, Groq, xAI, Together,
+  // Fireworks, OpenRouter, LM Studio, vLLM) deliberately have no
+  // ProviderDynamicDefaults row — their hosted catalogs churn too fast to
+  // keep pinned. `model: "dynamic"` must fail loudly for them, never
+  // silently resolve to `undefined`.
+  describe('providers without a dynamic model catalog', () => {
+    it.each(['deepseek', 'groq', 'xai', 'together', 'fireworks', 'openrouter', 'lmstudio', 'vllm'] as const)(
+      'throws a clear, actionable error for %s',
+      (provider) => {
+        const config = {
+          ...baseConfig,
+          service: {
+            ...baseConfig.service,
+            provider,
+            model: 'dynamic',
+          },
+        } as unknown as Config
+
+        expect(() => resolveDynamicModel(config, 'commit')).toThrow(
+          `provider '${provider}' does not support model: "dynamic"`
+        )
+      }
+    )
+
+    it('still honors a per-task dynamicModels override even without a provider catalog', () => {
+      const config = {
+        ...baseConfig,
+        service: {
+          ...baseConfig.service,
+          provider: 'groq',
+          model: 'dynamic',
+          dynamicModels: { commit: 'llama-3.3-70b-versatile' },
+        },
+      } as unknown as Config
+
+      expect(resolveDynamicModel(config, 'commit')).toBe('llama-3.3-70b-versatile')
+    })
+
+    it('returns undefined (not undefined-provider-defaults) from getDynamicModelDefaults for an opt-out provider', () => {
+      expect(getDynamicModelDefaults('groq' as never)).toBeUndefined()
     })
   })
 })

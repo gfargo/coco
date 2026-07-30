@@ -122,6 +122,8 @@ export function createGitHubListHandler<
       gitlabPath: forgePath,
       gitlabHost: repository?.host,
       bitbucketPath: forgePath,
+      bitbucketServerPath: forgePath,
+      bitbucketServerHost: repository?.host,
       giteaPath: forgePath,
       giteaHost: repository?.host,
     })

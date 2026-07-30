@@ -4,6 +4,9 @@ import { AutoFixConfig } from '../autofix/types'
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
 jest.mock('../autofix', () => ({ runAutoFix: jest.fn() }))
+jest.mock('../../git/providerData', () => ({ getProviderOverview: jest.fn() }))
+jest.mock('../../git/forgeActions', () => ({ getForgeActions: jest.fn() }))
+jest.mock('./inquirerPrompts', () => ({ confirmPrompt: jest.fn() }))
 const mockExecFile = jest.fn((_cmd: string, _args: string[], callback: (err: Error | null) => void) => {
   callback(null)
 })
@@ -52,8 +55,17 @@ Object.defineProperty(process, 'stdin', {
 
 import { TaskList } from './TaskList'
 import { runAutoFix } from '../autofix'
+import { getProviderOverview } from '../../git/providerData'
+import { getForgeActions } from '../../git/forgeActions'
+import { confirmPrompt } from './inquirerPrompts'
 
 const mockRunAutoFix = runAutoFix as jest.Mock
+const mockGetProviderOverview = getProviderOverview as jest.Mock
+const mockGetForgeActions = getForgeActions as jest.Mock
+const mockConfirmPrompt = confirmPrompt as jest.Mock
+const mockCreateIssue = jest.fn()
+
+const fakeGit = {} as never
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -94,6 +106,7 @@ beforeEach(() => {
       if (event === 'keypress' && keypressHandler === handler) keypressHandler = null
     }
   )
+  mockGetForgeActions.mockReturnValue({ createIssue: mockCreateIssue })
 })
 
 afterEach(() => {
@@ -380,5 +393,140 @@ describe('TaskList — autoFix() when runAutoFix throws', () => {
     expect(mockRunAutoFix).toHaveBeenCalledTimes(2)
     expect(mockRunAutoFix).toHaveBeenNthCalledWith(1, expect.objectContaining({ title: 'Item 1' }), config)
     expect(mockRunAutoFix).toHaveBeenNthCalledWith(2, expect.objectContaining({ title: 'Item 1' }), config)
+  })
+})
+
+describe('TaskList — fileIssue() ("i" key)', () => {
+  const okOverview = (overrides: Record<string, unknown> = {}) => ({
+    repository: { provider: 'github', remote: 'origin', owner: 'gfargo', name: 'coco' },
+    authenticated: true,
+    ...overrides,
+  })
+
+  it('includes file-issue choice label containing 📝 File issue', async () => {
+    const tl = new TaskList([makeItem()])
+    const startPromise = tl.start()
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('📝 File issue'))).toBe(true)
+  })
+
+  it('shows a message and does not probe the provider when no git context is available', async () => {
+    const tl = new TaskList([makeItem()]) // no config, no git
+    const startPromise = tl.start()
+
+    await press('i')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockGetProviderOverview).not.toHaveBeenCalled()
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(
+      logCalls.some((arg) => typeof arg === 'string' && arg.includes('No repository context available'))
+    ).toBe(true)
+  })
+
+  it('shows a message and skips the confirm prompt when the provider is unsupported', async () => {
+    mockGetProviderOverview.mockResolvedValue(
+      okOverview({ repository: { provider: 'unsupported', remote: 'origin', message: 'No supported remote.' } })
+    )
+
+    const tl = new TaskList([makeItem()], undefined, fakeGit)
+    const startPromise = tl.start()
+
+    await press('i')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockConfirmPrompt).not.toHaveBeenCalled()
+    expect(mockCreateIssue).not.toHaveBeenCalled()
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('No supported remote.'))).toBe(true)
+  })
+
+  it('shows a message and skips the confirm prompt when not authenticated', async () => {
+    mockGetProviderOverview.mockResolvedValue(okOverview({ authenticated: false, message: 'Run `gh auth login`.' }))
+
+    const tl = new TaskList([makeItem()], undefined, fakeGit)
+    const startPromise = tl.start()
+
+    await press('i')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockConfirmPrompt).not.toHaveBeenCalled()
+    expect(mockCreateIssue).not.toHaveBeenCalled()
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('Run `gh auth login`.'))).toBe(true)
+  })
+
+  it('cancels without creating an issue when the confirm prompt is declined', async () => {
+    mockGetProviderOverview.mockResolvedValue(okOverview())
+    mockConfirmPrompt.mockResolvedValue(false)
+
+    const tl = new TaskList([makeItem()], undefined, fakeGit)
+    const startPromise = tl.start()
+
+    await press('i')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockCreateIssue).not.toHaveBeenCalled()
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('Issue creation cancelled.'))).toBe(true)
+  })
+
+  it('creates the issue from the current finding and marks it complete on success', async () => {
+    mockGetProviderOverview.mockResolvedValue(okOverview())
+    mockConfirmPrompt.mockResolvedValue(true)
+    mockCreateIssue.mockResolvedValue({ ok: true, message: 'Created issue #42' })
+
+    const items = [makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })]
+    const tl = new TaskList(items, undefined, fakeGit)
+    const startPromise = tl.start()
+
+    await press('i') // files issue for item 1 → marks complete → advances to item 2
+    await press('q') // exit from item 2
+    await startPromise.catch(() => undefined)
+
+    expect(mockCreateIssue).toHaveBeenCalledWith(expect.objectContaining({ title: 'Item 1' }))
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('Created issue #42'))).toBe(true)
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('completed: 1'))).toBe(true)
+  })
+
+  it('shows the failure message and leaves the item pending when createIssue fails', async () => {
+    mockGetProviderOverview.mockResolvedValue(okOverview())
+    mockConfirmPrompt.mockResolvedValue(true)
+    mockCreateIssue.mockResolvedValue({ ok: false, message: 'API error: 500' })
+
+    const tl = new TaskList([makeItem()], undefined, fakeGit)
+    const startPromise = tl.start()
+
+    await press('i')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('API error: 500'))).toBe(true)
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('pending: 1'))).toBe(true)
+  })
+
+  it('shows an error message when the provider lookup throws', async () => {
+    mockGetProviderOverview.mockRejectedValue(new Error('git remote not found'))
+
+    const tl = new TaskList([makeItem()], undefined, fakeGit)
+    const startPromise = tl.start()
+
+    await press('i')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(
+      logCalls.some((arg) => typeof arg === 'string' && arg.includes('Failed to file issue: git remote not found'))
+    ).toBe(true)
   })
 })

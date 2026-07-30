@@ -46,4 +46,5 @@ export const azureProvider: ProviderDefinition = {
       : undefined
   },
   supportsReasoningEffort: true,
+  supportsStructuredOutput: 'json-schema',
 }

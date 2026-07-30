@@ -106,6 +106,8 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
           gitlabPath: repoPath,
           gitlabHost: overview.repository.host,
           bitbucketPath: repoPath,
+          bitbucketServerPath: repoPath,
+          bitbucketServerHost: overview.repository.host,
           giteaPath: repoPath,
           giteaHost: overview.repository.host,
         })
@@ -398,7 +400,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     logger.log(formatFindings(findings))
     logger.log(chalk.dim('\nNon-interactive session detected — re-run with --json for machine-readable output.'))
   } else {
-    const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined })
+    const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined }, git)
     logLlmTelemetrySummary(logger, 'review')
     await reviewer.start()
   }
