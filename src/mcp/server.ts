@@ -143,10 +143,28 @@ function registerGenerationTool(
       }
       const repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
       await assertClientAllowsRoot(server, repoRoot)
+      const progressToken = extra._meta?.progressToken
+      let progressCounter = 0
+      const onProgress = progressToken === undefined
+        ? undefined
+        : (update: { message?: string; fraction?: number }) => {
+          void extra.sendNotification({
+            method: 'notifications/progress',
+            params: {
+              progressToken,
+              progress: ++progressCounter,
+              message: update.message,
+            },
+          }).catch(() => {
+            // Fire-and-forget: a client that closed its notification
+            // channel mid-call must never fail the underlying operation.
+          })
+        }
       const context = await createAgentOperationContext({
         repoRoot,
         signal: extra.signal,
         surface: 'mcp',
+        onProgress,
       })
       const result = await runAgentOperation(operation, input, context)
       return {

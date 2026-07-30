@@ -132,6 +132,18 @@ describe('log Ink surface states', () => {
       expect(message).toContain('gh') // history
       expect(message).toContain('gb') // branches
       expect(message).toContain('gz') // stash
+      expect(message).not.toContain('sparse')
+    })
+
+    it('mentions sparse-checkout in the clean-tree hint when active (OSS-2056)', () => {
+      const message = formatLogInkStatusEmpty({ hasChanges: false, sparse: true })
+      expect(message).toContain('Worktree clean')
+      expect(message).toContain('sparse checkout')
+    })
+
+    it('omits the sparse note when sparse is false or omitted', () => {
+      expect(formatLogInkStatusEmpty({ hasChanges: false, sparse: false })).not.toContain('sparse')
+      expect(formatLogInkStatusEmpty({ hasChanges: false })).not.toContain('sparse')
     })
   })
 

@@ -71,13 +71,20 @@ export function formatLogInkHistoryEmpty(args: LogInkHistoryEmptyArgs): string {
 export type LogInkStatusEmptyArgs = {
   /** Whether the worktree currently has any pending changes (staged/unstaged/untracked). */
   hasChanges: boolean
+  /**
+   * Whether the working tree is a partial (sparse) checkout (OSS-2056).
+   * When true, the clean-tree hint notes it so an empty status view
+   * doesn't leave the user wondering whether files are missing.
+   */
+  sparse?: boolean
 }
 
-export function formatLogInkStatusEmpty({ hasChanges }: LogInkStatusEmptyArgs): string | undefined {
+export function formatLogInkStatusEmpty({ hasChanges, sparse }: LogInkStatusEmptyArgs): string | undefined {
   if (hasChanges) {
     return undefined
   }
-  return 'Worktree clean. Press gh for history, gb for branches, gz for stash.'
+  const sparseNote = sparse ? ' This is a sparse checkout — paths outside your cone are omitted on purpose.' : ''
+  return `Worktree clean. Press gh for history, gb for branches, gz for stash.${sparseNote}`
 }
 
 export type LogInkReflogEmptyArgs = {

@@ -70,6 +70,7 @@ export type HeaderChipId =
   | 'dirty'
   | 'operation'
   | 'bisecting'
+  | 'sparse'
   | 'pr'
   | 'view'
   | 'loading'
@@ -99,6 +100,12 @@ export type BuildHeaderChipsInput = {
   dirty: boolean
   /** True when `context.bisect.active` — renders its own warning chip. */
   bisecting: boolean
+  /**
+   * True when `context.sparse.enabled` (OSS-2056) — renders an
+   * informational chip so a partial checkout's omitted paths never
+   * read as lost files. No placeholder chip when false.
+   */
+  sparse: boolean
   /**
    * In-progress merge-machinery operation from `context.operation`
    * (#1360). `undefined` / `'none'` omits the chip; anything else
@@ -242,6 +249,22 @@ export function buildHeaderChips(input: BuildHeaderChipsInput): HeaderChip[] {
       dim: false,
       bold: true,
       priority: 85,
+    })
+  }
+
+  // Sparse-checkout — only when active (OSS-2056). Informational, not
+  // a warning: a partial checkout is an intentional setup, not a
+  // problem the user needs to resolve. Muted color keeps it from
+  // competing with the warning-colored operation/bisect chips while
+  // still flagging that omitted paths are expected, not missing.
+  if (input.sparse) {
+    chips.push({
+      id: 'sparse',
+      label: theme.ascii ? '~ SPARSE' : '◔ SPARSE',
+      color: theme.colors.muted,
+      dim: false,
+      bold: false,
+      priority: 80,
     })
   }
 

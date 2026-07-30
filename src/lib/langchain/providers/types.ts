@@ -42,6 +42,13 @@ export type ProviderDefinition = {
    */
   resolveEndpoint?: (config: Config) => string | undefined
   /**
+   * Endpoint used when `service.baseURL` is unset — the same value
+   * `resolveEndpoint` falls back to. Exposed directly (rather than making
+   * callers synthesize a `Config` to probe `resolveEndpoint`) so the init
+   * wizard can show/offer-to-override it before a `Config` exists yet.
+   */
+  defaultBaseURL?: string
+  /**
    * Multiplier applied to the gpt-4o tiktoken baseline count when this
    * provider has no synchronous local tokenizer of its own. Undefined (the
    * OpenAI/Azure case, whose tokenizer *is* tiktoken-family) means no
@@ -49,4 +56,13 @@ export type ProviderDefinition = {
    * Bedrock hosts multiple model families under one provider).
    */
   tokenCorrectionFactor?: number | ((model: string) => number)
+  /**
+   * How this provider natively constrains output to a schema, if at all.
+   * `'json-schema'` binds the caller's zod schema via constrained decoding
+   * (OpenAI/Azure `response_format`, Gemini `responseSchema`, Mistral tool
+   * binding); `'json-mode'` is plain unconstrained JSON mode (Ollama
+   * `format=json`). Undefined means no native support — callers fall back
+   * to the text `StructuredOutputParser` + repair path.
+   */
+  supportsStructuredOutput?: 'json-schema' | 'json-mode'
 }

@@ -83,7 +83,16 @@ export const builder = (yargs: Argv) => {
       // value (`coco recap --tag v1.0.0`) used to silently drop it as a
       // stray positional and recap since the *latest* tag instead (#1613).
       // Reject up front so the value is never silently discarded.
-      const rawArgv = argv as { tag?: boolean; 'last-tag'?: boolean; _: (string | number)[] }
+      const rawArgv = argv as {
+        tag?: boolean
+        'last-tag'?: boolean
+        yesterday?: boolean
+        'last-week'?: boolean
+        'last-month'?: boolean
+        currentBranch?: boolean
+        timeframe?: string
+        _: (string | number)[]
+      }
       const tagRequested = Boolean(rawArgv.tag ?? rawArgv['last-tag'])
       // Filter out the command token ('recap') that yargs always leaves
       // in `_` — it's not a stray positional (#1668).
@@ -91,6 +100,44 @@ export const builder = (yargs: Argv) => {
       if (tagRequested && positionals.length > 0) {
         throw new Error(
           `--tag on recap takes no value (it means "since the last tag") — unexpected argument '${positionals[0]}'. Did you mean 'coco changelog --tag ${positionals[0]}'?`
+        )
+      }
+
+      // `--timeframe` is documented as "the canonical form of the shortcut
+      // flags above", but the handler's ternary chain used to resolve the
+      // shortcuts before ever looking at `--timeframe` — so e.g. `--yesterday
+      // --timeframe last-week` silently recapped yesterday with no warning
+      // about the conflict (#1898). Reject ambiguous combinations up front.
+      //
+      // yargs syncs alias values onto every name (`--tag` sets both `tag`
+      // and `last-tag` in argv), so the parsed argv can't tell us which
+      // alias the user actually typed. Fall back to scanning the raw argv
+      // so aliased flags (`--tag`/`--week`/`--month`) are named the way the
+      // user wrote them instead of always showing the canonical form.
+      const rawArgs = process.argv.slice(2)
+      const flagLabel = (canonical: string, aliases: string[] = []): string => {
+        for (const name of [canonical, ...aliases]) {
+          if (rawArgs.some((arg) => arg === `--${name}` || arg.startsWith(`--${name}=`))) {
+            return `--${name}`
+          }
+        }
+        return `--${canonical}`
+      }
+
+      const selectors: Array<[string, boolean]> = [
+        [flagLabel('yesterday'), Boolean(rawArgv.yesterday)],
+        [flagLabel('last-week', ['week']), Boolean(rawArgv['last-week'])],
+        [flagLabel('last-month', ['month']), Boolean(rawArgv['last-month'])],
+        [flagLabel('last-tag', ['tag']), tagRequested],
+        [flagLabel('currentBranch'), Boolean(rawArgv.currentBranch)],
+        [flagLabel('timeframe'), rawArgv.timeframe !== undefined],
+      ]
+      const activeSelectors = selectors.filter(([, isSet]) => isSet)
+      if (activeSelectors.length > 1) {
+        throw new Error(
+          `Only one timeframe selector may be used at a time — got ${activeSelectors
+            .map(([flag]) => flag)
+            .join(', ')}.`
         )
       }
       return true
