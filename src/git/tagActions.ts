@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { rejectFlagLike } from './forgeArgGuards'
+import { resolveDefaultRemoteName } from './remoteResolution'
 
 export type TagActionResult = {
   ok: boolean
@@ -63,22 +64,32 @@ export function restoreDeletedTag(git: SimpleGit, tagName: string, sha: string):
   )
 }
 
-export function pushTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
+export async function pushTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
+  const remote = await resolveDefaultRemoteName(git)
+  if (!remote) {
+    return { ok: false, message: 'No remote configured — cannot push tag.' }
+  }
+
   // Fully qualified refspec: a bare name errors when the remote has a
   // same-named branch ("matches more than one").
   return runAction(
-    () => git.raw(['push', 'origin', `refs/tags/${tagName}`]),
+    () => git.raw(['push', remote, `refs/tags/${tagName}`]),
     `Pushed tag ${tagName}`
   )
 }
 
-export function deleteRemoteTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
+export async function deleteRemoteTag(git: SimpleGit, tagName: string): Promise<TagActionResult> {
+  const remote = await resolveDefaultRemoteName(git)
+  if (!remote) {
+    return { ok: false, message: 'No remote configured — cannot delete remote tag.' }
+  }
+
   // MUST stay fully qualified: `git push origin :<name>` resolves the
   // deletion target against ANY matching remote ref — with a local tag
   // that was never pushed and a same-named remote branch, the bare form
   // deletes the BRANCH while reporting "Deleted remote tag".
   return runAction(
-    () => git.raw(['push', 'origin', `:refs/tags/${tagName}`]),
+    () => git.raw(['push', remote, `:refs/tags/${tagName}`]),
     `Deleted remote tag ${tagName}`
   )
 }

@@ -148,6 +148,77 @@ describe('log data layer', () => {
     expect(positionalRefs.filter((arg) => /^[a-f0-9]+$/i.test(arg))).toEqual([])
   })
 
+  // --end-of-options safety (#1915): positional refs must be guarded so a
+  // dash-leading branch name isn't reinterpreted as a flag, and a branch
+  // that collides with a filename doesn't trigger git's ambiguity error.
+  describe('--end-of-options sentinel (#1915)', () => {
+    it('inserts --end-of-options before a dash-leading branch name', () => {
+      // compact view maps argv.branch to a positional ref
+      const args = buildLogArgs(argv({ branch: '-foo' }))
+
+      expect(args).toContain('--end-of-options')
+      expect(args).toContain('-foo')
+      const eooIdx = args.indexOf('--end-of-options')
+      const refIdx = args.indexOf('-foo')
+      expect(eooIdx).toBeGreaterThan(-1)
+      expect(refIdx).toBeGreaterThan(eooIdx)
+    })
+
+    it('inserts --end-of-options before a normal branch name', () => {
+      const args = buildLogArgs(argv({ branch: 'main' }))
+
+      expect(args).toContain('--end-of-options')
+      const eooIdx = args.indexOf('--end-of-options')
+      const refIdx = args.indexOf('main')
+      expect(eooIdx).toBeGreaterThan(-1)
+      expect(refIdx).toBeGreaterThan(eooIdx)
+    })
+
+    it('inserts --end-of-options before extraRefs, after --all', () => {
+      const args = buildLogArgs(argv({ all: true }), {
+        extraRefs: ['abc1234', 'def5678'],
+      })
+
+      expect(args).toContain('--end-of-options')
+      const allIdx = args.indexOf('--all')
+      const eooIdx = args.indexOf('--end-of-options')
+      const refIdx = args.indexOf('abc1234')
+      expect(eooIdx).toBeGreaterThan(allIdx)
+      expect(refIdx).toBeGreaterThan(eooIdx)
+    })
+
+    it('orders args as: flags --end-of-options <refs> -- <paths>', () => {
+      const args = buildLogArgs(argv({ all: true, path: ['src'] }), {
+        extraRefs: ['abc1234'],
+      })
+
+      const eooIdx = args.indexOf('--end-of-options')
+      const refIdx = args.indexOf('abc1234')
+      const sepIdx = args.indexOf('--')
+      expect(eooIdx).toBeGreaterThan(-1)
+      expect(refIdx).toBeGreaterThan(eooIdx)
+      expect(sepIdx).toBeGreaterThan(refIdx)
+    })
+
+    it('does NOT add --end-of-options when there are no positional refs (--all only)', () => {
+      const args = buildLogArgs(argv({ all: true }))
+
+      expect(args).not.toContain('--end-of-options')
+    })
+
+    it('does NOT add --end-of-options for a bare compact view with no branch', () => {
+      const args = buildLogArgs(argv())
+
+      expect(args).not.toContain('--end-of-options')
+    })
+
+    it('does NOT add --end-of-options when extraRefs is empty', () => {
+      const args = buildLogArgs(argv({ all: true }), { extraRefs: [] })
+
+      expect(args).not.toContain('--end-of-options')
+    })
+  })
+
   describe('buildToggleGraphArgs', () => {
     it('switches to full topology when fullGraph is true', () => {
       const merged = buildToggleGraphArgs(argv({ view: 'compact' }), true)
@@ -681,6 +752,44 @@ describe('log data layer', () => {
       // cursor lands; lowering it accidentally would reduce that.
       expect(COMMIT_CONTEXT_DEFAULT_LIMIT).toBeGreaterThanOrEqual(1000)
       expect(typeof COMMIT_CONTEXT_DEFAULT_LIMIT).toBe('number')
+    })
+
+    // #1915: the targetHash positional must also be guarded with
+    // --end-of-options so a hash-like value starting with a dash
+    // (unusual but possible) doesn't get reinterpreted as a flag.
+    it('passes --end-of-options before the targetHash positional (#1915)', async () => {
+      const path = await mkdtemp(join(tmpdir(), 'coco-anchored-eoo-test-'))
+      try {
+        const git = simpleGit(path)
+        await git.init()
+        await git.addConfig('user.name', 'Coco Test')
+        await git.addConfig('user.email', 'coco@example.com')
+        await git.addConfig('commit.gpgsign', 'false')
+        await git.raw(['checkout', '-b', 'main'])
+
+        await writeFile(join(path, 'a.md'), 'a\n')
+        await git.add('a.md')
+        await git.commit('chore: initial')
+        const rev = (await git.revparse(['HEAD'])).trim()
+
+        // Capture the raw args passed to git via a spy so we can assert
+        // --end-of-options precedes the hash, without needing to reach into
+        // implementation details beyond what the public API exposes.
+        const rawSpy = jest.spyOn(git, 'raw')
+
+        await getLogRowsAnchoredOn(git, argv(), rev, { limit: 10 })
+
+        const capturedArgs = rawSpy.mock.calls[0]?.[0] as unknown as string[] | undefined
+        expect(capturedArgs).toBeDefined()
+        const eooIdx = capturedArgs!.indexOf('--end-of-options')
+        const hashIdx = capturedArgs!.indexOf(rev)
+        expect(eooIdx).toBeGreaterThan(-1)
+        expect(hashIdx).toBeGreaterThan(eooIdx)
+
+        rawSpy.mockRestore()
+      } finally {
+        await rm(path, { recursive: true, force: true })
+      }
     })
   })
 })

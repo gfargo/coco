@@ -1,9 +1,11 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { getXdgConfigPath } from '../services/xdg'
-import { TRUSTED_PROJECT_SERVICE_KEYS } from '../services/project'
+import { PROJECT_CONFIG_CANDIDATES, TRUSTED_PROJECT_SERVICE_KEYS } from '../constants/projectConfig'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
 import { SCHEMA_PUBLIC_URL } from '../../schema'
+
+export { PROJECT_CONFIG_CANDIDATES } from '../constants/projectConfig'
 
 export type ConfigWriteScope = 'global' | 'project'
 
@@ -13,7 +15,6 @@ export type ConfigWriteScope = 'global' | 'project'
  * workstation's editor-open flow, `coco init`) don't have to hardcode
  * their own copy (#1731).
  */
-export const PROJECT_CONFIG_CANDIDATES = ['.coco.json', '.coco.config.json'] as const
 
 /**
  * Resolve the project config path for a given repo root: the first

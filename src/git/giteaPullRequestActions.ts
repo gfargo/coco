@@ -1,6 +1,7 @@
-import { runGiteaAction, type GiteaRunner } from './giteaCli'
+import { runGiteaAction, resolveGiteaLabelId, type GiteaRunner } from './giteaCli'
 import { findOpenGiteaPullRequestForBranch } from './giteaListData'
 import { rejectFlagLike, rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
+import { defaultOpenUrlRunner, type OpenUrlRunner } from './historyActions'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
 
 /**
@@ -53,8 +54,13 @@ export async function createGiteaPullRequest(
   })
 }
 
-export function openGiteaPullRequest(url: string): PullRequestActionResult {
-  return { ok: true, message: `Open this URL in your browser: ${url}`, url }
+export function openGiteaPullRequest(
+  url: string,
+  openUrl: OpenUrlRunner = defaultOpenUrlRunner
+): Promise<PullRequestActionResult> {
+  return openUrl(url)
+    .then(() => ({ ok: true, message: `Opened pull request: ${url}`, url }))
+    .catch((error) => ({ ok: false, message: (error as Error).message, url }))
 }
 
 // ---------------------------------------------------------------------------
@@ -140,20 +146,6 @@ export function requestChangesGiteaPullRequestByNumber(
   )
 }
 
-async function resolveGiteaLabelId(
-  projectPath: string,
-  label: string,
-  runner: GiteaRunner
-): Promise<number | undefined> {
-  try {
-    const out = (await runner(`repos/${projectPath}/labels?limit=50`)).trim()
-    const labels = out ? (JSON.parse(out) as Array<{ id?: number; name?: string }>) : []
-    return labels.find((l) => l.name === label)?.id
-  } catch {
-    return undefined
-  }
-}
-
 /**
  * Gitea's "add label to issue" endpoint takes label IDs, not names, so this
  * resolves the name to an ID via the repo's label list first.
@@ -168,16 +160,19 @@ export async function addGiteaPullRequestLabel(
   const bad = rejectUnsafeLabel(label)
   if (bad) return { ok: false, message: bad }
 
-  const id = await resolveGiteaLabelId(projectPath, label, runner)
-  if (id === undefined) {
+  const lookup = await resolveGiteaLabelId(projectPath, label, runner)
+  if (lookup.status === 'not-found') {
     return { ok: false, message: `Label '${label}' not found on this repository. Create it in Gitea first.` }
+  }
+  if (lookup.status === 'error') {
+    return { ok: false, message: `Could not verify label '${label}': ${lookup.message}` }
   }
 
   return runGiteaAction(
     runner,
     `repos/${projectPath}/issues/${pullRequestNumber}/labels`,
     'POST',
-    { labels: [id] },
+    { labels: [lookup.id] },
     () => ({ ok: true, message: `Added label '${label}' to pull request #${pullRequestNumber}` })
   )
 }

@@ -1,6 +1,7 @@
 import { defaultBitbucketRunner, runBitbucketAction, type BitbucketRunner } from './bitbucketCli'
 import { findOpenBitbucketPullRequestForBranch } from './bitbucketListData'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
+import { defaultOpenUrlRunner, type OpenUrlRunner } from './historyActions'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
 
 /**
@@ -52,8 +53,13 @@ export async function createBitbucketPullRequest(
   )
 }
 
-export function openBitbucketPullRequest(url: string): PullRequestActionResult {
-  return { ok: true, message: `Open this URL in your browser: ${url}`, url }
+export function openBitbucketPullRequest(
+  url: string,
+  openUrl: OpenUrlRunner = defaultOpenUrlRunner
+): Promise<PullRequestActionResult> {
+  return openUrl(url)
+    .then(() => ({ ok: true, message: `Opened pull request: ${url}`, url }))
+    .catch((error) => ({ ok: false, message: (error as Error).message, url }))
 }
 
 // ---------------------------------------------------------------------------

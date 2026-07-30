@@ -1,4 +1,8 @@
-import { defaultBitbucketRunner, type BitbucketRunner } from './bitbucketCli'
+import {
+  defaultBitbucketRunner,
+  resolveBitbucketActionError,
+  type BitbucketRunner,
+} from './bitbucketCli'
 import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
@@ -8,6 +12,7 @@ import type {
   PullRequestReview,
   PullRequestStatusCheck,
 } from './pullRequestDetailData'
+import { parsePullRequestDiffLines, type PullRequestDiffResult } from './pullRequestDiffData'
 
 /**
  * On-demand Bitbucket pull-request / issue detail for the workstation
@@ -52,13 +57,10 @@ function mapComments(comments: BitbucketComment[]): IssueComment[] {
     }))
 }
 
-async function safeJson<T>(runner: BitbucketRunner, endpoint: string): Promise<T | undefined> {
-  try {
-    const out = (await runner(endpoint)).trim()
-    return out ? (JSON.parse(out) as T) : undefined
-  } catch {
-    return undefined
-  }
+/** Fetch and parse a primary PR/issue object, letting fetch errors propagate. */
+async function requireJson<T>(runner: BitbucketRunner, endpoint: string): Promise<T | undefined> {
+  const out = (await runner(endpoint)).trim()
+  return out ? (JSON.parse(out) as T) : undefined
 }
 
 async function fetchAllComments(
@@ -136,7 +138,7 @@ export async function getBitbucketPullRequestDetail(
 ): Promise<PullRequestDetailResult> {
   try {
     const base = `repositories/${projectPath}/pullrequests/${pullRequestNumber}`
-    const pr = await safeJson<{
+    const pr = await requireJson<{
       description?: string
       participants?: unknown
       source?: { commit?: { hash?: string } }
@@ -160,7 +162,8 @@ export async function getBitbucketPullRequestDetail(
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message }
   }
 }
 
@@ -171,7 +174,7 @@ export async function getBitbucketIssueDetail(
 ): Promise<IssueDetailResult> {
   try {
     const base = `repositories/${projectPath}/issues/${issueNumber}`
-    const issue = await safeJson<{
+    const issue = await requireJson<{
       content?: { raw?: string }
     }>(runner, base)
 
@@ -187,6 +190,26 @@ export async function getBitbucketIssueDetail(
       comments,
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
+  } catch (error) {
+    const { message } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message }
+  }
+}
+
+/**
+ * Unified-patch fetch for a Bitbucket Cloud pull request by number (#1363,
+ * #1938). Bitbucket's `/diff` endpoint returns the raw patch text directly
+ * (following a redirect to the raw content, which `fetch` does by default),
+ * so this is a real implementation rather than a graceful "unsupported" stub.
+ */
+export async function getBitbucketPullRequestDiff(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: BitbucketRunner = defaultBitbucketRunner
+): Promise<PullRequestDiffResult> {
+  try {
+    const output = await runner(`repositories/${projectPath}/pullrequests/${pullRequestNumber}/diff`)
+    return { ok: true, lines: parsePullRequestDiffLines(output) }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) }
   }
