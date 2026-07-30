@@ -48,6 +48,11 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Generate build info
+        # Typecheck needs the gitignored src/lib/buildInfo.ts that `npm run
+        # build`'s prebuild hook would otherwise generate later.
+        run: npm run build:info
+
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
 
