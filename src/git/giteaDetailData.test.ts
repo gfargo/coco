@@ -110,6 +110,60 @@ describe('getGiteaPullRequestDetail (#826)', () => {
     expect(result.message).not.toContain('Empty response')
     expect(result.message).toContain('pull request 1 not found')
   })
+
+  it('sets commentsTruncated when the comment ceiling is hit while more pages remain', async () => {
+    const prPayload = JSON.stringify({ body: 'body', head: { sha: 'abc' } })
+    // Always return a full page (50 comments) so the 20-page ceiling is hit.
+    const fullPage = JSON.stringify(
+      Array.from({ length: 50 }, (_, i) => ({
+        body: `c${i}`,
+        created_at: '2026-01-01',
+        user: { login: 'a' },
+      }))
+    )
+    const runner = async (endpoint: string) => {
+      if (endpoint.includes('/comments')) return fullPage
+      if (endpoint.includes('/reviews')) return JSON.stringify([])
+      if (endpoint.includes('/commits/')) return JSON.stringify([])
+      return prPayload
+    }
+    const result = await getGiteaPullRequestDetail('owner/repo', 1, runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    // 20 pages × 50 comments = 1000.
+    expect(result.detail.comments).toHaveLength(1000)
+    expect(result.detail.commentsTruncated).toBe(true)
+  })
+
+  it('sets commentsTruncated when a comment page fetch fails mid-pagination', async () => {
+    const prPayload = JSON.stringify({ body: 'body', head: { sha: 'abc' } })
+    let page = 0
+    const runner = async (endpoint: string) => {
+      if (endpoint.includes('/comments')) {
+        page++
+        if (page === 1) {
+          // Return a full page (50 items) so hasMore is true and we proceed to page 2.
+          return JSON.stringify(
+            Array.from({ length: 50 }, (_, i) => ({
+              body: `c${i}`,
+              created_at: '2026-01-01',
+              user: { login: 'a' },
+            }))
+          )
+        }
+        // Empty output → parsePage returns undefined → truncated.
+        return ''
+      }
+      if (endpoint.includes('/reviews')) return JSON.stringify([])
+      if (endpoint.includes('/commits/')) return JSON.stringify([])
+      return prPayload
+    }
+    const result = await getGiteaPullRequestDetail('owner/repo', 1, runner)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.detail.comments).toHaveLength(50)
+    expect(result.detail.commentsTruncated).toBe(true)
+  })
 })
 
 describe('getGiteaIssueDetail (#826)', () => {

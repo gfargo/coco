@@ -5,6 +5,7 @@ import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../..
 import { checkoutBranch, checkoutBranchByName, deleteBranches, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
 import { cherryPickCommit, cherryPickRange, cherryPickCommits, autosquashRebase } from '../../../git/historyActions'
 import { createStash, dropStashes, restoreStash } from '../../../git/stashActions'
+import { addOrEditCommitNote } from '../../../git/notesActions'
 import { continueOperation } from '../../../git/operationActions'
 import { useWorkflowAction, type UseWorkflowActionDeps } from './useWorkflowAction'
 
@@ -65,6 +66,10 @@ jest.mock('../../../git/operationActions', () => {
     continueOperation: jest.fn(),
   }
 })
+
+jest.mock('../../../git/notesActions', () => ({
+  addOrEditCommitNote: jest.fn(),
+}))
 
 const checkoutReflogEntryMock = checkoutReflogEntry as jest.MockedFunction<
   typeof checkoutReflogEntry
@@ -706,6 +711,75 @@ describe('cherry-pick-commit range handling (#1670)', () => {
   })
 })
 
+const addOrEditCommitNoteMock = addOrEditCommitNote as jest.MockedFunction<typeof addOrEditCommitNote>
+
+describe('edit-commit-note (#OSS-2057)', () => {
+  const noteRow: GitLogRow = {
+    type: 'commit',
+    graph: '*',
+    shortHash: 'n0',
+    hash: 'n0',
+    parents: [],
+    date: '2026-05-01',
+    author: 'Coco',
+    refs: [],
+    message: 'commit n0',
+  }
+
+  beforeEach(() => {
+    addOrEditCommitNoteMock.mockReset()
+  })
+
+  it('guards when no commit is selected', async () => {
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      state: createLogInkState([]),
+    }))
+
+    await runWorkflowAction('edit-commit-note', 'a note')
+    expect(addOrEditCommitNoteMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects an empty note body without calling addOrEditCommitNote', async () => {
+    const state = { ...createLogInkState([noteRow]), selectedIndex: 0 }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state }))
+
+    await runWorkflowAction('edit-commit-note', '   ')
+    expect(addOrEditCommitNoteMock).not.toHaveBeenCalled()
+  })
+
+  it('writes the note and caches it in commitNoteByHash on success', async () => {
+    addOrEditCommitNoteMock.mockResolvedValue({ ok: true, message: 'Saved note on n0' })
+    const state = { ...createLogInkState([noteRow]), selectedIndex: 0 }
+    const setContext = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state, setContext }))
+
+    await runWorkflowAction('edit-commit-note', '  fixed the regression  ')
+    expect(addOrEditCommitNoteMock).toHaveBeenCalledWith(expect.anything(), 'n0', 'fixed the regression')
+    expect(setContext).toHaveBeenCalledTimes(1)
+    const updater = setContext.mock.calls[0][0]
+    expect(updater({}).commitNoteByHash.get('n0')).toBe('fixed the regression')
+  })
+
+  it('does not touch the context cache when the write fails', async () => {
+    addOrEditCommitNoteMock.mockResolvedValue({ ok: false, message: 'fatal: unable to write note object' })
+    const state = { ...createLogInkState([noteRow]), selectedIndex: 0 }
+    const setContext = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ state, setContext }))
+
+    await runWorkflowAction('edit-commit-note', 'note body')
+    expect(addOrEditCommitNoteMock).toHaveBeenCalled()
+    expect(setContext).not.toHaveBeenCalled()
+  })
+})
+
 const pullRequestItem = (number: number) =>
   ({
     number,
@@ -1136,7 +1210,7 @@ const stashEntry = {
   files: ['src/app.ts'],
 }
 
-describe('undo-drop-stash frame guard (#1607)', () => {
+describe('undo-drop-stash reconciled onto the shared undo stack (OSS-1606 / #1607)', () => {
   beforeEach(() => {
     dropStashesMock.mockReset()
     restoreStashMock.mockReset()
@@ -1144,29 +1218,42 @@ describe('undo-drop-stash frame guard (#1607)', () => {
     restoreStashMock.mockResolvedValue({ ok: true, message: 'Restored stash' })
   })
 
-  it('refuses undo-drop-stash when the repo frame changed since the drop, instead of restoring the parent hash against the child git', async () => {
-    const harness = createHookHarness()
+  it('resolves the most recent drop-stash entry off state.undoStack — the same stack `gu` pops from', async () => {
     const dispatch = jest.fn()
+    const harness = createHookHarness()
     harness.beginRender()
     const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
       dispatch,
-      context: { stashes: { stashes: [stashEntry] } } as never,
-      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{
+          kind: 'drop-stash', label: 'drop stash@{0}', depth: 0, hash: stashEntry.hash, message: stashEntry.message,
+        }],
+      } as never,
     }))
 
-    await runWorkflowAction('drop-stash')
-    expect(dropStashesMock).toHaveBeenCalledTimes(1)
+    await runWorkflowAction('undo-drop-stash')
 
-    // Simulate drilling into a submodule — a deeper runtimes stack —
-    // after the drop, before undo-drop-stash runs.
+    expect(restoreStashMock).toHaveBeenCalledWith(expect.anything(), stashEntry.hash, stashEntry.message)
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'removeUndoEntry',
+      value: { kind: 'drop-stash', label: 'drop stash@{0}', depth: 0, hash: stashEntry.hash, message: stashEntry.message },
+    })
+  })
+
+  it('refuses when no drop-stash entry is on the stack', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
     harness.beginRender()
-    const { runWorkflowAction: runInChildFrame } = useWorkflowAction(harness.React, createDeps({
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
       dispatch,
-      context: { stashes: { stashes: [] } } as never,
-      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{ kind: 'delete-tag', label: 'delete tag v1', depth: 0, name: 'v1', sha: 'abc' }],
+      } as never,
     }))
 
-    await runInChildFrame('undo-drop-stash')
+    await runWorkflowAction('undo-drop-stash')
 
     expect(restoreStashMock).not.toHaveBeenCalled()
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
@@ -1175,19 +1262,390 @@ describe('undo-drop-stash frame guard (#1607)', () => {
     }))
   })
 
-  it('still restores normally when undo-drop-stash runs in the same repo frame', async () => {
-    const harness = createHookHarness()
+  it('refuses when the entry was captured in a different repo frame (deeper runtimes stack, #1607)', async () => {
     const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{
+          kind: 'drop-stash', label: 'drop stash@{0}', depth: 0, hash: stashEntry.hash, message: stashEntry.message,
+        }],
+      } as never,
+      // Drilled into a submodule since the drop — a deeper runtimes stack.
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    await runWorkflowAction('undo-drop-stash')
+
+    expect(restoreStashMock).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Nothing to undo — no stash dropped this session',
+    }))
+  })
+
+  // A depth-only guard can't tell two SIBLING repo frames apart — popping
+  // out of one submodule and drilling into a different one lands back at
+  // the same depth with a different `git` handle. `workdir` is the actual
+  // frame identity; the guard must refuse even though depth matches here.
+  it('refuses when depth matches but the entry was captured in a sibling repo frame (different workdir)', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        repoStack: [{ label: 'submodule-b', workdir: '/repo/submodule-b' }],
+        undoStack: [{
+          kind: 'drop-stash', label: 'drop stash@{0}', depth: 0, workdir: '/repo/submodule-a',
+          hash: stashEntry.hash, message: stashEntry.message,
+        }],
+      } as never,
+      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    await runWorkflowAction('undo-drop-stash')
+
+    expect(restoreStashMock).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Nothing to undo — no stash dropped this session',
+    }))
+  })
+
+  it('drop-stash stages a workdir-tagged undo entry so a later undo can tell sibling repo frames apart', async () => {
+    dropStashesMock.mockResolvedValueOnce({ ok: true, message: 'Dropped stash@{0}' })
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        repoStack: [{ label: 'submodule-a', workdir: '/repo/submodule-a' }],
+      } as never,
+      context: { stashes: { stashes: [stashEntry] } } as never,
+    }))
+
+    await runWorkflowAction('drop-stash')
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: {
+        kind: 'drop-stash',
+        label: 'drop stash@{0}',
+        depth: 0,
+        workdir: '/repo/submodule-a',
+        hash: stashEntry.hash,
+        message: stashEntry.message,
+      },
+    })
+  })
+})
+
+describe('undo stack (OSS-1606)', () => {
+  beforeEach(() => {
+    deleteBranchesMock.mockReset()
+    dropStashesMock.mockReset()
+    restoreStashMock.mockReset()
+  })
+
+  it('delete-branch pushes an undo entry only when the delete actually succeeds', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [localBranch], currentBranch: 'other' } } as never,
+    }))
+
+    deleteBranchesMock.mockResolvedValueOnce({ ok: false, message: 'refused' })
+    await runWorkflowAction('delete-branch')
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'pushUndoEntry' }))
+
+    deleteBranchesMock.mockResolvedValueOnce({ ok: true, message: 'Deleted branch main' })
+    await runWorkflowAction('delete-branch')
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: { kind: 'delete-branch', label: 'delete branch main', depth: 0, name: 'main', sha: 'abc' },
+    })
+  })
+
+  it('drop-stash pushes an undo entry for the dropped stash', async () => {
+    dropStashesMock.mockResolvedValueOnce({ ok: true, message: 'Dropped stash@{0}' })
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
     harness.beginRender()
     const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
       dispatch,
       context: { stashes: { stashes: [stashEntry] } } as never,
-      runtimes: [{}] as unknown as UseWorkflowActionDeps['runtimes'],
     }))
 
     await runWorkflowAction('drop-stash')
-    await runWorkflowAction('undo-drop-stash')
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: {
+        kind: 'drop-stash',
+        label: 'drop stash@{0}',
+        depth: 0,
+        hash: stashEntry.hash,
+        message: stashEntry.message,
+      },
+    })
+  })
 
+  // OSS-1606 follow-up (review concern): a partial batch delete must
+  // still push undo entries for the branches that actually deleted,
+  // not zero — that's the exact case where a mistake is most likely.
+  it('delete-branch (partial batch) pushes undo entries only for the branches that actually deleted', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        selection: { view: 'branches', ids: new Set(['main', 'feature/other']) },
+      } as never,
+      context: { branches: { localBranches: [localBranch, otherBranch], currentBranch: 'other' } } as never,
+    }))
+
+    deleteBranchesMock.mockResolvedValueOnce({
+      ok: false,
+      message: 'Deleted 1 of 2 branches — 1 refused',
+      succeeded: ['feature/other'],
+    })
+    await runWorkflowAction('delete-branch')
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: { kind: 'delete-branch', label: 'delete branch feature/other', depth: 0, name: 'feature/other', sha: 'def' },
+    })
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: expect.objectContaining({ name: 'main' }),
+    })
+  })
+
+  // OSS-1606 follow-up (review concern): same partial-batch guarantee
+  // for drop-stash — the dropped stash's recorded hash is the primary
+  // recovery path (branches also have reflog), so silently dropping the
+  // undo entry here is the worse regression of the two.
+  it('drop-stash (partial batch) pushes undo entries only for the stashes whose hash succeeded', async () => {
+    const dispatch = jest.fn()
+    const stashEntry2 = {
+      ref: 'stash@{1}',
+      hash: 'hash1',
+      baseHash: 'base1',
+      date: '2026-05-17',
+      branch: 'main',
+      message: 'WIP on main: def5678 more',
+      files: ['src/other.ts'],
+    }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        selection: { view: 'stash', ids: new Set(['stash@{0}', 'stash@{1}']) },
+      } as never,
+      context: { stashes: { stashes: [stashEntry, stashEntry2] } } as never,
+    }))
+
+    dropStashesMock.mockResolvedValueOnce({
+      ok: false,
+      message: 'Dropped 1 of 2 stashes — 1 refused',
+      succeeded: [stashEntry.hash],
+    })
+    await runWorkflowAction('drop-stash')
+
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: { kind: 'drop-stash', label: `drop ${stashEntry.ref}`, depth: 0, hash: stashEntry.hash, message: stashEntry.message },
+    })
+    expect(dispatch).not.toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: expect.objectContaining({ hash: stashEntry2.hash }),
+    })
+  })
+
+  it('undo-last-action reports "nothing to undo" against an empty stack', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ dispatch }))
+
+    await runWorkflowAction('undo-last-action')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Nothing to undo.',
+    }))
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'popUndoEntry' }))
+  })
+
+  it('undo-last-action refuses an entry captured in a different repo frame (mirrors #1607)', async () => {
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{ kind: 'delete-tag', label: 'delete tag v1', depth: 0, name: 'v1', sha: 'abc' }],
+      } as never,
+      runtimes: [{}, {}] as unknown as UseWorkflowActionDeps['runtimes'],
+    }))
+
+    await runWorkflowAction('undo-last-action')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Nothing to undo at this repo level.',
+    }))
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'popUndoEntry' }))
+  })
+
+  it('undo-last-action pops the stack and recreates a deleted branch at its recorded sha', async () => {
+    const dispatch = jest.fn()
+    const git = { raw: jest.fn().mockResolvedValue('') }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{ kind: 'delete-branch', label: 'delete branch main', depth: 0, name: 'main', sha: 'abc' }],
+      } as never,
+    }))
+
+    await runWorkflowAction('undo-last-action')
+    expect(git.raw).toHaveBeenCalledWith(['branch', 'main', 'abc'])
+    expect(dispatch).toHaveBeenCalledWith({ type: 'popUndoEntry' })
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Undid: delete branch main',
+    }))
+  })
+
+  it('undo-last-action pops the stack and restores a dropped stash via restoreStash', async () => {
+    restoreStashMock.mockResolvedValueOnce({ ok: true, message: 'Restored dropped stash' })
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{
+          kind: 'drop-stash',
+          label: 'drop stash@{0}',
+          depth: 0,
+          hash: stashEntry.hash,
+          message: stashEntry.message,
+        }],
+      } as never,
+    }))
+
+    await runWorkflowAction('undo-last-action')
     expect(restoreStashMock).toHaveBeenCalledWith(expect.anything(), stashEntry.hash, stashEntry.message)
+    expect(dispatch).toHaveBeenCalledWith({ type: 'popUndoEntry' })
+  })
+
+  it('reset-to-commit captures the pre-reset HEAD and pushes an undo entry on success', async () => {
+    const rows: GitLogRow[] = [{
+      type: 'commit',
+      graph: '*',
+      shortHash: 'c0',
+      hash: 'c0',
+      parents: [],
+      date: '2026-05-01',
+      author: 'Coco',
+      refs: [],
+      message: 'commit c0',
+    }]
+    const state = { ...createLogInkState(rows), selectedIndex: 0 }
+    const dispatch = jest.fn()
+    const git = {
+      revparse: jest.fn().mockImplementation((args: string[]) =>
+        Promise.resolve(args[0] === 'HEAD' ? 'deadbeef1234\n' : '/tmp/coco-missing-git-state')
+      ),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state,
+    }))
+
+    await runWorkflowAction('reset-to-commit', 'hard')
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: { kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234', mode: 'hard' },
+    })
+
+    dispatch.mockClear()
+    harness.beginRender()
+    const { runWorkflowAction: runUndo } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{
+          kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234', mode: 'hard',
+        }],
+      } as never,
+    }))
+    await runUndo('undo-last-action')
+    expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'deadbeef1234'])
+    expect(dispatch).toHaveBeenCalledWith({ type: 'popUndoEntry' })
+  })
+
+  it('reset-to-commit undo mirrors a --soft original reset instead of forcing --hard', async () => {
+    const dispatch = jest.fn()
+    const git = {
+      revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction: runUndo } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{
+          kind: 'reset-to-commit', label: 'reset --soft to c0', depth: 0, previousSha: 'deadbeef1234', mode: 'soft',
+        }],
+      } as never,
+    }))
+    await runUndo('undo-last-action')
+    expect(git.raw).toHaveBeenCalledWith(['reset', '--soft', 'deadbeef1234'])
+    expect(dispatch).toHaveBeenCalledWith({ type: 'popUndoEntry' })
+  })
+
+  it('undo-last-action pops the stack and recreates a deleted tag at its recorded sha', async () => {
+    const dispatch = jest.fn()
+    const git = { raw: jest.fn().mockResolvedValue('') }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: {
+        ...createLogInkState([]),
+        undoStack: [{ kind: 'delete-tag', label: 'delete tag v1.0.0', depth: 0, name: 'v1.0.0', sha: 'abc1234' }],
+      } as never,
+    }))
+
+    await runWorkflowAction('undo-last-action')
+    expect(git.raw).toHaveBeenCalledWith(['tag', 'v1.0.0', 'abc1234'])
+    expect(dispatch).toHaveBeenCalledWith({ type: 'popUndoEntry' })
   })
 })

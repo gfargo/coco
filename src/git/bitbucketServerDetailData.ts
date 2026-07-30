@@ -167,7 +167,7 @@ export async function getBitbucketServerPullRequestDetail(
       return { ok: false, message: `Empty response from Bitbucket Server for pull request #${pullRequestNumber}` }
     }
 
-    const [comments, statusChecks] = await Promise.all([
+    const [commentsResult, statusChecks] = await Promise.all([
       fetchAllComments(runner, base),
       fetchCommitStatuses(runner, host, pr.fromRef?.latestCommit),
     ])
@@ -175,9 +175,10 @@ export async function getBitbucketServerPullRequestDetail(
     const detail: PullRequestDetail = {
       number: pullRequestNumber,
       body: pr.description || '',
-      comments,
+      comments: commentsResult.items,
       reviews: parseReviewers(pr.reviewers),
       statusCheckRollup: statusChecks,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {

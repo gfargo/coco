@@ -189,6 +189,19 @@ describe('agent repository context', () => {
     })
   })
 
+  it('stores the supplied onProgress reporter on the context', async () => {
+    const onProgress = jest.fn()
+    const context = await createAgentOperationContext({ repoRoot, onProgress })
+
+    expect(context.onProgress).toBe(onProgress)
+  })
+
+  it('leaves onProgress undefined when the caller does not supply one', async () => {
+    const context = await createAgentOperationContext({ repoRoot })
+
+    expect(context.onProgress).toBeUndefined()
+  })
+
   it('fails immediately when the operation is cancelled before source resolution', async () => {
     const controller = new AbortController()
     const context = await createAgentOperationContext({ repoRoot, signal: controller.signal })

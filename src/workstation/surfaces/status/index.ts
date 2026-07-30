@@ -111,7 +111,10 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
     const idx = surfaceRows.findIndex((row) => row.kind === 'file' && row.flatIndex === selectedIndex)
     return idx >= 0 ? idx : 0
   })()
-  const cleanHint = formatLogInkStatusEmpty({ hasChanges: Boolean(worktree?.files.length) })
+  const cleanHint = formatLogInkStatusEmpty({
+    hasChanges: Boolean(worktree?.files.length),
+    sparse: context.sparse?.enabled,
+  })
   const windowStart = Math.max(
     0,
     Math.min(
