@@ -1,6 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { BranchRef } from './branchData'
 import { rejectFlagLike } from './forgeArgGuards'
+import { listRemotes, resolveDefaultRemoteName } from './remoteResolution'
 
 export type BranchActionResult = {
   ok: boolean
@@ -44,25 +45,6 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
       message: (error as Error).message,
     }
   }
-}
-
-/** Configured remote names (best-effort; `[]` if the call fails). */
-async function listRemotes(git: SimpleGit): Promise<string[]> {
-  try {
-    return (await git.getRemotes()).map((remote) => remote.name).filter(Boolean)
-  } catch {
-    return []
-  }
-}
-
-/**
- * Remote to push a not-yet-tracked branch to: `origin` when it exists,
- * else the first configured remote, else `undefined` (no remotes).
- */
-async function resolveDefaultRemote(git: SimpleGit): Promise<string | undefined> {
-  const remotes = await listRemotes(git)
-  if (remotes.length === 0) return undefined
-  return remotes.includes('origin') ? 'origin' : remotes[0]
 }
 
 /** Whether the remote-tracking ref `refs/remotes/<remote>/<branch>` exists locally. */
@@ -349,7 +331,7 @@ export async function pushCurrentBranch(git: SimpleGit): Promise<BranchActionRes
   }
   // No upstream yet — push with `-u` to create the remote branch AND set
   // tracking, instead of failing with git's bare "has no upstream" error.
-  const remote = await resolveDefaultRemote(git)
+  const remote = await resolveDefaultRemoteName(git)
   if (!remote) {
     return { ok: false, message: 'No upstream and no remote configured — add one with `git remote add origin <url>`.' }
   }
@@ -430,7 +412,7 @@ export async function pushBranch(
   if (!branch.upstream || !branch.remote) {
     // No upstream yet — push with `-u` to create the remote branch AND set
     // tracking, rather than refusing and sending the user to the shell.
-    const remote = await resolveDefaultRemote(git)
+    const remote = await resolveDefaultRemoteName(git)
     if (!remote) {
       return {
         ok: false,
