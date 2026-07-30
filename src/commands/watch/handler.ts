@@ -98,7 +98,12 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
   // changed (editors can touch-save unchanged content, or fire twice for
   // one edit). Comparing `resolveChangeSource`'s content digest against the
   // last-seen value skips the LLM call entirely when nothing changed.
-  let lastDigest: string | undefined
+  //
+  // Tracked per operation rather than per pass: if `--review --draft` runs
+  // on a digest and `review` succeeds but `commit-draft` fails, the next
+  // settle on that same (still-unchanged) tree must retry only the failed
+  // operation, not re-bill the one that already succeeded.
+  const lastSucceededDigest = new Map<AgentOperation, string>()
   let stopped = false
 
   async function runOnce(): Promise<void> {
@@ -110,7 +115,7 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
     } catch (error) {
       const normalized = toAgentOperationError(error)
       if (normalized.code === 'NO_CHANGES') {
-        lastDigest = undefined
+        lastSucceededDigest.clear()
         if (!stopped) {
           emitEvent(argv, logger, { type: 'idle' })
         }
@@ -122,19 +127,13 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
       return
     }
 
-    if (resolved.meta.digest === lastDigest) {
+    const pending = operations.filter((operation) => lastSucceededDigest.get(operation) !== resolved.meta.digest)
+    if (pending.length === 0) {
       emitEvent(argv, logger, { type: 'skipped', reason: 'unchanged', digest: resolved.meta.digest })
       return
     }
 
-    // Only mark this digest "seen" once every operation in the pass has
-    // completed cleanly. Committing it up front would permanently retire a
-    // digest whose operation failed transiently (e.g. a network error),
-    // silently skipping it on every future settle even though nothing about
-    // the change set ever succeeded.
-    let allSucceeded = true
-
-    for (const operation of operations) {
+    for (const operation of pending) {
       if (stopped) return
       emitEvent(argv, logger, { type: 'running', operation })
       try {
@@ -142,6 +141,7 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
         // `--review --draft` pass see the exact tree the digest was taken
         // from, and so a settled change set resolves the diff once.
         const envelope = await runAgentOperation(operation, input, context, resolved)
+        lastSucceededDigest.set(operation, resolved.meta.digest)
         // Shutdown may land while an operation is resolving successfully;
         // `stopped` already emitted the terminal `stopped` event by the time
         // this settles, so don't emit a trailing result after it.
@@ -149,7 +149,6 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
           emitEvent(argv, logger, { type: 'result', operation, data: envelope.data, warnings: envelope.warnings })
         }
       } catch (error) {
-        allSucceeded = false
         const normalized = toAgentOperationError(error)
         // Same race on the failure path: an in-flight operation aborted by
         // shutdown may reject after `stopped` already emitted `stopped`.
@@ -157,10 +156,6 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
           emitEvent(argv, logger, { type: 'error', operation, code: normalized.code, message: normalized.message })
         }
       }
-    }
-
-    if (allSucceeded && !stopped) {
-      lastDigest = resolved.meta.digest
     }
   }
 

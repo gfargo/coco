@@ -243,6 +243,33 @@ describe('watch command handler', () => {
     expect(events.some((event) => (event as { type: string }).type === 'skipped')).toBe(false)
   })
 
+  it('retries only the operation that failed, not one that already succeeded on the same digest', async () => {
+    mockRunAgentOperation.mockImplementation((operation: string) =>
+      operation === 'commit-draft'
+        ? Promise.reject(new Error('provider unavailable'))
+        : Promise.resolve(reviewSuccess),
+    )
+
+    const handlerPromise = handler(argv({ review: true, draft: true }), logger)
+    await waitForShutdownListener()
+
+    // First pass on this digest: review succeeds, commit-draft fails.
+    await capturedRun?.()
+    // commit-draft now succeeds; the tree hasn't changed (same digest).
+    mockRunAgentOperation.mockImplementation((operation: string) =>
+      Promise.resolve(operation === 'commit-draft' ? { ...reviewSuccess, operation: 'commit-draft' } : reviewSuccess),
+    )
+    await capturedRun?.()
+
+    process.emit('SIGINT' as never)
+    await handlerPromise
+
+    // review only ran once — it already succeeded for this digest and must
+    // not be re-billed alongside the retried commit-draft.
+    const operationsCalled = mockRunAgentOperation.mock.calls.map((call) => call[0])
+    expect(operationsCalled).toEqual(['review', 'commit-draft', 'commit-draft'])
+  })
+
   it('does not emit idle after the terminal stopped event when NO_CHANGES resolves after shutdown', async () => {
     let rejectResolve: (error: unknown) => void = () => {}
     mockResolveChangeSource.mockImplementation(() => new Promise((_resolve, reject) => {
