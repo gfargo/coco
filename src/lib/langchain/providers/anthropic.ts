@@ -1,9 +1,8 @@
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import { resolveTemperature, toAnthropicEffort } from './reasoning'
-import type { CreateLlmArgs, ProviderDefinition } from './types'
+import type { ChatModel, CreateLlmArgs, ProviderDefinition } from './types'
 
-async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
+async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Promise<ChatModel> {
   const { ChatAnthropic } = await import('@langchain/anthropic')
   const reasoningEffort = config.service.reasoningEffort
 
@@ -49,9 +48,10 @@ async function createAnthropicLlm({ model, config, apiKey }: CreateLlmArgs): Pro
   // field. `withConfig` bakes it into every `chain.invoke()`/`.stream()`
   // without touching call sites — it auto-applies the cache breakpoint to
   // the last cacheable block and advances it as the conversation grows, so
-  // no manual message-block placement is needed.
+  // no manual message-block placement is needed. This returns a `Runnable`
+  // rather than a `ChatAnthropic`, hence the `ChatModel` return type above.
   if (config.service.promptCache) {
-    return llm.withConfig({ cache_control: { type: 'ephemeral' } }) as unknown as BaseChatModel
+    return llm.withConfig({ cache_control: { type: 'ephemeral' } })
   }
 
   return llm
