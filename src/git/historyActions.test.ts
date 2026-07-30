@@ -12,6 +12,7 @@ import {
   historyActionTestInternals,
   rewordHeadCommit,
   resetToCommit,
+  restorePreviousHead,
   revertCommit,
   autosquashRebase,
   createFixupCommit,
@@ -323,6 +324,56 @@ describe('log history actions', () => {
 
     expect(git.raw).toHaveBeenNthCalledWith(1, ['reset', '--mixed', commit.hash])
     expect(git.raw).toHaveBeenNthCalledWith(2, ['rebase', '-i', `${commit.hash}^`])
+  })
+
+  describe('restorePreviousHead (OSS-1606 undo-stack inverse for resetToCommit)', () => {
+    it('defaults to --hard when no mode is given', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+
+      await expect(restorePreviousHead(git as never, 'abcdef1234567890')).resolves.toEqual({
+        ok: true,
+        message: 'Restored HEAD to abcdef1',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'abcdef1234567890'])
+    })
+
+    it.each(['soft', 'mixed', 'hard'] as const)(
+      'mirrors a %s original reset with the matching mode',
+      async (mode) => {
+        const git = {
+          revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+          raw: jest.fn().mockResolvedValue(''),
+        }
+
+        await expect(restorePreviousHead(git as never, 'abcdef1234567890', mode)).resolves.toEqual({
+          ok: true,
+          message: 'Restored HEAD to abcdef1',
+        })
+        expect(git.raw).toHaveBeenCalledWith(['reset', `--${mode}`, 'abcdef1234567890'])
+      }
+    )
+
+    it('blocks while another git operation is in progress', async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'coco-history-restore-'))
+      const mergeHead = join(tempDir, 'MERGE_HEAD')
+      writeFileSync(mergeHead, 'abcdef1234567890')
+      const git = {
+        revparse: jest.fn().mockResolvedValue(mergeHead),
+        raw: jest.fn(),
+      }
+      try {
+        await expect(restorePreviousHead(git as never, 'abcdef1234567890')).resolves.toEqual({
+          ok: false,
+          message: 'Finish or abort the in-progress merge before editing history.',
+        })
+        expect(git.raw).not.toHaveBeenCalled()
+      } finally {
+        rmSync(tempDir, { force: true, recursive: true })
+      }
+    })
   })
 
   it('creates a fixup commit targeting the cursored commit', async () => {

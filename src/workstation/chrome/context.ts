@@ -9,6 +9,7 @@ export const LOG_INK_CONTEXT_KEYS = [
   'pullRequestList',
   'reflog',
   'remotes',
+  'sparse',
   'stashes',
   'submodules',
   'tags',

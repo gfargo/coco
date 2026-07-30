@@ -90,6 +90,13 @@ export type CommitDraftInput = {
    * trusted, preventing executable commitlint config from running implicitly.
    */
   trustRepositoryConfig?: boolean
+  /**
+   * Pre-resolved `conventions_context` prompt variable (#1956), e.g. from
+   * `getConventionsContext`. Only the agent layer reads convention files
+   * from disk -- this function never reads them itself, so interactive
+   * `coco commit` callers that omit this stay unaffected.
+   */
+  conventionsContext?: string
   /** Override the invocation surface stored in metadata-only local usage records. */
   usageSurface?: LlmUsageSurface
   /** Disable persistent usage-ledger writes when a caller requires it. */
@@ -163,6 +170,7 @@ export async function generateCommitDraft({
   changeSource,
   preparedSummary,
   trustRepositoryConfig = true,
+  conventionsContext,
   usageSurface,
   recordUsage,
 }: CommitDraftInput): Promise<CommitDraftResult> {
@@ -300,6 +308,7 @@ export async function generateCommitDraft({
         preserveConventionalTokens: useConventional,
       },
     ),
+    conventions_context: conventionsContext ?? '',
   }
 
   // Reconciles the summarizer's `|| 4096` fallback (createFileChangeParserOptions

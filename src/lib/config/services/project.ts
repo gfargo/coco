@@ -4,41 +4,11 @@ import { Config } from '../types'
 import { SCHEMA_PUBLIC_URL, schema } from '../../schema'
 import { ajv } from '../../ajv'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
-import { PROJECT_CONFIG_CANDIDATES } from '../utils/scopedConfigFile'
+import { PROJECT_CONFIG_CANDIDATES, TRUSTED_PROJECT_SERVICE_KEYS } from '../constants/projectConfig'
+
+export { TRUSTED_PROJECT_SERVICE_KEYS } from '../constants/projectConfig'
 
 const validate = ajv.compile(schema)
-
-/**
- * A repo-committed `.coco.json` / `.coco.config.json` is untrusted content —
- * anyone who can get a victim to `git clone` a repo controls this file. Only
- * "tuning" knobs are honored from it; anything that decides WHERE a request
- * goes or WHAT credentials it carries must come from a trusted layer (the
- * built-in default, XDG config, `~/.gitconfig`, or env vars), never from the
- * repo itself. Otherwise a hostile repo can point `service.baseURL` /
- * `endpoint` / `authentication` / `fields` at an attacker's server and the
- * victim's real API key (and staged diffs) get sent there on `coco commit`.
- *
- * `provider` is intentionally allowlisted: switching provider alone, with
- * baseURL/endpoint/authentication/fields still pinned to trusted values, can
- * at worst misroute to a different provider's OFFICIAL endpoint using a key
- * the user already had configured for it — a nuisance, not an exfiltration
- * vector.
- */
-export const TRUSTED_PROJECT_SERVICE_KEYS = [
-  'model',
-  'tokenLimit',
-  'temperature',
-  'maxConcurrent',
-  'minTokensForSummary',
-  'maxFileTokens',
-  'maxParsingAttempts',
-  'dynamicModels',
-  'dynamicModelPreference',
-  'streaming',
-  'fastPath',
-  'requestOptions',
-  'provider',
-] as const
 
 /**
  * Mirrors the read-side filter above, but for the write path: strips

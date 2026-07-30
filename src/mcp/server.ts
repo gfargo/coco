@@ -9,6 +9,8 @@ import {
     AgentTaskInputSchema,
     ChangelogDataSchema,
     CommitDraftDataSchema,
+    CondenseDiffDataSchema,
+    CondenseDiffRequestSchema,
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
@@ -18,6 +20,7 @@ import {
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
+    runCondenseDiff,
     toAgentOperationError,
 } from '../operations/agent'
 
@@ -31,6 +34,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, ChangelogDataSchema)
     case 'recap':
       return createAgentMcpOutputSchema(operation, RecapDataSchema)
+    case 'condense-diff':
+      return createAgentMcpOutputSchema(operation, CondenseDiffDataSchema)
   }
 }
 
@@ -143,10 +148,28 @@ function registerGenerationTool(
       }
       const repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
       await assertClientAllowsRoot(server, repoRoot)
+      const progressToken = extra._meta?.progressToken
+      let progressCounter = 0
+      const onProgress = progressToken === undefined
+        ? undefined
+        : (update: { message?: string; fraction?: number }) => {
+          void extra.sendNotification({
+            method: 'notifications/progress',
+            params: {
+              progressToken,
+              progress: ++progressCounter,
+              message: update.message,
+            },
+          }).catch(() => {
+            // Fire-and-forget: a client that closed its notification
+            // channel mid-call must never fail the underlying operation.
+          })
+        }
       const context = await createAgentOperationContext({
         repoRoot,
         signal: extra.signal,
         surface: 'mcp',
+        onProgress,
       })
       const result = await runAgentOperation(operation, input, context)
       return {
@@ -211,6 +234,60 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     'Generate a structured recap from repository changes or supplied context.',
     repoRoot,
   )
+
+  // condense-diff uses its own input schema (CondenseDiffRequestSchema) and
+  // dispatches to runCondenseDiff, so it is registered separately rather than
+  // through registerGenerationTool.
+  server.registerTool('coco_condense_diff', {
+    title: 'Condense diff',
+    description: [
+      'Reduce a diff to a semantically condensed representation within a token budget.',
+      'Uses tree-sitter / regex structural extractors — no LLM call, no API key required in structural mode (the default).',
+      'Per-file metrics report whether structural extraction, a trivial-shape shortcut, or line-based fallback was applied.',
+      'Files omitted to meet the budget are reported in metrics.filesOmitted.',
+      'The result is a LOSSY reduction; findings based on it may miss details from omitted or simplified content.',
+    ].join(' '),
+    inputSchema: CondenseDiffRequestSchema,
+    outputSchema: outputSchemaFor('condense-diff'),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    },
+  }, async (rawInput, extra) => {
+    const operation = 'condense-diff' as const
+    try {
+      const input = CondenseDiffRequestSchema.parse(rawInput)
+      if (input.trustRepositoryConfig) {
+        throw new AgentOperationError(
+          'UNSAFE_OPTION',
+          'MCP tools do not execute repository-defined prompts or commitlint configuration. Use the one-shot agent CLI only for explicitly trusted repositories.',
+        )
+      }
+      // repoRoot here shadows the outer parameter, using it as the "boundRoot"
+      // to match the single-repo confinement pattern of the other tools.
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot: resolvedRepoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const result = await runCondenseDiff(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+        structuredContent: failure,
+      }
+    }
+  })
 
   return server
 }

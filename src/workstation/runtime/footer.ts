@@ -130,6 +130,7 @@ export function renderFooter(
     // Suppressed under an overlay (which owns the footer) just like the
     // switcher.
     peeking: Boolean(state.peekReturnFocus) && singlePane && !overlayForcesPane,
+    undoStackSize: state.undoStack.length,
   })
   // Real status messages always win; idle tips only fill the slot when it
   // would otherwise be empty.

@@ -383,6 +383,30 @@ export function resetToCommit(
 }
 
 /**
+ * Reset back to the HEAD position recorded before a `resetToCommit` call
+ * — the undo-stack inverse (OSS-1606). Mirrors the ORIGINAL reset's mode
+ * rather than always forcing `--hard`: `--soft`/`--mixed` resets never
+ * touched the index/working tree, so undoing them with `--hard` would
+ * blow away any uncommitted work the user made after the reset (which
+ * the reflog cannot recover) — that's the wrong inverse for a
+ * non-destructive reset. Only a `--hard` original reset is undone with
+ * `--hard`, since that's the only mode where the recorded sha is also
+ * the correct index/working-tree state to restore.
+ */
+export function restorePreviousHead(
+  git: SimpleGit,
+  previousSha: string,
+  mode: ResetMode = 'hard'
+): Promise<BranchActionResult> {
+  return guardNoInProgressOperation(git).then((blocked) => (
+    blocked || runAction(
+      () => git.raw(['reset', `--${mode}`, previousSha]),
+      `Restored HEAD to ${previousSha.slice(0, 7)}`
+    )
+  ))
+}
+
+/**
  * Create a new local branch pointed at <commit>, without switching to it.
  *
  * This is the "create branch from cursored commit" history action — the

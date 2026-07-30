@@ -1033,7 +1033,7 @@ export async function handleCommitSplit({
 
   const shouldApply = await confirmPrompt({
     message: `Apply these ${plan.groups.filter((g) => !g.unclaimed).length} commits?`,
-    default: true,
+    default: false,
   })
 
   if (!shouldApply) {

@@ -2,6 +2,7 @@ import { Config } from '../../lib/config/types'
 import { getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
 import {
     checkAuthentication,
+    checkDynamicRouting,
     checkEndpointSupport,
     checkOllamaLiveness,
     checkProviderValidity,
@@ -99,6 +100,17 @@ describe('checkProviderValidity', () => {
     checkProviderValidity(configWithProvider('aws'), diagnostics)
     expect(diagnostics[0].message).toContain('"bedrock"')
   })
+
+  // #OSS-1623 — the OpenAI-compatible presets are first-class providers now,
+  // so `coco doctor` must recognize them (not flag as "Unknown provider").
+  it.each(['deepseek', 'groq', 'xai', 'together', 'fireworks', 'openrouter', 'lmstudio', 'vllm'])(
+    'produces no diagnostic for the first-class provider "%s"',
+    (provider) => {
+      const diagnostics: Diagnostic[] = []
+      checkProviderValidity(configWithProvider(provider), diagnostics)
+      expect(diagnostics).toEqual([])
+    }
+  )
 })
 
 describe('checkAuthentication', () => {
@@ -146,6 +158,41 @@ describe('checkAuthentication', () => {
     checkAuthentication(config, diagnostics)
 
     expect(diagnostics).toEqual([])
+  })
+
+  // #OSS-1623 — first-class OpenAI-compatible providers.
+  it('errors when a hosted compat provider (groq) has no authentication configured', () => {
+    const config = {
+      service: { provider: 'groq', model: 'llama-3.3-70b-versatile', authentication: { type: 'None' } },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('error')
+    expect(diagnostics[0].message).toContain('requires authentication')
+  })
+
+  it('only warns when a no-auth local provider (lmstudio) has no authentication configured', () => {
+    const config = {
+      service: { provider: 'lmstudio', model: 'local-model', authentication: { type: 'None' } },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+  })
+
+  it('only warns when a no-auth local provider (vllm) has no authentication configured', () => {
+    const config = {
+      service: { provider: 'vllm', model: 'local-model', authentication: { type: 'None' } },
+    } as unknown as Config
+    const diagnostics: Diagnostic[] = []
+    checkAuthentication(config, diagnostics)
+
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
   })
 })
 
@@ -209,6 +256,15 @@ describe('checkEndpointSupport', () => {
     const diagnostics: Diagnostic[] = []
     checkEndpointSupport({ service: { model: 'gpt-4o', endpoint: 'http://x' } } as unknown as Config, diagnostics)
     expect(diagnostics).toEqual([])
+  })
+
+  // #OSS-1623 — compat providers use service.baseURL, same as openai/anthropic.
+  it('warns when endpoint (not baseURL) is set for a first-class compat provider (groq)', () => {
+    const diagnostics: Diagnostic[] = []
+    checkEndpointSupport(configWith('groq', { endpoint: 'http://custom-host:8080' }), diagnostics)
+    expect(diagnostics).toHaveLength(1)
+    expect(diagnostics[0].severity).toBe('warn')
+    expect(diagnostics[0].fix).toContain('baseURL')
   })
 })
 
@@ -296,5 +352,62 @@ describe('checkOllamaLiveness', () => {
     // balanced commit tier for ollama is qwen2.5-coder:14b
     expect(diagnostic.message).toContain('qwen2.5-coder:14b')
     expect(diagnostic.message).toContain('dynamic → commit')
+  })
+})
+
+describe('checkDynamicRouting', () => {
+  it('reports the routing-active info for a provider with a tracked catalog', () => {
+    const diagnostics: Diagnostic[] = []
+    checkDynamicRouting(
+      { service: { provider: 'anthropic', model: 'dynamic' } } as unknown as Config,
+      diagnostics
+    )
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ severity: 'info', message: expect.stringContaining('routing is active') })
+    )
+  })
+
+  // #OSS-1623 — DeepSeek/Groq/etc. have no DYNAMIC_DEFAULTS row, so
+  // `resolveDynamicModel` throws at runtime for any uncovered task. Doctor
+  // must surface that before the user's first `coco commit`, not report a
+  // false-positive "routing is active".
+  it('flags an error for a first-class preset with no tracked catalog and no overrides', () => {
+    const diagnostics: Diagnostic[] = []
+    checkDynamicRouting(
+      { service: { provider: 'deepseek', model: 'dynamic' } } as unknown as Config,
+      diagnostics
+    )
+    const error = diagnostics.find((d) => d.severity === 'error')
+    expect(error).toBeDefined()
+    expect(error!.message).toContain('deepseek')
+    expect(error!.message).toContain('commit')
+    expect(diagnostics.some((d) => d.message.includes('routing is active'))).toBe(false)
+  })
+
+  it('does not flag an error when every task has a dynamicModels override', () => {
+    const diagnostics: Diagnostic[] = []
+    checkDynamicRouting(
+      {
+        service: {
+          provider: 'deepseek',
+          model: 'dynamic',
+          dynamicModels: {
+            summarize: 'deepseek-chat',
+            commit: 'deepseek-chat',
+            commitSplit: 'deepseek-chat',
+            changelog: 'deepseek-chat',
+            review: 'deepseek-chat',
+            recap: 'deepseek-chat',
+            repair: 'deepseek-chat',
+            largeDiff: 'deepseek-chat',
+          },
+        },
+      } as unknown as Config,
+      diagnostics
+    )
+    expect(diagnostics.some((d) => d.severity === 'error')).toBe(false)
+    expect(diagnostics).toContainEqual(
+      expect.objectContaining({ severity: 'info', message: expect.stringContaining('routing is active') })
+    )
   })
 })

@@ -3,6 +3,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { resolveGitRepoRoot } from '../../../utils/resolveGitRepoRoot'
 import { getCocoCacheDir } from '../../../utils/cocoPaths'
+import { writeFileAtomic } from '../../../utils/atomicFileWrite'
 
 /**
  * Per-repo disk cache of LLM-summarized diffs (#845, PR 5). On a
@@ -104,12 +105,114 @@ function readEnvelope(filePath: string): CacheEnvelope | undefined {
   }
 }
 
+/**
+ * In-memory envelope cache, keyed by cache file path (#1923). Each
+ * envelope is loaded from disk at most once per process and mutated
+ * in place thereafter; `writeDiffSummary`/`touchDiffSummary` used to
+ * pay a full parse+stringify+write of the whole file on every call,
+ * which meant every cache *hit* (touch) and every cache *write*
+ * rewrote the entire 500-entry file synchronously on the hot path.
+ * Dirty envelopes are flushed once via `flushDiffSummaryCache`,
+ * installed to run on process exit/signal.
+ */
+const envelopes = new Map<string, CacheEnvelope>()
+const dirtyPaths = new Set<string>()
+let flushHandlersInstalled = false
+
+function getEnvelope(filePath: string): CacheEnvelope {
+  const cached = envelopes.get(filePath)
+  if (cached) return cached
+  const loaded = readEnvelope(filePath) || {
+    version: CACHE_SCHEMA_VERSION,
+    savedAt: new Date().toISOString(),
+    entries: {},
+  }
+  envelopes.set(filePath, loaded)
+  return loaded
+}
+
+/**
+ * Merge this process's in-memory entries into whatever is currently
+ * on disk, keyed by `lastAccessedAt` (newest wins per key). A flush
+ * that instead blindly overwrote the file would, for two coco
+ * processes running concurrently (the `coco ui` + CLI run scenario
+ * the work item cites), silently discard whichever process's entire
+ * session flushed first (#1923 review) — a wider lost-update window
+ * than the read-modify-write this replaced. Merging bounds the loss
+ * to "an entry another process wrote got evicted by the cap," not
+ * "an entire process's session vanished."
+ */
+function mergeEnvelopeForFlush(filePath: string, inMemory: CacheEnvelope): CacheEnvelope {
+  const onDisk = readEnvelope(filePath)
+  const merged: Record<string, DiffSummaryCacheEntry> = { ...(onDisk?.entries ?? {}) }
+  for (const [key, entry] of Object.entries(inMemory.entries)) {
+    const existing = merged[key]
+    if (!existing || Date.parse(entry.lastAccessedAt) >= Date.parse(existing.lastAccessedAt)) {
+      merged[key] = entry
+    }
+  }
+  const evicted = enforceHardCap(merged)
+  for (const key of evicted) delete merged[key]
+  return { version: CACHE_SCHEMA_VERSION, savedAt: new Date().toISOString(), entries: merged }
+}
+
+/**
+ * Flush every dirty in-memory envelope to disk, atomically. Installed
+ * as an exit/signal handler (best-effort, swallowed) so a normal
+ * process end persists the process-lifetime cache exactly once,
+ * instead of on every write/touch.
+ */
+export function flushDiffSummaryCache(): void {
+  for (const filePath of dirtyPaths) {
+    const envelope = envelopes.get(filePath)
+    if (!envelope) continue
+    try {
+      const merged = mergeEnvelopeForFlush(filePath, envelope)
+      fs.mkdirSync(path.dirname(filePath), { recursive: true })
+      writeFileAtomic(filePath, JSON.stringify(merged))
+      // Keep the in-memory envelope in sync with what landed on disk
+      // so a later flush in this same process merges against the
+      // fuller picture (including entries another process wrote)
+      // instead of re-deriving it from a stale snapshot.
+      envelopes.set(filePath, merged)
+    } catch {
+      // Best-effort persistence; swallow.
+    }
+  }
+  dirtyPaths.clear()
+}
+
+/**
+ * Flush then re-raise the signal so Node's default "terminate
+ * immediately" disposition still applies. `writeDiffSummary`/
+ * `touchDiffSummary` run on the ordinary `coco commit`/`coco pr`
+ * path, not just long-lived `coco ui` — a signal handler that only
+ * flushes (and never exits) would silently remove Ctrl+C's ability
+ * to kill the process while an LLM request is in flight (#1923
+ * review). Removing our own listener before re-sending the signal
+ * lets Node apply the default action (or any other registered
+ * handler) exactly as if we were never here.
+ */
+function handleTerminationSignal(signal: NodeJS.Signals): void {
+  flushDiffSummaryCache()
+  process.removeListener(signal, handleTerminationSignal)
+  process.kill(process.pid, signal)
+}
+
+function installFlushHandlers(): void {
+  if (flushHandlersInstalled) return
+  flushHandlersInstalled = true
+  process.on('exit', flushDiffSummaryCache)
+  process.on('beforeExit', flushDiffSummaryCache)
+  process.on('SIGINT', handleTerminationSignal)
+  process.on('SIGTERM', handleTerminationSignal)
+}
+
 export function readDiffSummary(
   repoPath: string,
   key: string
 ): DiffSummaryCacheEntry | undefined {
-  const envelope = readEnvelope(getDiffSummaryCachePath(repoPath))
-  if (!envelope) return undefined
+  const envelope = getEnvelope(getDiffSummaryCachePath(repoPath))
   const entry = envelope.entries[key]
   if (!entry) return undefined
   if (!entry.summary || !entry.summary.trim()) return undefined
@@ -122,48 +225,36 @@ export function writeDiffSummary(
   entry: Omit<DiffSummaryCacheEntry, 'lastAccessedAt'>
 ): void {
   const filePath = getDiffSummaryCachePath(repoPath)
-  const existing = readEnvelope(filePath) || {
-    version: CACHE_SCHEMA_VERSION,
-    savedAt: new Date().toISOString(),
-    entries: {},
-  }
-  existing.entries[key] = { ...entry, lastAccessedAt: new Date().toISOString() }
-  existing.savedAt = new Date().toISOString()
+  const envelope = getEnvelope(filePath)
+  envelope.entries[key] = { ...entry, lastAccessedAt: new Date().toISOString() }
+  envelope.savedAt = new Date().toISOString()
 
-  const evictedEntries = enforceHardCap(existing.entries)
-  if (evictedEntries.length > 0) {
-    for (const evicted of evictedEntries) {
-      delete existing.entries[evicted]
-    }
+  const evictedEntries = enforceHardCap(envelope.entries)
+  for (const evicted of evictedEntries) {
+    delete envelope.entries[evicted]
   }
 
-  try {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true })
-    fs.writeFileSync(filePath, JSON.stringify(existing))
-  } catch {
-    // Best-effort persistence; swallow.
-  }
+  dirtyPaths.add(filePath)
+  installFlushHandlers()
 }
 
 /**
  * Touch an existing entry's lastAccessedAt so LRU eviction prefers
  * dropping older / unused entries. Caller is expected to know the
- * entry exists (read returned a hit).
+ * entry exists (read returned a hit). Memory-only — no disk I/O — so
+ * a fully-cached run no longer pays a rewrite per cache hit (#1923).
  */
 export function touchDiffSummary(repoPath: string, key: string): void {
   const filePath = getDiffSummaryCachePath(repoPath)
-  const envelope = readEnvelope(filePath)
-  if (!envelope || !envelope.entries[key]) return
+  const envelope = getEnvelope(filePath)
+  if (!envelope.entries[key]) return
   envelope.entries[key] = {
     ...envelope.entries[key],
     lastAccessedAt: new Date().toISOString(),
   }
   envelope.savedAt = new Date().toISOString()
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(envelope))
-  } catch {
-    // Swallow.
-  }
+  dirtyPaths.add(filePath)
+  installFlushHandlers()
 }
 
 function enforceHardCap(entries: Record<string, DiffSummaryCacheEntry>): string[] {
@@ -181,6 +272,10 @@ function enforceHardCap(entries: Record<string, DiffSummaryCacheEntry>): string[
 /** Remove the entire cache file for the repo. Used by `coco cache:clear`. */
 export function clearDiffSummaryCache(repoPath: string): { ok: boolean; removed: boolean } {
   const filePath = getDiffSummaryCachePath(repoPath)
+  // Drop the in-memory envelope too, so a cleared cache isn't
+  // silently re-flushed to disk by the exit handler (#1923).
+  envelopes.delete(filePath)
+  dirtyPaths.delete(filePath)
   if (!fs.existsSync(filePath)) {
     return { ok: true, removed: false }
   }
@@ -192,4 +287,13 @@ export function clearDiffSummaryCache(repoPath: string): { ok: boolean; removed:
   }
 }
 
-export const __testInternals = { CACHE_ENTRY_HARD_CAP, enforceHardCap }
+export const __testInternals = {
+  CACHE_ENTRY_HARD_CAP,
+  enforceHardCap,
+  handleTerminationSignal,
+  /** Drop all in-memory envelopes/dirty state between tests. */
+  resetInMemoryCache(): void {
+    envelopes.clear()
+    dirtyPaths.clear()
+  },
+}
