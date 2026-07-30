@@ -152,6 +152,69 @@ describe('log pull request data', () => {
     })
   })
 
+  it('reports the friendly message when gh genuinely has no PR for the branch', async () => {
+    const runner = jest
+      .fn()
+      .mockResolvedValueOnce('')
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Command failed: gh pr view --json ...'), {
+          stderr: 'no pull requests found for branch "wip"\n',
+        })
+      )
+    const git = {
+      getRemotes: jest.fn().mockResolvedValue([
+        { name: 'origin', refs: { fetch: 'git@github.com:gfargo/coco.git', push: '' } },
+      ]),
+      raw: jest.fn().mockResolvedValue('wip\n'),
+    }
+
+    await expect(getPullRequestOverview(git as never, runner)).resolves.toEqual({
+      available: true,
+      authenticated: true,
+      repository: { owner: 'gfargo', name: 'coco', host: 'github.com' },
+      currentBranch: 'wip',
+      message: 'No pull request found for wip.',
+    })
+  })
+
+  it('surfaces the real gh error instead of "No pull request found" for rate limits', async () => {
+    const runner = jest
+      .fn()
+      .mockResolvedValueOnce('')
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Command failed: gh pr view --json ...'), {
+          stderr: 'HTTP 403: API rate limit exceeded for user ID 123.\n',
+        })
+      )
+    const git = {
+      getRemotes: jest.fn().mockResolvedValue([
+        { name: 'origin', refs: { fetch: 'git@github.com:gfargo/coco.git', push: '' } },
+      ]),
+      raw: jest.fn().mockResolvedValue('wip\n'),
+    }
+
+    const overview = await getPullRequestOverview(git as never, runner)
+    expect(overview.message).toContain('rate limit')
+    expect(overview.message).not.toContain('No pull request found')
+  })
+
+  it('reports "No current branch." when detached with no useful gh error text', async () => {
+    const runner = jest
+      .fn()
+      .mockResolvedValueOnce('')
+      .mockRejectedValueOnce(new Error('Command failed: gh pr view --json ...'))
+    const git = {
+      getRemotes: jest.fn().mockResolvedValue([
+        { name: 'origin', refs: { fetch: 'git@github.com:gfargo/coco.git', push: '' } },
+      ]),
+      raw: jest.fn().mockResolvedValue(''),
+    }
+
+    await expect(getPullRequestOverview(git as never, runner)).resolves.toMatchObject({
+      message: 'No current branch.',
+    })
+  })
+
   it('exports the centralized JSON field list', () => {
     expect(PULL_REQUEST_VIEW_JSON_FIELDS).toContain('statusCheckRollup')
     expect(PULL_REQUEST_VIEW_JSON_FIELDS).toContain('reviews')

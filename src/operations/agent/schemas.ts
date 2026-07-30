@@ -4,6 +4,7 @@ import { ReviewFeedbackItemSchema } from '../../commands/review/config'
 
 export const AGENT_PROTOCOL_VERSION = 1 as const
 export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
+export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
 export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap'])
 
@@ -127,11 +128,17 @@ export function createAgentInputJsonSchema() {
   return z.toJSONSchema(AgentTaskInputSchema, { io: 'input', target: 'draft-07' })
 }
 
+export const ConventionsMetadataSchema = z.object({
+  digest: z.string(),
+  files: z.array(z.string()),
+}).strict()
+
 export const SourceMetadataSchema = z.object({
   kind: z.enum(['repository', 'patch', 'files', 'summary']),
   digest: z.string(),
   repositoryHead: z.string().optional(),
   verification: z.enum(['repository-derived', 'head-matched', 'provided-unverified']),
+  conventions: ConventionsMetadataSchema.optional(),
 }).strict()
 
 export const CommitDraftDataSchema = z.object({
@@ -243,6 +250,7 @@ export type AgentTaskInput = z.infer<typeof AgentTaskInputSchema>
 export type AgentOptions = z.infer<typeof AgentOptionsSchema>
 export type ChangeSource = z.infer<typeof ChangeSourceSchema>
 export type SourceMetadata = z.infer<typeof SourceMetadataSchema>
+export type ConventionsMetadata = z.infer<typeof ConventionsMetadataSchema>
 export type CommitDraftData = z.infer<typeof CommitDraftDataSchema>
 export type ReviewData = z.infer<typeof ReviewDataSchema>
 export type ChangelogData = z.infer<typeof ChangelogDataSchema>

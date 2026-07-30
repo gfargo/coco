@@ -41,4 +41,5 @@ export const azureProvider: ProviderDefinition = {
       ? `https://${svc.instanceName}.openai.azure.com`
       : undefined
   },
+  supportsStructuredOutput: 'json-schema',
 }

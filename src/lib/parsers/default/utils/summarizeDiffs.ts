@@ -5,6 +5,7 @@ import { SummarizeContext, summarize } from '../../../langchain/chains/summarize
 import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
 import { TokenCounter } from '../../../utils/tokenizer'
 import { recordUsage } from '../../../langchain/utils/usageLedger'
+import { createConcurrencyLimit } from '../../../utils/createConcurrencyLimit'
 import {
   diffSummaryKey,
   readDiffSummary,
@@ -240,8 +241,8 @@ export type SummarizeDiffsOptions = {
  * even though the other 19 calls finished long before.
  *
  * The continuous queue dispatches all eligible directories through
- * a `createLimit(maxConcurrent)` semaphore — same primitive
- * `collectDiffs` already uses. As soon as any in-flight summary
+ * a shared `createConcurrencyLimit(maxConcurrent)` limiter — same
+ * primitive `collectDiffs` already uses. As soon as any in-flight summary
  * resolves, the next eligible directory takes its slot. Each
  * scheduled call also re-checks the budget at the moment it would
  * fire; if the budget is already met (because earlier completions
@@ -291,7 +292,7 @@ async function summarizeInWaves(
     return { directories: results, totalTokenCount }
   }
 
-  const limit = createLimit(maxConcurrent)
+  const limit = createConcurrencyLimit(maxConcurrent)
   logger.verbose(
     `\nProcessing ${eligibleIndices.length} directories with continuous queue (concurrency ${maxConcurrent})...`,
     { color: 'blue' }
@@ -329,35 +330,6 @@ async function summarizeInWaves(
   })
 
   return { directories: results, totalTokenCount }
-}
-
-/**
- * Tiny semaphore mirroring `collectDiffs.createLimit` (kept private
- * here to avoid a cross-module import for one helper). Schedules at
- * most `maxConcurrent` operations concurrently; the rest queue FIFO.
- */
-function createLimit(maxConcurrent: number) {
-  const limit = Math.max(1, maxConcurrent)
-  let active = 0
-  const queue: (() => void)[] = []
-
-  const runNext = () => {
-    active--
-    const next = queue.shift()
-    if (next) next()
-  }
-
-  return async <T>(operation: () => Promise<T>): Promise<T> => {
-    if (active >= limit) {
-      await new Promise<void>((resolve) => queue.push(resolve))
-    }
-    active++
-    try {
-      return await operation()
-    } finally {
-      runNext()
-    }
-  }
 }
 
 /**

@@ -206,4 +206,71 @@ describe('loadConfig', () => {
     const repoBConfig = loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
     expect(repoBConfig.ignoredFiles).not.toContain('docs/')
   })
+
+  it('extends rather than replaces the ignore lists when argv provides ignoredFiles/ignoredExtensions (#1921)', () => {
+    // Repro for #1921: `--ignoredFiles secret.ts` used to wholesale
+    // replace the resolved list via `{ ...config, ...argv }`, wiping out
+    // the defaults (and any gitignore-derived secrets) instead of adding
+    // to them.
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const config = loadConfig<BaseCommandOptions>(({
+      ignoredFiles: ['secret.ts'],
+      ignoredExtensions: ['.secret'],
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.ignoredFiles).toContain('secret.ts')
+    expect(config.ignoredExtensions).toContain('.secret')
+    for (const fileName of DEFAULT_IGNORED_FILES) {
+      expect(config.ignoredFiles).toContain(fileName)
+    }
+    for (const ext of DEFAULT_IGNORED_EXTENSIONS) {
+      expect(config.ignoredExtensions).toContain(ext)
+    }
+  })
+
+  it('keeps gitignore-derived entries (e.g. .env) present even when argv narrows ignoredFiles (#1921)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? ['.gitignore'].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === '.gitignore') {
+        return '.env\n'
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      ignoredFiles: ['secret.ts'],
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.ignoredFiles).toContain('.env')
+    expect(config.ignoredFiles).toContain('secret.ts')
+  })
+
+  it('does not duplicate entries when argv re-supplies a default already in the ignore list (#1921)', () => {
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const config = loadConfig<BaseCommandOptions>(({
+      ignoredFiles: ['package-lock.json', 'secret.ts'],
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.ignoredFiles?.filter((f) => f === 'package-lock.json')).toHaveLength(1)
+  })
+
+  it('does not leak yargs meta keys (_ / $0) into the returned config (#1921)', () => {
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const config = loadConfig<BaseCommandOptions>(({
+      _: ['commit'],
+      $0: 'coco',
+      ignoredFiles: ['secret.ts'],
+    } as unknown) as BaseArgvOptions)
+
+    expect(config).not.toHaveProperty('_')
+    expect(config).not.toHaveProperty('$0')
+  })
 })

@@ -16,7 +16,7 @@ import { getLlm } from '../utils/getLlm'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 
 type ProviderCase = {
-  provider: 'openai' | 'gemini' | 'mistral' | 'azure' | 'anthropic'
+  provider: 'openai' | 'gemini' | 'mistral' | 'azure' | 'anthropic' | 'deepseek'
   model: string
   extraService?: Record<string, unknown>
   /** Field name the provider's LangChain client stores the output-token cap under. */
@@ -34,6 +34,9 @@ const CASES: ProviderCase[] = [
     extraService: { instanceName: 'inst', deploymentName: 'gpt-4o', apiVersion: '2024-10-21' },
     maxTokensField: 'maxTokens',
   },
+  // DeepSeek — one of the OpenAI-compatible presets (#OSS-1623). Shares
+  // `createOpenAiLlm`, so the same config-forwarding contract applies.
+  { provider: 'deepseek', model: 'deepseek-chat', maxTokensField: 'maxTokens' },
 ]
 
 function makeConfig(c: ProviderCase, service: Record<string, unknown> = {}): Config {

@@ -1,13 +1,16 @@
 import { StringOutputParser } from '@langchain/core/output_parsers'
 import { PromptTemplate } from '@langchain/core/prompts'
+import { RunnablePassthrough } from '@langchain/core/runnables'
 import { z } from 'zod'
 import { LangChainCancelledError } from '../errors'
+import { findProviderDefinition } from '../providers/registry'
 import { withRetry, type RetryOptions } from '../../utils/retry'
 import { Logger } from '../../utils/logger'
 import { TokenCounter } from '../../utils/tokenizer'
 import { createSchemaParser, SchemaParserOptions } from './createSchemaParser'
 import { executeChain } from './executeChain'
 import { getLlm } from './getLlm'
+import { getLlmMetadata } from './llmMetadata'
 import { LlmCallMetadata } from './observability'
 
 export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
@@ -27,6 +30,59 @@ export interface ExecuteChainWithSchemaOptions<T> extends SchemaParserOptions {
    * never retried, and skip the fallback parser.
    */
   signal?: AbortSignal
+}
+
+/**
+ * Unwraps zod optional/nullable/default/pipe wrappers to find the innermost
+ * type, then checks whether it's a `ZodObject`. Providers' native structured
+ * output (`response_format: json_schema`) requires an object-rooted JSON
+ * Schema — array-rooted schemas (e.g. `z.preprocess(fn, z.array(...))`, used
+ * by the review feedback schema) are rejected, so those must stay on the text
+ * parser path where `z.preprocess`'s normalization also still runs.
+ *
+ * zod v4 represents `z.preprocess(...)` as a `ZodPreprocess` (a `ZodPipe`
+ * subclass) whose `_def.out` is the target schema — there's no separate
+ * `ZodEffects` wrapper as in zod v3.
+ */
+function isObjectRootSchema(schema: z.ZodTypeAny): boolean {
+  let current: z.ZodTypeAny = schema
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (current instanceof z.ZodObject) {
+      return true
+    }
+    if (
+      current instanceof z.ZodOptional ||
+      current instanceof z.ZodNullable ||
+      current instanceof z.ZodDefault
+    ) {
+      // `as z.ZodTypeAny`: zod v4's internal `$ZodType` def shape is a
+      // structurally narrower base than the public `ZodType` class this
+      // function is typed against.
+      current = current._def.innerType as z.ZodTypeAny
+      continue
+    }
+    if (current instanceof z.ZodPipe) {
+      current = current._def.out as z.ZodTypeAny
+      continue
+    }
+    return false
+  }
+}
+
+/**
+ * Narrows `llm` to one whose `withStructuredOutput` is actually callable at
+ * runtime. `ProviderDefinition.supportsStructuredOutput` is a static,
+ * provider-level capability flag — it doesn't guarantee the *specific
+ * resolved model instance* implements the method (e.g. a future provider
+ * misconfiguration, or a base class used as a stand-in in tests). Checking
+ * here means a mismatch degrades straight to the legacy path instead of
+ * throwing deep inside `withStructuredOutput` itself.
+ */
+function supportsNativeStructuredOutput(llm: unknown): llm is {
+  withStructuredOutput: (schema: unknown, config: { method: string }) => unknown
+} {
+  return typeof (llm as { withStructuredOutput?: unknown }).withStructuredOutput === 'function'
 }
 
 /**
@@ -56,37 +112,101 @@ export async function executeChainWithSchema<T>(
     signal,
     ...parserOptions
   } = options
-  
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const parser: any = createSchemaParser(schema, parserOptions)
-  let attempt = 0
 
-  const operation = async (): Promise<T> => {
-    attempt++
-    const result = await executeChain({
-      llm,
-      prompt,
-      variables,
-      parser,
-      logger,
-      tokenizer,
-      signal,
-      metadata: {
-        task: 'schema-chain',
-        ...metadata,
-        retryAttempt: attempt,
-      },
-    })
+  const llmInfo = getLlmMetadata(llm)
+  const structuredOutputSupport = llmInfo.provider
+    ? findProviderDefinition(llmInfo.provider)?.supportsStructuredOutput
+    : undefined
 
-    return result as T
+  const useStructured = !!structuredOutputSupport && isObjectRootSchema(schema)
+
+  // `provider`/`endpoint` are threaded through explicitly (rather than
+  // re-derived from `effectiveLlm`) because the structured-output runnable
+  // built below is a fresh object returned by `withStructuredOutput` and was
+  // never registered in the `llmMetadata` WeakMap that `getLlmMetadata` reads.
+  const runLegacy = async (): Promise<T> => {
+    const parser = createSchemaParser(schema, parserOptions)
+    let attempt = 0
+    const operation = async (): Promise<T> => {
+      attempt++
+      const result = await executeChain({
+        llm,
+        prompt,
+        variables,
+        parser,
+        provider: llmInfo.provider,
+        endpoint: llmInfo.endpoint,
+        logger,
+        tokenizer,
+        signal,
+        metadata: {
+          task: 'schema-chain',
+          ...metadata,
+          retryAttempt: attempt,
+        },
+      })
+
+      return result as T
+    }
+
+    return withRetry(operation, retryOptions)
+  }
+
+  if (useStructured && supportsNativeStructuredOutput(llm)) {
+    try {
+      const method = structuredOutputSupport === 'json-schema' ? 'jsonSchema' : 'jsonMode'
+      // `schema as never`: the resolved provider's chat model overrides
+      // `withStructuredOutput`, but that isn't reflected in the narrow
+      // `Awaited<ReturnType<typeof getLlm>>` union `executeChainWithSchema` is
+      // typed against (same rationale as `createSchemaParser.ts:54`).
+      const structuredLlm = llm.withStructuredOutput(schema as never, { method }) as Awaited<
+        ReturnType<typeof getLlm>
+      >
+      // The model now returns the schema-shaped object directly — no text to
+      // parse, so the chain's parser stage is an identity passthrough.
+      const parser = new RunnablePassthrough()
+
+      // A native structured-output rejection is structural (the provider
+      // won't honor the schema for this input), not transient — retrying the
+      // identical request 3x wastes paid calls for no benefit. This is a
+      // single probe; on failure we degrade to the legacy text-parser path
+      // below, which still gets its own full `retryOptions` budget (and
+      // handles genuinely transient errors, e.g. a 429, there instead).
+      const result = await executeChain({
+        llm: structuredLlm,
+        prompt,
+        variables,
+        parser,
+        provider: llmInfo.provider,
+        endpoint: llmInfo.endpoint,
+        logger,
+        tokenizer,
+        signal,
+        metadata: {
+          task: 'schema-chain',
+          ...metadata,
+          retryAttempt: 1,
+        },
+      })
+
+      return result as T
+    } catch (error) {
+      // A user abort is intent, not a parse failure — never degrade it
+      // into the legacy/fallback path (which would fire ANOTHER llm call
+      // on an already-cancelled interaction).
+      if (error instanceof LangChainCancelledError) {
+        throw error
+      }
+      logger?.verbose('native structured output failed; degrading to text parser')
+      // Fall through to the legacy text-parser path below. This makes the
+      // native path strictly non-regressing even for callers (e.g.
+      // `splitPlanGenerator`) that supply no `fallbackParser` of their own.
+    }
   }
 
   try {
-    return await withRetry(operation, retryOptions)
+    return await runLegacy()
   } catch (error) {
-    // A user abort is intent, not a parse failure — never degrade it
-    // into the fallback path (which would fire ANOTHER llm call on an
-    // already-cancelled interaction).
     if (error instanceof LangChainCancelledError) {
       throw error
     }
@@ -94,7 +214,7 @@ export async function executeChainWithSchema<T>(
       if (onFallback) {
         onFallback()
       }
-      
+
       const fallbackResult = await executeChain({
         llm,
         prompt,
@@ -108,11 +228,11 @@ export async function executeChainWithSchema<T>(
           ...metadata,
         },
       })
-      
+
       const fallbackText = typeof fallbackResult === 'string' ? fallbackResult : String(fallbackResult)
       return fallbackParser(fallbackText)
     }
-    
+
     // No fallback available, re-throw the error
     throw error
   }

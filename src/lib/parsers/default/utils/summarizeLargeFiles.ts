@@ -4,6 +4,7 @@ import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/promp
 import { TokenCounter } from '../../../utils/tokenizer'
 import { Logger } from '../../../utils/logger'
 import { recordUsage } from '../../../langchain/utils/usageLedger'
+import { createConcurrencyLimit } from '../../../utils/createConcurrencyLimit'
 import {
   diffSummaryKey,
   readDiffSummary,
@@ -329,32 +330,8 @@ async function processInWaves<T, R>(
   processor: (item: T) => Promise<R>,
   maxConcurrent: number
 ): Promise<R[]> {
-  const limit = createLimit(maxConcurrent)
+  const limit = createConcurrencyLimit(maxConcurrent)
   return Promise.all(items.map((item) => limit(() => processor(item))))
-}
-
-function createLimit(maxConcurrent: number) {
-  const limit = Math.max(1, maxConcurrent)
-  let active = 0
-  const queue: (() => void)[] = []
-
-  const runNext = () => {
-    active--
-    const next = queue.shift()
-    if (next) next()
-  }
-
-  return async <T>(operation: () => Promise<T>): Promise<T> => {
-    if (active >= limit) {
-      await new Promise<void>((resolve) => queue.push(resolve))
-    }
-    active++
-    try {
-      return await operation()
-    } finally {
-      runNext()
-    }
-  }
 }
 
 /**

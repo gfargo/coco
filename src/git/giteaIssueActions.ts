@@ -1,4 +1,4 @@
-import { runGiteaAction, type GiteaRunner } from './giteaCli'
+import { runGiteaAction, resolveGiteaLabelId, type GiteaRunner } from './giteaCli'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
 import type { IssueActionResult } from './issueActions'
 
@@ -25,20 +25,6 @@ export function commentGiteaIssue(
   )
 }
 
-async function resolveGiteaLabelId(
-  projectPath: string,
-  label: string,
-  runner: GiteaRunner
-): Promise<number | undefined> {
-  try {
-    const out = (await runner(`repos/${projectPath}/labels?limit=50`)).trim()
-    const labels = out ? (JSON.parse(out) as Array<{ id?: number; name?: string }>) : []
-    return labels.find((l) => l.name === label)?.id
-  } catch {
-    return undefined
-  }
-}
-
 /**
  * Gitea's "add label to issue" endpoint takes label IDs, not names, so this
  * resolves the name to an ID via the repo's label list first.
@@ -53,16 +39,19 @@ export async function addGiteaIssueLabel(
   const bad = rejectFlagLike(label, 'Label')
   if (bad) return { ok: false, message: bad }
 
-  const id = await resolveGiteaLabelId(projectPath, label, runner)
-  if (id === undefined) {
+  const lookup = await resolveGiteaLabelId(projectPath, label, runner)
+  if (lookup.status === 'not-found') {
     return { ok: false, message: `Label '${label}' not found on this repository. Create it in Gitea first.` }
+  }
+  if (lookup.status === 'error') {
+    return { ok: false, message: `Could not verify label '${label}': ${lookup.message}` }
   }
 
   return runGiteaAction(
     runner,
     `repos/${projectPath}/issues/${issueNumber}/labels`,
     'POST',
-    { labels: [id] },
+    { labels: [lookup.id] },
     () => ({ ok: true, message: `Added label '${label}' to issue #${issueNumber}` })
   )
 }
