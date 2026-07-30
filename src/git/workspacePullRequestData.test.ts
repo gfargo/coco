@@ -266,6 +266,41 @@ describe('getWorkspacePullRequestCounts', () => {
 
     expect(failResult).toEqual({ authenticated: false, counts: {} })
   })
+
+  it('reports non-GitHub repos before the GitHub fetch batch settles', async () => {
+    // A non-GitHub row's onRepoComplete must not wait on the GitHub
+    // fan-out — the UI clears that row's spinner the moment it fires.
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/gl', 'git@gitlab.com:owner/repo.git'],
+      ['/tmp/gh', 'git@github.com:owner/repo.git'],
+    ])
+    const order: string[] = []
+    let releasePrList!: (value: string) => void
+    const prListGate = new Promise<string>((resolve) => {
+      releasePrList = resolve
+    })
+
+    const runner = jest.fn(async (args: string[]) => {
+      if (args[0] === 'auth') return 'ok'
+      if (args[0] === 'pr') return prListGate
+      return ''
+    })
+
+    const resultPromise = getWorkspacePullRequestCounts(['/tmp/gl', '/tmp/gh'], {
+      ghRunner: runner,
+      remoteUrls,
+      onRepoComplete: (repoPath) => order.push(repoPath),
+    })
+
+    // Give the classification + non-GitHub callback a chance to run
+    // while the GitHub `pr list` call is still hung on the gate.
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(order).toEqual(['/tmp/gl'])
+
+    releasePrList('[]')
+    await resultPromise
+    expect(order).toEqual(['/tmp/gl', '/tmp/gh'])
+  })
 })
 
 /** Helper: find the index after -R in an args array. */

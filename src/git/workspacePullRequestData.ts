@@ -203,40 +203,44 @@ export async function getWorkspacePullRequestCounts(
   const concurrency = Math.max(1, options.concurrency ?? 4)
   const timeoutMs = options.timeoutMs ?? WORKSPACE_PR_COUNT_TIMEOUT_MS
 
-  // Step 1: Resolve remote URLs and classify each repo by provider.
-  // Only repos with a GitHub provider and both owner + name are fetchable.
+  // Step 1: Resolve remote URLs and classify each repo by provider. Only
+  // repos with a GitHub provider and both owner + name are fetchable.
+  // Non-GitHub repos are reported right away — their row never depends on
+  // the GitHub auth probe or fetch batch, so don't make them wait for it.
   type RepoEntry = { repoPath: string; repo: ProviderRepository }
   const fetchable: RepoEntry[] = []
 
   for (const repoPath of repoPaths) {
     const url = options.remoteUrls?.get(repoPath) ?? readOriginRemoteUrl(repoPath)
-    if (!url) continue
-    const repo = getProviderRepository('origin', url)
-    if (repo.provider === 'github' && repo.owner && repo.name && repo.host) {
+    const repo = url ? getProviderRepository('origin', url) : undefined
+    if (repo?.provider === 'github' && repo.owner && repo.name && repo.host) {
       fetchable.push({ repoPath, repo })
+    } else {
+      options.onRepoComplete?.(repoPath, undefined)
     }
-    // Non-GitHub repos will be handled below with onRepoComplete(undefined)
   }
 
-  // Step 2: Probe auth once per unique GitHub host (memoized). When the
+  // Step 2: Probe auth once per unique GitHub host (memoized), in parallel —
+  // one host's slow/hung probe shouldn't delay the others. When the
   // workspace has no GitHub-hosted repos, fall back to a github.com probe
   // so `authenticated` still reflects real gh status (pre-#1609 behavior)
   // rather than unconditionally reporting true.
   const uniqueHosts = [...new Set(fetchable.map((e) => e.repo.host!))]
   const hostsToProbe = uniqueHosts.length > 0 ? uniqueHosts : ['github.com']
-  const hostAuthMap = new Map<string, boolean>()
-  for (const host of hostsToProbe) {
-    const status = await getGhStatus(runner, host)
-    hostAuthMap.set(host, status.kind === 'ok')
-  }
+  const hostAuthEntries = await Promise.all(
+    hostsToProbe.map(async (host) => {
+      const status = await getGhStatus(runner, host)
+      return [host, status.kind === 'ok'] as const
+    })
+  )
+  const hostAuthMap = new Map(hostAuthEntries)
 
   // Overall authenticated = true if any relevant GitHub host authenticated.
   // Repos on unauthenticated hosts still get onRepoComplete(undefined).
   const anyAuthenticated = hostsToProbe.some((h) => hostAuthMap.get(h))
 
   if (!anyAuthenticated) {
-    // Fire onRepoComplete for all repos (including non-GitHub ones)
-    for (const repoPath of repoPaths) {
+    for (const { repoPath } of fetchable) {
       options.onRepoComplete?.(repoPath, undefined)
     }
     return { authenticated: false, counts: {} }
@@ -245,11 +249,7 @@ export async function getWorkspacePullRequestCounts(
   // Step 3: Fan out gh pr list calls — only for repos whose host authenticated.
   const counts: Record<string, number> = {}
 
-  // Track which repoPaths we handled in the fetchable loop
-  const handledPaths = new Set<string>()
-
   await mapWithConcurrency(fetchable, concurrency, async ({ repoPath, repo }) => {
-    handledPaths.add(repoPath)
     const hostAuthenticated = hostAuthMap.get(repo.host!) ?? false
     if (!hostAuthenticated) {
       options.onRepoComplete?.(repoPath, undefined)
@@ -261,13 +261,6 @@ export async function getWorkspacePullRequestCounts(
     }
     options.onRepoComplete?.(repoPath, count)
   })
-
-  // Fire onRepoComplete for repos that had no GitHub remote (not in fetchable)
-  for (const repoPath of repoPaths) {
-    if (!handledPaths.has(repoPath)) {
-      options.onRepoComplete?.(repoPath, undefined)
-    }
-  }
 
   return { authenticated: true, counts }
 }
