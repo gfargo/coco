@@ -71,7 +71,7 @@ async function fetchAllPages<T>(
   want: number,
   perPage: number
 ): Promise<T[]> {
-  return paginate({
+  return (await paginate({
     fetchPage: (page) => runner(['api', `${baseEndpoint}&page=${page}`]),
     parsePage: (output) => {
       const items = parse(output)
@@ -79,7 +79,7 @@ async function fetchAllPages<T>(
     },
     want,
     maxPages: 100,
-  })
+  })).items
 }
 
 /** Map a GitLab MR/issue `state` to coco's uppercased state vocabulary. */

@@ -77,7 +77,7 @@ async function fetchAllPages<T>(
 ): Promise<T[]> {
   const perPage = Math.min(want, 50)
   const sep = baseEndpoint.includes('?') ? '&' : '?'
-  return paginate({
+  return (await paginate({
     fetchPage: (page) => runner(`${baseEndpoint}${sep}limit=${perPage}&page=${page}`),
     parsePage: (output) => {
       const trimmed = output.trim()
@@ -96,7 +96,7 @@ async function fetchAllPages<T>(
     },
     want,
     maxPages: 100,
-  })
+  })).items
 }
 
 // ---------------------------------------------------------------------------
