@@ -35,6 +35,7 @@ import { getForgePullRequestOverview } from '../../../git/forgeActions'
 import { getStashOverview } from '../../../git/stashData'
 import { getWorktreeOverview } from '../../../git/statusData'
 import { getBisectStatus } from '../../../git/bisectData'
+import { getSparseCheckoutStatus } from '../../../git/sparseCheckoutData'
 import { getReflogOverview } from '../../../git/reflogData'
 import { getTagOverview } from '../../../git/tagData'
 import { getWorktreeListOverview } from '../../../git/worktreeData'
@@ -48,7 +49,7 @@ async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
 }
 
 async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
-  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules, remotes] =
+  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, sparse, submodules, remotes] =
     await Promise.all([
       safe(getBranchOverview(git)),
       safe(getForgePullRequestOverview(git)),
@@ -61,6 +62,7 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
       safe(getReflogOverview(git)),
       safe(getBisectStatus(git)),
       safe(getLfsAttributeStatus(git)),
+      safe(getSparseCheckoutStatus(git)),
       safe(getSubmoduleOverview(git)),
       safe(getRemoteOverview(git)),
     ])
@@ -69,6 +71,7 @@ async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
     bisect,
     branches,
     lfs,
+    sparse,
     operation,
     provider,
     pullRequest,
@@ -96,6 +99,7 @@ export function loadLogInkContextEntries(git: SimpleGit): Array<{
     { key: 'reflog', load: () => safe(getReflogOverview(git)) },
     { key: 'bisect', load: () => safe(getBisectStatus(git)) },
     { key: 'lfs', load: () => safe(getLfsAttributeStatus(git)) },
+    { key: 'sparse', load: () => safe(getSparseCheckoutStatus(git)) },
     { key: 'submodules', load: () => safe(getSubmoduleOverview(git)) },
     { key: 'remotes', load: () => safe(getRemoteOverview(git)) },
     { key: 'worktree', load: () => safe(getWorktreeOverview(git)) },

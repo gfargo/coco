@@ -20,6 +20,7 @@ import type { FileHistoryResult } from '../../git/fileHistoryData'
 import type { BranchOverview } from '../../git/branchData'
 import type { LfsAttributeStatus } from '../../git/lfsAttributes'
 import type { RemoteOverview } from '../../git/remoteData'
+import type { SparseCheckoutStatus } from '../../git/sparseCheckoutData'
 import type { SubmoduleOverview } from '../../git/submoduleData'
 import type { GitOperationOverview } from '../../git/operationData'
 import type { ProviderOverview } from '../../git/providerData'
@@ -68,6 +69,12 @@ export type LogInkContext = {
    * in `lfsPointer.ts` continues to handle modified rows.
    */
   lfs?: LfsAttributeStatus
+  /**
+   * Sparse-checkout status (OSS-2056). When `enabled`, the working
+   * tree is a partial checkout — omitted paths are expected and
+   * should never read as lost/deleted files in the UI.
+   */
+  sparse?: SparseCheckoutStatus
   operation?: GitOperationOverview
   provider?: ProviderOverview
   pullRequest?: PullRequestOverview
