@@ -1,4 +1,4 @@
-import { BenchResult, DEFAULT_CHECK_TOLERANCES, evaluateCheck } from './evaluateCheck'
+import { BenchResult, DEFAULT_CHECK_TOLERANCES, evaluateCheck, scaleBaselineDurations } from './evaluateCheck'
 
 function makeResult(overrides: Partial<BenchResult> & Pick<BenchResult, 'fixture'>): BenchResult {
   return {
@@ -98,5 +98,39 @@ describe('evaluateCheck', () => {
 
     expect(ok).toBe(true)
     expect(entries[0].status).toBe('warning')
+  })
+
+  it('flags a duration regression once the baseline is scaled to match a --check run', () => {
+    // Baseline captured at full latency; a --check run's durationMs is
+    // ~10x smaller purely from the latency scale-down, not from any real
+    // improvement. Without scaling the baseline first, this would always
+    // look like a huge improvement and never warn.
+    const baseline = [makeResult({ fixture: 'large', llmCalls: 7, durationMs: 10000, pass: 'cold' })]
+    const scaled = scaleBaselineDurations(baseline, 0.1)
+    // Regressed relative to the *scaled* baseline (1000ms), even though
+    // it's still far below the unscaled baseline (10000ms).
+    const results = [makeResult({ fixture: 'large', llmCalls: 7, durationMs: 1400 })]
+
+    const { ok, entries } = evaluateCheck(results, scaled)
+
+    expect(ok).toBe(true) // duration only warns, never fails
+    expect(entries[0].status).toBe('warning')
+    expect(entries[0].baselineDurationMs).toBe(1000)
+  })
+
+  it('scaleBaselineDurations rounds and leaves other fields untouched', () => {
+    const baseline = [makeResult({ fixture: 'medium', llmCalls: 6, durationMs: 8505 })]
+
+    const scaled = scaleBaselineDurations(baseline, 0.1)
+
+    expect(scaled[0].durationMs).toBe(851)
+    expect(scaled[0].llmCalls).toBe(6)
+    expect(scaled[0].fixture).toBe('medium')
+  })
+
+  it('scaleBaselineDurations is a no-op at scale 1', () => {
+    const baseline = [makeResult({ fixture: 'medium', llmCalls: 6, durationMs: 8505 })]
+
+    expect(scaleBaselineDurations(baseline, 1)).toBe(baseline)
   })
 })

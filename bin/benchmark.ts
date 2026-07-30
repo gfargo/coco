@@ -48,7 +48,9 @@ import {
   CheckStatus,
   DEFAULT_CHECK_TOLERANCES,
   evaluateCheck,
+  scaleBaselineDurations,
 } from './benchmark/evaluateCheck'
+import { readBaseline } from './benchmark/readBaseline'
 
 // Silence the type checker about the unused `fileChangeParser` import
 // being present for future bench scenarios; the active runner uses
@@ -253,15 +255,31 @@ function writeBenchFile(results: BenchResult[], updateBaseline: boolean): void {
   }
 }
 
-function readBaseline(): BenchResult[] | undefined {
-  if (!fs.existsSync(BASELINE_PATH)) return undefined
-  try {
-    const raw = fs.readFileSync(BASELINE_PATH, 'utf8')
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed.results) ? parsed.results : undefined
-  } catch {
-    return undefined
+/**
+ * Loads the committed baseline for comparison. A missing/corrupt baseline
+ * is fine for a plain `npm run bench` (there's just nothing to diff
+ * against yet), but for `--check` it's fatal: the whole point of the gate
+ * is comparing against that file, so silently treating "the file that
+ * defines the gate is gone" the same as "this is a brand new fixture with
+ * no history" would let a deleted or corrupted baseline sail through CI
+ * green with zero enforcement. Callers that need the gate to fail loudly
+ * pass `required: true`.
+ */
+function loadBaseline(options: { required: boolean }): BenchResult[] | undefined {
+  const result = readBaseline(BASELINE_PATH)
+  if (result.status === 'ok') return result.results
+
+  if (!options.required) return undefined
+
+  if (result.status === 'missing') {
+    console.error(
+      `[FAIL] No baseline found at ${BASELINE_PATH}; --check has nothing to gate against. Run "npm run bench -- --update" to create one.`
+    )
+  } else {
+    console.error(`[FAIL] Baseline at ${BASELINE_PATH} is corrupt (${result.reason}); --check cannot gate against it.`)
   }
+  process.exitCode = 1
+  return undefined
 }
 
 function printCheckResults(entries: CheckEntry[]): void {
@@ -299,6 +317,8 @@ function renderCheckSummary(entries: CheckEntry[]): void {
     '| Fixture | LLM calls | Duration | Status |',
     '| --- | --- | --- | --- |',
     ...rows,
+    '',
+    `_Duration baseline scaled ${CHECK_LATENCY_SCALE}x to match --check's reduced-latency CI run; llmCalls are exact and unscaled._`,
     '',
   ].join('\n')
 
@@ -354,6 +374,13 @@ async function main(): Promise<void> {
     return
   }
 
+  // Fail fast on a missing/corrupt baseline for --check, before spending
+  // any time on the fixture sweep — a broken baseline can't be fixed by
+  // running the bench again. Loaded once and reused below so a plain run
+  // isn't penalized for a missing baseline (that's expected pre-bootstrap).
+  const rawBaseline = updateBaseline ? undefined : loadBaseline({ required: check })
+  if (check && !rawBaseline) return
+
   const results: BenchResult[] = []
   for (const fixture of fixtures) {
     if (repeat) {
@@ -382,11 +409,17 @@ async function main(): Promise<void> {
     }
   }
 
-  const baseline = updateBaseline ? undefined : readBaseline()
-  printSummary(results, baseline)
+  // `--check` measures durationMs with simulated latency scaled down (see
+  // CHECK_LATENCY_SCALE above) for CI speed, but the committed baseline was
+  // captured at full latency. Scale the baseline the same way before
+  // comparing so the durationMs warning stays meaningful instead of always
+  // reading as a ~10x improvement regardless of any real regression.
+  const comparisonBaseline =
+    check && rawBaseline ? scaleBaselineDurations(rawBaseline, CHECK_LATENCY_SCALE) : rawBaseline
+  printSummary(results, comparisonBaseline)
 
   if (check) {
-    const { ok, entries } = evaluateCheck(results, baseline, DEFAULT_CHECK_TOLERANCES)
+    const { ok, entries } = evaluateCheck(results, comparisonBaseline, DEFAULT_CHECK_TOLERANCES)
     printCheckResults(entries)
     renderCheckSummary(entries)
     if (!ok) {

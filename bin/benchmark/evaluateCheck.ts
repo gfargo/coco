@@ -58,6 +58,21 @@ function findBaselineRow(baseline: BenchResult[] | undefined, fixture: string): 
   )
 }
 
+/**
+ * `--check` runs the mock chain with its simulated latency scaled down
+ * (see `CHECK_LATENCY_SCALE` in `benchmark.ts`) so the CI gate doesn't pay
+ * for the full ~3-minute fixture sweep. The committed baseline, though,
+ * was captured at full latency. Comparing a scaled measurement directly
+ * against an unscaled baseline means the measurement is ~10x smaller
+ * regardless of any real regression, so the durationMs warning never
+ * fires. Scale the baseline by the same factor before comparing so both
+ * sides reflect the same latency model.
+ */
+export function scaleBaselineDurations(baseline: BenchResult[], scale: number): BenchResult[] {
+  if (scale === 1) return baseline
+  return baseline.map((row) => ({ ...row, durationMs: Math.round(row.durationMs * scale) }))
+}
+
 export function evaluateCheck(
   results: BenchResult[],
   baseline: BenchResult[] | undefined,
