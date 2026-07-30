@@ -55,8 +55,14 @@ function countFileBullets(blockText: string): number {
   return blockText.split('\n').filter((line) => line.startsWith(FILE_BULLET_PREFIX)).length
 }
 
-function buildOmittedMarker(omittedFileCount: number): string {
-  return omittedFileCount > 0 ? `\n\n[${omittedFileCount} files omitted for length]\n` : ''
+function buildOmittedMarker(omittedFileCount: number, omittedDirectoryCount: number): string {
+  if (omittedFileCount === 0 && omittedDirectoryCount === 0) {
+    return ''
+  }
+
+  const files = `${omittedFileCount} ${omittedFileCount === 1 ? 'file' : 'files'}`
+  const directories = `${omittedDirectoryCount} ${omittedDirectoryCount === 1 ? 'directory' : 'directories'}`
+  return `\n\n[${files} across ${directories} omitted for length]\n`
 }
 
 /**
@@ -92,7 +98,9 @@ async function trimSummaryByBlocks(
     .split(DIRECTORY_BLOCK_SEPARATOR)
     .filter(Boolean)
     .map((text, index) => ({ index, text }))
-  const dropQueue = [...blocks].sort((a, b) => tokenizer(b.text) - tokenizer(a.text))
+  const dropQueue = blocks
+    .map((block) => ({ ...block, tokens: tokenizer(block.text) }))
+    .sort((a, b) => b.tokens - a.tokens)
 
   const render = async (candidateSummary: string): Promise<number> => {
     const candidateVariables = { ...variables, [summaryKey]: candidateSummary }
@@ -101,11 +109,12 @@ async function trimSummaryByBlocks(
 
   let remaining = blocks
   let omittedFileCount = 0
+  let omittedDirectoryCount = 0
 
   while (remaining.length > 1) {
     const candidateSummary =
       remaining.map(({ text }) => `${DIRECTORY_BLOCK_SEPARATOR}${text}`).join('') +
-      buildOmittedMarker(omittedFileCount)
+      buildOmittedMarker(omittedFileCount, omittedDirectoryCount)
     const candidateTokenCount = await render(candidateSummary)
 
     if (candidateTokenCount <= tokenBudget) {
@@ -116,10 +125,11 @@ async function trimSummaryByBlocks(
     if (!dropped) break
     remaining = remaining.filter((block) => block.index !== dropped.index)
     omittedFileCount += countFileBullets(dropped.text)
+    omittedDirectoryCount += 1
   }
 
   const [lastBlock] = remaining
-  const marker = buildOmittedMarker(omittedFileCount)
+  const marker = buildOmittedMarker(omittedFileCount, omittedDirectoryCount)
 
   let low = 0
   let high = lastBlock.text.length
@@ -138,6 +148,13 @@ async function trimSummaryByBlocks(
     } else {
       high = mid - 1
     }
+  }
+
+  if (bestTokenCount > tokenBudget) {
+    throw new Error(
+      `Rendered prompt exceeds token budget even with an empty ${summaryKey} block: ` +
+      `${bestTokenCount} > ${tokenBudget}`
+    )
   }
 
   return { summary: bestSummary.trimEnd(), tokenCount: bestTokenCount }

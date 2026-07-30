@@ -7,7 +7,8 @@ import { Config } from '../types'
 
 import { DEFAULT_CONFIG, DEFAULT_IGNORED_FILES, DEFAULT_IGNORED_EXTENSIONS } from '../constants'
 import { BaseCommandOptions } from '../../../commands/types'
-import { mergeIgnoreLists } from './mergeIgnoreLists'
+import { mergeIgnoreLists, unionPreservingOrder } from './mergeIgnoreLists'
+import { removeUndefined } from '../../utils/removeUndefined'
 
 export type ConfigSource =
   | 'default'
@@ -93,5 +94,28 @@ export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} 
 
   _lastConfigSources = sources
 
-  return { ...config, ...argv } as Config & ConfigType & ArgvType
+  // Strip yargs' positional/meta keys and any undefined values before
+  // applying argv over config, so an omitted flag doesn't clobber a
+  // config-sourced value (#1437) and `_`/`$0` don't leak into Config.
+  const restArgv: Record<string, unknown> = { ...(argv as Record<string, unknown>) }
+  delete restArgv._
+  delete restArgv.$0
+  const cleanedArgv = removeUndefined(restArgv)
+
+  // argv wins for everything *except* the ignore lists: those are unioned
+  // against the fully-resolved (defaults + gitignore + loader) list so a
+  // narrowing `--ignoredFiles`/`--ignoredExtensions` extends rather than
+  // replaces it — otherwise it silently re-admits lockfiles, node_modules,
+  // and gitignore-derived secrets like `.env` into the diff (#1921).
+  const merged = { ...config, ...cleanedArgv }
+  merged.ignoredFiles = unionPreservingOrder(
+    config.ignoredFiles ?? [],
+    cleanedArgv.ignoredFiles as string[] | string | undefined
+  )
+  merged.ignoredExtensions = unionPreservingOrder(
+    config.ignoredExtensions ?? [],
+    cleanedArgv.ignoredExtensions as string[] | string | undefined
+  )
+
+  return merged as Config & ConfigType & ArgvType
 }

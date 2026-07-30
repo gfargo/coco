@@ -23,9 +23,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: update-homebrew-tap
+  cancel-in-progress: true
+
 jobs:
   update-tap:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout coco
         uses: actions/checkout@v4

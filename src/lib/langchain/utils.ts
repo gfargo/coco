@@ -1,8 +1,28 @@
 import { Config } from '../../commands/types'
 import { LangChainAuthenticationError, LangChainConfigurationError } from './errors'
-import { AnthropicLLMService, AzureLLMService, BedrockLLMService, GeminiLLMService, LLMModel, LLMProvider, LLMService, MistralLLMService, OllamaLLMService, OpenAILLMService } from './types'
+import {
+  AnthropicLLMService,
+  AzureLLMService,
+  BedrockLLMService,
+  DeepSeekLLMService,
+  FireworksLLMService,
+  GeminiLLMService,
+  GroqLLMService,
+  LLMModel,
+  LLMProvider,
+  LLMService,
+  LmStudioLLMService,
+  MistralLLMService,
+  OllamaLLMService,
+  OpenAILLMService,
+  OpenRouterLLMService,
+  TogetherLLMService,
+  VllmLLMService,
+  XaiLLMService,
+} from './types'
 import { validateRequired, validateServiceConfig } from './validation'
 import { providerRequiresAuth } from './providers/registry'
+import { OPENAI_COMPATIBLE_PROVIDER_IDS } from './providers/openaiCompatible'
 
 /**
  * Retrieves the provider and model from the given configuration object.
@@ -260,6 +280,128 @@ export const DEFAULT_OLLAMA_LLM_SERVICE: OllamaLLMService = {
   },
 }
 
+// OpenAI-compatible presets (#OSS-1623) — hosted/self-hosted APIs reachable
+// through the same `ChatOpenAI` client as the `openai` provider, but with
+// their own default endpoint, auth requirement, and token-count correction
+// (see `providers/openaiCompatible.ts`). Each opts out of `model: "dynamic"`
+// (no `ProviderDynamicDefaults` row in `dynamicModels.ts`) since these hosted
+// catalogs churn too fast to keep pinned — the default below is a concrete,
+// reasonably current model id users can override.
+export const DEFAULT_DEEPSEEK_LLM_SERVICE: DeepSeekLLMService = {
+  provider: 'deepseek',
+  model: 'deepseek-chat',
+  temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: { apiKey: '' },
+  },
+}
+
+export const DEFAULT_GROQ_LLM_SERVICE: GroqLLMService = {
+  provider: 'groq',
+  model: 'llama-3.3-70b-versatile',
+  temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: { apiKey: '' },
+  },
+}
+
+export const DEFAULT_XAI_LLM_SERVICE: XaiLLMService = {
+  provider: 'xai',
+  model: 'grok-4-fast',
+  temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: { apiKey: '' },
+  },
+}
+
+export const DEFAULT_TOGETHER_LLM_SERVICE: TogetherLLMService = {
+  provider: 'together',
+  model: 'meta-llama/Llama-3.3-70B-Instruct-Turbo',
+  temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: { apiKey: '' },
+  },
+}
+
+export const DEFAULT_FIREWORKS_LLM_SERVICE: FireworksLLMService = {
+  provider: 'fireworks',
+  model: 'accounts/fireworks/models/llama-v3p3-70b-instruct',
+  temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: { apiKey: '' },
+  },
+}
+
+export const DEFAULT_OPENROUTER_LLM_SERVICE: OpenRouterLLMService = {
+  provider: 'openrouter',
+  model: 'meta-llama/llama-3.3-70b-instruct',
+  temperature: 0.32,
+  tokenLimit: 4096,
+  maxConcurrent: 24,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'APIKey',
+    credentials: { apiKey: '' },
+  },
+}
+
+export const DEFAULT_LMSTUDIO_LLM_SERVICE: LmStudioLLMService = {
+  provider: 'lmstudio',
+  // Whatever the user has loaded locally — there's no universal default
+  // model for a self-hosted server, so this is a placeholder the wizard
+  // (and doctor) expect to be overridden.
+  model: 'local-model',
+  temperature: 0.4,
+  tokenLimit: 4096,
+  maxConcurrent: 1,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'None',
+    credentials: undefined,
+  },
+}
+
+export const DEFAULT_VLLM_LLM_SERVICE: VllmLLMService = {
+  provider: 'vllm',
+  model: 'local-model',
+  temperature: 0.4,
+  tokenLimit: 4096,
+  maxConcurrent: 1,
+  minTokensForSummary: 800,
+  maxFileTokens: 2000,
+  authentication: {
+    type: 'None',
+    credentials: undefined,
+  },
+}
+
 /**
  * Retrieves the default service configuration based on the provided provider and optional model.
  * @param provider - The LLM provider (openai, anthropic, ollama).
@@ -323,11 +465,71 @@ export function getDefaultServiceConfigFromAlias(provider: LLMProvider, model?: 
         ...DEFAULT_OPENAI_LLM_SERVICE,
         model: model || DEFAULT_OPENAI_LLM_SERVICE.model,
       } as OpenAILLMService
-      
+
+    case 'deepseek':
+      return {
+        ...DEFAULT_DEEPSEEK_LLM_SERVICE,
+        model: model || DEFAULT_DEEPSEEK_LLM_SERVICE.model,
+      } as DeepSeekLLMService
+
+    case 'groq':
+      return {
+        ...DEFAULT_GROQ_LLM_SERVICE,
+        model: model || DEFAULT_GROQ_LLM_SERVICE.model,
+      } as GroqLLMService
+
+    case 'xai':
+      return {
+        ...DEFAULT_XAI_LLM_SERVICE,
+        model: model || DEFAULT_XAI_LLM_SERVICE.model,
+      } as XaiLLMService
+
+    case 'together':
+      return {
+        ...DEFAULT_TOGETHER_LLM_SERVICE,
+        model: model || DEFAULT_TOGETHER_LLM_SERVICE.model,
+      } as TogetherLLMService
+
+    case 'fireworks':
+      return {
+        ...DEFAULT_FIREWORKS_LLM_SERVICE,
+        model: model || DEFAULT_FIREWORKS_LLM_SERVICE.model,
+      } as FireworksLLMService
+
+    case 'openrouter':
+      return {
+        ...DEFAULT_OPENROUTER_LLM_SERVICE,
+        model: model || DEFAULT_OPENROUTER_LLM_SERVICE.model,
+      } as OpenRouterLLMService
+
+    case 'lmstudio':
+      return {
+        ...DEFAULT_LMSTUDIO_LLM_SERVICE,
+        model: model || DEFAULT_LMSTUDIO_LLM_SERVICE.model,
+      } as LmStudioLLMService
+
+    case 'vllm':
+      return {
+        ...DEFAULT_VLLM_LLM_SERVICE,
+        model: model || DEFAULT_VLLM_LLM_SERVICE.model,
+      } as VllmLLMService
+
     default:
       throw new LangChainConfigurationError(
-        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, azure, gemini, mistral, bedrock, ollama`,
-        { provider, supportedProviders: ['openai', 'anthropic', 'azure', 'gemini', 'mistral', 'bedrock', 'ollama'] }
+        `getDefaultServiceConfigFromAlias: Unsupported provider '${provider}'. Supported providers: openai, anthropic, azure, gemini, mistral, bedrock, ollama, ${OPENAI_COMPATIBLE_PROVIDER_IDS.join(', ')}`,
+        {
+          provider,
+          supportedProviders: [
+            'openai',
+            'anthropic',
+            'azure',
+            'gemini',
+            'mistral',
+            'bedrock',
+            'ollama',
+            ...OPENAI_COMPATIBLE_PROVIDER_IDS,
+          ],
+        }
       )
   }
 }

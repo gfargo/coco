@@ -50,6 +50,12 @@ export type LogInkInputPromptKind =
   // the current branch's) gets the action. (The merge-strategy
   // prompts became 1-key choice prompts in #1351.)
   | 'triage-pr-request-changes'
+  // #OSS-2057 — add/edit the `refs/notes/commits` note on the cursored
+  // history commit, opened from the detail surface's [Notes] tab.
+  // Multiline (a note is free-form, unlike the single-line branch/tag/
+  // stash name prompts), seeded with the existing note text when one is
+  // already loaded so editing doesn't start from scratch.
+  | 'edit-commit-note'
 
 export type LogInkInputPromptState = {
   kind: LogInkInputPromptKind

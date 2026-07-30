@@ -4,6 +4,7 @@ import {
     formatLogInkComposeEmpty,
     formatLogInkHistoryEmpty,
     formatLogInkLoading,
+    formatLogInkNotesEmpty,
     formatLogInkPullRequestDiffEmpty,
     formatLogInkPullRequestDiffError,
     formatLogInkStashEmpty,
@@ -103,6 +104,14 @@ describe('log Ink surface states', () => {
     })
   })
 
+  describe('formatLogInkNotesEmpty', () => {
+    it('points at the add/edit keybinding', () => {
+      const message = formatLogInkNotesEmpty()
+      expect(message).toContain('No note on this commit')
+      expect(message).toContain('enter')
+    })
+  })
+
   describe('formatLogInkHistoryEmpty', () => {
     it('reports filter clear when search is active', () => {
       const message = formatLogInkHistoryEmpty({ filter: 'fix:', totalCommits: 100 })
@@ -132,6 +141,18 @@ describe('log Ink surface states', () => {
       expect(message).toContain('gh') // history
       expect(message).toContain('gb') // branches
       expect(message).toContain('gz') // stash
+      expect(message).not.toContain('sparse')
+    })
+
+    it('mentions sparse-checkout in the clean-tree hint when active (OSS-2056)', () => {
+      const message = formatLogInkStatusEmpty({ hasChanges: false, sparse: true })
+      expect(message).toContain('Worktree clean')
+      expect(message).toContain('sparse checkout')
+    })
+
+    it('omits the sparse note when sparse is false or omitted', () => {
+      expect(formatLogInkStatusEmpty({ hasChanges: false, sparse: false })).not.toContain('sparse')
+      expect(formatLogInkStatusEmpty({ hasChanges: false })).not.toContain('sparse')
     })
   })
 
