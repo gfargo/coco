@@ -172,6 +172,9 @@ function commentsSection(
   truncated?: boolean
 ): PreviewLine[] {
   if (comments.length === 0 && !truncated) return []
+  if (comments.length === 0 && truncated) {
+    return [heading('Comments'), dim('… comments unavailable (fetch failed or limit reached)')]
+  }
   const recent = comments.slice(-maxShown)
   const out: PreviewLine[] = [heading(`Comments (${comments.length}${truncated ? '+' : ''})`)]
   for (const comment of recent) {
