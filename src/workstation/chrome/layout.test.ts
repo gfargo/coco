@@ -204,6 +204,56 @@ describe('log Ink layout', () => {
     })
   })
 
+  // Regression coverage for #1855: the help overlay (detailWidth >= 60)
+  // combined with a focused sidebar (sidebarWidth >= 32) used to push
+  // sidebarWidth + mainPanelWidth + detailWidth past `columns`, since
+  // mainPanelWidth was floor-clamped independently instead of being
+  // derived by subtraction. The fix budgets the side panes against the
+  // terminal so the three always tile flush.
+  describe('three-pane width budgeting (#1855)', () => {
+    const FOCUS_OVERLAY_COMBOS: Array<
+      Pick<Parameters<typeof getLogInkLayout>[0], 'sidebarFocused' | 'inspectorFocused' | 'helpOverlayActive'>
+    > = [
+      {},
+      { sidebarFocused: true },
+      { inspectorFocused: true },
+      { helpOverlayActive: true },
+      { helpOverlayActive: true, sidebarFocused: true },
+      { helpOverlayActive: true, inspectorFocused: true },
+    ]
+
+    it('never lets the three panes exceed the terminal width, for any column count or focus/overlay combination', () => {
+      for (let columns = 80; columns <= 240; columns++) {
+        for (const combo of FOCUS_OVERLAY_COMBOS) {
+          const layout = getLogInkLayout({ columns, rows: 40, ...combo })
+          expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(columns)
+          if (!layout.singlePane) {
+            expect(layout.mainPanelWidth).toBeGreaterThanOrEqual(20)
+          }
+        }
+      }
+    })
+
+    it('does not overflow when the help overlay opens on a focused sidebar', () => {
+      for (const columns of [100, 110, 119, 130]) {
+        const layout = getLogInkLayout({
+          columns,
+          rows: 40,
+          helpOverlayActive: true,
+          sidebarFocused: true,
+        })
+        expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(columns)
+        expect(layout.mainPanelWidth).toBeGreaterThanOrEqual(20)
+      }
+    })
+
+    it('does not overflow with the help overlay alone at 100 columns', () => {
+      const layout = getLogInkLayout({ columns: 100, rows: 40, helpOverlayActive: true })
+      expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(100)
+      expect(layout.mainPanelWidth).toBeGreaterThanOrEqual(20)
+    })
+  })
+
   // Responsive density tiers — drive history-row column dropping,
   // relative-date formatting, row stacking, and side-panel rail
   // collapse. Breakpoints live in `LAYOUT_*_BELOW` constants so the
