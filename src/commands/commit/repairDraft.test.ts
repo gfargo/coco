@@ -63,6 +63,19 @@ describe('repairDraftAgainstValidationErrors', () => {
         expect(line.length).toBeLessThanOrEqual(100)
       }
     })
+
+    it('does not introduce extra spaces when the line contains double spaces', () => {
+      const longLine = `${'word  '.repeat(20).trimEnd()}` // double-spaced, 119 chars
+      const draft = `chore: test\n\n${longLine}`
+      const result = repairDraftAgainstValidationErrors(draft, [
+        "body's lines must not be longer than 100 characters",
+      ])
+      const bodyLines = result.split('\n\n')[1].split('\n')
+      for (const line of bodyLines) {
+        expect(line.length).toBeLessThanOrEqual(100)
+        expect(line).not.toMatch(/  /)
+      }
+    })
   })
 
   describe('header-max-length repair', () => {

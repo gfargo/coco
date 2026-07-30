@@ -164,7 +164,7 @@ function wrapLine(line: string, maxLen: number): string {
   // Detect and preserve leading whitespace
   const leadMatch = line.match(/^(\s*)/)
   const indent = leadMatch ? leadMatch[1] : ''
-  const words = line.trimStart().split(' ')
+  const words = line.trimStart().split(/\s+/)
   const lines: string[] = []
   let current = indent
 
@@ -253,13 +253,16 @@ export function repairDraftAgainstValidationErrors(
     }
 
     // --- subject-case (lower-case / sentence-case violations) ---
-    // The built-in rule allows any of: sentence-case, start-case, pascal-case,
-    // upper-case, lower-case — so we only normalise when the generated subject
-    // starts with an uppercase letter and lowercasing it is safe (i.e. we only
-    // fix "FooBar" → "fooBar" style capitalisation artefacts, not intentional
-    // proper nouns in start-case/pascal-case, which are already allowed).
-    // A pragmatic approach: lowercase just the first character of the subject,
-    // which is the most common violation (capitalised first word).
+    // Lower-cases just the first character of the subject whenever it's
+    // uppercase — the most common violation (capitalised first word), and
+    // the one that satisfies both `sentence-case` and `lower-case`. This is
+    // applied unconditionally on any subject-case error, without checking
+    // which cases a repository's own rule actually allows (e.g. a rule
+    // restricted to `start-case`/`pascal-case` would want the capital kept).
+    // That's safe because the repaired draft is always re-validated below
+    // before being accepted — a wrong-direction fix just fails re-validation
+    // and falls through to the original `ok: false` result, never a silently
+    // broken success.
     if (/subject.{0,30}(must be|case)/i.test(error) || /subject-case/i.test(error)) {
       // Extract subject from conventional title: "type(scope): Subject text"
       const conventionalMatch = title.match(/^([a-z]+(?:\([^)]*\))?!?):\s*(.*)$/)
