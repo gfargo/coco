@@ -94,6 +94,9 @@ export function getModelPrice(model?: string, provider?: string): ModelPrice | u
     return ANTHROPIC_PRICES[model.slice(BEDROCK_ANTHROPIC_PREFIX.length)]
   }
 
+  // Non-Anthropic Bedrock ids (e.g. `meta.llama...`, `amazon.titan...`) have
+  // no prefix mapping and intentionally fall through to a table miss here,
+  // degrading to the unpriced/tokens-only path rather than a fabricated price.
   return MODEL_PRICES[model]
 }
 
