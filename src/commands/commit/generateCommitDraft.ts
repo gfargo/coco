@@ -211,10 +211,11 @@ function truncateHeader(header: string, maxLen: number): string {
  *   1. `body-max-line-length` — hard-wraps over-length body lines at word
  *      boundaries using the limit extracted from the error message (defaults
  *      to 100 if no number is found).
- *   2. `subject-case` — lower-cases the subject (the part after `type(scope):`)
- *      when the violation is one of the case rules coco sets by default. Only
- *      applies the normalisation when *every* case allowed is a lower-case
- *      form (sentence-case, lower-case) and the fix is unambiguous.
+ *   2. `subject-case` — lower-cases the first character of the subject (the
+ *      part after `type(scope):`) whenever it's uppercase, without checking
+ *      which cases a repository's own rule actually allows. Safe because the
+ *      repaired draft is always re-validated before being accepted, so a
+ *      wrong-direction fix just falls through to the original failure.
  *   3. `header-max-length` — truncates the title at the last word boundary
  *      that fits within the limit extracted from the error message (defaults
  *      to 72 if no number is found).
