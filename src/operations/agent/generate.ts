@@ -32,7 +32,13 @@ import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { dispatchStructuralParser, type StructuralLanguageId } from '../../lib/parsers/default/utils/structuralParserRegistry'
 import { detectStructuralLanguageId } from '../../lib/parsers/default/utils/summarizeLargeFiles'
 import { summarizeTrivialDiff } from '../../lib/parsers/default/utils/trivialDiff'
-import { AgentOperationContext, ConventionsProvenance, getConventionsContext, resolveChangeSource } from './context'
+import {
+    AgentOperationContext,
+    ConventionsProvenance,
+    getConventionsContext,
+    ResolvedChangeContext,
+    resolveChangeSource,
+} from './context'
 import { AgentOperationError } from './errors'
 import { splitUnifiedDiff } from './splitUnifiedDiff'
 import {
@@ -236,8 +242,9 @@ function envelope<T>(
 export async function generateAgentCommitDraft(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<CommitDraftData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   report(context, 'Resolved changes', 0.2)
@@ -298,8 +305,9 @@ export async function generateAgentCommitDraft(
 export async function generateAgentReview(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<ReviewData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   report(context, 'Resolved changes', 0.2)
@@ -333,8 +341,9 @@ export async function generateAgentReview(
 export async function generateAgentChangelog(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<ChangelogData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   report(context, 'Resolved changes', 0.2)
@@ -367,8 +376,9 @@ export async function generateAgentChangelog(
 export async function generateAgentRecap(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<RecapData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   report(context, 'Resolved changes', 0.2)
@@ -399,16 +409,17 @@ export async function runAgentOperation(
   operation: AgentOperation,
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ) {
   switch (operation) {
     case 'commit-draft':
-      return generateAgentCommitDraft(input, context)
+      return generateAgentCommitDraft(input, context, preResolved)
     case 'review':
-      return generateAgentReview(input, context)
+      return generateAgentReview(input, context, preResolved)
     case 'changelog':
-      return generateAgentChangelog(input, context)
+      return generateAgentChangelog(input, context, preResolved)
     case 'recap':
-      return generateAgentRecap(input, context)
+      return generateAgentRecap(input, context, preResolved)
     case 'condense-diff':
       // condense-diff uses its own request schema (CondenseDiffRequest) and is
       // dispatched via runCondenseDiff, not through this shared entry point.
