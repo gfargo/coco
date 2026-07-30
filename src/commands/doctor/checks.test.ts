@@ -400,4 +400,36 @@ describe('checkUsageBudget', () => {
     checkUsageBudget(budgetConfig(1, 1), diagnostics)
     expect(diagnostics).toEqual([])
   })
+
+  // The month boundary is computed in UTC, not the host's local time zone
+  // (a prior version used `Date#getFullYear`/`getMonth`, which reads local
+  // time). In UTC-12, both `now` and the record below fall in UTC March —
+  // but their *local* dates straddle the Feb/Mar boundary, so a local-time
+  // implementation would wrongly exclude the record as "last month" and
+  // miss the warning entirely. This pins TZ to catch a regression back to
+  // local-time methods.
+  it('uses UTC (not host-local time) to decide "this calendar month"', () => {
+    const prevTz = process.env.TZ
+    process.env.TZ = 'Etc/GMT+12' // fixed UTC-12 offset, no DST
+    jest.useFakeTimers().setSystemTime(new Date('2024-03-01T23:00:00Z')) // local: Mar 1, 11:00
+    try {
+      fs.writeFileSync(
+        logPath,
+        `${JSON.stringify({
+          t: new Date('2024-03-01T10:00:00Z').getTime(), // local: Feb 29, 22:00
+          task: 'commit',
+          model: 'gpt-5.5',
+          promptTokens: 1_000_000,
+          completionTokens: 1_000_000,
+        })}\n`
+      )
+      const diagnostics: Diagnostic[] = []
+      checkUsageBudget(budgetConfig(1, 1), diagnostics)
+      expect(diagnostics).toHaveLength(1)
+    } finally {
+      jest.useRealTimers()
+      if (prevTz === undefined) delete process.env.TZ
+      else process.env.TZ = prevTz
+    }
+  })
 })

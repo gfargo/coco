@@ -27,14 +27,14 @@ import { DoctorArgv, DoctorOptions } from './config'
 import { checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
 import { Config } from '../../lib/config/types'
 
-function formatRowCost(row: UsageAggregate): string {
+export function formatRowCost(row: UsageAggregate): string {
   // Fully unpriced group (e.g. all calls used a model we don't have a price
   // for) — show a dash rather than a misleading $0.00.
   if (row.pricedCalls === 0) return '–'
   return `$${row.estimatedCostUsd.toFixed(4)}`
 }
 
-function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
+export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
   return rows.map((row) => {
     const tokens = row.promptTokens > 0 || row.completionTokens > 0
       ? `${row.promptTokens} in / ${row.completionTokens} out tok`
@@ -49,7 +49,7 @@ function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
  * dynamic-model task) plus, when the opt-in usage ledger has data, aggregated
  * tokens + latency by task and model.
  */
-function renderCostReport(config: Config, logger: Parameters<CommandHandler<DoctorArgv>>[1], json: boolean): void {
+export function renderCostReport(config: Config, logger: Parameters<CommandHandler<DoctorArgv>>[1], json: boolean): void {
   const profile = buildModelRoutingProfile(config)
   const records = readUsageRecords()
   const byTask = summarizeUsageByTask(records)

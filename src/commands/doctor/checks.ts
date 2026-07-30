@@ -310,6 +310,11 @@ function checkTokenLimits(config: Config, diagnostics: Diagnostic[]) {
  * `telemetry.budget.monthlyUsd` and warns at/above `warnAtPercent`. No-op
  * when no cap is configured, or when nothing in this month's ledger priced
  * out to a cost (unset ledger, or every call used an unpriced model).
+ *
+ * The month boundary is computed in UTC rather than the host's local time
+ * zone, so the same ledger reports the same "this month" total regardless of
+ * where `coco doctor` runs (and regardless of `t`'s own time zone — `t` is
+ * always an epoch millisecond timestamp).
  */
 export function checkUsageBudget(config: Config, diagnostics: Diagnostic[]) {
   const budget = config.telemetry?.budget
@@ -318,7 +323,7 @@ export function checkUsageBudget(config: Config, diagnostics: Diagnostic[]) {
   const now = new Date()
   const records = readUsageRecords().filter((r) => {
     const d = new Date(r.t)
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
+    return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth()
   })
 
   const { totalCostUsd, pricedCalls } = totalUsageCost(records)
