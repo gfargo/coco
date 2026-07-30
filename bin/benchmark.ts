@@ -14,6 +14,8 @@
  *   npm run bench                # run all fixtures, write bench file
  *   npm run bench -- --update    # also overwrite the baseline
  *   npm run bench -- --fixture=medium   # narrow to one fixture
+ *   npm run bench -- --check     # gate: fail if llmCalls regress vs baseline
+ *                                # (runs latency-scaled for CI speed, ~10x faster)
  *
  * The mock chain uses a deterministic latency model so before/after
  * runs compare apples to apples without paying for real API calls.
@@ -40,6 +42,15 @@ import {
   flushLlmBenchRun,
   resetLlmTelemetry,
 } from '../src/lib/langchain/utils/observability'
+import {
+  BenchResult,
+  CheckEntry,
+  CheckStatus,
+  DEFAULT_CHECK_TOLERANCES,
+  evaluateCheck,
+  scaleBaselineDurations,
+} from './benchmark/evaluateCheck'
+import { readBaseline } from './benchmark/readBaseline'
 
 // Silence the type checker about the unused `fileChangeParser` import
 // being present for future bench scenarios; the active runner uses
@@ -88,17 +99,13 @@ const DEFAULT_OPTIONS: BenchOptions = {
   maxTokens: 4096,
 }
 
-type BenchResult = {
-  fixture: string
-  fileCount: number
-  approxTokens: number
-  durationMs: number
-  llmCalls: number
-  llmTotalMs: number
-  llmTotalPromptTokens: number
-  /** When this row is a warm-cache re-run, the cold result it amortized against. */
-  pass?: 'cold' | 'warm'
-}
+// `--check` scales the mock chain's simulated latency down by this factor.
+// The full fixture sweep at DEFAULT_OPTIONS latency is realistic but real
+// wall-clock (~3 minutes of actual setTimeout delay across all fixtures) —
+// fine for a local `npm run bench`, too slow as a per-PR CI gate. llmCalls
+// (the strict gate) is a function of token/chunk counts, not latency, so
+// scaling latency down doesn't affect what --check actually enforces.
+const CHECK_LATENCY_SCALE = 0.1
 
 /**
  * Deterministic hash of the chain input. Used to derive per-call
@@ -248,15 +255,74 @@ function writeBenchFile(results: BenchResult[], updateBaseline: boolean): void {
   }
 }
 
-function readBaseline(): BenchResult[] | undefined {
-  if (!fs.existsSync(BASELINE_PATH)) return undefined
-  try {
-    const raw = fs.readFileSync(BASELINE_PATH, 'utf8')
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed.results) ? parsed.results : undefined
-  } catch {
-    return undefined
+/**
+ * Loads the committed baseline for comparison. A missing/corrupt baseline
+ * is fine for a plain `npm run bench` (there's just nothing to diff
+ * against yet), but for `--check` it's fatal: the whole point of the gate
+ * is comparing against that file, so silently treating "the file that
+ * defines the gate is gone" the same as "this is a brand new fixture with
+ * no history" would let a deleted or corrupted baseline sail through CI
+ * green with zero enforcement. Callers that need the gate to fail loudly
+ * pass `required: true`.
+ */
+function loadBaseline(options: { required: boolean }): BenchResult[] | undefined {
+  const result = readBaseline(BASELINE_PATH)
+  if (result.status === 'ok') return result.results
+
+  if (!options.required) return undefined
+
+  if (result.status === 'missing') {
+    console.error(
+      `[FAIL] No baseline found at ${BASELINE_PATH}; --check has nothing to gate against. Run "npm run bench -- --update" to create one.`
+    )
+  } else {
+    console.error(`[FAIL] Baseline at ${BASELINE_PATH} is corrupt (${result.reason}); --check cannot gate against it.`)
   }
+  process.exitCode = 1
+  return undefined
+}
+
+function printCheckResults(entries: CheckEntry[]): void {
+  console.log('\n=== benchmark check ===\n')
+  for (const entry of entries) {
+    const marker = entry.status === 'regression' ? 'FAIL' : entry.status === 'warning' ? 'WARN' : ' ok '
+    const log = entry.status === 'regression' ? console.error : console.log
+    log(`[${marker}] ${entry.fixture}: ${entry.message}`)
+  }
+  console.log('')
+}
+
+function renderCheckSummary(entries: CheckEntry[]): void {
+  const summaryPath = process.env.GITHUB_STEP_SUMMARY
+  if (!summaryPath) return
+
+  const statusLabel = (status: CheckStatus) =>
+    status === 'regression' ? '❌ regression' : status === 'warning' ? '⚠️ warning' : '✅ ok'
+
+  const rows = entries.map((entry) => {
+    const llmCallsCell =
+      entry.baselineLlmCalls === undefined
+        ? `${entry.llmCalls}`
+        : `${entry.llmCalls} (baseline ${entry.baselineLlmCalls})`
+    const durationCell =
+      entry.baselineDurationMs === undefined
+        ? `${entry.durationMs}ms`
+        : `${entry.durationMs}ms (baseline ${entry.baselineDurationMs}ms)`
+    return `| ${entry.fixture} | ${llmCallsCell} | ${durationCell} | ${statusLabel(entry.status)} |`
+  })
+
+  const table = [
+    '## Diff-condensing benchmark',
+    '',
+    '| Fixture | LLM calls | Duration | Status |',
+    '| --- | --- | --- | --- |',
+    ...rows,
+    '',
+    `_Duration baseline scaled ${CHECK_LATENCY_SCALE}x to match --check's reduced-latency CI run; llmCalls are exact and unscaled._`,
+    '',
+  ].join('\n')
+
+  fs.appendFileSync(summaryPath, table)
 }
 
 async function main(): Promise<void> {
@@ -268,6 +334,10 @@ async function main(): Promise<void> {
   // Demonstrates the cache hit rate added in #845 PR 5 — same fixture,
   // unchanged inputs, second run should be essentially free.
   const repeat = args.includes('--repeat')
+  // --check runs a single cold pass per fixture (cache cleared
+  // beforehand, same as the cold half of --repeat) and gates on the
+  // committed baseline instead of writing a new bench/baseline file.
+  const check = args.includes('--check')
   // --no-cache disables the diff-summary cache for the run. Useful
   // for reproducing pre-PR-5 numbers against the same harness.
   if (args.includes('--no-cache')) {
@@ -281,7 +351,19 @@ async function main(): Promise<void> {
   const fastPath = fastPathArg
     ? Object.fromEntries(fastPathArg.split(',').map((name) => [name.trim(), true]))
     : undefined
-  const runOptions: BenchOptions = { ...DEFAULT_OPTIONS, fastPath }
+  // --check only gates on llmCalls (deterministic, unaffected by the mock
+  // chain's simulated latency) and warns loosely on durationMs — it never
+  // fails on a *shorter* duration. So scale the simulated latency down for
+  // check runs: it cuts the full-fixture-sweep gate from ~3 minutes of real
+  // setTimeout delay to a few seconds without weakening the gate itself.
+  const runOptions: BenchOptions = check
+    ? {
+        ...DEFAULT_OPTIONS,
+        fastPath,
+        baseLatencyMs: DEFAULT_OPTIONS.baseLatencyMs * CHECK_LATENCY_SCALE,
+        perTokenMs: DEFAULT_OPTIONS.perTokenMs * CHECK_LATENCY_SCALE,
+      }
+    : { ...DEFAULT_OPTIONS, fastPath }
 
   const fixtures = fixtureArg
     ? allFixtures.filter((fixture) => fixture.name === fixtureArg)
@@ -291,6 +373,13 @@ async function main(): Promise<void> {
     process.exitCode = 1
     return
   }
+
+  // Fail fast on a missing/corrupt baseline for --check, before spending
+  // any time on the fixture sweep — a broken baseline can't be fixed by
+  // running the bench again. Loaded once and reused below so a plain run
+  // isn't penalized for a missing baseline (that's expected pre-bootstrap).
+  const rawBaseline = updateBaseline ? undefined : loadBaseline({ required: check })
+  if (check && !rawBaseline) return
 
   const results: BenchResult[] = []
   for (const fixture of fixtures) {
@@ -305,6 +394,14 @@ async function main(): Promise<void> {
       console.log(`Running fixture ${fixture.name} (warm)...`)
       const warm = await runFixture(fixture, runOptions)
       results.push({ ...warm, pass: 'warm' })
+    } else if (check) {
+      // Cache cleared per fixture, same as the cold half of --repeat,
+      // so a --check run always measures cold numbers comparable to
+      // the baseline's cold rows.
+      clearDiffSummaryCache(process.cwd())
+      console.log(`Running fixture ${fixture.name} (check)...`)
+      const result = await runFixture(fixture, runOptions)
+      results.push(result)
     } else {
       console.log(`Running fixture ${fixture.name}...`)
       const result = await runFixture(fixture, runOptions)
@@ -312,9 +409,25 @@ async function main(): Promise<void> {
     }
   }
 
-  const baseline = updateBaseline ? undefined : readBaseline()
-  printSummary(results, baseline)
-  writeBenchFile(results, updateBaseline)
+  // `--check` measures durationMs with simulated latency scaled down (see
+  // CHECK_LATENCY_SCALE above) for CI speed, but the committed baseline was
+  // captured at full latency. Scale the baseline the same way before
+  // comparing so the durationMs warning stays meaningful instead of always
+  // reading as a ~10x improvement regardless of any real regression.
+  const comparisonBaseline =
+    check && rawBaseline ? scaleBaselineDurations(rawBaseline, CHECK_LATENCY_SCALE) : rawBaseline
+  printSummary(results, comparisonBaseline)
+
+  if (check) {
+    const { ok, entries } = evaluateCheck(results, comparisonBaseline, DEFAULT_CHECK_TOLERANCES)
+    printCheckResults(entries)
+    renderCheckSummary(entries)
+    if (!ok) {
+      process.exitCode = 1
+    }
+  } else {
+    writeBenchFile(results, updateBaseline)
+  }
 
   // Flush any in-memory bench telemetry to a separate file when
   // COCO_BENCH is set externally; lets devs capture the per-call

@@ -3,10 +3,50 @@ import {
   addIssueLabel,
   closeIssue,
   commentIssue,
+  createIssue,
   reopenIssue,
 } from './issueActions'
 
 describe('issueActions', () => {
+  describe('createIssue', () => {
+    it('rejects a blank title without invoking gh', async () => {
+      const runner = jest.fn()
+      await expect(createIssue({ title: '   ', body: 'b' }, runner)).resolves.toEqual({
+        ok: false,
+        message: 'Issue title required',
+      })
+      expect(runner).not.toHaveBeenCalled()
+    })
+
+    it('invokes `gh issue create --title --body-file` and parses the URL', async () => {
+      const runner = jest.fn().mockResolvedValue('https://github.com/gfargo/coco/issues/42')
+      const result = await createIssue({ title: 'Bug found', body: 'It broke.' }, runner)
+      expect(result).toEqual({
+        ok: true,
+        message: 'Created issue: https://github.com/gfargo/coco/issues/42',
+        url: 'https://github.com/gfargo/coco/issues/42',
+      })
+      expect(runner).toHaveBeenCalledTimes(1)
+      const args = runner.mock.calls[0][0] as string[]
+      expect(args[0]).toBe('issue')
+      expect(args[1]).toBe('create')
+      expect(args[2]).toBe('--title=Bug found')
+      expect(args[3]).toMatch(/^--body-file=/)
+    })
+
+    it('surfaces gh errors as ok: false', async () => {
+      const runner = jest.fn((args: string[]) =>
+        args[0] === 'auth'
+          ? Promise.resolve('Logged in to github.com')
+          : Promise.reject(new Error('validation failed'))
+      )
+      await expect(createIssue({ title: 't', body: 'b' }, runner)).resolves.toEqual({
+        ok: false,
+        message: 'validation failed',
+      })
+    })
+  })
+
   describe('commentIssue', () => {
     it('rejects empty bodies without invoking gh', async () => {
       const runner = jest.fn()

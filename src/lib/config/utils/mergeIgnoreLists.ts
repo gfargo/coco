@@ -19,7 +19,7 @@ import { splitList } from './splitList'
  * per commit) outweighs the niche case of intentionally excluding a
  * default lockfile pattern.
  */
-function unionPreservingOrder(
+export function unionPreservingOrder(
   base: string[],
   extras: string[] | string | undefined
 ): string[] {

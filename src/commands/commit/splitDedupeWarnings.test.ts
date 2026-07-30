@@ -162,6 +162,9 @@ describe('prepareCommitSplitPlan / handleCommitSplit — dedupe warnings (#1462)
 
       expect(output).toContain('Split cancelled')
       expect(mockedConfirmPrompt).toHaveBeenCalledTimes(1)
+      // #1662: the confirm must default to "no" so a stray Enter cancels
+      // rather than applying the destructive split.
+      expect(mockedConfirmPrompt).toHaveBeenCalledWith(expect.objectContaining({ default: false }))
 
       // Interactive default path writes the plan preview directly to
       // stdout (bypassing the logger, which may be muted independently of

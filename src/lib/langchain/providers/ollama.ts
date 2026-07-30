@@ -48,4 +48,5 @@ export const ollamaProvider: ProviderDefinition = {
   // token-counting audit — locally-hosted models vary too widely to pin
   // down a single tokenizer, so this tracks the Claude/Llama-class estimate.
   tokenCorrectionFactor: 1.2,
+  supportsStructuredOutput: 'json-mode',
 }

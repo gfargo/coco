@@ -103,29 +103,60 @@ export type PaginateParams<T> = {
   onError?: 'throw' | 'stop'
 }
 
+export type PaginateResult<T> = {
+  /** Accumulated items across all fetched pages, capped at `want`. */
+  items: T[]
+  /**
+   * `true` when the result is known to be incomplete: either the `maxPages`
+   * ceiling was reached while `hasMore` was still true, or `onError: 'stop'`
+   * swallowed a mid-pagination error. List loaders (where `maxPages` is 100
+   * and pages rarely hit the ceiling) can safely ignore this; detail loaders
+   * use it to surface a "… N more comments (fetch failed / limit reached)"
+   * notice so reviewers know they may be missing entries.
+   */
+  truncated: boolean
+}
+
 /**
  * Shared accumulate-until-short-page loop used by every forge's list/detail
  * pagination (GitLab MR/issue lists, Bitbucket PR/issue lists, GitLab note
  * threads, Bitbucket comment threads). Callers supply only the page fetch and
  * parse; this owns the page counter, the `want`/`maxPages` stop conditions,
  * and the throw-vs-degrade error behavior.
+ *
+ * Returns `{ items, truncated }`. `truncated` is `true` when the result is
+ * incomplete: the `maxPages` ceiling was hit while `hasMore` was still true,
+ * or `onError: 'stop'` swallowed a mid-pagination error.
  */
-export async function paginate<T>(params: PaginateParams<T>): Promise<T[]> {
+export async function paginate<T>(params: PaginateParams<T>): Promise<PaginateResult<T>> {
   const { fetchPage, parsePage, want, maxPages, onError = 'throw' } = params
   const acc: T[] = []
+  let truncated = false
   for (let page = 1; page <= maxPages && acc.length < want; page++) {
     let parsed: PaginatePageResult<T> | undefined
     try {
       parsed = parsePage(await fetchPage(page))
     } catch (error) {
       if (onError === 'throw') throw error
+      // onError === 'stop': swallow the error and mark the result as truncated.
+      truncated = true
       break
     }
-    if (!parsed) break
+    if (!parsed) {
+      // parsePage returning undefined also means we stopped early (e.g. due to
+      // an onError: 'stop' caller returning undefined for a malformed page).
+      truncated = true
+      break
+    }
     acc.push(...parsed.items)
     if (!parsed.hasMore) break
+    // If we just consumed the last allowed page and hasMore is still true,
+    // flag truncation so callers know there are more items on the server.
+    if (page === maxPages) {
+      truncated = true
+    }
   }
-  return acc.slice(0, want)
+  return { items: acc.slice(0, want), truncated }
 }
 
 type GitLike = { raw(args: string[]): Promise<string> }

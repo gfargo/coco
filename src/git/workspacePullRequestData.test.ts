@@ -51,15 +51,23 @@ describe('workspacePullRequestData parsers', () => {
 
 describe('getWorkspacePullRequestCounts', () => {
   it('returns authenticated:false when gh auth status fails', async () => {
+    // Provide a GitHub remote so a host probe is issued. The probe throws
+    // (gh not authenticated), and the result should be authenticated:false.
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/a', 'git@github.com:owner/repo-a.git'],
+    ])
     const runner = jest.fn(async (args: string[]) => {
       if (args[0] === 'auth') throw new Error('not logged in')
       return ''
     })
 
-    const result = await getWorkspacePullRequestCounts(['/tmp/a'], { ghRunner: runner })
+    const result = await getWorkspacePullRequestCounts(['/tmp/a'], {
+      ghRunner: runner,
+      remoteUrls,
+    })
 
     expect(result).toEqual({ authenticated: false, counts: {} })
-    // Only the auth probe should have been issued.
+    // Only the auth probe should have been issued (no pr list calls).
     expect(runner).toHaveBeenCalledTimes(1)
   })
 
@@ -157,4 +165,145 @@ describe('getWorkspacePullRequestCounts', () => {
       '/tmp/repo-b': 0,
     })
   })
+
+  it('fetches PR counts for a GitHub Enterprise repo using the full webUrl as -R arg', async () => {
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/ghe-repo', 'git@github.acme.com:owner/ghe-repo.git'],
+    ])
+
+    const runner = jest.fn(async (args: string[]) => {
+      if (args[0] === 'auth') {
+        // Only the GHE hostname probe should be issued
+        const hostnameIdx = args.indexOf('--hostname')
+        if (hostnameIdx !== -1 && args[hostnameIdx + 1] === 'github.acme.com') return 'ok'
+        throw new Error('not logged in')
+      }
+      if (args[0] === 'pr') {
+        const repoArg = args[args.indexOf('-R') + 1]
+        if (repoArg === 'https://github.acme.com/owner/ghe-repo') {
+          return '[{"number":10},{"number":11},{"number":12}]'
+        }
+        throw new Error('unexpected -R arg: ' + repoArg)
+      }
+      return ''
+    })
+
+    const result = await getWorkspacePullRequestCounts(['/tmp/ghe-repo'], {
+      ghRunner: runner,
+      remoteUrls,
+    })
+
+    expect(result.authenticated).toBe(true)
+    expect(result.counts).toEqual({ '/tmp/ghe-repo': 3 })
+    // Confirm the -R arg was the full GHE URL, not a bare owner/name slug
+    const prCall = runner.mock.calls.find((c) => c[0][0] === 'pr')
+    expect(prCall).toBeDefined()
+    const repoArg = prCall![0][indexAfterRepoFlag(prCall![0])]
+    expect(repoArg).toBe('https://github.acme.com/owner/ghe-repo')
+  })
+
+  it('handles a mixed workspace: github.com authenticated, GHE unauthenticated', async () => {
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/gh-repo', 'git@github.com:owner/gh-repo.git'],
+      ['/tmp/ghe-repo', 'git@github.acme.com:owner/ghe-repo.git'],
+    ])
+
+    const runner = jest.fn(async (args: string[]) => {
+      if (args[0] === 'auth') {
+        const hostnameIdx = args.indexOf('--hostname')
+        const host = hostnameIdx !== -1 ? args[hostnameIdx + 1] : 'github.com'
+        if (host === 'github.com') return 'ok'
+        throw new Error('not logged in to ' + host)
+      }
+      if (args[0] === 'pr') {
+        const repoArg = args[args.indexOf('-R') + 1]
+        if (repoArg === 'owner/gh-repo') return '[{"number":1}]'
+        throw new Error('unexpected call for unauthenticated host')
+      }
+      return ''
+    })
+
+    const result = await getWorkspacePullRequestCounts(
+      ['/tmp/gh-repo', '/tmp/ghe-repo'],
+      { ghRunner: runner, remoteUrls }
+    )
+
+    // Overall authenticated = true because github.com is authenticated
+    expect(result.authenticated).toBe(true)
+    // github.com count present, GHE count absent
+    expect(result.counts).toEqual({ '/tmp/gh-repo': 1 })
+    // GHE pr list was not called (host unauthenticated)
+    const prCalls = runner.mock.calls.filter((c) => c[0][0] === 'pr')
+    expect(prCalls).toHaveLength(1)
+    expect(prCalls[0][0][prCalls[0][0].indexOf('-R') + 1]).toBe('owner/gh-repo')
+  })
+
+  it('probes github.com and reports auth status for an all-non-GitHub workspace', async () => {
+    const remoteUrls = new Map<string, string>([['/tmp/gl', 'git@gitlab.com:owner/repo.git']])
+    const authed = jest.fn(async (args: string[]) => (args[0] === 'auth' ? 'ok' : ''))
+    const onRepoComplete = jest.fn()
+
+    const okResult = await getWorkspacePullRequestCounts(['/tmp/gl'], {
+      ghRunner: authed,
+      remoteUrls,
+      onRepoComplete,
+    })
+
+    expect(okResult).toEqual({ authenticated: true, counts: {} })
+    // No `pr list` — the sole gh call is the github.com auth probe.
+    expect(authed.mock.calls.every((c) => c[0][0] === 'auth')).toBe(true)
+    expect(onRepoComplete).toHaveBeenCalledWith('/tmp/gl', undefined)
+
+    const denied = jest.fn(async (args: string[]) => {
+      if (args[0] === 'auth') throw new Error('not logged in')
+      return ''
+    })
+
+    const failResult = await getWorkspacePullRequestCounts(['/tmp/gl'], {
+      ghRunner: denied,
+      remoteUrls,
+    })
+
+    expect(failResult).toEqual({ authenticated: false, counts: {} })
+  })
+
+  it('reports non-GitHub repos before the GitHub fetch batch settles', async () => {
+    // A non-GitHub row's onRepoComplete must not wait on the GitHub
+    // fan-out — the UI clears that row's spinner the moment it fires.
+    const remoteUrls = new Map<string, string>([
+      ['/tmp/gl', 'git@gitlab.com:owner/repo.git'],
+      ['/tmp/gh', 'git@github.com:owner/repo.git'],
+    ])
+    const order: string[] = []
+    let releasePrList!: (value: string) => void
+    const prListGate = new Promise<string>((resolve) => {
+      releasePrList = resolve
+    })
+
+    const runner = jest.fn(async (args: string[]) => {
+      if (args[0] === 'auth') return 'ok'
+      if (args[0] === 'pr') return prListGate
+      return ''
+    })
+
+    const resultPromise = getWorkspacePullRequestCounts(['/tmp/gl', '/tmp/gh'], {
+      ghRunner: runner,
+      remoteUrls,
+      onRepoComplete: (repoPath) => order.push(repoPath),
+    })
+
+    // Give the classification + non-GitHub callback a chance to run
+    // while the GitHub `pr list` call is still hung on the gate.
+    await new Promise((resolve) => setImmediate(resolve))
+    expect(order).toEqual(['/tmp/gl'])
+
+    releasePrList('[]')
+    await resultPromise
+    expect(order).toEqual(['/tmp/gl', '/tmp/gh'])
+  })
 })
+
+/** Helper: find the index after -R in an args array. */
+function indexAfterRepoFlag(args: string[]): number {
+  return args.indexOf('-R') + 1
+}
