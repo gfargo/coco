@@ -297,6 +297,41 @@ describe('watch command handler', () => {
     expect(events.some((event) => (event as { type: string }).type === 'idle')).toBe(false)
   })
 
+  it('does not emit skipped after the terminal stopped event when the digest resolves unchanged after shutdown', async () => {
+    mockCreateRepoChangeWatcher.mockImplementation(({ onChange }: { onChange: (kind: string) => void }) => {
+      void onChange('worktree')
+      return { close: closeMock }
+    })
+
+    const handlerPromise = handler(argv(), logger)
+    await waitForShutdownListener()
+    // The watcher mock fires `onChange` once on creation — wait for that
+    // first settle to succeed and record the digest, so the next settle on
+    // the same digest takes the `pending.length === 0` skip path.
+    await waitForCalls(mockRunAgentOperation, 1)
+
+    // Second settle resolves the same digest, but not until after shutdown
+    // has already emitted the terminal `stopped` event.
+    let resolveChange: (value: unknown) => void = () => {}
+    mockResolveChangeSource.mockImplementation(() => new Promise((resolve) => {
+      resolveChange = resolve
+    }))
+    const secondRun = capturedRun?.()
+
+    process.emit('SIGINT' as never)
+    resolveChange(resolved('sha256:v1'))
+
+    await handlerPromise
+    await secondRun
+    // Flush any pending microtasks from the late-resolving change source, to
+    // prove the skipped event stays suppressed rather than just delayed.
+    for (let i = 0; i < 10; i += 1) await Promise.resolve()
+
+    const events = lines()
+    expect(events[events.length - 1]).toEqual({ type: 'stopped' })
+    expect(events.some((event) => (event as { type: string }).type === 'skipped')).toBe(false)
+  })
+
   it('closes the watcher and throttled runner on SIGINT', async () => {
     const runnerClose = jest.fn()
     mockCreateThrottledRunner.mockReturnValue({ trigger: jest.fn(), close: runnerClose })

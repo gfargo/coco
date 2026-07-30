@@ -129,7 +129,12 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
 
     const pending = operations.filter((operation) => lastSucceededDigest.get(operation) !== resolved.meta.digest)
     if (pending.length === 0) {
-      emitEvent(argv, logger, { type: 'skipped', reason: 'unchanged', digest: resolved.meta.digest })
+      // Same race as the other post-await emit sites below: shutdown may
+      // land while `resolveChangeSource` is still resolving, so don't emit
+      // a trailing `skipped` after `stopped` already went out.
+      if (!stopped) {
+        emitEvent(argv, logger, { type: 'skipped', reason: 'unchanged', digest: resolved.meta.digest })
+      }
       return
     }
 
