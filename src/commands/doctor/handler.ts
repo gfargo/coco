@@ -27,6 +27,9 @@ import { Config } from '../../lib/config/types'
 
 export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
   return rows.map((row) => {
+    const tokens = row.promptTokens > 0 || row.completionTokens > 0
+      ? `${row.promptTokens} in / ${row.completionTokens} out tok`
+      : '–'
     // Diff-summary cache hit-rate (#1958): whether we skipped the LLM call
     // entirely because a cached diff summary already existed.
     const diffCache = row.cacheLookups > 0
