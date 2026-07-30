@@ -1,6 +1,6 @@
 import { defaultBitbucketRunner, runBitbucketAction, type BitbucketRunner } from './bitbucketCli'
 import { rejectUnsafeUsername } from './forgeArgGuards'
-import type { IssueActionResult } from './issueActions'
+import type { CreateIssueInput, IssueActionResult } from './issueActions'
 
 /**
  * Bitbucket issue mutations via the REST API v2. Mirrors `gitlabIssueActions.ts`
@@ -11,6 +11,25 @@ import type { IssueActionResult } from './issueActions'
  * and `priority`. `addBitbucketIssueLabel` is intentionally unsupported; see
  * the comment inline.
  */
+
+export function createBitbucketIssue(
+  projectPath: string,
+  input: CreateIssueInput,
+  runner: BitbucketRunner = defaultBitbucketRunner
+): Promise<IssueActionResult> {
+  if (!input.title.trim()) return Promise.resolve({ ok: false, message: 'Issue title required' })
+  return runBitbucketAction(
+    runner,
+    `repositories/${projectPath}/issues`,
+    'POST',
+    { title: input.title, content: { raw: input.body } },
+    (out) => {
+      const issue = out.trim() ? (JSON.parse(out) as { links?: { html?: { href?: string } } }) : undefined
+      const url = issue?.links?.html?.href
+      return { ok: true, message: url ? `Created issue: ${url}` : 'Created issue', url }
+    }
+  )
+}
 
 export function commentBitbucketIssue(
   projectPath: string,

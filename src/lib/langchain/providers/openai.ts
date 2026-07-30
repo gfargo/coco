@@ -2,7 +2,17 @@ import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
-async function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
+/**
+ * Builds a `ChatOpenAI` client from a service config. Shared by the `openai`
+ * provider itself and every OpenAI-compatible preset (DeepSeek, Groq, xAI,
+ * Together, Fireworks, OpenRouter, LM Studio, vLLM — see
+ * `openaiCompatible.ts`), which pass their own `defaultBaseURL` so
+ * `service.baseURL` only needs to be set to override it.
+ */
+export async function createOpenAiLlm(
+  { model, config, apiKey }: CreateLlmArgs,
+  defaultBaseURL?: string
+): Promise<BaseChatModel> {
   const { ChatOpenAI } = await import('@langchain/openai')
   const openaiConfig: Partial<ConstructorParameters<typeof ChatOpenAI>[0]> = {
     apiKey,
@@ -21,9 +31,13 @@ async function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): Promis
       : {}),
   }
 
-  // Custom base URL for OpenAI-compatible APIs (OpenRouter, etc.).
-  if ('baseURL' in config.service && config.service.baseURL) {
-    openaiConfig.configuration = { baseURL: config.service.baseURL }
+  // Custom base URL for OpenAI-compatible APIs (OpenRouter, etc.), falling
+  // back to the preset's own default endpoint when the service doesn't
+  // override it.
+  const baseURL =
+    ('baseURL' in config.service && config.service.baseURL) || defaultBaseURL
+  if (baseURL) {
+    openaiConfig.configuration = { baseURL }
   }
 
   // Merge any additional provider fields.
@@ -41,4 +55,5 @@ export const openaiProvider: ProviderDefinition = {
   createLlm: createOpenAiLlm,
   resolveEndpoint: (config) =>
     'baseURL' in config.service ? config.service.baseURL : undefined,
+  supportsStructuredOutput: 'json-schema',
 }

@@ -419,7 +419,7 @@ export const handler: CommandHandler<ChangelogArgv> = async (argv, logger) => {
   const MODE =
     (INTERACTIVE && 'interactive') || (config.commit && 'interactive') || config?.mode || 'stdout'
 
-  handleResult({
+  await handleResult({
     result: changelogMsg,
     interactiveModeCallback: async () => {
       logSuccess()
