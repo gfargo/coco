@@ -205,6 +205,26 @@ describe('markMergeRequestReadyByNumber (#1933)', () => {
     ])
   })
 
+  it('strips a bracketed [Draft] title prefix', async () => {
+    const runner = jest.fn()
+      .mockResolvedValueOnce(JSON.stringify({ title: '[Draft] Add feature' }))
+      .mockResolvedValueOnce('')
+    await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenNthCalledWith(2, [
+      'api', 'projects/g%2Fp/merge_requests/5', '-X', 'PUT', '-f', 'title=Add feature',
+    ])
+  })
+
+  it('strips a parenthesized (WIP) title prefix', async () => {
+    const runner = jest.fn()
+      .mockResolvedValueOnce(JSON.stringify({ title: '(WIP) Add feature' }))
+      .mockResolvedValueOnce('')
+    await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenNthCalledWith(2, [
+      'api', 'projects/g%2Fp/merge_requests/5', '-X', 'PUT', '-f', 'title=Add feature',
+    ])
+  })
+
   it('is a no-op when the title has no draft prefix', async () => {
     const runner = jest.fn().mockResolvedValueOnce(JSON.stringify({ title: 'Add feature' }))
     const result = await markMergeRequestReadyByNumber('g/p', 5, runner)

@@ -138,6 +138,15 @@ describe('markBitbucketPullRequestReadyByNumber (#1933)', () => {
     expect(result.ok).toBe(false)
     expect(calls).toHaveLength(1)
   }))
+
+  it('is a no-op when the pull request is already draft: false', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({
+      'repositories/ws/repo/pullrequests/5': JSON.stringify({ title: 'Add feature', draft: false }),
+    })
+    const result = await markBitbucketPullRequestReadyByNumber('ws/repo', 5, runner)
+    expect(result).toEqual({ ok: true, message: 'Pull request #5 is not a draft' })
+    expect(calls).toHaveLength(1)
+  }))
 })
 
 describe('reopenBitbucketPullRequestByNumber (#1933)', () => {

@@ -344,10 +344,12 @@ export function reopenMergeRequestByNumber(
 }
 
 /**
- * Draft prefix GitLab recognizes on an MR title — "Draft:" is current,
- * "WIP:" is the legacy convention it still honors.
+ * Draft prefixes GitLab recognizes on an MR title — "Draft:" is current,
+ * "WIP:" is the legacy convention it still honors, and both also match in
+ * their bracket (`[Draft]`) and paren (`(Draft)`) forms, which GitLab's own
+ * draft detection treats identically to the colon form.
  */
-const DRAFT_TITLE_PREFIX = /^\s*(draft|wip)\s*:\s*/i
+const DRAFT_TITLE_PREFIX = /^\s*(?:\[\s*(?:draft|wip)\s*\]|\(\s*(?:draft|wip)\s*\)|(?:draft|wip)\s*:)\s*/i
 
 async function fetchMergeRequestTitle(
   projectPath: string,

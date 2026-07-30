@@ -155,7 +155,9 @@ export function addBitbucketPullRequestLabel(): Promise<PullRequestActionResult>
  * field update rather than a title rewrite. Bitbucket's `PUT` is a
  * full-resource update where `title` is required, so the current title is
  * fetched first and echoed back alongside `draft: false` to avoid a 400 or
- * clobbering it.
+ * clobbering it. Mirrors the GitLab/Gitea no-op short-circuit: if the fetch
+ * shows the PR is already `draft: false`, this returns early instead of
+ * issuing a redundant PUT.
  */
 export async function markBitbucketPullRequestReadyByNumber(
   projectPath: string,
@@ -163,10 +165,12 @@ export async function markBitbucketPullRequestReadyByNumber(
   runner: BitbucketRunner = defaultBitbucketRunner
 ): Promise<PullRequestActionResult> {
   let title: string | undefined
+  let isDraft: boolean | undefined
   try {
     const out = (await runner(`repositories/${projectPath}/pullrequests/${pullRequestNumber}`)).trim()
-    const pr = out ? (JSON.parse(out) as { title?: string }) : undefined
+    const pr = out ? (JSON.parse(out) as { title?: string; draft?: boolean }) : undefined
     title = pr?.title
+    isDraft = pr?.draft
   } catch (error) {
     const { message, details } = await resolveBitbucketActionError(error, runner)
     return { ok: false, message, ...(details && details.length ? { details } : {}) }
@@ -174,6 +178,10 @@ export async function markBitbucketPullRequestReadyByNumber(
 
   if (title === undefined) {
     return { ok: false, message: `Could not fetch pull request #${pullRequestNumber}.` }
+  }
+
+  if (isDraft === false) {
+    return { ok: true, message: `Pull request #${pullRequestNumber} is not a draft` }
   }
 
   return runBitbucketAction(
