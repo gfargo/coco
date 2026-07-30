@@ -5176,6 +5176,48 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    // Enter on the [Notes] tab (#OSS-2057) opens the add/edit prompt for
+    // the cursored commit's `refs/notes/commits` note, seeded with
+    // whatever note text the caller has hydrated so far.
+    it('Enter on notes tab opens the edit-commit-note prompt seeded with the loaded note', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorTab: 'notes' }),
+        '',
+        { return: true },
+        { inspectorActionCount: 9, commitNoteText: 'existing note body' },
+      )
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: expect.objectContaining({
+            type: 'openInputPrompt',
+            kind: 'edit-commit-note',
+            initial: 'existing note body',
+            multiline: true,
+          }),
+        },
+      ])
+    })
+
+    it('Enter on notes tab opens the prompt blank when no note is loaded yet', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorTab: 'notes' }),
+        '',
+        { return: true },
+        { inspectorActionCount: 9 },
+      )
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: expect.objectContaining({
+            type: 'openInputPrompt',
+            kind: 'edit-commit-note',
+            initial: '',
+          }),
+        },
+      ])
+    })
+
     // ←/→ for inspector tab switching mirrors the sidebar pattern. The
     // bracketed `[/]` notation that previously appeared in the chrome
     // hint read as "press the / key" — which collides with the global
