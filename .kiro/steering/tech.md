@@ -65,29 +65,32 @@ npm run screenshot:sync          # regenerate all marketing assets → .www
 
 ## CI (`.github/workflows/ci.yml`)
 
-Four core jobs run in parallel (the workstation lints/tests/builds/smoke-tests on
-every PR), plus an optional integration job. Concurrency cancels stale runs per ref.
+The per-commit gate is intentionally Linux-only and uses two parallel jobs. Stale
+runs are cancelled per ref, and every job has an explicit timeout.
 
-- **`lint`** — `eslint src bin`; also asserts `yarn.lock` exists and
-  `package-lock.json` does not (yarn-only guard).
-- **`test`** — matrix: Ubuntu Node 22.22.2 + 24.15.0 (required), macOS Node 22.22.2
-  (required), Windows Node 22.22.2 (experimental, `continue-on-error`). Runs
-  `npm run test:coverage`; uploads coverage to Codecov once (Ubuntu/22).
-- **`build`** — `npm run build`, asserts no `schema.json` drift, runs
-  `release:dry-run`, and uploads `dist/` as an artifact the smoke job reuses.
-- **`smoke`** (needs `build`) — downloads `dist/`, sets a git identity, runs
-  `npm run test:cli` (`bin/smokeCli.ts`) against the real bundled output to catch
-  packaging/export regressions tsc can't see.
-- **`integration`** (non-blocking) — `npm run test:integration`; gated on
-  `COCO_GITLAB_IT` / `COCO_GITLAB_TEST_PROJECT` secrets (self-skips without them).
+- **`quality`** — one checkout/install for lockfile hygiene, ESLint, standalone
+  TypeScript checking, build + schema drift, package/release dry runs, and the
+  packaged CLI smoke test. Build and smoke share the workspace, so no transient
+  `dist` artifact is needed.
+- **`tests`** — unit tests with coverage on Ubuntu / Node 22.22.2, Codecov upload,
+  then the integration suites without re-running them inside coverage. Live GitLab
+  cases remain gated on `COCO_GITLAB_IT` / `COCO_GITLAB_TEST_PROJECT`.
 
 Other workflows:
 
-- **`devskim.yml`** — Microsoft DevSkim security scan (push/PR to main + weekly),
+- **`full-ci.yml`** — the Node 24 / macOS / Windows matrix plus PTY e2e journeys;
+  runs weekly, manually, or when a PR receives the `full-ci` label. Platform cells
+  run unit tests without coverage instrumentation; Windows remains experimental.
+- **`visual-regression.yml`** — deterministic VHS still capture, manual or gated by
+  the `visual-ci` PR label. Pinned/checksummed VHS dependencies and short artifact
+  retention keep it reproducible without putting rendering on the hot path.
+- **`devskim.yml`** — Microsoft DevSkim security scan (PR to main + weekly),
   SARIF → GitHub Security tab, with test/fixture/generated paths excluded.
 - **`ai-review.yml`** — `anthropics/claude-code-action` review, gated on the
   `claude review` label; focuses on correctness, CLI-injection/secret-exposure
   security, and forge-abstraction parity. Needs `ANTHROPIC_API_KEY`.
+- **`main-broken-alert.yml`** — files/updates the main-broken issue immediately on
+  failure and reconciles recovery daily, avoiding a runner job after every green push.
 - **`publish-release.yml`** — verify (`npm test` + dry-run) then `npm publish`,
   triggered manually with a `publish` input.
 - **`update-homebrew-tap.yml`** — on release, polls npm for the new version,
