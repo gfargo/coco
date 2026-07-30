@@ -214,7 +214,7 @@ export async function resolveGiteaLabelId(
 
   try {
     // 1. Page through repo labels
-    const repoLabels = await paginate<LabelItem>({
+    const repoLabelsResult = await paginate<LabelItem>({
       fetchPage: (page) =>
         runner(`repos/${projectPath}/labels?limit=${GITEA_LABEL_PAGE_SIZE}&page=${page}`),
       parsePage: (raw) => {
@@ -225,6 +225,7 @@ export async function resolveGiteaLabelId(
       maxPages: GITEA_LABEL_MAX_PAGES,
       onError: 'throw',
     })
+    const repoLabels = repoLabelsResult.items
 
     const repoMatch = repoLabels.find((l) => l.name === label)
     if (repoMatch?.id !== undefined) {
@@ -234,7 +235,7 @@ export async function resolveGiteaLabelId(
     // 2. Page through org-level labels (404 = personal repo owner; swallow it)
     let orgLabels: LabelItem[] = []
     try {
-      orgLabels = await paginate<LabelItem>({
+      const orgLabelsResult = await paginate<LabelItem>({
         fetchPage: (page) =>
           runner(`orgs/${org}/labels?limit=${GITEA_LABEL_PAGE_SIZE}&page=${page}`),
         parsePage: (raw) => {
@@ -245,6 +246,7 @@ export async function resolveGiteaLabelId(
         maxPages: GITEA_LABEL_MAX_PAGES,
         onError: 'throw',
       })
+      orgLabels = orgLabelsResult.items
     } catch (orgError) {
       const err = orgError as Error & { status?: number }
       if (err.status !== 404) throw orgError

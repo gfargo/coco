@@ -70,15 +70,17 @@ async function fetchAllPages<T>(
 ): Promise<T[]> {
   const limit = Math.min(want, 100)
   const sep = baseEndpoint.includes('?') ? '&' : '?'
-  return paginate({
-    fetchPage: (page) => runner(`${baseEndpoint}${sep}limit=${limit}&start=${(page - 1) * limit}`),
-    parsePage: (output) => {
-      const result = parsePage<T>(output, resource)
-      return { items: result.values, hasMore: result.isLastPage === false }
-    },
-    want,
-    maxPages: 100,
-  })
+  return (
+    await paginate({
+      fetchPage: (page) => runner(`${baseEndpoint}${sep}limit=${limit}&start=${(page - 1) * limit}`),
+      parsePage: (output) => {
+        const result = parsePage<T>(output, resource)
+        return { items: result.values, hasMore: result.isLastPage === false }
+      },
+      want,
+      maxPages: 100,
+    })
+  ).items
 }
 
 function epochToIso(value: unknown): string {
