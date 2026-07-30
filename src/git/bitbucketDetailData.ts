@@ -1,4 +1,8 @@
-import { defaultBitbucketRunner, type BitbucketRunner } from './bitbucketCli'
+import {
+  defaultBitbucketRunner,
+  resolveBitbucketActionError,
+  type BitbucketRunner,
+} from './bitbucketCli'
 import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
@@ -53,19 +57,16 @@ function mapComments(comments: BitbucketComment[]): IssueComment[] {
     }))
 }
 
-async function safeJson<T>(runner: BitbucketRunner, endpoint: string): Promise<T | undefined> {
-  try {
-    const out = (await runner(endpoint)).trim()
-    return out ? (JSON.parse(out) as T) : undefined
-  } catch {
-    return undefined
-  }
+/** Fetch and parse a primary PR/issue object, letting fetch errors propagate. */
+async function requireJson<T>(runner: BitbucketRunner, endpoint: string): Promise<T | undefined> {
+  const out = (await runner(endpoint)).trim()
+  return out ? (JSON.parse(out) as T) : undefined
 }
 
 async function fetchAllComments(
   runner: BitbucketRunner,
   base: string
-): Promise<IssueComment[]> {
+): Promise<{ items: IssueComment[]; truncated: boolean }> {
   return paginate({
     fetchPage: async (page) => (await runner(`${base}/comments?pagelen=50&page=${page}`)).trim(),
     parsePage: (output) => {
@@ -137,7 +138,7 @@ export async function getBitbucketPullRequestDetail(
 ): Promise<PullRequestDetailResult> {
   try {
     const base = `repositories/${projectPath}/pullrequests/${pullRequestNumber}`
-    const pr = await safeJson<{
+    const pr = await requireJson<{
       description?: string
       participants?: unknown
       source?: { commit?: { hash?: string } }
@@ -147,7 +148,7 @@ export async function getBitbucketPullRequestDetail(
       return { ok: false, message: `Empty response from Bitbucket for pull request #${pullRequestNumber}` }
     }
 
-    const [comments, statusChecks] = await Promise.all([
+    const [commentsResult, statusChecks] = await Promise.all([
       fetchAllComments(runner, base),
       fetchCommitStatuses(runner, projectPath, pr.source?.commit?.hash),
     ])
@@ -155,13 +156,15 @@ export async function getBitbucketPullRequestDetail(
     const detail: PullRequestDetail = {
       number: pullRequestNumber,
       body: pr.description || '',
-      comments,
+      comments: commentsResult.items,
       reviews: parseParticipantsAsReviews(pr.participants),
       statusCheckRollup: statusChecks,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message }
   }
 }
 
@@ -172,7 +175,7 @@ export async function getBitbucketIssueDetail(
 ): Promise<IssueDetailResult> {
   try {
     const base = `repositories/${projectPath}/issues/${issueNumber}`
-    const issue = await safeJson<{
+    const issue = await requireJson<{
       content?: { raw?: string }
     }>(runner, base)
 
@@ -180,16 +183,18 @@ export async function getBitbucketIssueDetail(
       return { ok: false, message: `Empty response from Bitbucket for issue #${issueNumber}` }
     }
 
-    const comments = await fetchAllComments(runner, base)
+    const commentsResult = await fetchAllComments(runner, base)
 
     const detail: IssueDetail = {
       number: issueNumber,
       body: issue.content?.raw || '',
-      comments,
+      comments: commentsResult.items,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message }
   }
 }
 

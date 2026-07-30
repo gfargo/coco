@@ -11,7 +11,8 @@ import { installNpmPackage } from '../../lib/utils/installPackage'
 
 import { ConfigWithServiceObject } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
-import { LLMModel, LLMProvider, OllamaLLMService, OpenAILLMService } from '../../lib/langchain/types'
+import { LLMModel, LLMProvider, LmStudioLLMService, OllamaLLMService, OpenAILLMService, VllmLLMService } from '../../lib/langchain/types'
+import { findProviderDefinition } from '../../lib/langchain/providers/registry'
 import { getDefaultServiceConfigFromAlias } from '../../lib/langchain/utils'
 import { OllamaNotReadyError } from '../../lib/langchain/utils/ollamaStatus'
 import { CommandHandler } from '../../lib/types'
@@ -90,6 +91,26 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
     (service as OpenAILLMService).baseURL = compatiblePreset.baseURL
   }
 
+  // Direct-select path for local-server providers (LM Studio, vLLM): unlike
+  // "Other OpenAI-compatible endpoint" above, picking these straight from the
+  // main list has no baseURL prompt, so a non-default port would otherwise
+  // require hand-editing config afterward. Offer an override here, defaulting
+  // to the registry's baked-in endpoint when left blank.
+  let directLocalServerBaseURL: string | undefined
+  if (llmProvider === 'lmstudio' || llmProvider === 'vllm') {
+    const defaultBaseURL = findProviderDefinition(llmProvider)?.defaultBaseURL
+    if (defaultBaseURL) {
+      const baseURL = await questions.inputOptionalBaseURL(
+        llmProvider === 'lmstudio' ? 'LM Studio' : 'vLLM',
+        defaultBaseURL
+      )
+      if (baseURL) {
+        (service as LmStudioLLMService | VllmLLMService).baseURL = baseURL
+        directLocalServerBaseURL = baseURL
+      }
+    }
+  }
+
   const config: ConfigWithServiceObject = {
     defaultBranch: 'main',
     mode: 'interactive',
@@ -119,12 +140,35 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       )
     )
   }
+
+  if (isProjectScope && directLocalServerBaseURL) {
+    // Same trust boundary as the compat-preset note above: baseURL isn't in
+    // TRUSTED_PROJECT_SERVICE_KEYS, so a repo-committed config silently falls
+    // back to the registry default on load.
+    logger.log(
+      chalk.dim(
+        `Note: project scope can't persist a custom endpoint (${directLocalServerBaseURL}) — ` +
+        `it will be dropped on load. Use \`coco init --scope global\`, or set COCO_SERVICE_BASE_URL via env var.`
+      )
+    )
+  }
+
+  // lmstudio/vllm are deliberately absent here, same as ollama/bedrock — all
+  // four are typically no-auth (local/self-hosted or credential-chain-based)
+  // providers, so the wizard skips the API-key prompt entirely rather than
+  // asking for a key that'll usually be left blank.
   const inputPromptByProvider: Partial<Record<LLMProvider, { label: string; envVar: string }>> = {
     openai: { label: 'OpenAI', envVar: 'OPENAI_API_KEY' },
     anthropic: { label: 'Anthropic', envVar: 'ANTHROPIC_API_KEY' },
     gemini: { label: 'Google Gemini', envVar: 'GEMINI_API_KEY' },
     mistral: { label: 'Mistral', envVar: 'MISTRAL_API_KEY' },
     azure: { label: 'Azure OpenAI', envVar: 'AZURE_OPENAI_API_KEY' },
+    deepseek: { label: 'DeepSeek', envVar: 'DEEPSEEK_API_KEY' },
+    groq: { label: 'Groq', envVar: 'GROQ_API_KEY' },
+    xai: { label: 'xAI', envVar: 'XAI_API_KEY' },
+    together: { label: 'Together AI', envVar: 'TOGETHER_API_KEY' },
+    fireworks: { label: 'Fireworks AI', envVar: 'FIREWORKS_API_KEY' },
+    openrouter: { label: 'OpenRouter', envVar: 'OPENROUTER_API_KEY' },
   }
 
   let apiKey = '' as string

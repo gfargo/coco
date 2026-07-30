@@ -103,6 +103,15 @@ describe('log stash actions', () => {
     expect(git.raw).not.toHaveBeenCalled()
   })
 
+  it('rejects a flag-like stash-branch name to avoid arg injection', async () => {
+    const git = { raw: jest.fn() }
+    await expect(stashBranch(git as never, stash, '--force')).resolves.toEqual({
+      ok: false,
+      message: "Branch name '--force' cannot start with '-'.",
+    })
+    expect(git.raw).not.toHaveBeenCalled()
+  })
+
   it('renames a stash: drop the original entry first, then re-store the commit under the new message', async () => {
     const git = { raw: jest.fn().mockResolvedValue('') }
     const at2: StashEntry = { ...stash, ref: 'stash@{2}', hash: 'deadbeef' }
@@ -199,7 +208,7 @@ describe('log stash actions', () => {
     it('summarizes on full success', async () => {
       const git = { raw: jest.fn().mockResolvedValue('') }
       const result = await dropStashes(git as never, [stashAt(0), stashAt(2)])
-      expect(result).toEqual({ ok: true, message: 'Dropped 2 stashes: stash@{2}, stash@{0}' })
+      expect(result).toEqual({ ok: true, message: 'Dropped 2 stashes: stash@{2}, stash@{0}', succeeded: ['hash2', 'hash0'] })
     })
 
     it('continues past a refusal and reports the raw per-stash failure in details', async () => {
@@ -215,6 +224,26 @@ describe('log stash actions', () => {
       expect(result.details).toEqual(['stash@{1}: fatal: could not drop stash'])
       // The refusal did NOT stop the batch — all three attempts ran.
       expect(git.raw).toHaveBeenCalledTimes(3)
+    })
+
+    // OSS-1606 — the dropped stash's hash is the primary undo-recovery
+    // path, so a partial batch must report exactly the hashes that
+    // dropped (in drop order), not zero and not the refused one's.
+    it('reports the hashes of stashes that actually dropped in `succeeded` on a partial failure', async () => {
+      const git = {
+        raw: jest.fn()
+          .mockResolvedValueOnce('') // stash@{2} succeeds
+          .mockRejectedValueOnce(new Error('fatal: could not drop stash')) // stash@{1} fails
+          .mockResolvedValueOnce(''), // stash@{0} succeeds
+      }
+      const result = await dropStashes(git as never, [stashAt(0), stashAt(1), stashAt(2)])
+      expect(result.succeeded).toEqual(['hash2', 'hash0'])
+    })
+
+    it('reports every dropped hash in `succeeded` on full success', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await dropStashes(git as never, [stashAt(0), stashAt(2)])
+      expect(result.succeeded).toEqual(['hash2', 'hash0'])
     })
 
     it('a batch of one delegates to the single-stash behavior verbatim', async () => {

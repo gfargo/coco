@@ -10,6 +10,7 @@ import doctor from './commands/doctor'
 import hooks from './commands/hooks'
 import init from './commands/init'
 import issues from './commands/issues'
+import lint from './commands/lint'
 import log from './commands/log'
 import mcp from './commands/mcp'
 import prCreate from './commands/prCreate'
@@ -30,6 +31,7 @@ import { DoctorOptions } from './commands/doctor/config'
 import { HooksOptions } from './commands/hooks/config'
 import { InitOptions } from './commands/init/config'
 import { IssuesOptions } from './commands/issues/config'
+import { LintOptions } from './commands/lint/config'
 import { LogOptions } from './commands/log/config'
 import { McpOptions } from './commands/mcp/config'
 import { PrCreateOptions } from './commands/prCreate/config'
@@ -188,6 +190,13 @@ y.command<LogOptions>(
   log.handler
 )
 
+y.command<LintOptions>(
+  lint.command,
+  lint.desc,
+  lint.builder,
+  lint.handler
+)
+
 y.command<UiOptions>(
   ui.command,
   ui.desc,
@@ -267,6 +276,7 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(init.command), desc: init.desc },
   { name: firstCommandToken(doctor.command), desc: doctor.desc },
   { name: firstCommandToken(log.command), desc: log.desc },
+  { name: firstCommandToken(lint.command), desc: lint.desc },
   { name: firstCommandToken(ui.command), desc: ui.desc },
   { name: firstCommandToken(workspace.command), desc: workspace.desc },
   { name: firstCommandToken(cache.command), desc: cache.desc },

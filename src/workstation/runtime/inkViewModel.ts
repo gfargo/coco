@@ -72,6 +72,8 @@ import {
     cycleBranchSort,
     cycleTagSort,
 } from '../chrome/sorting'
+import { pushUndoEntry, popUndoEntry, removeUndoEntry, type UndoEntry } from './undoStack'
+export type { UndoEntry } from './undoStack'
 
 export type LogInkFocus = 'sidebar' | 'commits' | 'detail'
 
@@ -359,16 +361,19 @@ export type LogInkCompareRef = {
 export type LogInkDiffViewMode = 'unified' | 'split'
 
 /**
- * Inspector tab (#806 follow-up). On tall terminals the inspector
- * stacks the commit-detail block and the actions block together. On
- * short terminals (rows below the layout's tabbed threshold) only one
- * tab renders at a time and the user toggles between them with `[/]`
- * while the inspector is focused. The field is always present in
- * state so the user can pre-set their preference; the renderer
- * decides whether to honor it (short terminal) or stack both
- * (tall terminal).
+ * Inspector tab (#806 follow-up; extended to a third tab by #OSS-2057). On
+ * tall terminals the inspector stacks the commit-detail block and the
+ * actions block together. On short terminals (rows below the layout's
+ * tabbed threshold) only one tab renders at a time and the user cycles
+ * between them with `[`/`]` (or ←/→) while the inspector is focused. The
+ * field is always present in state so the user can pre-set their
+ * preference; the renderer decides whether to honor it (short terminal) or
+ * stack both (tall terminal).
  */
-export type LogInkInspectorTab = 'inspector' | 'actions'
+export type LogInkInspectorTab = 'inspector' | 'actions' | 'notes'
+
+/** `LogInkInspectorTab` values in cycle order, shared by `cycleInspectorTab`. */
+const INSPECTOR_TAB_ORDER: LogInkInspectorTab[] = ['inspector', 'actions', 'notes']
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
@@ -592,6 +597,18 @@ export type LogInkState = {
    * depth.
    */
   repoStack: LogInkRepoFrame[]
+  /**
+   * Session-scoped undo stack (OSS-1606). Populated by
+   * `useWorkflowAction.ts` after an invertible destructive action
+   * (branch delete, stash drop, reset, tag delete) succeeds; `gu` pops
+   * the top entry and runs its recorded git-level inverse. Bounded
+   * (`MAX_UNDO_STACK_SIZE` in `./undoStack`) and never persisted —
+   * intentionally NOT reset on repo-frame push/pop (unlike most
+   * per-frame UI state above) because each entry carries its own
+   * `depth`; the consumer refuses to pop an entry captured in a
+   * different repo frame rather than dropping it silently.
+   */
+  undoStack: UndoEntry[]
   /**
    * Sort modes for the promoted views (P4.2). `s` cycles through the
    * available modes; the surface header shows a `▼ <mode>` indicator.
@@ -1163,6 +1180,9 @@ export type LogInkAction =
   | { type: 'setFocus'; value: LogInkFocus }
   | { type: 'togglePeek' }
   | { type: 'setPendingKey'; value?: string }
+  | { type: 'pushUndoEntry'; value: UndoEntry }
+  | { type: 'popUndoEntry' }
+  | { type: 'removeUndoEntry'; value: UndoEntry }
   | { type: 'setSidebarTab'; value: LogInkSidebarTab }
   | { type: 'restoreSidebarTab'; value: LogInkSidebarTab }
   | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' | 'warning'; loading?: boolean; ttl?: 'echo' | 'result' | 'advisory' }
@@ -1995,6 +2015,7 @@ export function createLogInkState(
     selectedIssueFilter: 'open',
     selectedPullRequestFilter: 'open',
     repoStack: [{ label: options.repoLabel || 'root', workdir: options.repoWorkdir }],
+    undoStack: [],
     branchSort: DEFAULT_BRANCH_SORT_MODE,
     tagSort: DEFAULT_TAG_SORT_MODE,
     ...createCommandPaletteState(),
@@ -2277,14 +2298,15 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingKey: undefined,
       }
     case 'cycleInspectorTab': {
-      // Two-tab toggle — `delta` is symmetrical so direction does not
-      // matter, but we keep the action shape consistent with the
-      // sidebar's `nextSidebarTab` / `previousSidebarTab` so callers
-      // can mirror the sidebar pattern verbatim.
-      const next: LogInkInspectorTab = state.inspectorTab === 'inspector' ? 'actions' : 'inspector'
+      // Three-tab cycle (#OSS-2057 — Inspector / Actions / Notes). `delta`
+      // mirrors the sidebar's `nextSidebarTab` / `previousSidebarTab` shape
+      // so callers can dispatch the same way regardless of direction.
+      const currentIndex = INSPECTOR_TAB_ORDER.indexOf(state.inspectorTab)
+      const nextIndex =
+        (currentIndex + action.delta + INSPECTOR_TAB_ORDER.length) % INSPECTOR_TAB_ORDER.length
       return {
         ...state,
-        inspectorTab: next,
+        inspectorTab: INSPECTOR_TAB_ORDER[nextIndex],
         inspectorActionIndex: 0,
         pendingKey: undefined,
       }
@@ -2819,6 +2841,21 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         pendingKey: action.value,
+      }
+    case 'pushUndoEntry':
+      return {
+        ...state,
+        undoStack: pushUndoEntry(state.undoStack, action.value),
+      }
+    case 'popUndoEntry':
+      return {
+        ...state,
+        undoStack: popUndoEntry(state.undoStack).stack,
+      }
+    case 'removeUndoEntry':
+      return {
+        ...state,
+        undoStack: removeUndoEntry(state.undoStack, action.value),
       }
     case 'setSidebarTab':
       return {

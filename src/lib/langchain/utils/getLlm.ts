@@ -1,10 +1,10 @@
-import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { Config } from '../../../commands/types'
 import { LLMModel, LLMProvider } from '../types'
 import { getApiKeyForModel } from '../utils'
 import { LangChainExecutionError, LangChainConfigurationError } from '../errors'
 import { validateRequired, validateProvider, validateModel } from '../validation'
 import { handleLangChainError } from '../errorHandler'
+import type { ChatModel } from '../providers/types'
 import { findProviderDefinition, LLM_PROVIDER_IDS } from '../providers/registry'
 import { recordLlmMetadata } from './llmMetadata'
 
@@ -26,7 +26,7 @@ export async function getLlm(
   provider: LLMProvider,
   model: LLMModel,
   config: Config
-): Promise<BaseChatModel> {
+): Promise<ChatModel> {
   // Validate input parameters
   validateProvider(provider, 'getLlm')
   validateModel(model, provider, 'getLlm')

@@ -68,6 +68,30 @@ describe('usageLedger', () => {
     expect(byModel.find((r) => r.key === 'gpt-4o')?.calls).toBe(2)
   })
 
+  it('records and aggregates cachedInputTokens, leaving it out entirely when unset', () => {
+    recordUsage({ task: 'commit', model: 'claude-sonnet-4-6', promptTokens: 1000, cachedInputTokens: 800, elapsedMs: 100 })
+    recordUsage({ task: 'commit', model: 'claude-sonnet-4-6', promptTokens: 500, elapsedMs: 100 })
+
+    const records = readUsageRecords()
+    expect(records[0].cachedInputTokens).toBe(800)
+    expect(records[1]).not.toHaveProperty('cachedInputTokens')
+
+    const byTask = summarizeUsageByTask(records)
+    expect(byTask.find((r) => r.key === 'commit')?.cachedInputTokens).toBe(800)
+  })
+
+  it('records and aggregates inputTokens, leaving it out entirely when unset', () => {
+    recordUsage({ task: 'commit', model: 'claude-sonnet-4-6', promptTokens: 900, inputTokens: 1200, elapsedMs: 100 })
+    recordUsage({ task: 'commit', model: 'claude-sonnet-4-6', promptTokens: 500, elapsedMs: 100 })
+
+    const records = readUsageRecords()
+    expect(records[0].inputTokens).toBe(1200)
+    expect(records[1]).not.toHaveProperty('inputTokens')
+
+    const byTask = summarizeUsageByTask(records)
+    expect(byTask.find((r) => r.key === 'commit')?.inputTokens).toBe(1200)
+  })
+
   it('persists and aggregates the invocation surface while treating legacy records as CLI', () => {
     recordUsage({ task: 'commit', surface: 'agent-cli', promptTokens: 30, completionTokens: 3, elapsedMs: 300 })
     recordUsage({ task: 'review', surface: 'mcp', promptTokens: 20, completionTokens: 2, elapsedMs: 200 })
