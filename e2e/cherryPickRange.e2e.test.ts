@@ -28,7 +28,11 @@ describe('cherry-pick range', () => {
     tui.press('g', 'b')
     await tui.waitForText('2/2 local')
     tui.press('j', 'enter')
-    const screen = await tui.waitForText('ℹ Synced history to branch main tip')
+    await tui.waitForText('ℹ Synced history to branch main tip')
+    // Settle before asserting the header — the status toast can paint a
+    // beat before the branch indicator (and the checkout's cursor-sync)
+    // fully catches up, same lesson as the later gates in this file.
+    const screen = await tui.waitForIdle()
     expect(screen).toContain('⎇ main')
   })
 

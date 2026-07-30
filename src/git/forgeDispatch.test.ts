@@ -248,12 +248,14 @@ describe('forge Bitbucket Server dispatch (#1616)', () => {
     await forge.addIssueAssignee(7, 'bob')
     await forge.closeIssue(7)
     await forge.reopenIssue(7)
+    await forge.createIssue({ title: 't', body: 'b' })
 
     expect(bbsIssues.commentBitbucketServerIssue).toHaveBeenCalled()
     expect(bbsIssues.addBitbucketServerIssueLabel).toHaveBeenCalled()
     expect(bbsIssues.addBitbucketServerIssueAssignee).toHaveBeenCalled()
     expect(bbsIssues.closeBitbucketServerIssue).toHaveBeenCalled()
     expect(bbsIssues.reopenBitbucketServerIssue).toHaveBeenCalled()
+    expect(bbsIssues.createBitbucketServerIssue).toHaveBeenCalled()
   })
 
   it('routes lists + detail to the bitbucket-server implementations, binding the project path', async () => {

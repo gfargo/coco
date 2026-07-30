@@ -168,9 +168,29 @@ export async function loadCommitlintConfig(): Promise<QualifiedConfig> {
 }
 
 /**
+ * Format a commitlint case-type rule value for prompt text. The value may be a
+ * single case name (e.g. `'lower-case'`) or, as with the built-in `subject-case`
+ * rule, an array of acceptable case names — any one of which satisfies the rule.
+ */
+function formatCaseType(caseType: string | readonly string[] | undefined): string {
+  if (caseType === undefined) {
+    return ''
+  }
+  if (typeof caseType === 'string') {
+    return caseType
+  }
+  if (caseType.length === 1) {
+    return caseType[0]
+  }
+  return `one of ${caseType.slice(0, -1).join(', ')} or ${caseType[caseType.length - 1]}`
+}
+
+/**
  * Format commitlint rules into a human-readable string for AI prompts
  */
-export function formatCommitlintRulesForPrompt(config: QualifiedConfig): string {
+export function formatCommitlintRulesForPrompt(
+  config: Pick<QualifiedConfig, 'rules'> & Partial<Pick<QualifiedConfig, 'extends'>>
+): string {
   if (!config.rules || Object.keys(config.rules).length === 0) {
     return ''
   }
@@ -220,14 +240,14 @@ export function formatCommitlintRulesForPrompt(config: QualifiedConfig): string 
   if (rules['type-case']) {
     const [level, , caseType] = rules['type-case']
     if (level > 0) {
-      ruleDescriptions.push(`Type must be ${caseType} case`)
+      ruleDescriptions.push(`Type must be ${formatCaseType(caseType)}`)
     }
   }
 
   if (rules['subject-case']) {
     const [level, , caseType] = rules['subject-case']
     if (level > 0) {
-      ruleDescriptions.push(`Subject must be ${caseType} case`)
+      ruleDescriptions.push(`Subject must be ${formatCaseType(caseType)}`)
     }
   }
 
@@ -259,6 +279,16 @@ export function formatCommitlintRulesForPrompt(config: QualifiedConfig): string 
   return ruleDescriptions.length > 0 
     ? `## Commitlint Rules\nYour commit message must follow these project-specific rules:\n${ruleDescriptions.map(rule => `- ${rule}`).join('\n')}\n`
     : ''
+}
+
+/**
+ * Format the hardcoded built-in conventional rules for the prompt. Used on the
+ * untrusted (`trustRepositoryConfig: false`) path so generation is constrained
+ * by the same rules `validateConventionalCommitMessage` enforces, instead of
+ * repository commitlint config which is never read on that path.
+ */
+export function getBuiltInConventionalRulesContext(): string {
+  return formatCommitlintRulesForPrompt({ rules: BUILT_IN_CONVENTIONAL_RULES })
 }
 
 /**

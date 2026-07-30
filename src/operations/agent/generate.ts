@@ -27,9 +27,20 @@ import { executeChainStreaming } from '../../lib/langchain/utils/executeChainStr
 import { getLanguageContext } from '../../lib/langchain/utils/languageContext'
 import { getLlm } from '../../lib/langchain/utils/getLlm'
 import { getPrompt } from '../../lib/langchain/utils/getPrompt'
+import type { FileDiff } from '../../lib/types'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
-import { AgentOperationContext, ConventionsProvenance, getConventionsContext, resolveChangeSource } from './context'
+import { dispatchStructuralParser, type StructuralLanguageId } from '../../lib/parsers/default/utils/structuralParserRegistry'
+import { detectStructuralLanguageId } from '../../lib/parsers/default/utils/summarizeLargeFiles'
+import { summarizeTrivialDiff } from '../../lib/parsers/default/utils/trivialDiff'
+import {
+    AgentOperationContext,
+    ConventionsProvenance,
+    getConventionsContext,
+    ResolvedChangeContext,
+    resolveChangeSource,
+} from './context'
 import { AgentOperationError } from './errors'
+import { splitUnifiedDiff } from './splitUnifiedDiff'
 import {
     AgentOperation,
     AgentOptions,
@@ -38,6 +49,9 @@ import {
     AGENT_PROTOCOL_VERSION,
     ChangelogData,
     CommitDraftData,
+    CondenseDiffData,
+    CondenseDiffFileResult,
+    CondenseDiffRequest,
     RecapData,
     ReviewData,
 } from './schemas'
@@ -228,8 +242,9 @@ function envelope<T>(
 export async function generateAgentCommitDraft(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<CommitDraftData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   report(context, 'Resolved changes', 0.2)
@@ -273,10 +288,19 @@ export async function generateAgentCommitDraft(
     throw new AgentOperationError('CANCELLED', 'Commit draft generation was cancelled.')
   }
   if (!result.ok || !result.message) {
+    // Determine retryability: validation failures are self-inflicted (coco
+    // chose the rules and generated the text) and a fresh sampling attempt
+    // would likely produce a passing message — exactly what happened in the
+    // bug report (call 3 succeeded without any input change). Mark these as
+    // retryable so well-behaved agent callers don't give up prematurely.
+    // Other failure modes (no changes, empty summary, API key missing) are
+    // genuinely non-retryable without caller action.
+    const hasValidationErrors = result.validationErrors && result.validationErrors.length > 0
+    const retryable = hasValidationErrors
     throw new AgentOperationError(
       'GENERATION_FAILED',
       [...result.warnings, ...result.validationErrors].join('; ') || 'Failed to generate a commit draft.',
-      false,
+      retryable,
       { validationErrors: result.validationErrors },
     )
   }
@@ -290,8 +314,9 @@ export async function generateAgentCommitDraft(
 export async function generateAgentReview(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<ReviewData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   report(context, 'Resolved changes', 0.2)
@@ -325,8 +350,9 @@ export async function generateAgentReview(
 export async function generateAgentChangelog(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<ChangelogData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   report(context, 'Resolved changes', 0.2)
@@ -359,8 +385,9 @@ export async function generateAgentChangelog(
 export async function generateAgentRecap(
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<RecapData>> {
-  const resolved = await resolveChangeSource(input.source, context, {
+  const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
   report(context, 'Resolved changes', 0.2)
@@ -391,15 +418,211 @@ export async function runAgentOperation(
   operation: AgentOperation,
   input: AgentTaskInput,
   context: AgentOperationContext,
+  preResolved?: ResolvedChangeContext,
 ) {
   switch (operation) {
     case 'commit-draft':
-      return generateAgentCommitDraft(input, context)
+      return generateAgentCommitDraft(input, context, preResolved)
     case 'review':
-      return generateAgentReview(input, context)
+      return generateAgentReview(input, context, preResolved)
     case 'changelog':
-      return generateAgentChangelog(input, context)
+      return generateAgentChangelog(input, context, preResolved)
     case 'recap':
-      return generateAgentRecap(input, context)
+      return generateAgentRecap(input, context, preResolved)
+    case 'condense-diff':
+      // condense-diff uses its own request schema (CondenseDiffRequest) and is
+      // dispatched via runCondenseDiff, not through this shared entry point.
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'condense-diff must be dispatched via runCondenseDiff, not runAgentOperation.',
+        false,
+      )
+  }
+}
+
+/**
+ * Apply structural condensation to a single file diff. Returns the reduced
+ * diff text and the strategy used.
+ */
+async function condenseFileDiff(
+  fileDiff: FileDiff,
+  languages: readonly string[] | undefined,
+): Promise<{ condensed: string; applied: CondenseDiffFileResult['applied']; langId: StructuralLanguageId | undefined }> {
+  const langId = detectStructuralLanguageId(fileDiff.file) as StructuralLanguageId | undefined
+
+  // Check language filter: if caller specified specific languages, skip
+  // structural extraction for files not in the list (fall through to line-based).
+  const langAllowed = !languages || !languages.length || (langId && languages.includes(langId))
+
+  if (langAllowed && langId) {
+    try {
+      const structural = await dispatchStructuralParser(langId, fileDiff)
+      if (structural !== undefined) {
+        return { condensed: structural, applied: 'structural', langId }
+      }
+    } catch {
+      // Parser surrendered — fall through to next strategy.
+    }
+  }
+
+  // Try trivial-diff shortcut (pure add/delete/rename/binary).
+  const trivial = summarizeTrivialDiff(fileDiff)
+  if (trivial !== undefined) {
+    return { condensed: trivial, applied: 'trivial', langId }
+  }
+
+  // No structural extraction; keep the raw diff (line-based).
+  return { condensed: fileDiff.diff, applied: 'line-based', langId }
+}
+
+/**
+ * Generate a condensed representation of a diff within a token budget.
+ *
+ * Structural mode (default): deterministic, no LLM call, no API key required.
+ * Files are processed by the tree-sitter / regex extractor chain; trivial diffs
+ * (pure add/delete/rename/binary) get a templated one-liner; everything else
+ * keeps its raw diff. If the total still exceeds the budget, whole files are
+ * dropped biggest-first until the output is within budget.
+ *
+ * The returned `metrics` use the same inputTokens / outputTokens /
+ * reductionRatio definitions as `runStructuralExtractEval` so the two surfaces
+ * stay comparable.
+ */
+export async function runCondenseDiff(
+  input: CondenseDiffRequest,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<CondenseDiffData>> {
+  if (input.mode === 'summary') {
+    throw new AgentOperationError(
+      'UNSUPPORTED_MODE',
+      'The "summary" mode (LLM-based prose condensation) is not yet available. Use mode "structural" (the default).',
+      false,
+    )
+  }
+
+  if (input.source.kind === 'summary' || input.source.kind === 'files') {
+    throw new AgentOperationError(
+      'UNSUPPORTED_SOURCE',
+      `condense-diff requires a diff-shaped source ('repository' scope or 'patch'). The '${input.source.kind}' source kind carries prose/metadata rather than per-file unified-diff text and cannot be structurally condensed.`,
+      false,
+    )
+  }
+
+  const resolved = await resolveChangeSource(input.source, context, {
+    trustRepositoryConfig: input.trustRepositoryConfig,
+  })
+
+  // Obtain tokenizer WITHOUT an LLM call. AC #1: no API key required in structural mode.
+  const provider = input.provider || 'openai'
+  const model = input.model || 'gpt-4o'
+  const tokenizer = await getTokenCounterForProvider(provider, model)
+
+  // Split the resolved diff text into per-file records.
+  const fileDiffs = splitUnifiedDiff(resolved.text, tokenizer)
+
+  if (fileDiffs.length === 0) {
+    throw new AgentOperationError('NO_CHANGES', 'No file diffs were found in the resolved change source.')
+  }
+
+  const languages = input.languages
+
+  // Phase 1: apply per-file condensation strategy.
+  const fileResults: CondenseDiffFileResult[] = []
+  const condensedDiffs: Array<{ fileDiff: FileDiff; condensed: string; applied: CondenseDiffFileResult['applied'] }> = []
+
+  let totalInputTokens = 0
+  for (const fd of fileDiffs) {
+    totalInputTokens += fd.tokenCount
+    const { condensed, applied, langId } = await condenseFileDiff(fd, languages)
+    const outputTokens = tokenizer(condensed)
+    fileResults.push({
+      path: fd.file,
+      language: langId ?? undefined,
+      applied,
+      inputTokens: fd.tokenCount,
+      outputTokens,
+    })
+    condensedDiffs.push({ fileDiff: { ...fd, diff: condensed, tokenCount: outputTokens }, condensed, applied })
+  }
+
+  const budgetTokens = input.budget.tokens
+
+  // Phase 2: budget enforcement — drop whole files biggest-first if still over budget.
+  // Sort by output token count descending so the biggest consumers are dropped first.
+  const sortedIndices = fileResults
+    .map((_, i) => i)
+    .sort((a, b) => fileResults[b].outputTokens - fileResults[a].outputTokens)
+
+  // The final `condensed` string joins included parts with this separator, whose
+  // tokens are real cost that per-file outputTokens sums don't capture. Account
+  // for it here so the drop loop actually converges the *serialized* output
+  // within budget, not just the sum of per-file counts.
+  const JOIN_SEPARATOR = '\n\n'
+  const separatorTokens = tokenizer(JOIN_SEPARATOR)
+
+  let currentTokens = fileResults.reduce((sum, f) => sum + f.outputTokens, 0)
+  let currentIncluded = fileResults.length
+  const serializedTokens = () => currentTokens + Math.max(0, currentIncluded - 1) * separatorTokens
+
+  // Mark files as omitted when their removal is needed to reach budget.
+  for (const idx of sortedIndices) {
+    if (serializedTokens() <= budgetTokens) break
+    if (fileResults[idx].applied === 'omitted') continue
+    currentTokens -= fileResults[idx].outputTokens
+    currentIncluded--
+    fileResults[idx] = { ...fileResults[idx], applied: 'omitted', outputTokens: 0 }
+  }
+
+  // Build the condensed output, preserving the original file order.
+  const includedParts: string[] = []
+  let filesIncluded = 0
+  let filesOmitted = 0
+  let totalOutputTokens = 0
+
+  for (let i = 0; i < fileResults.length; i++) {
+    const fr = fileResults[i]
+    if (fr.applied === 'omitted') {
+      filesOmitted++
+    } else {
+      includedParts.push(condensedDiffs[i].condensed)
+      filesIncluded++
+      totalOutputTokens += fr.outputTokens
+    }
+  }
+
+  const condensed = includedParts.join(JOIN_SEPARATOR)
+
+  const reductionRatio = totalInputTokens > 0
+    ? Math.max(0, 1 - totalOutputTokens / totalInputTokens)
+    : 0
+
+  const warnings: string[] = [
+    'This is a lossy condensation of the original diff. Findings based on this output may miss details from omitted or simplified file content.',
+  ]
+  if (filesOmitted > 0) {
+    warnings.push(`${filesOmitted} file${filesOmitted === 1 ? ' was' : 's were'} omitted to stay within the token budget.`)
+  }
+
+  const data: CondenseDiffData = {
+    condensed,
+    metrics: {
+      inputTokens: totalInputTokens,
+      outputTokens: totalOutputTokens,
+      reductionRatio: Math.round(reductionRatio * 10000) / 10000,
+      filesIncluded,
+      filesOmitted,
+      strategy: 'structural',
+    },
+    files: fileResults,
+  }
+
+  return {
+    version: AGENT_PROTOCOL_VERSION,
+    ok: true,
+    operation: 'condense-diff',
+    status: 'completed',
+    data,
+    warnings,
+    meta: resolved.meta,
   }
 }

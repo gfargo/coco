@@ -11,6 +11,10 @@ import type { IssueActionResult } from './issueActions'
 
 const UNSUPPORTED_MESSAGE = 'Issues are not supported on Bitbucket Server (no built-in issue tracker).'
 
+export function createBitbucketServerIssue(): Promise<IssueActionResult> {
+  return Promise.resolve({ ok: false, message: UNSUPPORTED_MESSAGE })
+}
+
 export function commentBitbucketServerIssue(): Promise<IssueActionResult> {
   return Promise.resolve({ ok: false, message: UNSUPPORTED_MESSAGE })
 }

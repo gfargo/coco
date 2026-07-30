@@ -41,7 +41,7 @@ import { summarizeTrivialDiff } from './trivialDiff'
  * generation) and register a parser chain entry in
  * `structuralParserRegistry.ts`.
  */
-function detectStructuralLanguageId(path: string): StructuralLanguageId | undefined {
+export function detectStructuralLanguageId(path: string): StructuralLanguageId | undefined {
   const ts = detectTsLanguage(path)
   if (ts) return ts
   if (isPythonFile(path)) return 'py'

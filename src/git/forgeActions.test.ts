@@ -12,6 +12,8 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
   'closePullRequestByNumber',
   'approvePullRequestByNumber',
   'requestChangesPullRequestByNumber',
+  'markPullRequestReadyByNumber',
+  'reopenPullRequestByNumber',
   'mergePullRequest',
   'closePullRequest',
   'approvePullRequest',
@@ -24,6 +26,7 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
   'addIssueAssignee',
   'closeIssue',
   'reopenIssue',
+  'createIssue',
 ]
 
 describe('getForgeActions (#0.70)', () => {
@@ -53,6 +56,7 @@ describe('getForgeActions (#0.70)', () => {
     expect((await forge.getPullRequestDetail(1)).ok).toBe(false)
     expect((await forge.getIssueDetail(1)).ok).toBe(false)
     expect((await forge.getPullRequestDiffByNumber(1)).ok).toBe(false)
+    expect((await forge.createIssue({ title: 't', body: 'b' })).ok).toBe(false)
   })
 
   it('Gitea detail loaders fail gracefully without a resolved project path', async () => {
@@ -60,6 +64,7 @@ describe('getForgeActions (#0.70)', () => {
     expect((await forge.getPullRequestDetail(1)).ok).toBe(false)
     expect((await forge.getIssueDetail(1)).ok).toBe(false)
     expect((await forge.getPullRequestDiffByNumber(1)).ok).toBe(false)
+    expect((await forge.createIssue({ title: 't', body: 'b' })).ok).toBe(false)
   })
 
   it('Gitea checkout is a graceful unsupported stub', async () => {
@@ -67,6 +72,18 @@ describe('getForgeActions (#0.70)', () => {
     const result = await forge.checkoutPullRequestByNumber(1)
     expect(result.ok).toBe(false)
     expect(result.message).toContain('not supported for Gitea')
+  })
+
+  it('Bitbucket reopen is a graceful unsupported stub (#1933)', async () => {
+    const forge = getForgeActions('bitbucket', { bitbucketPath: 'ws/repo' })
+    const result = await forge.reopenPullRequestByNumber(1)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not supported')
+  })
+
+  it('GitLab markPullRequestReadyByNumber fails gracefully without a resolved project path (#1933)', async () => {
+    const forge = getForgeActions('gitlab', {})
+    expect((await forge.markPullRequestReadyByNumber(1)).ok).toBe(false)
   })
 
   it('Bitbucket by-number and issue mutations fail gracefully without a resolved project path', async () => {

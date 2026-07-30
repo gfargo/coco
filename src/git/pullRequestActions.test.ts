@@ -12,9 +12,11 @@ import {
   commentPullRequestByNumber,
   createPullRequest,
   isPullRequestMergeStrategy,
+  markPullRequestReadyByNumber,
   mergePullRequest,
   mergePullRequestByNumber,
   openPullRequest,
+  reopenPullRequestByNumber,
   requestChangesPullRequest,
   requestChangesPullRequestByNumber,
 } from './pullRequestActions'
@@ -361,6 +363,36 @@ describe('destructive PR by-number actions (#882 phase 5)', () => {
       expect(runner).toHaveBeenCalledWith([
         'pr', 'review', '962', '--request-changes', '--body=please address X',
       ])
+    })
+  })
+
+  describe('markPullRequestReadyByNumber (#1933)', () => {
+    it('invokes `gh pr ready <#>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(markPullRequestReadyByNumber(962, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Marked pull request #962 as ready for review',
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'ready', '962'])
+    })
+
+    it('preserves trimmed gh stdout as the success message', async () => {
+      const runner = jest.fn().mockResolvedValue('Pull request #962 is marked as ready for review\n')
+      await expect(markPullRequestReadyByNumber(962, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Pull request #962 is marked as ready for review',
+      })
+    })
+  })
+
+  describe('reopenPullRequestByNumber (#1933)', () => {
+    it('invokes `gh pr reopen <#>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(reopenPullRequestByNumber(962, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Reopened pull request #962',
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'reopen', '962'])
     })
   })
 })

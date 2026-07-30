@@ -1,4 +1,4 @@
-import { execFile } from 'node:child_process'
+import { execFile, ExecFileException } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import * as path from 'node:path'
@@ -25,8 +25,13 @@ export type AgentOperationContext = {
   logger: Logger
   surface: LlmUsageSurface
   signal?: AbortSignal
+  cleanFilterProbe?: Promise<CleanFilterProbeResult>
   onProgress?: AgentProgressReporter
 }
+
+type CleanFilterProbeResult =
+  | { blocked: false }
+  | { blocked: true, filter: string }
 
 export type ResolvedChangeContext = {
   text: string
@@ -339,6 +344,61 @@ async function resolveCommitRevision(
   }
 }
 
+const CLEAN_FILTER_CONFIG_PATTERN = String.raw`^filter\..*\.clean$`
+const CLEAN_FILTER_CONFIG_KEY_PATTERN = /^filter\.(.+)\.clean$/
+const CHECK_ATTR_BATCH_SIZE = 200
+
+// Determines whether the repository defines a `clean` filter AND assigns it to a tracked
+// path. Only that combination can cause `git diff` against the worktree to execute
+// arbitrary repository-defined commands; a filter that is merely configured but never
+// assigned to a path is inert.
+async function probeCleanFilters(context: AgentOperationContext): Promise<CleanFilterProbeResult> {
+  let configOutput: string
+  try {
+    configOutput = await runAgentGit(context, ['config', '--get-regexp', CLEAN_FILTER_CONFIG_PATTERN])
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    // `git config --get-regexp` exits with status 1 specifically when nothing matches;
+    // that is the only exit code execFile surfaces as an error that we can treat as
+    // "no filters configured". Any other failure (corrupted config, git binary issues,
+    // unexpected git version behavior) means we could not verify safety, so fail closed
+    // instead of silently allowing the worktree diff to proceed.
+    const exitCode = (error as ExecFileException)?.code
+    if (exitCode === 1) return { blocked: false }
+    throw new AgentOperationError(
+      'UNSAFE_SOURCE',
+      `Could not verify the repository is free of clean filters (${error instanceof Error ? error.message : String(error)}). Supply a patch/summary or explicitly trust repository configuration in the one-shot agent CLI.`,
+    )
+  }
+
+  const configuredFilters = new Map<string, string>()
+  for (const line of configOutput.split('\n')) {
+    const spaceIndex = line.indexOf(' ')
+    if (spaceIndex === -1) continue
+    const key = line.slice(0, spaceIndex)
+    const match = CLEAN_FILTER_CONFIG_KEY_PATTERN.exec(key)
+    if (match) configuredFilters.set(match[1], key)
+  }
+  if (configuredFilters.size === 0) return { blocked: false }
+
+  const trackedFilesOutput = await runAgentGit(context, ['ls-files', '-z'])
+  const trackedFiles = trackedFilesOutput.split('\0').filter(Boolean)
+  if (trackedFiles.length === 0) return { blocked: false }
+
+  for (let offset = 0; offset < trackedFiles.length; offset += CHECK_ATTR_BATCH_SIZE) {
+    const batch = trackedFiles.slice(offset, offset + CHECK_ATTR_BATCH_SIZE)
+    const output = await runAgentGit(context, ['check-attr', '-z', 'filter', '--', ...batch])
+    const fields = output.split('\0')
+    for (let i = 0; i + 2 < fields.length; i += 3) {
+      const assignedFilter = fields[i + 2]
+      const configKey = configuredFilters.get(assignedFilter)
+      if (configKey) return { blocked: true, filter: configKey }
+    }
+  }
+
+  return { blocked: false }
+}
+
 async function repositoryText(
   source: Extract<ChangeSource, { kind: 'repository' }>,
   context: AgentOperationContext,
@@ -350,10 +410,14 @@ async function repositoryText(
       return runAgentGit(context, ['diff', '--cached', ...safeDiffOptions, '--'])
     case 'worktree': {
       if (!trustRepositoryConfig) {
-        throw new AgentOperationError(
-          'UNSAFE_SOURCE',
-          'Worktree inspection can invoke repository-defined clean filters. Supply a patch/summary or explicitly trust repository configuration in the one-shot agent CLI.',
-        )
+        context.cleanFilterProbe ??= probeCleanFilters(context)
+        const probe = await context.cleanFilterProbe
+        if (probe.blocked) {
+          throw new AgentOperationError(
+            'UNSAFE_SOURCE',
+            `Repository defines clean filter '${probe.filter}' which git would execute during worktree inspection. Supply a patch/summary or explicitly trust repository configuration in the one-shot agent CLI.`,
+          )
+        }
       }
       const [staged, unstaged, untrackedFiles] = await Promise.all([
         runAgentGit(context, ['diff', '--cached', ...safeDiffOptions, '--']),

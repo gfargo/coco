@@ -6131,6 +6131,64 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
       const result = applyInput(state, 'x')
       expect(result.pendingConfirmationId).toBe('close-pr')
     })
+
+    it('d sets pendingConfirmation to triage-pr-ready (#1933)', () => {
+      const state = applyInput(baseState(), 'd', {}, { pullRequestTriageCount: 3 })
+      expect(state.pendingConfirmationId).toBe('triage-pr-ready')
+    })
+
+    it('X sets pendingConfirmation to triage-pr-reopen (#1933)', () => {
+      const state = applyInput(baseState(), 'X', {}, { pullRequestTriageCount: 3 })
+      expect(state.pendingConfirmationId).toBe('triage-pr-reopen')
+    })
+
+    it('confirming triage-pr-ready fires runWorkflowAction (#1933)', () => {
+      const state = applyInput(baseState(), 'd', {}, { pullRequestTriageCount: 3 })
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events.find((e) => e.type === 'runWorkflowAction')).toEqual({
+        type: 'runWorkflowAction',
+        id: 'triage-pr-ready',
+        payload: undefined,
+      })
+    })
+  })
+
+  describe('pull-request view (#1933)', () => {
+    const baseState = (): LogInkState =>
+      applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'pull-request' })
+
+    it('d sets pendingConfirmation to ready-pr', () => {
+      const state = applyInput(baseState(), 'd')
+      expect(state.pendingConfirmationId).toBe('ready-pr')
+    })
+
+    it('X sets pendingConfirmation to reopen-pr', () => {
+      const state = applyInput(baseState(), 'X')
+      expect(state.pendingConfirmationId).toBe('reopen-pr')
+    })
+
+    it('does NOT collide with the triage view\'s d/X bindings', () => {
+      // Regression guard, mirroring the existing `x` collision test
+      // above: from the triage view, `d`/`X` route to the by-number
+      // triage variants, not the current-branch ones.
+      const state = applyInput(
+        applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'pull-request-triage' }),
+        'd',
+        {},
+        { pullRequestTriageCount: 3 }
+      )
+      expect(state.pendingConfirmationId).toBe('triage-pr-ready')
+    })
+
+    it('confirming ready-pr fires runWorkflowAction', () => {
+      const state = applyInput(baseState(), 'd')
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events.find((e) => e.type === 'runWorkflowAction')).toEqual({
+        type: 'runWorkflowAction',
+        id: 'ready-pr',
+        payload: undefined,
+      })
+    })
   })
 })
 

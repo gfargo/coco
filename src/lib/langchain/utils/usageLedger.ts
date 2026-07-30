@@ -30,6 +30,10 @@ export type UsageRecord = {
   promptTokens?: number
   /** Output/completion tokens, when the provider's usage metadata reports them. */
   completionTokens?: number
+  /** Input tokens served from the provider's prompt cache, when reported. */
+  cachedInputTokens?: number
+  /** The provider's own reported total input-token count, when present — see `LlmCallMetadata.inputTokens`. */
+  inputTokens?: number
   elapsedMs?: number
   /** Readable `owner/repo` (or directory name) the call ran against. */
   repo?: string
@@ -48,6 +52,9 @@ export type UsageAggregate = {
   calls: number
   promptTokens: number
   completionTokens: number
+  cachedInputTokens: number
+  /** Sum of the provider-reported `inputTokens`, when any records had it. */
+  inputTokens: number
   totalMs: number
   avgMs: number
   /** Count of calls where the diff-summary cache was consulted and hit. */
@@ -143,6 +150,8 @@ export function recordUsage(metadata: LlmCallMetadata): void {
     model: metadata.model,
     promptTokens: metadata.promptTokens,
     completionTokens: metadata.completionTokens,
+    cachedInputTokens: metadata.cachedInputTokens,
+    inputTokens: metadata.inputTokens,
     elapsedMs: metadata.elapsedMs,
     ...(repoTag ? { repo: repoTag } : {}),
     ...(metadata.cacheHit !== undefined ? { cacheHit: metadata.cacheHit } : {}),
@@ -203,7 +212,16 @@ export function readUsageRecords(filePath: string = getUsageLogPath()): UsageRec
 function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): UsageAggregate[] {
   const byKey = new Map<
     string,
-    { calls: number; promptTokens: number; completionTokens: number; totalMs: number; cacheHits: number; cacheLookups: number }
+    {
+      calls: number
+      promptTokens: number
+      completionTokens: number
+      cachedInputTokens: number
+      inputTokens: number
+      totalMs: number
+      cacheHits: number
+      cacheLookups: number
+    }
   >()
   for (const r of records) {
     const key = keyOf(r) || 'unknown'
@@ -211,6 +229,8 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       calls: 0,
       promptTokens: 0,
       completionTokens: 0,
+      cachedInputTokens: 0,
+      inputTokens: 0,
       totalMs: 0,
       cacheHits: 0,
       cacheLookups: 0,
@@ -219,6 +239,8 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       current.calls += 1
       current.promptTokens += r.promptTokens || 0
       current.completionTokens += r.completionTokens || 0
+      current.cachedInputTokens += r.cachedInputTokens || 0
+      current.inputTokens += r.inputTokens || 0
       current.totalMs += r.elapsedMs || 0
     }
     if (typeof r.cacheHit === 'boolean') {
@@ -233,6 +255,8 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       calls: v.calls,
       promptTokens: v.promptTokens,
       completionTokens: v.completionTokens,
+      cachedInputTokens: v.cachedInputTokens,
+      inputTokens: v.inputTokens,
       totalMs: v.totalMs,
       avgMs: v.calls > 0 ? Math.round(v.totalMs / v.calls) : 0,
       cacheHits: v.cacheHits,

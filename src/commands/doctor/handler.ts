@@ -27,13 +27,22 @@ import { Config } from '../../lib/config/types'
 
 export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
   return rows.map((row) => {
-    const tokens = row.promptTokens > 0 || row.completionTokens > 0
-      ? `${row.promptTokens} in / ${row.completionTokens} out tok`
-      : '–'
-    const cache = row.cacheLookups > 0
-      ? `  cache ${Math.round((row.cacheHits / row.cacheLookups) * 100)}% (${row.cacheHits}/${row.cacheLookups})`
+    // Diff-summary cache hit-rate (#1958): whether we skipped the LLM call
+    // entirely because a cached diff summary already existed.
+    const diffCache = row.cacheLookups > 0
+      ? `  diff-cache ${Math.round((row.cacheHits / row.cacheLookups) * 100)}% (${row.cacheHits}/${row.cacheLookups})`
       : ''
-    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms${cache}`
+    // Provider prompt-cache hit-rate: how much of the input the provider
+    // itself served from its prompt cache. Prefer the provider's own
+    // reported `inputTokens` — `promptTokens` is a local tiktoken estimate
+    // (further skewed by each provider's tokenCorrectionFactor), so dividing
+    // the provider's real cachedInputTokens by it can overstate the rate.
+    // Clamped to 100% as a backstop for whichever denominator is used.
+    const hitRateDenominator = row.inputTokens > 0 ? row.inputTokens : row.promptTokens
+    const promptCache = row.cachedInputTokens > 0 && hitRateDenominator > 0
+      ? `  prompt-cache ${Math.min(100, Math.round((row.cachedInputTokens / hitRateDenominator) * 100))}%`
+      : ''
+    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms${diffCache}${promptCache}`
   })
 }
 

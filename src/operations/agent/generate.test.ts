@@ -8,13 +8,14 @@ import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { generateCommitDraft } from '../../commands/commit/generateCommitDraft'
 import { AgentOperationContext, resolveChangeSource } from './context'
+import { AgentOperationError } from './errors'
 import {
   generateAgentChangelog,
   generateAgentCommitDraft,
   generateAgentRecap,
   generateAgentReview,
 } from './generate'
-import { AgentOptionsSchema, AgentTaskInput } from './schemas'
+import { AGENT_PROTOCOL_VERSION, AgentOptionsSchema, AgentTaskInput } from './schemas'
 
 jest.mock('./context', () => ({
   resolveChangeSource: jest.fn(),
@@ -318,5 +319,94 @@ describe('agent generate progress reporting', () => {
 
       expect(withoutProgress).toEqual(withProgress)
     })
+  })
+})
+
+// Unit tests for generateAgentCommitDraft's retryable flag (OSS-1326 / #1854):
+// validation failures must be marked retryable: true because they are
+// self-inflicted and a fresh sampling attempt would likely succeed.
+describe('generateAgentCommitDraft — retryable flag (OSS-1326 / #1854)', () => {
+  function makeRetryableTestInput(): AgentTaskInput {
+    return {
+      version: AGENT_PROTOCOL_VERSION,
+      source: { kind: 'repository', scope: { type: 'staged' } },
+      options: AgentOptionsSchema.parse({
+        conventional: true,
+        trustRepositoryConfig: false,
+      }),
+    }
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+
+    mockResolveChangeSource.mockResolvedValue({
+      text: 'some diff context',
+      meta: {
+        kind: 'repository',
+        digest: 'abc123',
+        verification: 'repository-derived',
+      },
+    })
+  })
+
+  it('throws AgentOperationError with retryable:true when validation errors are present', async () => {
+    mockGenerateCommitDraft.mockResolvedValue({
+      ok: false,
+      draft: 'chore: Update deps\n\nsome body',
+      message: { title: 'chore: Update deps', body: 'some body', formatted: 'chore: Update deps\n\nsome body' },
+      warnings: [],
+      validationErrors: ["body's lines must not be longer than 100 characters"],
+    })
+
+    let caughtErr: unknown
+    try {
+      await generateAgentCommitDraft(makeRetryableTestInput(), makeContext())
+    } catch (err) {
+      caughtErr = err
+    }
+    expect(caughtErr).toBeInstanceOf(AgentOperationError)
+    const agentErr = caughtErr as AgentOperationError
+    expect(agentErr.code).toBe('GENERATION_FAILED')
+    expect(agentErr.retryable).toBe(true)
+  })
+
+  it('throws AgentOperationError with retryable:false when failure has no validation errors', async () => {
+    mockGenerateCommitDraft.mockResolvedValue({
+      ok: false,
+      draft: '',
+      warnings: ['No staged changes detected.'],
+      validationErrors: [],
+    })
+
+    let caughtErr: unknown
+    try {
+      await generateAgentCommitDraft(makeRetryableTestInput(), makeContext())
+    } catch (err) {
+      caughtErr = err
+    }
+    expect(caughtErr).toBeInstanceOf(AgentOperationError)
+    const agentErr = caughtErr as AgentOperationError
+    expect(agentErr.code).toBe('GENERATION_FAILED')
+    expect(agentErr.retryable).toBe(false)
+  })
+
+  it('returns a success envelope when generation succeeds', async () => {
+    mockGenerateCommitDraft.mockResolvedValue({
+      ok: true,
+      draft: 'fix: handle edge case\n\nDetails here.',
+      message: {
+        title: 'fix: handle edge case',
+        body: 'Details here.',
+        formatted: 'fix: handle edge case\n\nDetails here.',
+      },
+      warnings: [],
+      validationErrors: [],
+    })
+
+    const result = await generateAgentCommitDraft(makeRetryableTestInput(), makeContext())
+    expect(result.ok).toBe(true)
+    expect(result.operation).toBe('commit-draft')
+    expect(result.data.title).toBe('fix: handle edge case')
   })
 })
