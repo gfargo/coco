@@ -6,7 +6,7 @@ export interface AmendOptions extends BaseCommandOptions {
   interactive: boolean
   conventional: boolean
   additional?: string
-  noVerify: boolean
+  noVerify?: boolean
   dryRun?: boolean
   apply?: boolean
 }
