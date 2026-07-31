@@ -176,6 +176,26 @@ describe('amend command', () => {
     )
   })
 
+  it('honors noVerify from config when the CLI flag is not set', async () => {
+    mockLoadConfig.mockReturnValue({
+      service: { provider: 'openai' },
+      noVerify: true,
+    } as unknown as Config)
+    argv.apply = true
+    const { restore } = spyStdout()
+    try {
+      await handler(argv, logger)
+    } finally {
+      restore()
+    }
+    expect(mockCreateCommit).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      expect.any(Function),
+      expect.objectContaining({ amend: true, noVerify: true })
+    )
+  })
+
   it('exits non-zero when there is no commit to amend', async () => {
     git.revparse.mockRejectedValue(new Error('fatal: needed a single revision'))
     await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
