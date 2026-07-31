@@ -6,10 +6,14 @@ import {
     AGENT_PROTOCOL_VERSION,
     ChangelogDataSchema,
     ChangeSourceSchema,
+    CondenseDiffDataSchema,
+    CondenseDiffRequestSchema,
     createAgentInputJsonSchema,
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
-    MAX_AGENT_CONTEXT_BYTES
+    createCondenseDiffInputJsonSchema,
+    MAX_AGENT_CONTEXT_BYTES,
+    MAX_CONDENSE_BUDGET_TOKENS
 } from './schemas'
 
 const meta = {
@@ -189,6 +193,77 @@ describe('agent output schemas', () => {
     expect(jsonSchema.oneOf?.[1]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'changelog' } },
       required: expect.arrayContaining(['error']),
+    })
+  })
+})
+
+describe('CondenseDiffRequestSchema', () => {
+  it('applies safe defaults (structural mode, staged source)', () => {
+    const result = CondenseDiffRequestSchema.parse({ budget: { tokens: 2000 } })
+    expect(result).toEqual({
+      version: 1,
+      source: { kind: 'repository', scope: { type: 'staged' } },
+      budget: { tokens: 2000 },
+      mode: 'structural',
+      trustRepositoryConfig: false,
+    })
+  })
+
+  it('requires the budget field', () => {
+    expect(CondenseDiffRequestSchema.safeParse({}).success).toBe(false)
+    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: 0 } }).success).toBe(false)
+  })
+
+  it('enforces budget.tokens min=1 and max=MAX_CONDENSE_BUDGET_TOKENS', () => {
+    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: 1 } }).success).toBe(true)
+    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: MAX_CONDENSE_BUDGET_TOKENS } }).success).toBe(true)
+    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: MAX_CONDENSE_BUDGET_TOKENS + 1 } }).success).toBe(false)
+  })
+
+  it('rejects unknown fields (strict)', () => {
+    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: 1000 }, unexpected: true }).success).toBe(false)
+    expect(CondenseDiffRequestSchema.safeParse({ budget: { tokens: 1000, extra: true } }).success).toBe(false)
+  })
+
+  it('accepts optional model, provider, and languages fields', () => {
+    const result = CondenseDiffRequestSchema.parse({
+      budget: { tokens: 500 },
+      model: 'claude-3-5-sonnet',
+      provider: 'anthropic',
+      languages: ['ts', 'py'],
+    })
+    expect(result.model).toBe('claude-3-5-sonnet')
+    expect(result.provider).toBe('anthropic')
+    expect(result.languages).toEqual(['ts', 'py'])
+  })
+
+  it('rejects invalid language identifiers', () => {
+    expect(CondenseDiffRequestSchema.safeParse({
+      budget: { tokens: 500 },
+      languages: ['not-a-lang'],
+    }).success).toBe(false)
+  })
+
+  it('publishes a caller-facing JSON Schema with required budget field', () => {
+    const json = createCondenseDiffInputJsonSchema() as unknown as {
+      properties: { budget: { properties: { tokens: Record<string, unknown> } } }
+    }
+    expect(json).toMatchObject({ type: 'object' })
+    expect(json.properties.budget.properties.tokens).toMatchObject({ type: 'integer', minimum: 1 })
+  })
+
+  it('produces a condense-diff output envelope with oneOf metadata in MCP schema', () => {
+    const jsonSchema = z.toJSONSchema(
+      createAgentMcpOutputSchema('condense-diff', CondenseDiffDataSchema)
+    ) as { type?: string; oneOf?: Array<Record<string, unknown>> }
+
+    expect(jsonSchema.type).toBe('object')
+    expect(jsonSchema.oneOf).toHaveLength(2)
+    expect(jsonSchema.oneOf?.[0]).toMatchObject({
+      properties: { ok: { const: true }, operation: { const: 'condense-diff' } },
+    })
+    expect(jsonSchema.oneOf?.[1]).toMatchObject({
+      properties: { ok: { const: false }, operation: { const: 'condense-diff' } },
     })
   })
 })

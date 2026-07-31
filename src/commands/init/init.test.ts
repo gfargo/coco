@@ -200,6 +200,11 @@ describe('init command', () => {
   })
 
   describe('OpenAI-compatible endpoint presets (#1610)', () => {
+    // OpenRouter/Groq/LM Studio/vLLM are now first-class providers
+    // (#OSS-1623) rather than presets of this sentinel flow — only the
+    // generic `custom` fallback remains, covered below. Their own
+    // provider-selection paths are covered in the "first-class OpenAI
+    // compatible providers" describe block further down.
     beforeEach(() => {
       mockLoadConfig.mockReturnValue({
         scope: 'global',
@@ -208,44 +213,47 @@ describe('init command', () => {
       mockApiKeyService('openai')
     })
 
-    it('resolves the sentinel to provider=openai with the preset baseURL, and requires an API key for a hosted preset (OpenRouter)', async () => {
+    it('resolves the sentinel to provider=openai with the custom baseURL, and requires an API key', async () => {
       jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue(OPENAI_COMPATIBLE_SENTINEL)
       jest.spyOn(questions, 'selectOpenAiCompatiblePreset').mockResolvedValue({
-        id: 'openrouter',
-        label: 'OpenRouter',
-        baseURL: 'https://openrouter.ai/api/v1',
-        apiKeyEnvVar: 'OPENROUTER_API_KEY',
-        requiresApiKey: true,
+        id: 'custom',
+        label: 'Custom OpenAI-compatible URL',
+        baseURL: 'https://custom-endpoint.example/v1',
+        apiKeyEnvVar: 'OPENAI_COMPATIBLE_API_KEY',
+        requiresApiKey: false,
       })
       jest.spyOn(questions, 'inputOpenAiCompatibleModel').mockResolvedValue('meta-llama/llama-3.3-70b-instruct')
-      jest.spyOn(questions, 'inputApiKey').mockResolvedValue('or-secret-key')
+      jest.spyOn(questions, 'inputOptionalApiKey').mockResolvedValue('custom-secret-key')
 
       await handler(createArgv({ scope: 'global' }), logger)
 
       expect(questions.selectLLMModel).not.toHaveBeenCalled()
-      expect(questions.inputApiKey).toHaveBeenCalledWith('OpenRouter', 'OPENROUTER_API_KEY')
+      expect(questions.inputOptionalApiKey).toHaveBeenCalledWith(
+        'Custom OpenAI-compatible URL',
+        'OPENAI_COMPATIBLE_API_KEY'
+      )
       expect(mockAppendToGitConfig).toHaveBeenCalledWith(
         '/home/coco/.gitconfig',
         expect.objectContaining({
           service: expect.objectContaining({
             provider: 'openai',
-            baseURL: 'https://openrouter.ai/api/v1',
+            baseURL: 'https://custom-endpoint.example/v1',
             authentication: expect.objectContaining({
               type: 'APIKey',
-              credentials: expect.objectContaining({ apiKey: 'or-secret-key' }),
+              credentials: expect.objectContaining({ apiKey: 'custom-secret-key' }),
             }),
           }),
         })
       )
     })
 
-    it('drops to no-auth when a self-hosted preset (LM Studio) gets no API key', async () => {
+    it('drops to no-auth when the custom endpoint gets no API key', async () => {
       jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue(OPENAI_COMPATIBLE_SENTINEL)
       jest.spyOn(questions, 'selectOpenAiCompatiblePreset').mockResolvedValue({
-        id: 'lmstudio',
-        label: 'LM Studio',
+        id: 'custom',
+        label: 'Custom OpenAI-compatible URL',
         baseURL: 'http://localhost:1234/v1',
-        apiKeyEnvVar: 'LMSTUDIO_API_KEY',
+        apiKeyEnvVar: 'OPENAI_COMPATIBLE_API_KEY',
         requiresApiKey: false,
       })
       jest.spyOn(questions, 'inputOpenAiCompatibleModel').mockResolvedValue('local-model')
@@ -253,7 +261,10 @@ describe('init command', () => {
 
       await handler(createArgv({ scope: 'global' }), logger)
 
-      expect(questions.inputOptionalApiKey).toHaveBeenCalledWith('LM Studio', 'LMSTUDIO_API_KEY')
+      expect(questions.inputOptionalApiKey).toHaveBeenCalledWith(
+        'Custom OpenAI-compatible URL',
+        'OPENAI_COMPATIBLE_API_KEY'
+      )
       expect(questions.inputApiKey).not.toHaveBeenCalled()
       expect(mockAppendToGitConfig).toHaveBeenCalledWith(
         '/home/coco/.gitconfig',
@@ -279,10 +290,10 @@ describe('init command', () => {
     } as unknown as Config)
     jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue(OPENAI_COMPATIBLE_SENTINEL)
     jest.spyOn(questions, 'selectOpenAiCompatiblePreset').mockResolvedValue({
-      id: 'lmstudio',
-      label: 'LM Studio',
+      id: 'custom',
+      label: 'Custom OpenAI-compatible URL',
       baseURL: 'http://localhost:1234/v1',
-      apiKeyEnvVar: 'LMSTUDIO_API_KEY',
+      apiKeyEnvVar: 'OPENAI_COMPATIBLE_API_KEY',
       requiresApiKey: false,
     })
     jest.spyOn(questions, 'inputOpenAiCompatibleModel').mockResolvedValue('local-model')
@@ -301,6 +312,130 @@ describe('init command', () => {
     const [, writtenConfig] = mockAppendToProjectJsonConfig.mock.calls[0]
     expect(writtenConfig.service).not.toHaveProperty('baseURL')
     expect(writtenConfig.service).not.toHaveProperty('authentication')
+  })
+
+  describe('first-class OpenAI-compatible providers (#OSS-1623)', () => {
+    beforeEach(() => {
+      mockLoadConfig.mockReturnValue({
+        scope: 'global',
+        dryRun: false,
+      } as unknown as Config)
+    })
+
+    it('prompts for an API key for a hosted preset (Groq)', async () => {
+      mockGetDefaultServiceConfigFromAlias.mockReturnValue({
+        provider: 'groq',
+        model: 'llama-3.3-70b-versatile',
+        authentication: { type: 'APIKey', credentials: { apiKey: '' } },
+      } as never)
+      jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('groq')
+      // The handler calls `questions.selectLLMModel(provider)` for any
+      // non-sentinel provider pick (real impl free-text-prompts for the
+      // OpenAI-compatible presets) — mock it directly like every other
+      // provider case in this suite.
+      jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('llama-3.3-70b-versatile')
+      jest.spyOn(questions, 'inputApiKey').mockResolvedValue('groq-secret-key')
+
+      await handler(createArgv({ scope: 'global' }), logger)
+
+      expect(questions.selectLLMModel).toHaveBeenCalledWith('groq')
+      expect(questions.inputApiKey).toHaveBeenCalledWith('Groq', 'GROQ_API_KEY')
+      expect(mockAppendToGitConfig).toHaveBeenCalledWith(
+        '/home/coco/.gitconfig',
+        expect.objectContaining({
+          service: expect.objectContaining({
+            provider: 'groq',
+            authentication: expect.objectContaining({
+              type: 'APIKey',
+              credentials: expect.objectContaining({ apiKey: 'groq-secret-key' }),
+            }),
+          }),
+        })
+      )
+    })
+
+    it('never prompts for an API key for a no-auth local preset (LM Studio)', async () => {
+      mockGetDefaultServiceConfigFromAlias.mockReturnValue({
+        provider: 'lmstudio',
+        model: 'local-model',
+        authentication: { type: 'None', credentials: undefined },
+      } as never)
+      jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('lmstudio')
+      jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('local-model')
+      jest.spyOn(questions, 'inputOptionalBaseURL').mockResolvedValue(undefined)
+
+      await handler(createArgv({ scope: 'global' }), logger)
+
+      expect(questions.inputApiKey).not.toHaveBeenCalled()
+      expect(questions.inputOptionalBaseURL).toHaveBeenCalledWith('LM Studio', 'http://localhost:1234/v1')
+      expect(mockAppendToGitConfig).toHaveBeenCalledWith(
+        '/home/coco/.gitconfig',
+        expect.objectContaining({
+          service: expect.objectContaining({
+            provider: 'lmstudio',
+            authentication: { type: 'None', credentials: undefined },
+          }),
+        })
+      )
+      // Leaving the prompt blank keeps the registry default rather than
+      // stamping an explicit (redundant) baseURL onto the written config.
+      const [, writtenConfig] = mockAppendToGitConfig.mock.calls[0]
+      expect(writtenConfig.service).not.toHaveProperty('baseURL')
+    })
+
+    it('lets a direct lmstudio/vllm pick override the default port', async () => {
+      mockGetDefaultServiceConfigFromAlias.mockReturnValue({
+        provider: 'vllm',
+        model: 'local-model',
+        authentication: { type: 'None', credentials: undefined },
+      } as never)
+      jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('vllm')
+      jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('local-model')
+      jest.spyOn(questions, 'inputOptionalBaseURL').mockResolvedValue('http://localhost:9000/v1')
+
+      await handler(createArgv({ scope: 'global' }), logger)
+
+      expect(questions.inputOptionalBaseURL).toHaveBeenCalledWith('vLLM', 'http://localhost:8000/v1')
+      expect(mockAppendToGitConfig).toHaveBeenCalledWith(
+        '/home/coco/.gitconfig',
+        expect.objectContaining({
+          service: expect.objectContaining({
+            provider: 'vllm',
+            baseURL: 'http://localhost:9000/v1',
+          }),
+        })
+      )
+    })
+
+    it('warns that a direct lmstudio/vllm baseURL override is dropped on load for project scope', async () => {
+      // Same trust boundary as the compat-preset case above (OSS-1003): a
+      // direct-select lmstudio/vllm baseURL override isn't in
+      // TRUSTED_PROJECT_SERVICE_KEYS either, so it's silently stripped from
+      // a repo-committed config. The user should get the same steer.
+      mockLoadConfig.mockReturnValue({
+        scope: 'project',
+        dryRun: false,
+      } as unknown as Config)
+      mockGetDefaultServiceConfigFromAlias.mockReturnValue({
+        provider: 'vllm',
+        model: 'local-model',
+        authentication: { type: 'None', credentials: undefined },
+      } as never)
+      jest.spyOn(questions, 'selectLLMProvider').mockResolvedValue('vllm')
+      jest.spyOn(questions, 'selectLLMModel').mockResolvedValue('local-model')
+      jest.spyOn(questions, 'inputOptionalBaseURL').mockResolvedValue('http://localhost:9000/v1')
+
+      await handler(createArgv({ scope: 'project' }), logger)
+
+      expect(logger.log).toHaveBeenCalledWith(
+        chalk.dim(
+          `Note: project scope can't persist a custom endpoint (http://localhost:9000/v1) — ` +
+          `it will be dropped on load. Use \`coco init --scope global\`, or set COCO_SERVICE_BASE_URL via env var.`
+        )
+      )
+      const [, writtenConfig] = mockAppendToProjectJsonConfig.mock.calls[0]
+      expect(writtenConfig.service).not.toHaveProperty('baseURL')
+    })
   })
 
   it('skips the custom Ollama endpoint prompt for project scope', async () => {

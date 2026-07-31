@@ -395,6 +395,7 @@ const SURFACES: SurfaceEntry[] = [
         history: {
           ok: true,
           path: LONG_PATH,
+          truncated: false,
           commits: times(150, (i) => ({
             hash: `${i}`.repeat(8).slice(0, 40),
             shortHash: `${i}`.padStart(8, '0'),

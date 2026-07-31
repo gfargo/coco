@@ -160,6 +160,19 @@ export function createForgeTriageWorkflowHandlers(
     },
     'close-pr': async () => forge.closePullRequest(),
     'approve-pr': async () => forge.approvePullRequest(),
+    // #1933 — the single-PR panel already displays the current branch's
+    // PR object (and its number), so these route through the by-number
+    // verb rather than adding a parallel current-branch-inferring one.
+    'ready-pr': async () => {
+      const pr = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
+      if (!pr) return { ok: false, message: 'No pull request found for the current branch.' }
+      return forge.markPullRequestReadyByNumber(pr.number)
+    },
+    'reopen-pr': async () => {
+      const pr = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
+      if (!pr) return { ok: false, message: 'No pull request found for the current branch.' }
+      return forge.reopenPullRequestByNumber(pr.number)
+    },
     'request-changes-pr': async () => {
       const body = payload?.trim()
       if (!body) return { ok: false, message: 'Review body required for change-request' }
@@ -307,6 +320,20 @@ export function createForgeTriageWorkflowHandlers(
       const pr = getSelectedPullRequestTriage(state, context)
       if (!pr) return { ok: false, message: 'No pull request under cursor' }
       const result = await forge.requestChangesPullRequestByNumber(pr.number, body)
+      if (result.ok) invalidatePullRequestListCaches(pr.number)
+      return result
+    },
+    'triage-pr-ready': async () => {
+      const pr = getSelectedPullRequestTriage(state, context)
+      if (!pr) return { ok: false, message: 'No pull request under cursor' }
+      const result = await forge.markPullRequestReadyByNumber(pr.number)
+      if (result.ok) invalidatePullRequestListCaches(pr.number)
+      return result
+    },
+    'triage-pr-reopen': async () => {
+      const pr = getSelectedPullRequestTriage(state, context)
+      if (!pr) return { ok: false, message: 'No pull request under cursor' }
+      const result = await forge.reopenPullRequestByNumber(pr.number)
       if (result.ok) invalidatePullRequestListCaches(pr.number)
       return result
     },

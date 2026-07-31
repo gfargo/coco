@@ -6,6 +6,16 @@ import { geminiProvider } from './gemini'
 import { mistralProvider } from './mistral'
 import { ollamaProvider } from './ollama'
 import { openaiProvider } from './openai'
+import {
+  deepseekProvider,
+  fireworksProvider,
+  groqProvider,
+  lmstudioProvider,
+  openrouterProvider,
+  togetherProvider,
+  vllmProvider,
+  xaiProvider,
+} from './openaiCompatible'
 import type { ProviderDefinition } from './types'
 
 /**
@@ -22,6 +32,14 @@ export const PROVIDERS: Record<LLMProvider, ProviderDefinition> = {
   mistral: mistralProvider,
   bedrock: bedrockProvider,
   ollama: ollamaProvider,
+  deepseek: deepseekProvider,
+  groq: groqProvider,
+  xai: xaiProvider,
+  together: togetherProvider,
+  fireworks: fireworksProvider,
+  openrouter: openrouterProvider,
+  lmstudio: lmstudioProvider,
+  vllm: vllmProvider,
 }
 
 /** All registered provider ids. */

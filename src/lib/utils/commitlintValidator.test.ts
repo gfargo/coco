@@ -2,8 +2,14 @@ import { execFile } from 'node:child_process'
 import * as path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { getBuiltInConventionalRulesContext } from './commitlintValidator'
 
 const execFileAsync = promisify(execFile)
+
+// Each test spawns a real Node subprocess that transpiles and imports the
+// validator module via tsx. Under heavy parallel CI load (esp. macOS
+// runners) the default 5s jest timeout is too tight for that cold start.
+jest.setTimeout(30000)
 
 type ValidationResult = {
   valid: boolean
@@ -51,5 +57,18 @@ describe('validateConventionalCommitMessage', () => {
     expect(result.errors).toEqual(expect.arrayContaining([
       expect.stringMatching(/type may not be empty/i),
     ]))
+  })
+})
+
+describe('getBuiltInConventionalRulesContext (OSS-1326 / #1854)', () => {
+  it('describes the hardcoded rules that validateConventionalCommitMessage enforces', () => {
+    const context = getBuiltInConventionalRulesContext()
+
+    expect(context).toContain('Header (title) must be 72 characters or less')
+    expect(context).toContain('Body lines must be 100 characters or less')
+    expect(context).toContain(
+      'Subject must be one of sentence-case, start-case, pascal-case, upper-case or lower-case',
+    )
+    expect(context).not.toContain('sentence-case,start-case')
   })
 })

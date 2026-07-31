@@ -124,6 +124,7 @@ the which-key overlay lists them live when you press `g`.
 | `g T` | **Create tag** at the cursored commit (history view; name prompt) — *not* changelog; the changelog opens with `L` from history/branches |
 | `g H` | Apply cursored hunk to index (`git apply --cached`) |
 | `g C` | Theme picker (overlay) |
+| `g u` | **Undo last action** (action, not nav) — pops the session-scoped undo stack and reverses the top entry: branch delete (recreate at recorded sha), stash drop (`git stash store`), reset (reset back to the recorded HEAD using the *original* mode), or tag delete (recreate at recorded sha). Not every destructive action is invertible — only these four push an entry. Never touches pushed/remote history; the footer shows a count (`gu undo (N)`) when the stack is non-empty. |
 | `g k` / `g K` | Open the project / global coco config in `$EDITOR` |
 | `g ?` | **Which-key strip** (overlay, not nav) — surfaces the *single-key* actions available in the current view (the deliberate overloads below), sourced live from `LOG_INK_KEY_BINDINGS`. `?` from the strip expands to the full help; `Esc` closes. The per-view counterpart to this very `g`-chord menu. |
 
@@ -304,6 +305,8 @@ While AI proposals are open (after `M`):
 | `C` | Check the PR's branch out locally (triage; `gh pr checkout <n>`) — the global create-PR `C` is repurposed on this view |
 | `m` | Merge (1-key strategy choice: `m` merge · `s` squash · `r` rebase) |
 | `a` | Approve (confirm) |
+| `d` | Mark ready for review (confirm; `gh pr ready`) |
+| `X` | Reopen (confirm) |
 | `R` | Request changes (review prompt) |
 | `c` | Comment (prompt) |
 | `x` | Close (confirm) |
@@ -368,7 +371,8 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `S` | status/diff/compose → commit-split flow · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
 | `P` | branches → push branch · tags → push tag (takes precedence over the global push) |
 | `D` | worktrees → remove worktree + branch · branches → delete branch |
-| `x` / `X` | PR → close · issues → close / reopen · stashes → drop (`X`) |
+| `d` | diff → toggle unified/side-by-side · rebase plan → retag drop · PR/PR-triage → mark ready for review (#1933) |
+| `x` / `X` | PR → close · PR/PR-triage `X` → **reopen** (#1933) · issues → close / reopen · stashes → drop (`X`) |
 | `L` | history/branches → generate changelog · PR-triage/issues → add label |
 | `f` | history → fixup staged into cursored commit · PR-triage → cycle PR filter · issues → cycle issue filter |
 | `o` | status/diff/conflicts → open file in `$EDITOR` (consistent — different file resolution only) |

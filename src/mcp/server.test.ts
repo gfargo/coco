@@ -7,6 +7,13 @@ import { createCocoMcpServer } from './server'
 const mockResolveAgentRepoRoot = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
+const mockRunCondenseDiff = jest.fn()
+
+type HandlerExtra = {
+  signal: AbortSignal
+  _meta?: { progressToken?: string | number }
+  sendNotification: (notification: unknown) => Promise<void>
+}
 
 const registrations = new Map<string, {
   config: {
@@ -16,7 +23,7 @@ const registrations = new Map<string, {
     outputSchema: z.ZodType
     annotations: Record<string, boolean>
   }
-  handler: (input: unknown, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>
+  handler: (input: unknown, extra: HandlerExtra) => Promise<Record<string, unknown>>
 }>()
 const serverOptions: unknown[] = []
 
@@ -40,7 +47,7 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
           outputSchema: z.ZodType
           annotations: Record<string, boolean>
         },
-        handler: handler as (input: unknown, extra: { signal: AbortSignal }) => Promise<Record<string, unknown>>,
+        handler: handler as (input: unknown, extra: HandlerExtra) => Promise<Record<string, unknown>>,
       })
     }
 
@@ -61,6 +68,7 @@ jest.mock('../operations/agent', () => {
     resolveAgentRepoRoot: (...args: unknown[]) => mockResolveAgentRepoRoot(...args),
     isPathWithinRoot: jest.fn(() => true),
     runAgentOperation: (...args: unknown[]) => mockRunAgentOperation(...args),
+    runCondenseDiff: (...args: unknown[]) => mockRunCondenseDiff(...args),
   }
 })
 
@@ -79,6 +87,20 @@ const reviewSuccess = {
 }
 
 describe('createCocoMcpServer', () => {
+  const condenseDiffSuccess = {
+    version: 1 as const,
+    ok: true as const,
+    operation: 'condense-diff' as const,
+    status: 'completed' as const,
+    data: {
+      condensed: '',
+      metrics: { inputTokens: 0, outputTokens: 0, reductionRatio: 0, filesIncluded: 0, filesOmitted: 0, strategy: 'structural' as const },
+      files: [],
+    },
+    warnings: [],
+    meta: { kind: 'summary' as const, digest: 'sha256:test', verification: 'provided-unverified' as const },
+  }
+
   beforeEach(() => {
     jest.clearAllMocks()
     registrations.clear()
@@ -86,6 +108,7 @@ describe('createCocoMcpServer', () => {
     mockResolveAgentRepoRoot.mockResolvedValue('/repo')
     mockCreateAgentOperationContext.mockResolvedValue({ signal: undefined } as never)
     mockRunAgentOperation.mockResolvedValue(reviewSuccess)
+    mockRunCondenseDiff.mockResolvedValue(condenseDiffSuccess)
   })
 
   function createServer() {
@@ -98,7 +121,15 @@ describe('createCocoMcpServer', () => {
     return registration
   }
 
-  it('registers four read-only generation tools with visible discriminated output schemas', () => {
+  function makeExtra(overrides: Partial<HandlerExtra> = {}): HandlerExtra {
+    return {
+      signal: new AbortController().signal,
+      sendNotification: jest.fn(async () => undefined),
+      ...overrides,
+    }
+  }
+
+  it('registers five read-only generation tools including coco_condense_diff', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -106,8 +137,13 @@ describe('createCocoMcpServer', () => {
       'coco_review',
       'coco_changelog',
       'coco_recap',
+      'coco_condense_diff',
     ])
-    for (const registration of registrations.values()) {
+    // The four LLM-generation tools share the AgentTaskInputSchema and have
+    // idempotentHint:false; condense-diff has its own schema and idempotentHint:true.
+    const generationTools = ['coco_commit_draft', 'coco_review', 'coco_changelog', 'coco_recap']
+    for (const name of generationTools) {
+      const registration = tool(name)
       expect(registration.config.annotations).toEqual({
         readOnlyHint: true,
         destructiveHint: false,
@@ -124,6 +160,25 @@ describe('createCocoMcpServer', () => {
       expect(outputJson.type).toBe('object')
       expect(outputJson.oneOf).toHaveLength(2)
     }
+
+    // coco_condense_diff uses its own request schema.
+    const condenseTool = tool('coco_condense_diff')
+    expect(condenseTool.config.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: true,
+    })
+    const condenseInputJson = z.toJSONSchema(condenseTool.config.inputSchema, {
+      io: 'input',
+      target: 'draft-07',
+    })
+    expect(condenseInputJson).toMatchObject({ type: 'object', additionalProperties: false })
+    // Must NOT be the same as the generation tool input schema.
+    expect(condenseInputJson).not.toEqual(createAgentInputJsonSchema())
+    const condenseOutputJson = z.toJSONSchema(condenseTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
+    expect(condenseOutputJson.type).toBe('object')
+    expect(condenseOutputJson.oneOf).toHaveLength(2)
   })
 
   it('documents repository binding and metadata-only analytics in server instructions', () => {
@@ -144,13 +199,14 @@ describe('createCocoMcpServer', () => {
 
     const result = await tool('coco_review').handler({
       source: { kind: 'summary', summary: 'changed' },
-    }, { signal: controller.signal })
+    }, makeExtra({ signal: controller.signal }))
 
     expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith(undefined, '/repo', controller.signal)
     expect(mockCreateAgentOperationContext).toHaveBeenCalledWith({
       repoRoot: '/repo',
       signal: controller.signal,
       surface: 'mcp',
+      onProgress: undefined,
     })
     expect(mockRunAgentOperation).toHaveBeenCalledWith(
       'review',
@@ -172,7 +228,7 @@ describe('createCocoMcpServer', () => {
     const result = await tool('coco_review').handler({
       source: { kind: 'summary', summary: 'changed' },
       options: { trustRepositoryConfig: true },
-    }, { signal: new AbortController().signal })
+    }, makeExtra())
 
     expect(result).toMatchObject({
       isError: true,
@@ -190,9 +246,7 @@ describe('createCocoMcpServer', () => {
   it('returns strict input validation failures as structured MCP errors', async () => {
     createServer()
 
-    const result = await tool('coco_changelog').handler({ unexpected: true }, {
-      signal: new AbortController().signal,
-    })
+    const result = await tool('coco_changelog').handler({ unexpected: true }, makeExtra())
 
     expect(result).toMatchObject({
       isError: true,
@@ -211,7 +265,7 @@ describe('createCocoMcpServer', () => {
 
     const result = await tool('coco_recap').handler({
       source: { kind: 'summary', summary: 'changed' },
-    }, { signal: new AbortController().signal })
+    }, makeExtra())
 
     expect(result).toMatchObject({
       isError: true,
@@ -221,5 +275,141 @@ describe('createCocoMcpServer', () => {
         error: { code: 'OPERATION_FAILED', message: 'provider unavailable' },
       },
     })
+  })
+
+  it('routes condense-diff to runCondenseDiff and returns a structured result', async () => {
+    createServer()
+    const controller = new AbortController()
+
+    const result = await tool('coco_condense_diff').handler({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+    }, makeExtra({ signal: controller.signal }))
+
+    expect(result).toMatchObject({
+      structuredContent: expect.objectContaining({
+        ok: true,
+        operation: 'condense-diff',
+      }),
+    })
+  })
+
+  it('returns validation failures for invalid condense-diff input', async () => {
+    createServer()
+
+    const result = await tool('coco_condense_diff').handler({
+      // budget is required — omitting it triggers a validation error
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'condense-diff',
+        error: { code: 'INVALID_INPUT' },
+      },
+    })
+  })
+
+  it('rejects trustRepositoryConfig:true on coco_condense_diff with UNSAFE_OPTION', async () => {
+    createServer()
+
+    const result = await tool('coco_condense_diff').handler({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+      trustRepositoryConfig: true,
+    }, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        version: 1,
+        ok: false,
+        operation: 'condense-diff',
+        error: { code: 'UNSAFE_OPTION', retryable: false },
+      },
+    })
+    expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
+    expect(mockRunCondenseDiff).not.toHaveBeenCalled()
+  })
+
+  it('builds a progress reporter and forwards notifications/progress with a monotonic counter when a progressToken is present', async () => {
+    createServer()
+    let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
+    mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
+      capturedOnProgress = input.onProgress
+      return { signal: undefined } as never
+    })
+    const sendNotification = jest.fn(async () => undefined)
+
+    await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra({ _meta: { progressToken: 'token-1' }, sendNotification }))
+
+    expect(capturedOnProgress).toBeInstanceOf(Function)
+    capturedOnProgress!({ message: 'Resolved changes' })
+    capturedOnProgress!({ message: 'Generating review…' })
+
+    expect(sendNotification).toHaveBeenNthCalledWith(1, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-1', progress: 1, message: 'Resolved changes' },
+    })
+    expect(sendNotification).toHaveBeenNthCalledWith(2, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-1', progress: 2, message: 'Generating review…' },
+    })
+  })
+
+  it('swallows a rejecting sendNotification without failing the operation', async () => {
+    createServer()
+    let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
+    mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
+      capturedOnProgress = input.onProgress
+      return { signal: undefined } as never
+    })
+    const sendNotification = jest.fn(async () => {
+      throw new Error('client closed its notification channel')
+    })
+
+    const result = await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra({ _meta: { progressToken: 'token-3' }, sendNotification }))
+
+    expect(capturedOnProgress).toBeInstanceOf(Function)
+    expect(() => capturedOnProgress!({ message: 'Resolved changes' })).not.toThrow()
+    expect(sendNotification).toHaveBeenCalledTimes(1)
+
+    // Give the fire-and-forget rejection a microtask turn to settle,
+    // then confirm it never surfaced through the handler's own result.
+    await Promise.resolve()
+    expect(result).toMatchObject({
+      structuredContent: { ok: true },
+    })
+  })
+
+  it('passes no progress reporter when the request has no progressToken', async () => {
+    createServer()
+
+    await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(mockCreateAgentOperationContext).toHaveBeenCalledWith(
+      expect.objectContaining({ onProgress: undefined }),
+    )
+  })
+
+  it('keeps the terminal envelope byte-identical whether or not a progressToken is present', async () => {
+    createServer()
+
+    const withToken = await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra({ _meta: { progressToken: 'token-2' } }))
+    const withoutToken = await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(withToken).toEqual(withoutToken)
   })
 })
