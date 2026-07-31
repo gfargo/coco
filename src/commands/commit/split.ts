@@ -997,7 +997,7 @@ export async function handleCommitSplit({
       hunkInventory: context.hunkInventory,
       git,
       logger,
-      noVerify: argv.noVerify || config.noVerify || false,
+      noVerify: config.noVerify || false,
       fallback,
       onHookFailure,
     })
@@ -1046,7 +1046,7 @@ export async function handleCommitSplit({
     hunkInventory: context.hunkInventory,
     git,
     logger,
-    noVerify: argv.noVerify || config.noVerify || false,
+    noVerify: config.noVerify || false,
     fallback,
     onHookFailure,
   })

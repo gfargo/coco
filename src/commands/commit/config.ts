@@ -125,7 +125,6 @@ export const options = {
   noVerify: {
     description: 'Skip pre-commit and commit-msg hooks (passes --no-verify to git commit)',
     type: 'boolean',
-    default: false,
     alias: 'n',
   },
   language: {

@@ -39,7 +39,6 @@ export const options = {
     type: 'boolean',
     alias: 'noVerify',
     description: 'Skip git hooks (passes --no-verify to the amend commit)',
-    default: false,
   },
   dryRun: {
     type: 'boolean',
