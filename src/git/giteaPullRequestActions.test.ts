@@ -4,6 +4,8 @@ import {
   mergeGiteaPullRequestByNumber,
   approveGiteaPullRequestByNumber,
   closeGiteaPullRequestByNumber,
+  reopenGiteaPullRequestByNumber,
+  markGiteaPullRequestReadyByNumber,
   commentGiteaPullRequestByNumber,
   requestChangesGiteaPullRequestByNumber,
   addGiteaPullRequestLabel,
@@ -76,10 +78,23 @@ describe('createGiteaPullRequest (#826)', () => {
 })
 
 describe('openGiteaPullRequest (#826)', () => {
-  it('returns the URL to open in the browser', () => {
-    const result = openGiteaPullRequest('https://codeberg.org/owner/repo/pulls/1')
-    expect(result.ok).toBe(true)
-    expect(result.url).toBe('https://codeberg.org/owner/repo/pulls/1')
+  it('invokes the opener with the URL and returns ok:true on success', async () => {
+    const opened: string[] = []
+    const runner = async (u: string) => { opened.push(u) }
+    const result = await openGiteaPullRequest('https://codeberg.org/owner/repo/pulls/1', runner)
+    expect(opened).toEqual(['https://codeberg.org/owner/repo/pulls/1'])
+    expect(result).toEqual({
+      ok: true,
+      message: 'Opened pull request: https://codeberg.org/owner/repo/pulls/1',
+      url: 'https://codeberg.org/owner/repo/pulls/1',
+    })
+  })
+
+  it('returns ok:false when the opener rejects', async () => {
+    const runner = async () => { throw new Error('no browser found') }
+    const result = await openGiteaPullRequest('https://codeberg.org/owner/repo/pulls/1', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toBe('no browser found')
   })
 })
 
@@ -126,6 +141,69 @@ describe('closeGiteaPullRequestByNumber (#826)', () => {
   })
 })
 
+describe('reopenGiteaPullRequestByNumber (#1933)', () => {
+  it('PATCHes state=open', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await reopenGiteaPullRequestByNumber('owner/repo', 5, runner)
+    expect(result.ok).toBe(true)
+    expect(calls[0].endpoint).toBe('repos/owner/repo/pulls/5')
+    expect(calls[0].method).toBe('PATCH')
+    expect(JSON.parse(calls[0].body ?? '{}').state).toBe('open')
+  })
+})
+
+describe('markGiteaPullRequestReadyByNumber (#1933)', () => {
+  it('PATCHes draft: false when the PR has a real draft boolean set', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ draft: true, title: 'Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls[1].endpoint).toBe('repos/owner/repo/pulls/5')
+    expect(calls[1].method).toBe('PATCH')
+    expect(JSON.parse(calls[1].body ?? '{}').draft).toBe(false)
+    expect(result).toEqual({ ok: true, message: 'Marked pull request #5 as ready for review' })
+  })
+
+  it('is a no-op when draft: false is set, even if the title has a [WIP] prefix', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ draft: false, title: '[WIP] Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls).toHaveLength(1)
+    expect(result).toEqual({ ok: true, message: 'Pull request #5 is not a draft' })
+  })
+
+  it('falls back to stripping the [WIP] title prefix when there is no draft boolean', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ title: '[WIP] Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls[0]).toEqual({ endpoint: 'repos/owner/repo/pulls/5', method: undefined, body: undefined })
+    expect(calls[1].endpoint).toBe('repos/owner/repo/pulls/5')
+    expect(calls[1].method).toBe('PATCH')
+    expect(JSON.parse(calls[1].body ?? '{}').title).toBe('Add feature')
+    expect(result).toEqual({ ok: true, message: 'Marked pull request #5 as ready for review' })
+  })
+
+  it('is a no-op when there is no draft boolean and the title has no [WIP] prefix', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ title: 'Add feature' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls).toHaveLength(1)
+    expect(result).toEqual({ ok: true, message: 'Pull request #5 is not a draft' })
+  })
+
+  it('refuses to PATCH an empty title when it is only the [WIP] prefix', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/pulls/5': JSON.stringify({ title: '[WIP]' }),
+    })
+    const result = await markGiteaPullRequestReadyByNumber('owner/repo', 5, runner)
+    expect(calls).toHaveLength(1)
+    expect(result.ok).toBe(false)
+  })
+})
+
 describe('commentGiteaPullRequestByNumber (#826)', () => {
   it('POSTs the comment to the issue-comments endpoint', async () => {
     const { calls, runner } = capturingRunner()
@@ -155,7 +233,7 @@ describe('requestChangesGiteaPullRequestByNumber (#826)', () => {
 describe('addGiteaPullRequestLabel (#826)', () => {
   it('resolves the label name to an id, then posts it', async () => {
     const { calls, runner } = capturingRunner({
-      'repos/owner/repo/labels?limit=50': JSON.stringify([{ id: 9, name: 'bug' }]),
+      'repos/owner/repo/labels?limit=50&page=1': JSON.stringify([{ id: 9, name: 'bug' }]),
     })
     const result = await addGiteaPullRequestLabel('owner/repo', 5, 'bug', runner)
     expect(result.ok).toBe(true)
@@ -165,10 +243,65 @@ describe('addGiteaPullRequestLabel (#826)', () => {
   })
 
   it('returns an explanatory error when the label does not exist', async () => {
-    const { runner } = capturingRunner({ 'repos/owner/repo/labels?limit=50': JSON.stringify([]) })
+    const { runner } = capturingRunner({
+      'repos/owner/repo/labels?limit=50&page=1': JSON.stringify([]),
+      'orgs/owner/labels?limit=50&page=1': JSON.stringify([]),
+    })
     const result = await addGiteaPullRequestLabel('owner/repo', 5, 'missing', runner)
     expect(result.ok).toBe(false)
     expect(result.message).toContain('not found')
+    expect(result.message).not.toContain('Could not verify')
+  })
+
+  it('resolves a label on page 2 when the first page is full', async () => {
+    const page1 = JSON.stringify(Array.from({ length: 50 }, (_, i) => ({ id: i + 1, name: `label-${i + 1}` })))
+    const page2 = JSON.stringify([{ id: 77, name: 'rare-label' }])
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/labels?limit=50&page=1': page1,
+      'repos/owner/repo/labels?limit=50&page=2': page2,
+    })
+    const result = await addGiteaPullRequestLabel('owner/repo', 5, 'rare-label', runner)
+    expect(result.ok).toBe(true)
+    const labelCall = calls.find((c) => c.endpoint === 'repos/owner/repo/issues/5/labels')
+    expect(JSON.parse(labelCall?.body ?? '{}').labels).toEqual([77])
+  })
+
+  it('resolves a label from org labels when not in repo labels', async () => {
+    const { calls, runner } = capturingRunner({
+      'repos/owner/repo/labels?limit=50&page=1': '[]',
+      'orgs/owner/labels?limit=50&page=1': JSON.stringify([{ id: 42, name: 'org-label' }]),
+    })
+    const result = await addGiteaPullRequestLabel('owner/repo', 5, 'org-label', runner)
+    expect(result.ok).toBe(true)
+    const labelCall = calls.find((c) => c.endpoint === 'repos/owner/repo/issues/5/labels')
+    expect(JSON.parse(labelCall?.body ?? '{}').labels).toEqual([42])
+  })
+
+  it('returns "lookup failed" (not "create it") on API error', async () => {
+    const runner = async (endpoint: string): Promise<string> => {
+      if (endpoint.startsWith('repos/owner/repo/labels')) {
+        throw Object.assign(new Error('Gitea API error 500: internal'), { status: 500 })
+      }
+      return '{}'
+    }
+    const result = await addGiteaPullRequestLabel('owner/repo', 5, 'bug', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Could not verify')
+    expect(result.message).not.toContain('Create it in Gitea first')
+  })
+
+  it('treats org 404 as "no org labels" and returns not-found for personal repos', async () => {
+    const runner = async (endpoint: string): Promise<string> => {
+      if (endpoint.startsWith('repos/owner/repo/labels')) return '[]'
+      if (endpoint.startsWith('orgs/owner/labels')) {
+        throw Object.assign(new Error('Gitea API error 404: not found'), { status: 404 })
+      }
+      return '{}'
+    }
+    const result = await addGiteaPullRequestLabel('owner/repo', 5, 'missing', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not found')
+    expect(result.message).toContain('Create it in Gitea first')
   })
 })
 

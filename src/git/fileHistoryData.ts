@@ -20,6 +20,18 @@ const SEP = '\x1f'
 /** Record separator (ASCII Record Separator, 0x1e) — terminates each commit entry. */
 const REC = '\x1e'
 
+/**
+ * Default maximum number of commits returned by `getFileHistory`.
+ * Mirrors `LOG_DEFAULT_LIMIT` in `logData.ts` (30) — keeps memory and
+ * wall-time bounded for long-lived files with hundreds of commits.
+ *
+ * When `git log --max-count=<limit>` returns exactly `limit` results
+ * there may be more commits beyond the cap (the `truncated` flag in
+ * `FileHistoryResult` signals this). Pass a larger `limit` argument to
+ * `getFileHistory` for a future "load more" path.
+ */
+export const FILE_HISTORY_DEFAULT_LIMIT = 30
+
 export type FileHistoryCommit = {
   /** Full 40-char commit sha. */
   hash: string
@@ -34,7 +46,7 @@ export type FileHistoryCommit = {
 }
 
 export type FileHistoryResult =
-  | { ok: true; path: string; commits: FileHistoryCommit[] }
+  | { ok: true; path: string; commits: FileHistoryCommit[]; truncated: boolean }
   | { ok: false; path: string; message: string }
 
 /**
@@ -78,14 +90,24 @@ export function parseFileHistoryOutput(output: string): FileHistoryCommit[] {
  * `git log --follow -- <path>`. `--follow` renames tracking so the log
  * shows the file's full history even across renames.
  *
+ * Results are capped at `limit` commits (default: `FILE_HISTORY_DEFAULT_LIMIT`).
+ * When the result length equals the limit there may be additional commits
+ * beyond the cap — the `truncated` field in the ok-variant signals this.
+ * Pass a larger `limit` for a future "load more" path.
+ *
  * Best-effort: failures (path outside repo, not a git repo, binary) resolve
  * to `{ ok: false }` so the surface can show a placeholder.
  */
-export async function getFileHistory(git: SimpleGit, path: string): Promise<FileHistoryResult> {
+export async function getFileHistory(
+  git: SimpleGit,
+  path: string,
+  limit = FILE_HISTORY_DEFAULT_LIMIT,
+): Promise<FileHistoryResult> {
   let output = ''
   try {
     output = await git.raw([
       'log',
+      `--max-count=${limit}`,
       '--follow',
       `--format=%H${SEP}%h${SEP}%an${SEP}%at${SEP}%s${REC}`,
       '--',
@@ -96,5 +118,10 @@ export async function getFileHistory(git: SimpleGit, path: string): Promise<File
     return { ok: false, path, message }
   }
   const commits = parseFileHistoryOutput(output)
-  return { ok: true, path, commits }
+  // Best-effort truncation signal: if git returned exactly `limit` rows,
+  // there may be more commits beyond the cap. Can false-positive when
+  // the file has exactly `limit` commits, but is the same heuristic
+  // paginated logs use.
+  const truncated = commits.length >= limit
+  return { ok: true, path, commits, truncated }
 }

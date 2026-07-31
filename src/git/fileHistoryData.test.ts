@@ -1,4 +1,4 @@
-import { getFileHistory, parseFileHistoryOutput } from './fileHistoryData'
+import { getFileHistory, parseFileHistoryOutput, FILE_HISTORY_DEFAULT_LIMIT } from './fileHistoryData'
 
 const SEP = '\x1f'
 const REC = '\x1e'
@@ -70,6 +70,43 @@ describe('getFileHistory', () => {
     )
   })
 
+  it('passes --max-count with the default limit', async () => {
+    const git = { raw: jest.fn().mockResolvedValue(FIXTURE) }
+    await getFileHistory(git as never, 'src/example.ts')
+    expect(git.raw).toHaveBeenCalledWith(
+      expect.arrayContaining([`--max-count=${FILE_HISTORY_DEFAULT_LIMIT}`])
+    )
+  })
+
+  it('passes --max-count with a custom limit', async () => {
+    const git = { raw: jest.fn().mockResolvedValue(FIXTURE) }
+    await getFileHistory(git as never, 'src/example.ts', 10)
+    expect(git.raw).toHaveBeenCalledWith(
+      expect.arrayContaining(['--max-count=10'])
+    )
+  })
+
+  it('sets truncated:true when result length equals the limit', async () => {
+    // Build a fixture with exactly 3 records and call with limit=3
+    const git = { raw: jest.fn().mockResolvedValue(FIXTURE) }
+    const result = await getFileHistory(git as never, 'src/example.ts', 3)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.commits).toHaveLength(3)
+      expect(result.truncated).toBe(true)
+    }
+  })
+
+  it('sets truncated:false when result length is under the limit', async () => {
+    const git = { raw: jest.fn().mockResolvedValue(FIXTURE) }
+    const result = await getFileHistory(git as never, 'src/example.ts', 10)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.commits).toHaveLength(3)
+      expect(result.truncated).toBe(false)
+    }
+  })
+
   it('returns a best-effort failure result when git log throws', async () => {
     const git = { raw: jest.fn().mockRejectedValue(new Error('not a git repo')) }
     const result = await getFileHistory(git as never, 'missing.ts')
@@ -79,6 +116,6 @@ describe('getFileHistory', () => {
   it('returns ok:true with empty commits for a file with no history', async () => {
     const git = { raw: jest.fn().mockResolvedValue('') }
     const result = await getFileHistory(git as never, 'new.ts')
-    expect(result).toEqual({ ok: true, path: 'new.ts', commits: [] })
+    expect(result).toEqual({ ok: true, path: 'new.ts', commits: [], truncated: false })
   })
 })

@@ -94,6 +94,30 @@ describe('getTokenCounterForProvider', () => {
     })
   })
 
+  describe('OpenAI-compatible presets (#OSS-1623)', () => {
+    it.each([
+      ['deepseek', 'deepseek-chat', 1.1],
+      ['groq', 'llama-3.3-70b-versatile', 1.2],
+      ['xai', 'grok-4-fast', 1.15],
+      ['together', 'meta-llama/Llama-3.3-70B-Instruct-Turbo', 1.2],
+      ['fireworks', 'accounts/fireworks/models/llama-v3p3-70b-instruct', 1.2],
+      ['openrouter', 'meta-llama/llama-3.3-70b-instruct', 1.15],
+      ['lmstudio', 'local-model', 1.2],
+      ['vllm', 'local-model', 1.2],
+    ] as const)(
+      '%s applies its correction factor instead of the undercounting gpt-4o baseline',
+      async (provider, model, factor) => {
+        const base = await getTokenCounter('gpt-4o')
+        const counter = await getTokenCounterForProvider(provider, model)
+        expect(counter(SAMPLE)).toBe(Math.ceil(base(SAMPLE) * factor))
+        // The whole point (per the ticket): a corrected count must be
+        // strictly greater than the raw gpt-4o count it was previously
+        // silently reported as, or prompt-budget enforcement undercounts.
+        expect(counter(SAMPLE)).toBeGreaterThan(base(SAMPLE))
+      }
+    )
+  })
+
   it('falls back to factor 1 for an unregistered provider without throwing', async () => {
     const base = await getTokenCounter('gpt-4o')
     const counter = await getTokenCounterForProvider('unknown-provider', 'some-model')

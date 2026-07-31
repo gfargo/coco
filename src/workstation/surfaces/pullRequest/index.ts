@@ -1,7 +1,7 @@
 /**
  * Pull-request action panel (#783) — renders the current branch's PR
  * with header, checks table, reviews summary, and a body preview.
- * Action keys (m / x / a / R / c / O) are wired in inkInput.ts and
+ * Action keys (m / x / a / d / X / R / c / O) are wired in inkInput.ts and
  * surfaced via the footer; this renderer is read-only.
  *
  * Three loading / fallback states matter:

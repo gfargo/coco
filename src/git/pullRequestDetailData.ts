@@ -41,6 +41,13 @@ export type PullRequestDetail = {
   comments: IssueComment[]
   reviews: PullRequestReview[]
   statusCheckRollup: PullRequestStatusCheck[]
+  /**
+   * `true` when the comment list is known to be incomplete — either the
+   * pagination ceiling was reached or a mid-pagination error was swallowed.
+   * Used by the preview pane to render a "… more comments" notice so
+   * reviewers know they may be missing entries.
+   */
+  commentsTruncated?: boolean
 }
 
 /**

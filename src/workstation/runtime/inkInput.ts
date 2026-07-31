@@ -11,6 +11,7 @@ import {
     LogInkSidebarTab,
     LogInkState,
     LogInkView,
+    getSelectedInkCommit,
     isLogInkNestedRepo,
     parseLogInkHistoryFetchPrefix,
 } from './inkViewModel'
@@ -242,6 +243,13 @@ export type LogInkInputContext = {
    * renders but the cursor model is a no-op.
    */
   inspectorActionCount?: number
+  /**
+   * Currently-loaded `refs/notes/commits` note text for the cursored
+   * history commit (#OSS-2057), or undefined when none is loaded /
+   * cached yet. Seeds the [Notes] tab's Enter-to-edit prompt so editing
+   * an existing note starts from its current body.
+   */
+  commitNoteText?: string
   /**
    * Path of the cursored file in a commit-diff explore. Used by `c`
    * (cherry-pick file from commit).
@@ -910,6 +918,7 @@ export function getLogInkPaletteExecuteEvents(
     case 'workflowRenameStash':
     case 'workflowStashBranch':
     case 'workflowUndoDropStash':
+    case 'workflowUndoLastAction':
     case 'workflowPushTag':
     case 'workflowDeleteRemoteTag':
     case 'workflowResolveOurs':
@@ -2004,6 +2013,18 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // `gu` chord (OSS-1606): pop the session-scoped undo stack and run
+  // the recorded inverse for the most recent invertible destructive
+  // action (branch delete, stash drop, reset, tag delete). No y-confirm
+  // — `undo-last-action` is restorative by construction (kind: 'normal'
+  // in the registry), matching `undo-drop-stash`'s bare `u` on stash.
+  if (state.pendingKey === 'g' && inputValue === 'u') {
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      { type: 'runWorkflowAction', id: 'undo-last-action' },
+    ]
+  }
+
   // `gB` chord: jump to the bisect workflow view (#784). Capital B
   // disambiguates from `gb` (branches). Always navigates — even when
   // bisect is inactive — so the user can see the empty-state hint and
@@ -2464,17 +2485,17 @@ export function getLogInkInputEvents(
     return [action({ type: 'nextSidebarTab' })]
   }
 
-  // ←/→ on the inspector switch between the [Inspector] / [Actions]
-  // tabs, mirroring the sidebar's left/right tab semantics. `[` and
-  // `]` still work as keyboard alternatives, but the visible hint in
-  // the inspector chrome shows ←/→ because the bracketed `[/]`
-  // notation reads as "press the / key" — which is the global filter
-  // trigger and was making users think the binding was busted.
+  // ←/→ on the inspector cycle the [Inspector] / [Actions] / [Notes]
+  // tabs (#OSS-2057), mirroring the sidebar's left/right tab semantics
+  // and the `[`/`]` keyboard alternatives below. The visible hint in the
+  // inspector chrome shows ←/→ because the bracketed `[/]` notation
+  // reads as "press the / key" — which is the global filter trigger and
+  // was making users think the binding was busted.
   if (key.leftArrow && state.focus === 'detail') {
-    return [action({ type: 'setInspectorTab', value: 'inspector' })]
+    return [action({ type: 'cycleInspectorTab', delta: -1 })]
   }
   if (key.rightArrow && state.focus === 'detail') {
-    return [action({ type: 'setInspectorTab', value: 'actions' })]
+    return [action({ type: 'cycleInspectorTab', delta: 1 })]
   }
 
   // ←/→ on the status surface jump between the staged / unstaged /
@@ -3162,6 +3183,27 @@ export function getLogInkInputEvents(
     }
   }
 
+  // Inspector Notes tab: Enter opens the add/edit prompt for the cursored
+  // commit's `refs/notes/commits` note (#OSS-2057). Seeded with the
+  // currently-loaded note text (if any) so editing an existing note
+  // starts from its current body instead of a blank field.
+  if (
+    key.return &&
+    state.focus === 'detail' &&
+    state.inspectorTab === 'notes'
+  ) {
+    const selected = getSelectedInkCommit(state)
+    if (selected) {
+      return [action({
+        type: 'openInputPrompt',
+        kind: 'edit-commit-note',
+        label: `Note for ${selected.hash.slice(0, 8)}`,
+        initial: context.commitNoteText || '',
+        multiline: true,
+      })]
+    }
+  }
+
   // From the inspector / commit-diff detail panel, Enter opens (or refocuses)
   // the diff view scoped to the currently-selected commit and file. Lets the
   // user drive the explore flow entirely from the right panel: j/k picks a
@@ -3520,6 +3562,14 @@ export function getLogInkInputEvents(
   if (inputValue === 'M' && state.activeView === 'pull-request') {
     return [action({ type: 'setPendingChoice', value: autoMergeStrategyChoice('automerge-pr') })]
   }
+  // #1933 — draft→ready and reopen, gated through the same y-confirm
+  // path as `approve-pr` (rewrites publicly-visible forge state).
+  if (inputValue === 'd' && state.activeView === 'pull-request') {
+    return [action({ type: 'setPendingConfirmation', value: 'ready-pr' })]
+  }
+  if (inputValue === 'X' && state.activeView === 'pull-request') {
+    return [action({ type: 'setPendingConfirmation', value: 'reopen-pr' })]
+  }
 
   // #882 phase 4 — issue triage per-row actions. Scoped to the
   // `'issues'` view + commits focus so the single-letter keys stay
@@ -3654,6 +3704,14 @@ export function getLogInkInputEvents(
     }
     if (inputValue === 'M' && context.pullRequestTriageCount) {
       return [action({ type: 'setPendingChoice', value: autoMergeStrategyChoice('triage-pr-automerge') })]
+    }
+    // #1933 — draft→ready and reopen, mirroring the single-PR panel's
+    // `d` / `X` keys (see above) at their by-number triage equivalents.
+    if (inputValue === 'd' && context.pullRequestTriageCount) {
+      return [action({ type: 'setPendingConfirmation', value: 'triage-pr-ready' })]
+    }
+    if (inputValue === 'X' && context.pullRequestTriageCount) {
+      return [action({ type: 'setPendingConfirmation', value: 'triage-pr-reopen' })]
     }
     // #882 phase 6 — cycle the canned filter preset (open → draft
     // → mine → assigned → closed → merged → open). The effect in

@@ -1,3 +1,4 @@
+import { execFile } from 'child_process'
 import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -9,14 +10,24 @@ import {
   cherryPickRange,
   createBranchFromCommit,
   createTagAtCommit,
+  defaultOpenUrlRunner,
   historyActionTestInternals,
   rewordHeadCommit,
   resetToCommit,
+  restorePreviousHead,
   revertCommit,
   autosquashRebase,
   createFixupCommit,
   startInteractiveRebase,
 } from './historyActions'
+
+jest.mock('child_process', () => ({
+  ...jest.requireActual('child_process'),
+  execFile: jest.fn(),
+  spawn: jest.fn(),
+}))
+
+const mockedExecFile = execFile as unknown as jest.Mock
 
 describe('log history actions', () => {
   const commit = {
@@ -325,6 +336,56 @@ describe('log history actions', () => {
     expect(git.raw).toHaveBeenNthCalledWith(2, ['rebase', '-i', `${commit.hash}^`])
   })
 
+  describe('restorePreviousHead (OSS-1606 undo-stack inverse for resetToCommit)', () => {
+    it('defaults to --hard when no mode is given', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+
+      await expect(restorePreviousHead(git as never, 'abcdef1234567890')).resolves.toEqual({
+        ok: true,
+        message: 'Restored HEAD to abcdef1',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'abcdef1234567890'])
+    })
+
+    it.each(['soft', 'mixed', 'hard'] as const)(
+      'mirrors a %s original reset with the matching mode',
+      async (mode) => {
+        const git = {
+          revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+          raw: jest.fn().mockResolvedValue(''),
+        }
+
+        await expect(restorePreviousHead(git as never, 'abcdef1234567890', mode)).resolves.toEqual({
+          ok: true,
+          message: 'Restored HEAD to abcdef1',
+        })
+        expect(git.raw).toHaveBeenCalledWith(['reset', `--${mode}`, 'abcdef1234567890'])
+      }
+    )
+
+    it('blocks while another git operation is in progress', async () => {
+      const tempDir = mkdtempSync(join(tmpdir(), 'coco-history-restore-'))
+      const mergeHead = join(tempDir, 'MERGE_HEAD')
+      writeFileSync(mergeHead, 'abcdef1234567890')
+      const git = {
+        revparse: jest.fn().mockResolvedValue(mergeHead),
+        raw: jest.fn(),
+      }
+      try {
+        await expect(restorePreviousHead(git as never, 'abcdef1234567890')).resolves.toEqual({
+          ok: false,
+          message: 'Finish or abort the in-progress merge before editing history.',
+        })
+        expect(git.raw).not.toHaveBeenCalled()
+      } finally {
+        rmSync(tempDir, { force: true, recursive: true })
+      }
+    })
+  })
+
   it('creates a fixup commit targeting the cursored commit', async () => {
     const git = {
       revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
@@ -519,5 +580,72 @@ describe('log history actions', () => {
         message: "fatal: a branch named 'feature/x' already exists",
       })
     })
+  })
+})
+
+describe('defaultOpenUrlRunner', () => {
+  const originalPlatform = process.platform
+
+  function setPlatform(platform: NodeJS.Platform) {
+    Object.defineProperty(process, 'platform', { value: platform })
+  }
+
+  beforeEach(() => {
+    mockedExecFile.mockReset()
+    mockedExecFile.mockImplementation((_command, _args, callback) => callback(null))
+  })
+
+  afterEach(() => {
+    setPlatform(originalPlatform)
+  })
+
+  it('rejects non-http(s) URLs before launching anything', async () => {
+    await expect(defaultOpenUrlRunner('javascript:alert(1)')).rejects.toThrow(/unsupported URL/)
+    await expect(defaultOpenUrlRunner('not a url')).rejects.toThrow(/invalid URL/)
+    expect(mockedExecFile).not.toHaveBeenCalled()
+  })
+
+  it('opens Windows URLs via rundll32 instead of `cmd /c start`, avoiding cmd.exe shell parsing (#1900)', async () => {
+    setPlatform('win32')
+
+    // A remote-derived URL containing shell metacharacters (e.g. `&calc`)
+    // must never reach cmd.exe, which would parse it as a second command.
+    const url = 'https://example.com/a&calc/b'
+    await defaultOpenUrlRunner(url)
+
+    expect(mockedExecFile).toHaveBeenCalledTimes(1)
+    const [command, args] = mockedExecFile.mock.calls[0]
+    expect(command).toBe('rundll32')
+    expect(args).toEqual(['url.dll,FileProtocolHandler', url])
+    expect(command).not.toBe('cmd')
+  })
+
+  it('opens macOS URLs via `open`', async () => {
+    setPlatform('darwin')
+
+    await defaultOpenUrlRunner('https://example.com/repo')
+
+    expect(mockedExecFile).toHaveBeenCalledWith('open', ['https://example.com/repo'], expect.any(Function))
+  })
+
+  it('opens Linux URLs via `xdg-open`', async () => {
+    setPlatform('linux')
+
+    await defaultOpenUrlRunner('https://example.com/repo')
+
+    expect(mockedExecFile).toHaveBeenCalledWith('xdg-open', ['https://example.com/repo'], expect.any(Function))
+  })
+})
+
+describe('historyActionTestInternals.assertOpenableUrl', () => {
+  it('accepts well-formed http(s) URLs', () => {
+    expect(() => historyActionTestInternals.assertOpenableUrl('https://github.com/gfargo/coco')).not.toThrow()
+    expect(() => historyActionTestInternals.assertOpenableUrl('http://example.com')).not.toThrow()
+  })
+
+  it('rejects unparseable and non-http(s) URLs', () => {
+    expect(() => historyActionTestInternals.assertOpenableUrl('not a url')).toThrow(/invalid URL/)
+    expect(() => historyActionTestInternals.assertOpenableUrl('file:///etc/passwd')).toThrow(/unsupported URL/)
+    expect(() => historyActionTestInternals.assertOpenableUrl('javascript:alert(1)')).toThrow(/unsupported URL/)
   })
 })

@@ -1,5 +1,6 @@
 import {
   buildDrillInUiArgv,
+  finalizeWorkspaceExit,
   resolveWorkspaceKnownRepos,
   resolveWorkspaceMaxDepth,
   resolveWorkspaceRoots,
@@ -165,5 +166,34 @@ describe('runWorkspaceLoop', () => {
 
     expect(chdir).toHaveBeenNthCalledWith(1, '/repos/broken')
     expect(chdir).toHaveBeenLastCalledWith('/start')
+  })
+})
+
+describe('finalizeWorkspaceExit', () => {
+  const originalExitCode = process.exitCode
+
+  beforeEach(() => {
+    process.exitCode = undefined
+  })
+
+  afterEach(() => {
+    process.exitCode = originalExitCode
+  })
+
+  it('exits 0 when nothing set process.exitCode', () => {
+    const exit = jest.fn() as unknown as (code?: number) => never
+
+    finalizeWorkspaceExit(exit)
+
+    expect(exit).toHaveBeenCalledWith(0)
+  })
+
+  it('preserves a non-zero process.exitCode instead of forcing 0', () => {
+    process.exitCode = 1
+    const exit = jest.fn() as unknown as (code?: number) => never
+
+    finalizeWorkspaceExit(exit)
+
+    expect(exit).toHaveBeenCalledWith(1)
   })
 })

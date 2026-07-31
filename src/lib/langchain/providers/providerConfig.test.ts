@@ -16,7 +16,7 @@ import { getLlm } from '../utils/getLlm'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
 
 type ProviderCase = {
-  provider: 'openai' | 'gemini' | 'mistral' | 'azure' | 'anthropic'
+  provider: 'openai' | 'gemini' | 'mistral' | 'azure' | 'anthropic' | 'deepseek'
   model: string
   extraService?: Record<string, unknown>
   /** Field name the provider's LangChain client stores the output-token cap under. */
@@ -34,6 +34,9 @@ const CASES: ProviderCase[] = [
     extraService: { instanceName: 'inst', deploymentName: 'gpt-4o', apiVersion: '2024-10-21' },
     maxTokensField: 'maxTokens',
   },
+  // DeepSeek — one of the OpenAI-compatible presets (#OSS-1623). Shares
+  // `createOpenAiLlm`, so the same config-forwarding contract applies.
+  { provider: 'deepseek', model: 'deepseek-chat', maxTokensField: 'maxTokens' },
 ]
 
 function makeConfig(c: ProviderCase, service: Record<string, unknown> = {}): Config {
@@ -89,6 +92,115 @@ describe.each(CASES)('provider config forwarding — $provider', (c) => {
       makeConfig(c, { fields: { [c.maxTokensField]: 8192 } })
     ) as unknown as Record<string, unknown>
     expect(llm[c.maxTokensField]).toBe(8192)
+  })
+
+  it('translates reasoningEffort per the provider capability flag (mistral has none, and no-ops)', async () => {
+    const llm = await getLlm(
+      c.provider,
+      c.model as LLMModel,
+      makeConfig(c, { reasoningEffort: 'high' })
+    ) as unknown as Record<string, unknown>
+
+    switch (c.provider) {
+      case 'gemini':
+        expect((llm.thinkingConfig as { thinkingLevel?: string } | undefined)?.thinkingLevel).toBe('HIGH')
+        break
+      case 'anthropic':
+        expect((llm.thinking as { type?: string } | undefined)?.type).toBe('adaptive')
+        expect((llm.outputConfig as { effort?: string } | undefined)?.effort).toBe('high')
+        break
+      case 'mistral':
+        // No `supportsReasoningEffort` flag — the option is silently ignored, never throws.
+        expect(llm.reasoning).toBeUndefined()
+        break
+      default:
+        expect((llm.reasoning as { effort?: string } | undefined)?.effort).toBe('high')
+    }
+  })
+
+  it('omits the default temperature when reasoningEffort is set (Completions path 400s on a non-1 temperature for reasoning models)', async () => {
+    if (c.provider !== 'openai' && c.provider !== 'azure') return
+
+    const llm = await getLlm(c.provider, c.model as LLMModel, makeConfig(c, { reasoningEffort: 'low' }))
+    expect(temperatureOf(llm)).toBeUndefined()
+  })
+
+  it('normalizes away an explicit non-1 temperature when reasoningEffort is set', async () => {
+    if (c.provider !== 'openai' && c.provider !== 'azure') return
+
+    const llm = await getLlm(
+      c.provider,
+      c.model as LLMModel,
+      makeConfig(c, { reasoningEffort: 'low', temperature: 0.9 })
+    )
+    expect(temperatureOf(llm)).toBeUndefined()
+  })
+})
+
+describe('anthropic reasoning effort + prompt caching', () => {
+  const anthropicCase = CASES.find((c) => c.provider === 'anthropic')!
+
+  it('skips the 0.2 temperature default when reasoningEffort is set (extended thinking rejects it)', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase, { reasoningEffort: 'low' })
+    )
+    expect(temperatureOf(llm)).toBeUndefined()
+  })
+
+  it('still respects an explicit temperature of 1 alongside reasoningEffort', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase, { reasoningEffort: 'low', temperature: 1 })
+    )
+    expect(temperatureOf(llm)).toBe(1)
+  })
+
+  it('normalizes away an explicit non-1 temperature when reasoningEffort is set', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase, { reasoningEffort: 'low', temperature: 0.9 })
+    )
+    expect(temperatureOf(llm)).toBeUndefined()
+  })
+
+  it('grades outputConfig.effort per reasoningEffort tier, mapping minimal down to low', async () => {
+    const cases: Array<['minimal' | 'low' | 'medium' | 'high', string]> = [
+      ['minimal', 'low'],
+      ['low', 'low'],
+      ['medium', 'medium'],
+      ['high', 'high'],
+    ]
+
+    for (const [reasoningEffort, expected] of cases) {
+      const llm = (await getLlm(
+        'anthropic',
+        anthropicCase.model as LLMModel,
+        makeConfig(anthropicCase, { reasoningEffort })
+      )) as unknown as { outputConfig?: { effort?: string } }
+      expect(llm.outputConfig?.effort).toBe(expected)
+    }
+  })
+
+  it('binds cache_control as a call option when promptCache is enabled', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase, { promptCache: true })
+    ) as unknown as { config?: { cache_control?: { type?: string } } }
+    expect(llm.config?.cache_control).toEqual({ type: 'ephemeral' })
+  })
+
+  it('does not bind cache_control when promptCache is unset', async () => {
+    const llm = await getLlm(
+      'anthropic',
+      anthropicCase.model as LLMModel,
+      makeConfig(anthropicCase)
+    ) as unknown as { config?: unknown }
+    expect(llm.config).toBeUndefined()
   })
 })
 

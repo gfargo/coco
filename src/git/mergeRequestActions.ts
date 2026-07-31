@@ -453,6 +453,93 @@ export function buildMergeRequestDiffArgs(mergeRequestNumber: number): string[] 
 }
 
 /**
+ * `glab mr reopen <n>` — the GitLab counterpart of `reopenIssue` (#1933).
+ * Recovers an MR closed via `closeMergeRequestByNumber`.
+ */
+export function reopenMergeRequestByNumber(
+  mergeRequestNumber: number,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestActionResult> {
+  return runGlabAction(
+    runner,
+    ['mr', 'reopen', String(mergeRequestNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Reopened merge request !${mergeRequestNumber}`,
+    }),
+    hostname
+  )
+}
+
+/**
+ * Draft prefixes GitLab recognizes on an MR title — "Draft:" is current,
+ * "WIP:" is the legacy convention it still honors, and both also match in
+ * their bracket (`[Draft]`) and paren (`(Draft)`) forms, which GitLab's own
+ * draft detection treats identically to the colon form.
+ */
+const DRAFT_TITLE_PREFIX = /^\s*(?:\[\s*(?:draft|wip)\s*\]|\(\s*(?:draft|wip)\s*\)|(?:draft|wip)\s*:)\s*/i
+
+async function fetchMergeRequestTitle(
+  projectPath: string,
+  mergeRequestNumber: number,
+  runner: GlabRunner
+): Promise<string | undefined> {
+  const out = (
+    await runner(['api', `projects/${encodeURIComponent(projectPath)}/merge_requests/${mergeRequestNumber}`])
+  ).trim()
+  const mr = out ? (JSON.parse(out) as { title?: string }) : undefined
+  return mr?.title
+}
+
+/**
+ * Promote a draft MR to ready for review (#1933), the glab counterpart of
+ * `gh pr ready`. glab has no dedicated "ready" verb — GitLab's draft state
+ * is carried by a `Draft:` (or legacy `WIP:`) title prefix, so this fetches
+ * the current title via `glab api` and PUTs it back with the prefix
+ * stripped. A title with neither prefix is left untouched (already ready)
+ * so a user-authored title that merely mentions "draft" mid-sentence is
+ * never rewritten.
+ */
+export async function markMergeRequestReadyByNumber(
+  projectPath: string,
+  mergeRequestNumber: number,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestActionResult> {
+  try {
+    const title = await fetchMergeRequestTitle(projectPath, mergeRequestNumber, runner)
+    if (title === undefined) {
+      return { ok: false, message: `Could not fetch merge request !${mergeRequestNumber}.` }
+    }
+    if (!DRAFT_TITLE_PREFIX.test(title)) {
+      return { ok: true, message: `Merge request !${mergeRequestNumber} is not a draft` }
+    }
+    const readyTitle = title.replace(DRAFT_TITLE_PREFIX, '')
+    if (!readyTitle.trim()) {
+      return {
+        ok: false,
+        message: `Cannot mark merge request !${mergeRequestNumber} ready: the title is only the draft prefix. Rename it first.`,
+      }
+    }
+    return await runGlabAction(
+      runner,
+      [
+        'api',
+        `projects/${encodeURIComponent(projectPath)}/merge_requests/${mergeRequestNumber}`,
+        '-X', 'PUT',
+        '-f', `title=${readyTitle}`,
+      ],
+      () => ({ ok: true, message: `Marked merge request !${mergeRequestNumber} as ready for review` }),
+      hostname
+    )
+  } catch (error) {
+    const { message, details } = await resolveGlabActionError(error, runner, hostname)
+    return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
+}
+
+/**
  * Unified-patch fetch for a merge request by number — the GitLab
  * counterpart of `getPullRequestDiff` (#1363). Returns the shared
  * `PullRequestDiffResult` so the workstation's PR-diff hydration

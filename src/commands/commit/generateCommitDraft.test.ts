@@ -16,6 +16,7 @@ import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
 import {
     checkCommitlintAvailability,
+    getBuiltInConventionalRulesContext,
     validateCommitMessage,
     validateConventionalCommitMessage,
 } from '../../lib/utils/commitlintValidator'
@@ -63,6 +64,9 @@ const mockValidateCommitMessage = validateCommitMessage as jest.MockedFunction<
 >
 const mockValidateConventionalCommitMessage = validateConventionalCommitMessage as jest.MockedFunction<
   typeof validateConventionalCommitMessage
+>
+const mockGetBuiltInConventionalRulesContext = getBuiltInConventionalRulesContext as jest.MockedFunction<
+  typeof getBuiltInConventionalRulesContext
 >
 const mockExecuteChainWithSchema = executeChainWithSchema as jest.MockedFunction<
   typeof executeChainWithSchema
@@ -140,6 +144,7 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
     mockCheckCommitlintAvailability.mockReturnValue({ available: true, missingPackages: [] })
     mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
     mockValidateConventionalCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockGetBuiltInConventionalRulesContext.mockReturnValue('')
     mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
   })
 
@@ -251,6 +256,45 @@ describe('generateCommitDraft — diff summary budgeting (OSS-504 / #1459)', () 
     )
     expect(mockValidateCommitMessage).not.toHaveBeenCalled()
   })
+
+  it('injects the built-in commitlint rules into the prompt for untrusted conventional generation (OSS-1326 / #1854)', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+    mockGetBuiltInConventionalRulesContext.mockReturnValue(
+      '## Commitlint Rules\nYour commit message must follow these project-specific rules:\n- Body lines must be 100 characters or less (including spaces)\n'
+    )
+
+    await generateCommitDraft({
+      git,
+      argv: buildArgv({ conventional: true }),
+      preparedSummary: 'Changed the agent transport.',
+      trustRepositoryConfig: false,
+    })
+
+    expect(mockGetBuiltInConventionalRulesContext).toHaveBeenCalled()
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as {
+      commitlint_rules_context: string
+    }
+    expect(variables.commitlint_rules_context).toContain(
+      'Body lines must be 100 characters or less'
+    )
+  })
+
+  it('does not inject built-in commitlint rules when conventional mode is off', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+
+    await generateCommitDraft({
+      git,
+      argv: buildArgv({ conventional: false }),
+      preparedSummary: 'Changed the agent transport.',
+      trustRepositoryConfig: false,
+    })
+
+    expect(mockGetBuiltInConventionalRulesContext).not.toHaveBeenCalled()
+    const variables = mockExecuteChainWithSchema.mock.calls[0][3] as {
+      commitlint_rules_context: string
+    }
+    expect(variables.commitlint_rules_context).toBe('')
+  })
 })
 
 describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)', () => {
@@ -282,6 +326,7 @@ describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)
     mockCheckCommitlintAvailability.mockReturnValue({ available: true, missingPackages: [] })
     mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
     mockValidateConventionalCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockGetBuiltInConventionalRulesContext.mockReturnValue('')
     mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
     mockFileChangeParser.mockResolvedValue('a short summary')
   })
@@ -324,5 +369,132 @@ describe('generateCommitDraft — language_context propagation (OSS-989 / #1683)
 
     const variables = mockExecuteChainWithSchema.mock.calls[0][3] as { language_context: string }
     expect(variables.language_context).toBe('')
+  })
+})
+
+describe('generateCommitDraft — repair pass on validation failure (OSS-1326 / #1854)', () => {
+  const git = {
+    status: jest.fn().mockResolvedValue({ files: [] }),
+  } as unknown as SimpleGit
+
+  beforeEach(() => {
+    jest.resetAllMocks()
+
+    mockGetApiKeyForModel.mockReturnValue('test-key')
+    mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'openai', model: 'gpt-4o' })
+    mockResolveDynamicService.mockImplementation((config, task) => ({
+      ...(config.service as Record<string, unknown>),
+      model: task === 'commit' ? 'commit-model' : 'summarize-model',
+    }) as ReturnType<typeof resolveDynamicService>)
+    mockGetLlm.mockResolvedValue({} as Awaited<ReturnType<typeof getLlm>>)
+    mockGetTokenCounterForProvider.mockResolvedValue(charTokenizer)
+    mockGetCurrentBranchName.mockResolvedValue('main')
+    mockGetPreviousCommits.mockResolvedValue('')
+    mockHasCommitlintConfig.mockResolvedValue(false)
+    mockCheckCommitlintAvailability.mockReturnValue({ available: true, missingPackages: [] })
+    mockValidateCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockValidateConventionalCommitMessage.mockResolvedValue({ valid: true, errors: [], warnings: [] })
+    mockGetBuiltInConventionalRulesContext.mockReturnValue('')
+    mockExecuteChainWithSchema.mockResolvedValue({ title: 'feat: test change', body: 'Test body.' })
+    mockFileChangeParser.mockResolvedValue('a short summary')
+  })
+
+  it('repairs an over-long body line and returns ok:true without an extra LLM call', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+    // Both generation attempts produce the same message with an over-long body line.
+    // Use a wrappable string (words with spaces) so the word-wrap repair can split it.
+    const longLine = 'Update the authentication module to support OAuth 2.0 and PKCE flows including refresh token handling and revocation endpoints'
+    expect(longLine.length).toBeGreaterThan(100)
+    mockExecuteChainWithSchema.mockResolvedValue({
+      title: 'chore: update deps',
+      body: longLine,
+    })
+    // First validation call fails, second (after repair) passes
+    mockValidateConventionalCommitMessage
+      .mockResolvedValueOnce({ valid: false, errors: ["body's lines must not be longer than 100 characters"], warnings: [] })
+      .mockResolvedValueOnce({ valid: false, errors: ["body's lines must not be longer than 100 characters"], warnings: [] })
+      .mockResolvedValueOnce({ valid: true, errors: [], warnings: [] }) // repair re-validation
+
+    const result = await generateCommitDraft({
+      git,
+      argv: buildArgv({ conventional: true }),
+      preparedSummary: 'Updated some dependencies.',
+      trustRepositoryConfig: false,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.warnings).toContain(
+      'Commit message was automatically repaired to satisfy commitlint rules.'
+    )
+    expect(result.validationErrors).toHaveLength(0)
+    // The repaired body lines must all be ≤100 chars
+    const bodyLines = result.draft.split('\n\n')[1].split('\n')
+    for (const line of bodyLines) {
+      expect(line.length).toBeLessThanOrEqual(100)
+    }
+    // Only 2 LLM calls (the 2-attempt loop), not 3
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(2)
+  })
+
+  it('normalises an uppercase subject and returns ok:true without an extra LLM call', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+    mockExecuteChainWithSchema.mockResolvedValue({
+      title: 'feat(auth): Add OAuth support',
+      body: 'Implements the OAuth 2.0 flow.',
+    })
+    mockValidateConventionalCommitMessage
+      .mockResolvedValueOnce({
+        valid: false,
+        errors: ['subject must be sentence-case, start-case, pascal-case, upper-case, lower-case'],
+        warnings: [],
+      })
+      .mockResolvedValueOnce({
+        valid: false,
+        errors: ['subject must be sentence-case, start-case, pascal-case, upper-case, lower-case'],
+        warnings: [],
+      })
+      .mockResolvedValueOnce({ valid: true, errors: [], warnings: [] })
+
+    const result = await generateCommitDraft({
+      git,
+      argv: buildArgv({ conventional: true }),
+      preparedSummary: 'Added OAuth.',
+      trustRepositoryConfig: false,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(result.draft).toContain('feat(auth): add OAuth support')
+    expect(result.warnings).toContain(
+      'Commit message was automatically repaired to satisfy commitlint rules.'
+    )
+    expect(mockExecuteChainWithSchema).toHaveBeenCalledTimes(2)
+  })
+
+  it('still returns ok:false with a draft when repair cannot fix all violations', async () => {
+    mockLoadConfig.mockReturnValue(buildConfig() as never)
+    mockExecuteChainWithSchema.mockResolvedValue({
+      title: 'invalid-type: something',
+      body: 'body here',
+    })
+    const typeError = 'type must be one of [feat, fix, …]'
+    // All three validation calls fail (2 attempts + 1 post-repair)
+    mockValidateConventionalCommitMessage.mockResolvedValue({
+      valid: false,
+      errors: [typeError],
+      warnings: [],
+    })
+
+    const result = await generateCommitDraft({
+      git,
+      argv: buildArgv({ conventional: true }),
+      preparedSummary: 'Something changed.',
+      trustRepositoryConfig: false,
+    })
+
+    expect(result.ok).toBe(false)
+    expect(result.validationErrors).toContain(typeError)
+    // The draft is still provided so callers can hand-edit
+    expect(result.draft).toBeTruthy()
+    expect(result.message).toBeDefined()
   })
 })

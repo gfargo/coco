@@ -89,6 +89,7 @@ export type LogInkCommandId =
   | 'workflowRenameStash'
   | 'workflowStashBranch'
   | 'workflowUndoDropStash'
+  | 'workflowUndoLastAction'
   | 'workflowPushTag'
   | 'workflowDeleteRemoteTag'
   | 'workflowResolveOurs'
@@ -381,6 +382,18 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['gr'],
     label: 'reflog',
     description: 'Push the reflog browser view — chronological recovery log.',
+    contexts: ['normal'],
+  },
+  {
+    // OSS-1606 — pop the session-scoped undo stack (branch delete /
+    // stash drop / reset / tag delete) and run its recorded inverse.
+    // Lives in the `g` chord namespace alongside the other global/meta
+    // commands rather than a bare key, so it can't collide with any
+    // per-view single-letter binding.
+    id: 'workflowUndoLastAction',
+    keys: ['gu'],
+    label: 'undo',
+    description: 'Undo the most recent invertible destructive action from this session (branch delete, stash drop, reset, or tag delete).',
     contexts: ['normal'],
   },
   {
@@ -973,6 +986,14 @@ export type GetLogInkFooterHintsOptions = {
    * affordance (`v/esc → main`) since the user is mid-glance, not
    * navigating. */
   peeking?: boolean
+  /**
+   * Depth of the session-scoped undo stack (OSS-1606). When > 0, the
+   * default (non-overlay) global hint cluster surfaces `gu undo (N)` so
+   * the safety net stays discoverable exactly when it's actionable —
+   * hidden the rest of the time rather than advertising a key that
+   * would just report "nothing to undo".
+   */
+  undoStackSize?: number
 }
 
 export type LogInkChordContinuation = {
@@ -1094,6 +1115,10 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',
+  // The undo safety net (OSS-1606) belongs with the other essentials, not
+  // `edit` (compose-surface authoring) — it's a global recovery action,
+  // not a commit-message key, and its whole point is to be easy to find.
+  workflowUndoLastAction: 'essentials',
   // ── Navigation: focus + view jumps. The g-prefix navigation chords
   //    cluster here so users learn them as a set.
   focusNext: 'navigation',
@@ -1371,6 +1396,16 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
       global: SINGLE_PANE_GLOBAL_HINTS,
     }
   }
+  // OSS-1606 — surface the undo stack ONLY in the default (non-overlay)
+  // global cluster: the reference-equality check against
+  // NORMAL_GLOBAL_HINTS confirms we're in one of the plain per-view /
+  // per-focus branches below, not mid-overlay (help / palette / filter /
+  // split-plan), where `gu` isn't actually live and advertising it would
+  // be a footer lie. Hidden entirely at depth 0 rather than always
+  // shown-but-inert — an undo hint that does nothing is noise.
+  if (options.undoStackSize && options.undoStackSize > 0 && hints.global === NORMAL_GLOBAL_HINTS) {
+    return { ...hints, global: [...NORMAL_GLOBAL_HINTS, `gu undo (${options.undoStackSize})`] }
+  }
   return hints
 }
 
@@ -1633,8 +1668,10 @@ function pullRequestHints(): LogInkFooterHints {
   // a global). Each routes through y-confirm or an input prompt;
   // none fire silently. OSS-1615 adds K (re-run failed checks,
   // fires directly) and M (auto-merge, opens the strategy picker).
+  // #1933 adds d (mark ready) / X (reopen), both confirm-gated like
+  // a/approve.
   return {
-    contextual: ['m merge', 'x close', 'a approve', 'R changes', 'c comment', 'K rerun checks', 'M auto-merge', 'O open', 'esc back'],
+    contextual: ['m merge', 'x close', 'a approve', 'd ready', 'X reopen', 'R changes', 'c comment', 'K rerun checks', 'M auto-merge', 'O open', 'esc back'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1673,11 +1710,11 @@ function issuesHints(): LogInkFooterHints {
 function pullRequestTriageHints(): LogInkFooterHints {
   // #882 phase 4-6 — full PR action panel scoped to the triage
   // list + filter cycling; #1363 adds the review pair (enter →
-  // read the diff, C → check the branch out locally). AI
-  // summarize (`I`) deferred to a follow-up. OSS-1615 adds K
-  // (re-run failed checks) and M (auto-merge).
+  // read the diff, C → check the branch out locally). OSS-1615 adds K
+  // (re-run failed checks) and M (auto-merge). #1933 adds d (mark
+  // ready) / X (reopen). AI summarize (`I`) deferred to a follow-up.
   return {
-    contextual: ['↑/↓ PRs', 'enter diff', 'C checkout', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'R changes*', 'K rerun checks', 'M auto-merge*', 'esc back'],
+    contextual: ['↑/↓ PRs', 'enter diff', 'C checkout', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'd ready', 'X reopen', 'R changes*', 'K rerun checks', 'M auto-merge*', 'esc back'],
     global: NORMAL_GLOBAL_HINTS,
   }
 }

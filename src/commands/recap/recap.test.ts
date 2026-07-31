@@ -260,6 +260,46 @@ describe('recap command', () => {
     expect(mockGetChangesByTimestamp).toHaveBeenCalled()
   })
 
+  it('falls back to a config-file currentBranch when nothing is set on the CLI', async () => {
+    mockLoadConfig.mockReturnValue({
+      service: {
+        authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+        provider: 'openai',
+        model: 'gpt-4o',
+        tokenLimit: 4096,
+        temperature: 0.2,
+        maxConcurrent: 1,
+      },
+      defaultBranch: 'main',
+      mode: 'stdout',
+      currentBranch: true,
+    } as unknown as Config)
+
+    await handler(argv, logger)
+    expect(mockGetDiffForBranch).toHaveBeenCalled()
+  })
+
+  it('honors an explicit --timeframe over a config-file currentBranch (#1898 follow-up)', async () => {
+    mockLoadConfig.mockReturnValue({
+      service: {
+        authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+        provider: 'openai',
+        model: 'gpt-4o',
+        tokenLimit: 4096,
+        temperature: 0.2,
+        maxConcurrent: 1,
+      },
+      defaultBranch: 'main',
+      mode: 'stdout',
+      currentBranch: true,
+    } as unknown as Config)
+
+    argv.timeframe = 'last-week'
+    await handler(argv, logger)
+    expect(mockGetChangesByTimestamp).toHaveBeenCalled()
+    expect(mockGetDiffForBranch).not.toHaveBeenCalled()
+  })
+
   it('emits machine-readable JSON when --json is passed', async () => {
     argv.json = true
     mockGetChanges.mockResolvedValue({
@@ -354,7 +394,12 @@ describe('recap command', () => {
         },
         provider: 'openai',
         model: 'gpt-4o',
-        tokenLimit: 700,
+        // Large enough that the reserve-adjusted budget (tokenLimit - the
+        // default 512-token response reserve) still leaves room for the
+        // rendered prompt overhead (instructions/format/timeframe/language
+        // context), so trimming the oversized `changes` diff is possible
+        // rather than the request being rejected outright as unsatisfiable.
+        tokenLimit: 1300,
         temperature: 0.2,
         maxConcurrent: 1,
       },
