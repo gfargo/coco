@@ -30,17 +30,22 @@ export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] 
     const tokens = row.promptTokens > 0 || row.completionTokens > 0
       ? `${row.promptTokens} in / ${row.completionTokens} out tok`
       : '–'
-    // Cache hit-rate is only meaningful once we have both a cached count and
-    // a denominator to divide it by. Prefer the provider's own reported
-    // `inputTokens` — `promptTokens` is a local tiktoken estimate (further
-    // skewed by each provider's tokenCorrectionFactor), so dividing the
-    // provider's real cachedInputTokens by it can overstate the rate.
+    // Diff-summary cache hit-rate (#1958): whether we skipped the LLM call
+    // entirely because a cached diff summary already existed.
+    const diffCache = row.cacheLookups > 0
+      ? `  diff-cache ${Math.round((row.cacheHits / row.cacheLookups) * 100)}% (${row.cacheHits}/${row.cacheLookups})`
+      : ''
+    // Provider prompt-cache hit-rate: how much of the input the provider
+    // itself served from its prompt cache. Prefer the provider's own
+    // reported `inputTokens` — `promptTokens` is a local tiktoken estimate
+    // (further skewed by each provider's tokenCorrectionFactor), so dividing
+    // the provider's real cachedInputTokens by it can overstate the rate.
     // Clamped to 100% as a backstop for whichever denominator is used.
     const hitRateDenominator = row.inputTokens > 0 ? row.inputTokens : row.promptTokens
-    const hitRate = row.cachedInputTokens > 0 && hitRateDenominator > 0
-      ? `  cache ${Math.min(100, Math.round((row.cachedInputTokens / hitRateDenominator) * 100))}%`
+    const promptCache = row.cachedInputTokens > 0 && hitRateDenominator > 0
+      ? `  prompt-cache ${Math.min(100, Math.round((row.cachedInputTokens / hitRateDenominator) * 100))}%`
       : ''
-    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms${hitRate}`
+    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms${diffCache}${promptCache}`
   })
 }
 
@@ -57,11 +62,13 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
   const bySurface = summarizeUsageBySurface(records)
   const byRepo = summarizeUsageByRepo(records)
   const hasRepoData = byRepo.some((row) => row.key !== 'unknown')
+  const callCount = records.filter((r) => r.cacheHit !== true).length
+  const cacheHitCount = records.length - callCount
 
   if (json) {
     emitJson({
       routing: profile,
-      usage: { records: records.length, byTask, byModel, bySurface, byRepo },
+      usage: { records: records.length, calls: callCount, cacheHits: cacheHitCount, byTask, byModel, bySurface, byRepo },
     })
     return
   }
@@ -88,7 +95,12 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
     return
   }
 
-  logger.log(chalk.bold(`LLM usage`) + chalk.dim(` (${records.length} call(s) · ${getUsageLogPath()})`))
+  logger.log(
+    chalk.bold(`LLM usage`) +
+      chalk.dim(
+        ` (${callCount} call(s)${cacheHitCount ? ` · ${cacheHitCount} cache hit(s)` : ''} · ${getUsageLogPath()})`
+      )
+  )
   logger.log('')
   logger.log(chalk.dim('  By task:'))
   for (const line of renderUsageRows(byTask, 'call')) logger.log(line)

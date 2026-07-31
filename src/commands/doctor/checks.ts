@@ -8,6 +8,7 @@ import {
 import { DEFAULT_OLLAMA_ENDPOINT, getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
 import { DEPRECATED_MODELS, detectProviderMismatch } from '../../lib/langchain/modelValidity'
 import { LLMProvider } from '../../lib/langchain/types'
+import { readUsageRecords, summarizeUsageByTask } from '../../lib/langchain/utils/usageLedger'
 import { LLM_PROVIDER_IDS, providerRequiresAuth } from '../../lib/langchain/providers/registry'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
@@ -44,8 +45,48 @@ export function runDiagnostics(config: Config): Diagnostic[] {
   checkEndpointSupport(config, diagnostics)
   checkIgnoredFiles(config, diagnostics)
   checkProjectConfigFile(diagnostics)
+  checkCacheHitRate(diagnostics)
 
   return diagnostics
+}
+
+/**
+ * Diff-summary cache tasks (#1958). Only these two call sites consult
+ * `diffSummaryCache` — summing their hit/lookup counts gives the
+ * effective cache hit rate across a run of `coco commit`/`coco changelog`.
+ */
+const CACHE_ELIGIBLE_TASKS = ['summarize-large-file', 'summarize-directory-diff']
+
+/** Below this many lookups, a single miss/hit swings the rate too much to warn on. */
+const CACHE_HIT_RATE_MIN_LOOKUPS = 20
+
+/** Warn when the hit rate across eligible tasks falls below this fraction. */
+const CACHE_HIT_RATE_WARN_THRESHOLD = 0.3
+
+export function checkCacheHitRate(diagnostics: Diagnostic[]) {
+  const records = readUsageRecords()
+  if (records.length === 0) return
+
+  const { cacheHits, cacheLookups } = summarizeUsageByTask(records)
+    .filter((row) => CACHE_ELIGIBLE_TASKS.includes(row.key))
+    .reduce(
+      (acc, row) => ({
+        cacheHits: acc.cacheHits + row.cacheHits,
+        cacheLookups: acc.cacheLookups + row.cacheLookups,
+      }),
+      { cacheHits: 0, cacheLookups: 0 }
+    )
+
+  if (cacheLookups < CACHE_HIT_RATE_MIN_LOOKUPS) return
+
+  const rate = cacheHits / cacheLookups
+  if (rate < CACHE_HIT_RATE_WARN_THRESHOLD) {
+    diagnostics.push({
+      severity: 'warn',
+      message: `Diff-summary cache hit rate is low (${Math.round(rate * 100)}% over ${cacheLookups} lookup(s)).`,
+      fix: 'Run coco from the repo root (a stable cache key needs a stable repo path), keep service.model consistent across runs, and avoid COCO_NO_CACHE unless intentionally bypassing the cache. See `coco doctor --cost` for the full breakdown.',
+    })
+  }
 }
 
 function checkServiceBlock(config: Config, diagnostics: Diagnostic[]) {

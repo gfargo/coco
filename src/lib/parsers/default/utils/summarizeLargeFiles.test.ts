@@ -1,6 +1,12 @@
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import { FileDiff, DiffNode } from '../../../types'
 import { summarize } from '../../../langchain/chains/summarize'
+import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
+import { readUsageRecords } from '../../../langchain/utils/usageLedger'
 import { summarizeLargeFiles, preprocessLargeFiles } from './summarizeLargeFiles'
+import { diffSummaryKey, resolveDiffSummaryCacheRepoPath, writeDiffSummary } from './diffSummaryCache'
 
 // Mock the summarize function
 jest.mock('../../../langchain/chains/summarize', () => ({
@@ -428,6 +434,115 @@ describe('summarizeLargeFiles', () => {
     result.forEach((diff) => {
       expect(diff.diff).toContain('Summary')
     })
+  })
+})
+
+describe('diff-summary cache hit/miss reporting (#1958)', () => {
+  const mockTokenizer = (text: string) => Math.ceil(text.length / 4)
+  const mockLogger = {
+    verbose: jest.fn().mockReturnThis(),
+    log: jest.fn().mockReturnThis(),
+    startSpinner: jest.fn().mockReturnThis(),
+    stopSpinner: jest.fn().mockReturnThis(),
+    startTimer: jest.fn().mockReturnThis(),
+    stopTimer: jest.fn().mockReturnThis(),
+  }
+  const mockChain = {} as never
+  const mockTextSplitter = {} as never
+
+  let cacheDir: string
+  let usageDir: string
+  let usageLogPath: string
+  const prevXdgCacheHome = process.env.XDG_CACHE_HOME
+  const prevUsageLog = process.env.COCO_USAGE_LOG
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-diffcache-'))
+    usageDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-usage-'))
+    usageLogPath = path.join(usageDir, 'usage.jsonl')
+    process.env.XDG_CACHE_HOME = cacheDir
+    process.env.COCO_USAGE_LOG = usageLogPath
+  })
+
+  afterEach(() => {
+    if (prevXdgCacheHome === undefined) delete process.env.XDG_CACHE_HOME
+    else process.env.XDG_CACHE_HOME = prevXdgCacheHome
+    if (prevUsageLog === undefined) delete process.env.COCO_USAGE_LOG
+    else process.env.COCO_USAGE_LOG = prevUsageLog
+    fs.rmSync(cacheDir, { recursive: true, force: true })
+    fs.rmSync(usageDir, { recursive: true, force: true })
+  })
+
+  it('records a cacheHit:true usage entry and skips the LLM on a cache hit', async () => {
+    const diff = 'a'.repeat(2000)
+    const model = 'gpt-4o'
+    const repo = resolveDiffSummaryCacheRepoPath()
+    const key = diffSummaryKey(diff, model, SUMMARIZE_PROMPT_HASH)
+    writeDiffSummary(repo, key, { summary: 'cached summary', model, tokens: 5 })
+
+    const diffs: FileDiff[] = [{ file: 'large.ts', diff, summary: 'large.ts', tokenCount: 600 }]
+
+    const result = await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+      metadata: { model },
+    })
+
+    expect(result[0].diff).toBe('cached summary')
+    expect(mockSummarize).not.toHaveBeenCalled()
+
+    const records = readUsageRecords(usageLogPath)
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ task: 'summarize-large-file', model, cacheHit: true })
+  })
+
+  it('marks the downstream LLM call cacheHit:false on a cache miss', async () => {
+    const diff = 'b'.repeat(2000)
+    const model = 'gpt-4o'
+
+    const diffs: FileDiff[] = [{ file: 'large2.ts', diff, summary: 'large2.ts', tokenCount: 600 }]
+
+    await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+      metadata: { model },
+    })
+
+    expect(mockSummarize).toHaveBeenCalledTimes(1)
+    const [, options] = mockSummarize.mock.calls[0] as [unknown, { metadata?: { cacheHit?: boolean } }]
+    expect(options.metadata?.cacheHit).toBe(false)
+  })
+
+  it('leaves cacheHit unset when the cache is disabled (no model to key on)', async () => {
+    const diff = 'c'.repeat(2000)
+    const diffs: FileDiff[] = [{ file: 'large3.ts', diff, summary: 'large3.ts', tokenCount: 600 }]
+
+    // No `metadata.model` -> cacheKey is never computed, so the cache
+    // is never consulted for this call.
+    await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockSummarize).toHaveBeenCalledTimes(1)
+    const [, options] = mockSummarize.mock.calls[0] as [unknown, { metadata?: { cacheHit?: boolean } }]
+    expect(options.metadata?.cacheHit).toBeUndefined()
   })
 })
 

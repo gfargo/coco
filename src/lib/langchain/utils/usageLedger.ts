@@ -37,6 +37,14 @@ export type UsageRecord = {
   elapsedMs?: number
   /** Readable `owner/repo` (or directory name) the call ran against. */
   repo?: string
+  /**
+   * Diff-summary cache outcome (#1958): `true` on a hit, `false` on a
+   * miss. Absent when the cache wasn't consulted for this call (disabled,
+   * or not a cache-eligible task) — records without this field predate
+   * the feature or are non-cache tasks, and are excluded from hit-rate
+   * aggregation rather than counted as misses.
+   */
+  cacheHit?: boolean
 }
 
 export type UsageAggregate = {
@@ -49,6 +57,10 @@ export type UsageAggregate = {
   inputTokens: number
   totalMs: number
   avgMs: number
+  /** Count of calls where the diff-summary cache was consulted and hit. */
+  cacheHits: number
+  /** Count of calls where the diff-summary cache was consulted (hit or miss). */
+  cacheLookups: number
 }
 
 /**
@@ -142,6 +154,7 @@ export function recordUsage(metadata: LlmCallMetadata): void {
     inputTokens: metadata.inputTokens,
     elapsedMs: metadata.elapsedMs,
     ...(repoTag ? { repo: repoTag } : {}),
+    ...(metadata.cacheHit !== undefined ? { cacheHit: metadata.cacheHit } : {}),
   }
 
   try {
@@ -206,6 +219,8 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       cachedInputTokens: number
       inputTokens: number
       totalMs: number
+      cacheHits: number
+      cacheLookups: number
     }
   >()
   for (const r of records) {
@@ -217,13 +232,21 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       cachedInputTokens: 0,
       inputTokens: 0,
       totalMs: 0,
+      cacheHits: 0,
+      cacheLookups: 0,
     }
-    current.calls += 1
-    current.promptTokens += r.promptTokens || 0
-    current.completionTokens += r.completionTokens || 0
-    current.cachedInputTokens += r.cachedInputTokens || 0
-    current.inputTokens += r.inputTokens || 0
-    current.totalMs += r.elapsedMs || 0
+    if (r.cacheHit !== true) {
+      current.calls += 1
+      current.promptTokens += r.promptTokens || 0
+      current.completionTokens += r.completionTokens || 0
+      current.cachedInputTokens += r.cachedInputTokens || 0
+      current.inputTokens += r.inputTokens || 0
+      current.totalMs += r.elapsedMs || 0
+    }
+    if (typeof r.cacheHit === 'boolean') {
+      current.cacheLookups += 1
+      if (r.cacheHit) current.cacheHits += 1
+    }
     byKey.set(key, current)
   }
   return [...byKey.entries()]
@@ -236,6 +259,8 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       inputTokens: v.inputTokens,
       totalMs: v.totalMs,
       avgMs: v.calls > 0 ? Math.round(v.totalMs / v.calls) : 0,
+      cacheHits: v.cacheHits,
+      cacheLookups: v.cacheLookups,
     }))
     .sort((a, b) => b.promptTokens - a.promptTokens || b.calls - a.calls)
 }

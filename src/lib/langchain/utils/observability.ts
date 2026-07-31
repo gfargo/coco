@@ -59,6 +59,14 @@ export type LlmCallMetadata = {
   streamChunks?: number
   /** Explicitly disable persistent local usage-ledger writes for this call. */
   recordUsage?: boolean
+  /**
+   * Diff-summary cache outcome for this call site (#1958). `true` on a
+   * cache hit (LLM skipped), `false` on a miss (LLM invoked). Left
+   * `undefined` when the cache wasn't consulted (disabled via
+   * `COCO_NO_CACHE`, or no model to key on) so those calls don't dilute
+   * the hit-rate denominator in `coco doctor --cost`.
+   */
+  cacheHit?: boolean
 }
 
 /**
