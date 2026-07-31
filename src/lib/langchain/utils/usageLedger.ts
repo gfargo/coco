@@ -2,6 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import type { LlmCallMetadata } from './observability'
 import { getCocoCacheDir } from '../../utils/cocoPaths'
+import { estimateCostUsd } from './pricing'
 
 /**
  * Local LLM usage ledger. Records a compact line per LLM call so the
@@ -57,6 +58,12 @@ export type UsageAggregate = {
   inputTokens: number
   totalMs: number
   avgMs: number
+  /** Sum of {@link estimateCostUsd} across the priced calls in this group. `0` when none were priced. */
+  estimatedCostUsd: number
+  /** Calls whose model+tokens resolved to a cost. */
+  pricedCalls: number
+  /** Calls that contributed tokens but not cost — unpriced model, or no token counts recorded. */
+  unpricedCalls: number
   /** Count of calls where the diff-summary cache was consulted and hit. */
   cacheHits: number
   /** Count of calls where the diff-summary cache was consulted (hit or miss). */
@@ -219,6 +226,9 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       cachedInputTokens: number
       inputTokens: number
       totalMs: number
+      estimatedCostUsd: number
+      pricedCalls: number
+      unpricedCalls: number
       cacheHits: number
       cacheLookups: number
     }
@@ -232,6 +242,9 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       cachedInputTokens: 0,
       inputTokens: 0,
       totalMs: 0,
+      estimatedCostUsd: 0,
+      pricedCalls: 0,
+      unpricedCalls: 0,
       cacheHits: 0,
       cacheLookups: 0,
     }
@@ -242,6 +255,13 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       current.cachedInputTokens += r.cachedInputTokens || 0
       current.inputTokens += r.inputTokens || 0
       current.totalMs += r.elapsedMs || 0
+      const cost = estimateCostUsd(r)
+      if (cost === undefined) {
+        current.unpricedCalls += 1
+      } else {
+        current.pricedCalls += 1
+        current.estimatedCostUsd += cost
+      }
     }
     if (typeof r.cacheHit === 'boolean') {
       current.cacheLookups += 1
@@ -259,10 +279,34 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       inputTokens: v.inputTokens,
       totalMs: v.totalMs,
       avgMs: v.calls > 0 ? Math.round(v.totalMs / v.calls) : 0,
+      estimatedCostUsd: v.estimatedCostUsd,
+      pricedCalls: v.pricedCalls,
+      unpricedCalls: v.unpricedCalls,
       cacheHits: v.cacheHits,
       cacheLookups: v.cacheLookups,
     }))
     .sort((a, b) => b.promptTokens - a.promptTokens || b.calls - a.calls)
+}
+
+/** Sum estimated cost across a set of records, e.g. a calendar month for the budget check. */
+export function totalUsageCost(records: UsageRecord[]): {
+  totalCostUsd: number
+  pricedCalls: number
+  unpricedCalls: number
+} {
+  let totalCostUsd = 0
+  let pricedCalls = 0
+  let unpricedCalls = 0
+  for (const r of records) {
+    const cost = estimateCostUsd(r)
+    if (cost === undefined) {
+      unpricedCalls += 1
+    } else {
+      pricedCalls += 1
+      totalCostUsd += cost
+    }
+  }
+  return { totalCostUsd, pricedCalls, unpricedCalls }
 }
 
 /** Aggregate usage by dynamic-model task label. */

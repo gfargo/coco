@@ -19,17 +19,27 @@ import {
     summarizeUsageByRepo,
     summarizeUsageBySurface,
     summarizeUsageByTask,
+    totalUsageCost,
     type UsageAggregate,
 } from '../../lib/langchain/utils/usageLedger'
+import { PRICES_AS_OF } from '../../lib/langchain/utils/pricing'
 import { DoctorArgv, DoctorOptions } from './config'
 import { checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
 import { Config } from '../../lib/config/types'
+
+export function formatRowCost(row: UsageAggregate): string {
+  // Fully unpriced group (e.g. all calls used a model we don't have a price
+  // for) — show a dash rather than a misleading $0.00.
+  if (row.pricedCalls === 0) return '–'
+  return `$${row.estimatedCostUsd.toFixed(4)}`
+}
 
 export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] {
   return rows.map((row) => {
     const tokens = row.promptTokens > 0 || row.completionTokens > 0
       ? `${row.promptTokens} in / ${row.completionTokens} out tok`
       : '–'
+    const cost = formatRowCost(row)
     // Diff-summary cache hit-rate (#1958): whether we skipped the LLM call
     // entirely because a cached diff summary already existed.
     const diffCache = row.cacheLookups > 0
@@ -45,7 +55,7 @@ export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] 
     const promptCache = row.cachedInputTokens > 0 && hitRateDenominator > 0
       ? `  prompt-cache ${Math.min(100, Math.round((row.cachedInputTokens / hitRateDenominator) * 100))}%`
       : ''
-    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  avg ${row.avgMs}ms${diffCache}${promptCache}`
+    return `  ${row.key.padEnd(14)} ${String(row.calls).padStart(4)} ${unit}  ${tokens.padStart(10)}  ${cost.padStart(9)}  avg ${row.avgMs}ms${diffCache}${promptCache}`
   })
 }
 
@@ -54,7 +64,7 @@ export function renderUsageRows(rows: UsageAggregate[], unit: string): string[] 
  * dynamic-model task) plus, when the opt-in usage ledger has data, aggregated
  * tokens + latency by task and model.
  */
-function renderCostReport(config: Config, logger: Parameters<CommandHandler<DoctorArgv>>[1], json: boolean): void {
+export function renderCostReport(config: Config, logger: Parameters<CommandHandler<DoctorArgv>>[1], json: boolean): void {
   const profile = buildModelRoutingProfile(config)
   const records = readUsageRecords()
   const byTask = summarizeUsageByTask(records)
@@ -62,13 +72,26 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
   const bySurface = summarizeUsageBySurface(records)
   const byRepo = summarizeUsageByRepo(records)
   const hasRepoData = byRepo.some((row) => row.key !== 'unknown')
+  const { totalCostUsd, pricedCalls, unpricedCalls } = totalUsageCost(records)
   const callCount = records.filter((r) => r.cacheHit !== true).length
   const cacheHitCount = records.length - callCount
 
   if (json) {
     emitJson({
       routing: profile,
-      usage: { records: records.length, calls: callCount, cacheHits: cacheHitCount, byTask, byModel, bySurface, byRepo },
+      usage: {
+        records: records.length,
+        calls: callCount,
+        cacheHits: cacheHitCount,
+        pricesAsOf: PRICES_AS_OF,
+        totalEstimatedCostUsd: totalCostUsd,
+        pricedCalls,
+        unpricedCalls,
+        byTask,
+        byModel,
+        bySurface,
+        byRepo,
+      },
     })
     return
   }
@@ -114,6 +137,17 @@ function renderCostReport(config: Config, logger: Parameters<CommandHandler<Doct
     logger.log('')
     logger.log(chalk.dim('  By repo:'))
     for (const line of renderUsageRows(byRepo, 'call')) logger.log(line)
+  }
+
+  logger.log('')
+  if (pricedCalls > 0) {
+    const unpricedNote = unpricedCalls > 0 ? `, ${unpricedCalls} call(s) on unpriced models shown as tokens only` : ''
+    logger.log(
+      chalk.bold(`Estimated cost: $${totalCostUsd.toFixed(4)}`) +
+        chalk.dim(` (prices as of ${PRICES_AS_OF}${unpricedNote})`)
+    )
+  } else {
+    logger.log(chalk.dim(`No priced models in this ledger yet — showing tokens only (prices as of ${PRICES_AS_OF}).`))
   }
 }
 

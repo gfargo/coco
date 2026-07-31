@@ -8,7 +8,11 @@ import {
 import { DEFAULT_OLLAMA_ENDPOINT, getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
 import { DEPRECATED_MODELS, detectProviderMismatch } from '../../lib/langchain/modelValidity'
 import { LLMProvider } from '../../lib/langchain/types'
-import { readUsageRecords, summarizeUsageByTask } from '../../lib/langchain/utils/usageLedger'
+import {
+  readUsageRecords,
+  summarizeUsageByTask,
+  totalUsageCost,
+} from '../../lib/langchain/utils/usageLedger'
 import { LLM_PROVIDER_IDS, providerRequiresAuth } from '../../lib/langchain/providers/registry'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
@@ -45,6 +49,7 @@ export function runDiagnostics(config: Config): Diagnostic[] {
   checkEndpointSupport(config, diagnostics)
   checkIgnoredFiles(config, diagnostics)
   checkProjectConfigFile(diagnostics)
+  checkUsageBudget(config, diagnostics)
   checkCacheHitRate(diagnostics)
 
   return diagnostics
@@ -359,6 +364,56 @@ function checkTokenLimits(config: Config, diagnostics: Diagnostic[]) {
           svc.maxConcurrent = 1
         }
       },
+    })
+  }
+}
+
+/**
+ * Compares this calendar month's *estimated* ledger spend against
+ * `telemetry.budget.monthlyUsd` and warns at/above `warnAtPercent`. No-op
+ * when no cap is configured, or when nothing in this month's ledger priced
+ * out to a cost (unset ledger, or every call used an unpriced model).
+ *
+ * The month boundary is computed in UTC rather than the host's local time
+ * zone, so the same ledger reports the same "this month" total regardless of
+ * where `coco doctor` runs (and regardless of `t`'s own time zone — `t` is
+ * always an epoch millisecond timestamp).
+ */
+export function checkUsageBudget(config: Config, diagnostics: Diagnostic[]) {
+  const budget = config.telemetry?.budget
+  if (budget?.monthlyUsd === undefined) return
+
+  const now = new Date()
+  const records = readUsageRecords().filter((r) => {
+    const d = new Date(r.t)
+    return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth()
+  })
+
+  const { totalCostUsd, pricedCalls } = totalUsageCost(records)
+  if (pricedCalls === 0) return
+
+  // A zero or negative cap can't be expressed as a percentage of itself, so
+  // treat it as "warn on any priced spend" rather than silently no-op'ing
+  // (which `!budget.monthlyUsd` used to do for the common `monthlyUsd: 0` case).
+  if (budget.monthlyUsd <= 0) {
+    if (totalCostUsd > 0) {
+      diagnostics.push({
+        severity: 'warn',
+        message: `Estimated spend this month is $${totalCostUsd.toFixed(2)}, exceeding your telemetry.budget.monthlyUsd cap ($${budget.monthlyUsd}).`,
+        fix: 'Raise telemetry.budget.monthlyUsd above 0, or lower cost by setting service.dynamicModelPreference to "cost" (or a cheaper fixed service.model).',
+      })
+    }
+    return
+  }
+
+  const warnAtPercent = budget.warnAtPercent ?? 80
+  const percentSpent = (totalCostUsd / budget.monthlyUsd) * 100
+
+  if (percentSpent >= warnAtPercent) {
+    diagnostics.push({
+      severity: 'warn',
+      message: `Estimated spend this month is $${totalCostUsd.toFixed(2)}, ${percentSpent.toFixed(0)}% of your telemetry.budget.monthlyUsd cap ($${budget.monthlyUsd}).`,
+      fix: 'Raise telemetry.budget.monthlyUsd, or lower cost by setting service.dynamicModelPreference to "cost" (or a cheaper fixed service.model).',
     })
   }
 }
