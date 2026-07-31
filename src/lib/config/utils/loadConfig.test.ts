@@ -1,4 +1,5 @@
 import { BaseArgvOptions, BaseCommandOptions } from '../../../commands/types'
+import { CommitOptions } from '../../../commands/commit/config'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { DEFAULT_CONFIG, DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../constants'
 import { loadConfig } from './loadConfig'
@@ -163,6 +164,45 @@ describe('loadConfig', () => {
 
     expect(config.verbose).toBe(false)
     expect(config.includeBranchName).toBe(true)
+  })
+
+  it('does not let an unset argv key clobber config-sourced noVerify (OSS-1742)', () => {
+    // Repro for OSS-1742: commit/split/amend all read `noVerify` off this
+    // merge, and the `noVerify` yargs option used to carry `default: false`
+    // — the same #1437 shape. That materialized `false` into argv on every
+    // run (whether or not the user passed --no-verify), so a `.coco.json`
+    // `noVerify: true` was always overwritten by the time any command saw
+    // it. argv here mirrors the post-fix shape: the key is simply absent
+    // when the flag isn't passed.
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ noVerify: true })
+      }
+      return ''
+    })
+
+    const config = loadConfig<CommitOptions>({} as BaseArgvOptions)
+
+    expect(config.noVerify).toBe(true)
+  })
+
+  it('still lets an explicitly-passed argv flag override config for noVerify (OSS-1742)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ noVerify: true })
+      }
+      return ''
+    })
+
+    const config = loadConfig<CommitOptions>(({ noVerify: false } as unknown) as BaseArgvOptions)
+
+    expect(config.noVerify).toBe(false)
   })
 
   it('does not mutate the shared DEFAULT_CONFIG singleton across calls (#1695)', () => {
