@@ -6,6 +6,7 @@ export const LOG_INK_CONTEXT_KEYS = [
   'operation',
   'provider',
   'pullRequest',
+  'pullRequestChecks',
   'pullRequestList',
   'reflog',
   'remotes',

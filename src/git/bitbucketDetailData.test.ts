@@ -1,6 +1,7 @@
 import {
   getBitbucketPullRequestDetail,
   getBitbucketIssueDetail,
+  getBitbucketPullRequestChecks,
   getBitbucketPullRequestDiff,
   __test,
 } from './bitbucketDetailData'
@@ -180,6 +181,26 @@ describe('getBitbucketPullRequestDetail (1238)', () => {
     if (!result.ok) return
     expect(result.detail.comments).toHaveLength(50)
     expect(result.detail.commentsTruncated).toBe(true)
+  })
+
+  describe('getBitbucketPullRequestChecks (OSS-1615)', () => {
+    it('fetches only the source commit statuses', async () => {
+      const prPayload = JSON.stringify({ source: { commit: { hash: 'deadbeef' } } })
+      const statusPayload = JSON.stringify({ values: [{ key: 'ci', name: 'CI', state: 'FAILED' }] })
+      const runner = async (endpoint: string) => (endpoint.includes('/commit/') ? statusPayload : prPayload)
+
+      const result = await getBitbucketPullRequestChecks('ws/repo', 1, runner)
+
+      expect(result).toEqual({
+        ok: true,
+        checks: [{ name: 'CI', status: 'FAILED', conclusion: 'failure' }],
+      })
+    })
+
+    it('returns ok: false when the PR is not found', async () => {
+      const result = await getBitbucketPullRequestChecks('ws/repo', 999, async () => '')
+      expect(result.ok).toBe(false)
+    })
   })
 })
 

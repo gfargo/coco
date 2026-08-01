@@ -82,6 +82,41 @@ export function mergeGiteaPullRequestByNumber(
   )
 }
 
+/**
+ * `POST .../pulls/{n}/merge` with `merge_when_checks_succeed: true` —
+ * Gitea's auto-merge equivalent, on the same endpoint as a regular
+ * merge (unlike GitHub/GitLab, which have a distinct auto-merge call).
+ */
+export function enableGiteaAutoMerge(
+  projectPath: string,
+  pullRequestNumber: number,
+  strategy: PullRequestMergeStrategy,
+  runner: GiteaRunner
+): Promise<PullRequestActionResult> {
+  return runGiteaAction(
+    runner,
+    `repos/${projectPath}/pulls/${pullRequestNumber}/merge`,
+    'POST',
+    { Do: giteaMergeStrategy(strategy), merge_when_checks_succeed: true },
+    () => ({ ok: true, message: `Enabled auto-merge (${strategy}) for pull request #${pullRequestNumber}` })
+  )
+}
+
+/**
+ * Gitea's exposed check data (`GET .../commits/{sha}/statuses`) is the
+ * generic external-CI status API — any reporter (Gitea Actions, Drone,
+ * Woodpecker, a plain webhook) can post to it, and there's no reliable
+ * way to tell from a status entry alone whether Gitea Actions itself is
+ * the reporter (the only case with a matching "re-run" API). Left as an
+ * explicit gap (OSS-1615) rather than guessing.
+ */
+export function rerunFailedGiteaChecks(): Promise<PullRequestActionResult> {
+  return Promise.resolve({
+    ok: false,
+    message: 'Re-running checks is not supported for Gitea/Forgejo yet.',
+  })
+}
+
 export function approveGiteaPullRequestByNumber(
   projectPath: string,
   pullRequestNumber: number,

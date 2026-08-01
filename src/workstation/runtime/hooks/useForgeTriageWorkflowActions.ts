@@ -117,6 +117,17 @@ export function createForgeTriageWorkflowHandlers(
     )
     clearGitHubListCache()
   }
+  // OSS-1615 — drop the cached per-check breakdown after a successful
+  // re-run so `usePullRequestChecksHydration` refetches the updated run
+  // state instead of showing the pre-rerun snapshot until the next full
+  // context refresh.
+  const invalidatePullRequestChecksCache = (): void => {
+    setContext((current) => ({ ...current, pullRequestChecks: undefined }), issuedAtDepth)
+    setContextStatus(
+      (current) => updateLogInkContextStatus(current, 'pullRequestChecks', 'idle'),
+      issuedAtDepth,
+    )
+  }
 
   return {
     // #783 — full PR action panel handlers. Each wraps the matching
@@ -182,6 +193,27 @@ export function createForgeTriageWorkflowHandlers(
       const body = payload?.trim()
       if (!body) return { ok: false, message: 'Comment body required' }
       return forge.commentPullRequest(body)
+    },
+    // OSS-1615 — CI-checks surface. Both read the current branch's PR
+    // number off `context.pullRequest` (the same overview the panel
+    // renders from) since the new ForgeActions methods operate by
+    // number, unlike `mergePullRequest`/`closePullRequest`/etc. above,
+    // which let gh/glab infer the PR from the checked-out branch.
+    'rerun-pr-checks': async () => {
+      const number = context.pullRequest?.currentPullRequest?.number
+      if (!number) return { ok: false, message: 'No pull request detected for the current branch.' }
+      const result = await forge.rerunFailedChecks(number)
+      if (result.ok) invalidatePullRequestChecksCache()
+      return result
+    },
+    'automerge-pr': async () => {
+      const strategy = (payload || 'merge').toLowerCase()
+      if (!isPullRequestMergeStrategy(strategy)) {
+        return { ok: false, message: `Unknown merge strategy: ${strategy}. Use merge, squash, or rebase.` }
+      }
+      const number = context.pullRequest?.currentPullRequest?.number
+      if (!number) return { ok: false, message: 'No pull request detected for the current branch.' }
+      return forge.enableAutoMerge(number, strategy)
     },
     // #882 phase 4 — triage-view low-risk mutations. Each picks
     // the cursored item from the *filtered* list (matching what
@@ -322,6 +354,24 @@ export function createForgeTriageWorkflowHandlers(
       const result = await forge.requestChangesPullRequestByNumber(pr.number, body)
       if (result.ok) invalidatePullRequestListCaches(pr.number)
       return result
+    },
+    // OSS-1615 — CI-checks surface, triage-view siblings of
+    // `rerun-pr-checks` / `automerge-pr` above. Neither invalidates the
+    // list cache — checks/auto-merge state isn't part of the triage row
+    // shape today, so there's nothing stale to clear.
+    'triage-pr-rerun-checks': async () => {
+      const pr = getSelectedPullRequestTriage(state, context)
+      if (!pr) return { ok: false, message: 'No pull request under cursor' }
+      return forge.rerunFailedChecks(pr.number)
+    },
+    'triage-pr-automerge': async () => {
+      const strategy = payload?.trim()
+      if (!strategy || !isPullRequestMergeStrategy(strategy)) {
+        return { ok: false, message: `Unknown merge strategy: ${strategy}. Use merge, squash, or rebase.` }
+      }
+      const pr = getSelectedPullRequestTriage(state, context)
+      if (!pr) return { ok: false, message: 'No pull request under cursor' }
+      return forge.enableAutoMerge(pr.number, strategy)
     },
     'triage-pr-ready': async () => {
       const pr = getSelectedPullRequestTriage(state, context)

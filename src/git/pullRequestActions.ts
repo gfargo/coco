@@ -4,6 +4,7 @@ import { join } from 'path'
 import { GhRunner, defaultGhRunner } from './pullRequestData'
 import { runGhAction } from './githubCli'
 import { rejectFlagLike, rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
+import { getPullRequestChecks, type PullRequestStatusCheck } from './pullRequestDetailData'
 
 /**
  * Shared result shape for every forge action (gh/glab/Bitbucket, PR/issue
@@ -333,6 +334,89 @@ export function checkoutPullRequestByNumber(
     (output) => ({
       ok: true,
       message: output.trim() || `Checked out pull request #${pullRequestNumber}`,
+    })
+  )
+}
+
+/**
+ * CI-checks surface (OSS-1615) — "one flaky check failed, re-run it,
+ * then merge" without a browser trip. gh's `statusCheckRollup` collapses
+ * every check into `{name, status, conclusion}` with no re-run handle of
+ * its own, so this re-derives the workflow run id from each failed
+ * check's `detailsUrl` (parsed into `runId` by `getPullRequestChecks`)
+ * and reruns each DISTINCT run's failed jobs — a single workflow run
+ * commonly backs several check-rollup rows (one per job), so re-running
+ * the same run id twice would be redundant, hence the de-dupe.
+ */
+function isFailedCheck(check: PullRequestStatusCheck): boolean {
+  const conclusion = (check.conclusion || '').toUpperCase()
+  // ACTION_REQUIRED means the run is awaiting manual approval (a deployment
+  // gate or first-time-contributor check) — not a failed job, so
+  // `gh run rerun --failed` can't advance it.
+  return conclusion === 'FAILURE' || conclusion === 'ERROR' || conclusion === 'TIMED_OUT'
+}
+
+export async function rerunFailedChecks(
+  pullRequestNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  const checksResult = await getPullRequestChecks(pullRequestNumber, runner)
+  if (!checksResult.ok) {
+    return { ok: false, message: checksResult.message }
+  }
+
+  const failedRunIds = [...new Set(
+    checksResult.checks.filter(isFailedCheck).map((check) => check.runId).filter((id): id is string => Boolean(id))
+  )]
+
+  if (!failedRunIds.length) {
+    return {
+      ok: false,
+      message: `No re-runnable failed checks found for pull request #${pullRequestNumber}.`,
+    }
+  }
+
+  const results = await Promise.all(
+    failedRunIds.map((runId) =>
+      runGhAction(runner, ['run', 'rerun', runId, '--failed'], (output) => ({
+        ok: true,
+        message: output.trim() || `Re-ran failed jobs for workflow run ${runId}`,
+      }))
+    )
+  )
+
+  const failures = results.filter((result) => !result.ok)
+  if (failures.length) {
+    return {
+      ok: false,
+      message: `Re-ran ${results.length - failures.length}/${results.length} workflow run(s) for pull request #${pullRequestNumber}; ${failures.length} failed.`,
+      details: failures.flatMap((failure) => (failure.details?.length ? failure.details : [failure.message])),
+    }
+  }
+
+  return {
+    ok: true,
+    message: `Re-ran ${failedRunIds.length} failed workflow run${failedRunIds.length === 1 ? '' : 's'} for pull request #${pullRequestNumber}.`,
+  }
+}
+
+/**
+ * `gh pr merge --auto` — merges automatically once required checks pass
+ * (and branch protection allows it; gh surfaces the "not allowed"
+ * rejection through the standard error path if the repo hasn't enabled
+ * auto-merge).
+ */
+export function enableAutoMerge(
+  pullRequestNumber: number,
+  strategy: PullRequestMergeStrategy,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  return runGhAction(
+    runner,
+    ['pr', 'merge', String(pullRequestNumber), '--auto', `--${strategy}`],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Enabled auto-merge (${strategy}) for pull request #${pullRequestNumber}`,
     })
   )
 }

@@ -1031,6 +1031,23 @@ const mergeStrategyChoice = (workflowId: string) => ({
   ],
 })
 
+/**
+ * OSS-1615 — same 1-key strategy picker as `mergeStrategyChoice`, but for
+ * enabling auto-merge rather than merging immediately. Kept separate so
+ * the overlay title/warning describe what auto-merge actually does
+ * (schedules a later merge, doesn't land one now).
+ */
+const autoMergeStrategyChoice = (workflowId: string) => ({
+  id: 'pr-automerge-strategy-choice',
+  title: 'Enable auto-merge',
+  warning: 'Merges automatically once checks pass.',
+  options: [
+    { key: 'm', label: 'Merge commit', workflowId, payload: 'merge' },
+    { key: 's', label: 'Squash and merge', workflowId, payload: 'squash' },
+    { key: 'r', label: 'Rebase and merge', workflowId, payload: 'rebase' },
+  ],
+})
+
 const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '1': 'status',
   '2': 'branches',
@@ -3534,6 +3551,17 @@ export function getLogInkInputEvents(
       multiline: true,
     })]
   }
+  // OSS-1615 — CI-checks surface. `K` re-runs failed checks directly (a
+  // re-run is cheap to undo — worst case it's a no-op re-trigger — so it
+  // skips the y-confirm path, mirroring `triage-pr-checkout`); `M` opens
+  // the same 1-key strategy picker as `m` merge since auto-merge needs a
+  // strategy too.
+  if (inputValue === 'K' && state.activeView === 'pull-request') {
+    return [{ type: 'runWorkflowAction', id: 'rerun-pr-checks' }]
+  }
+  if (inputValue === 'M' && state.activeView === 'pull-request') {
+    return [action({ type: 'setPendingChoice', value: autoMergeStrategyChoice('automerge-pr') })]
+  }
   // #1933 — draft→ready and reopen, gated through the same y-confirm
   // path as `approve-pr` (rewrites publicly-visible forge state).
   if (inputValue === 'd' && state.activeView === 'pull-request') {
@@ -3668,6 +3696,14 @@ export function getLogInkInputEvents(
         label: 'Request changes — review body (Enter newline · Ctrl+D submit)',
         multiline: true,
       })]
+    }
+    // OSS-1615 — CI-checks surface, triage-view siblings of the
+    // single-PR panel's `K` / `M` bindings above.
+    if (inputValue === 'K' && context.pullRequestTriageCount) {
+      return [{ type: 'runWorkflowAction', id: 'triage-pr-rerun-checks' }]
+    }
+    if (inputValue === 'M' && context.pullRequestTriageCount) {
+      return [action({ type: 'setPendingChoice', value: autoMergeStrategyChoice('triage-pr-automerge') })]
     }
     // #1933 — draft→ready and reopen, mirroring the single-PR panel's
     // `d` / `X` keys (see above) at their by-number triage equivalents.

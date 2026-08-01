@@ -26,6 +26,13 @@ export type PullRequestStatusCheck = {
   name: string
   status?: string
   conclusion?: string
+  /**
+   * Opaque per-forge identifier for re-running this check — a GitHub
+   * Actions workflow run id, a GitLab pipeline job id, etc. `undefined`
+   * when the forge/check doesn't expose one (e.g. a legacy commit
+   * status with no backing job to re-trigger).
+   */
+  runId?: string
 }
 
 export type PullRequestDetail = {
@@ -96,6 +103,17 @@ function parseReviews(value: unknown): PullRequestReview[] {
     .filter((review) => review.author || review.body)
 }
 
+/**
+ * gh's `statusCheckRollup` entries for Actions-backed check runs carry a
+ * `detailsUrl` like `https://github.com/owner/repo/actions/runs/123/job/456`
+ * — the workflow RUN id (not the job id) is what `gh run rerun` takes, so
+ * pull it out here rather than plumbing a second gh call just to resolve it.
+ */
+function parseCheckRunId(detailsUrl: unknown): string | undefined {
+  if (typeof detailsUrl !== 'string') return undefined
+  return detailsUrl.match(/\/actions\/runs\/(\d+)/)?.[1]
+}
+
 function parseStatusCheckRollup(value: unknown): PullRequestStatusCheck[] {
   if (!Array.isArray(value)) return []
   return value.map((entry) => {
@@ -104,6 +122,7 @@ function parseStatusCheckRollup(value: unknown): PullRequestStatusCheck[] {
       name: String(raw.name || raw.context || 'check'),
       status: typeof raw.status === 'string' ? raw.status : undefined,
       conclusion: typeof raw.conclusion === 'string' ? raw.conclusion : undefined,
+      runId: parseCheckRunId(raw.detailsUrl),
     }
   })
 }
@@ -148,6 +167,34 @@ export async function getPullRequestDetail(
       }
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
+export type PullRequestChecksResult =
+  | { ok: true; checks: PullRequestStatusCheck[] }
+  | { ok: false; message: string }
+
+/**
+ * Lighter-weight sibling of `getPullRequestDetail` that fetches only the
+ * check rollup (OSS-1615) — used by the checks surface and by
+ * `rerunFailedChecks`, which needs the freshest run ids rather than
+ * whatever happened to be cached from the last full detail fetch.
+ */
+export async function getPullRequestChecks(
+  pullRequestNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestChecksResult> {
+  try {
+    const output = await runner(['pr', 'view', String(pullRequestNumber), '--json', 'statusCheckRollup'])
+    const trimmed = output.trim()
+    if (!trimmed) return { ok: true, checks: [] }
+    const raw = JSON.parse(trimmed) as { statusCheckRollup?: unknown }
+    return { ok: true, checks: parseStatusCheckRollup(raw.statusCheckRollup) }
   } catch (error) {
     return {
       ok: false,

@@ -1,4 +1,4 @@
-import { getGiteaPullRequestDetail, getGiteaIssueDetail, getGiteaPullRequestDiff, __test } from './giteaDetailData'
+import { getGiteaPullRequestDetail, getGiteaIssueDetail, getGiteaPullRequestDiff, getGiteaPullRequestChecks, __test } from './giteaDetailData'
 
 const { mapComments, parseReviews, normalizeGiteaBuildStatus } = __test
 
@@ -87,6 +87,26 @@ describe('getGiteaPullRequestDetail (#826)', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.message).toBe('Empty response from Gitea for pull request #999')
+  })
+
+  describe('getGiteaPullRequestChecks (OSS-1615)', () => {
+    it('fetches only the head commit statuses', async () => {
+      const prPayload = JSON.stringify({ head: { sha: 'deadbeef' } })
+      const statusPayload = JSON.stringify([{ context: 'ci', status: 'failure' }])
+      const runner = async (endpoint: string) => (endpoint.includes('/commits/') ? statusPayload : prPayload)
+
+      const result = await getGiteaPullRequestChecks('owner/repo', 1, runner)
+
+      expect(result).toEqual({
+        ok: true,
+        checks: [{ name: 'ci', status: 'failure', conclusion: 'failure' }],
+      })
+    })
+
+    it('returns ok: false when the PR is not found', async () => {
+      const result = await getGiteaPullRequestChecks('owner/repo', 999, async () => '')
+      expect(result.ok).toBe(false)
+    })
   })
 
   it('returns ok: false on runner error, resolved via the auth-aware error path', async () => {

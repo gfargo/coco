@@ -75,9 +75,17 @@ export function renderPullRequestSurface(ctx: SurfaceRenderContext): ReactTypes.
       h(Text, { dimColor: true }, truncateCells(hint, width - 4)))
   }
 
-  const checks = summarizePullRequestChecks(pr.statusCheckRollup)
+  // OSS-1615 — prefer the lazily-hydrated per-check breakdown
+  // (`forge.getPullRequestChecks`) over the overview's `statusCheckRollup`.
+  // For GitHub the two are equivalent; for GitLab the hydrated list is a
+  // real per-job breakdown instead of one synthetic pipeline row.
+  const hydratedChecks = context.pullRequestChecks
+  const checksLoading = isLogInkContextKeyLoading(contextStatus, 'pullRequestChecks')
+  const checksUnsupported = hydratedChecks?.ok === false ? hydratedChecks.message : undefined
+  const checksList = hydratedChecks?.ok ? hydratedChecks.checks : pr.statusCheckRollup
+  const checks = summarizePullRequestChecks(checksList)
   const reviews = summarizePullRequestReviews(pr.reviews, pr.reviewDecision)
-  const checkRows = buildPullRequestCheckRows(pr.statusCheckRollup, { ascii: theme.ascii })
+  const checkRows = buildPullRequestCheckRows(checksList, { ascii: theme.ascii })
   const checkColor = (s: 'success' | 'failure' | 'pending' | 'neutral' | 'skipped'): string | undefined => {
     if (theme.noColor) return undefined
     if (s === 'success') return theme.colors.success
@@ -118,6 +126,12 @@ export function renderPullRequestSurface(ctx: SurfaceRenderContext): ReactTypes.
     // Checks section
     h(Text, { bold: true, color: accent }, 'Checks'),
     h(Text, { dimColor: true }, truncateCells(`  ${formatPullRequestChecksSummary(checks, { ascii: theme.ascii })}`, width - 4)),
+    ...(checksLoading && !hydratedChecks
+      ? [h(Text, { key: 'pr-checks-loading', dimColor: true }, '  loading checks…')]
+      : []),
+    ...(checksUnsupported
+      ? [h(Text, { key: 'pr-checks-unsupported', dimColor: true }, truncateCells(`  ${checksUnsupported}`, width - 4))]
+      : []),
     ...visibleChecks.map((row, index) => h(Text, {
       key: `pr-check-${index}`,
       color: checkColor(row.status),
