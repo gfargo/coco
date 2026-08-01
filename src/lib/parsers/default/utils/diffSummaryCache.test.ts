@@ -7,6 +7,7 @@ import {
   __testInternals,
   clearDiffSummaryCache,
   diffSummaryKey,
+  flushDiffSummaryCache,
   getDiffSummaryCachePath,
   readDiffSummary,
   resolveDiffSummaryCacheRepoPath,
@@ -25,6 +26,7 @@ describe('diffSummaryCache (#845, PR 5)', () => {
   })
 
   afterEach(() => {
+    __testInternals.resetInMemoryCache()
     if (originalXdgCacheHome === undefined) {
       delete process.env.XDG_CACHE_HOME
     } else {
@@ -194,6 +196,7 @@ describe('diffSummaryCache (#845, PR 5)', () => {
     it('removes the cache file for the repo', () => {
       const key = diffSummaryKey('diff', 'gpt', 'p')
       writeDiffSummary('/repo/foo', key, { summary: 's', model: 'gpt', tokens: 1 })
+      flushDiffSummaryCache()
       expect(fs.existsSync(getDiffSummaryCachePath('/repo/foo'))).toBe(true)
       const result = clearDiffSummaryCache('/repo/foo')
       expect(result).toEqual({ ok: true, removed: true })
@@ -202,6 +205,182 @@ describe('diffSummaryCache (#845, PR 5)', () => {
 
     it('returns removed=false when the cache file did not exist', () => {
       expect(clearDiffSummaryCache('/repo/never-cached')).toEqual({ ok: true, removed: false })
+    })
+
+    it('drops in-memory state so a later flush does not resurrect the file (#1923)', () => {
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary('/repo/resurrect', key, { summary: 's', model: 'gpt', tokens: 1 })
+      flushDiffSummaryCache()
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/resurrect'))).toBe(true)
+
+      clearDiffSummaryCache('/repo/resurrect')
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/resurrect'))).toBe(false)
+
+      // A flush after clearing must not recreate the file from a
+      // stale in-memory envelope.
+      flushDiffSummaryCache()
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/resurrect'))).toBe(false)
+    })
+  })
+
+  describe('deferred writes (#1923)', () => {
+    it('writeDiffSummary does not touch disk until flushed', () => {
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary('/repo/deferred', key, { summary: 's', model: 'gpt', tokens: 1 })
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/deferred'))).toBe(false)
+      // In-process reads still see the write immediately (memory hit).
+      expect(readDiffSummary('/repo/deferred', key)?.summary).toBe('s')
+
+      flushDiffSummaryCache()
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/deferred'))).toBe(true)
+    })
+
+    it('touchDiffSummary does not write to disk before flush, and is persisted on flush', async () => {
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary('/repo/touch-defer', key, { summary: 's', model: 'gpt', tokens: 1 })
+      flushDiffSummaryCache()
+      const cachePath = getDiffSummaryCachePath('/repo/touch-defer')
+      const before = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { lastAccessedAt: string }>
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      touchDiffSummary('/repo/touch-defer', key)
+      // Still the pre-touch content on disk — the touch hasn't flushed yet.
+      const midFlight = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { lastAccessedAt: string }>
+      }
+      expect(midFlight.entries[key].lastAccessedAt).toBe(before.entries[key].lastAccessedAt)
+
+      flushDiffSummaryCache()
+      const after = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { lastAccessedAt: string }>
+      }
+      expect(Date.parse(after.entries[key].lastAccessedAt)).toBeGreaterThan(
+        Date.parse(before.entries[key].lastAccessedAt)
+      )
+    })
+
+    it('multiple writes before a flush produce a single file with all entries', () => {
+      for (let i = 0; i < 5; i++) {
+        writeDiffSummary('/repo/batched', diffSummaryKey(`diff-${i}`, 'gpt', 'p'), {
+          summary: `s${i}`,
+          model: 'gpt',
+          tokens: i,
+        })
+      }
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/batched'))).toBe(false)
+      flushDiffSummaryCache()
+
+      const raw = fs.readFileSync(getDiffSummaryCachePath('/repo/batched'), 'utf8')
+      const parsed = JSON.parse(raw) as { entries: Record<string, unknown> }
+      expect(Object.keys(parsed.entries)).toHaveLength(5)
+    })
+  })
+
+  describe('flush merges with concurrent on-disk state (#1923 review)', () => {
+    it('preserves an entry written by another process instead of overwriting it', () => {
+      const repoPath = '/repo/concurrent'
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary(repoPath, key, { summary: 'mine', model: 'gpt', tokens: 1 })
+
+      // Simulate a second coco process flushing its own entry to the
+      // same cache file after this process loaded its envelope but
+      // before this process flushes.
+      const cachePath = getDiffSummaryCachePath(repoPath)
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true })
+      const otherKey = diffSummaryKey('other diff', 'gpt', 'p')
+      fs.writeFileSync(
+        cachePath,
+        JSON.stringify({
+          version: 1,
+          savedAt: new Date().toISOString(),
+          entries: {
+            [otherKey]: {
+              summary: 'from another process',
+              model: 'gpt',
+              tokens: 2,
+              lastAccessedAt: new Date().toISOString(),
+            },
+          },
+        })
+      )
+
+      flushDiffSummaryCache()
+
+      const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { summary: string }>
+      }
+      expect(raw.entries[key].summary).toBe('mine')
+      expect(raw.entries[otherKey].summary).toBe('from another process')
+    })
+
+    it('keeps whichever entry has the newer lastAccessedAt when both processes touched the same key', () => {
+      const repoPath = '/repo/conflict'
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary(repoPath, key, { summary: 'stale', model: 'gpt', tokens: 1 })
+
+      const cachePath = getDiffSummaryCachePath(repoPath)
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true })
+      const future = new Date(Date.now() + 60_000).toISOString()
+      fs.writeFileSync(
+        cachePath,
+        JSON.stringify({
+          version: 1,
+          savedAt: future,
+          entries: {
+            [key]: { summary: 'fresher', model: 'gpt', tokens: 9, lastAccessedAt: future },
+          },
+        })
+      )
+
+      flushDiffSummaryCache()
+
+      const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { summary: string }>
+      }
+      expect(raw.entries[key].summary).toBe('fresher')
+    })
+
+    it('a second flush in the same process still has the other process entry merged in', () => {
+      const repoPath = '/repo/repeat-flush'
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary(repoPath, key, { summary: 'mine', model: 'gpt', tokens: 1 })
+
+      const cachePath = getDiffSummaryCachePath(repoPath)
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true })
+      const otherKey = diffSummaryKey('other diff', 'gpt', 'p')
+      fs.writeFileSync(
+        cachePath,
+        JSON.stringify({
+          version: 1,
+          savedAt: new Date().toISOString(),
+          entries: {
+            [otherKey]: {
+              summary: 'from another process',
+              model: 'gpt',
+              tokens: 2,
+              lastAccessedAt: new Date().toISOString(),
+            },
+          },
+        })
+      )
+      flushDiffSummaryCache()
+
+      // A later write + flush in this same process must not drop the
+      // other process's entry it already merged in.
+      writeDiffSummary(repoPath, diffSummaryKey('yet another', 'gpt', 'p'), {
+        summary: 'second write',
+        model: 'gpt',
+        tokens: 3,
+      })
+      flushDiffSummaryCache()
+
+      const raw = JSON.parse(fs.readFileSync(cachePath, 'utf8')) as {
+        entries: Record<string, { summary: string }>
+      }
+      expect(raw.entries[otherKey].summary).toBe('from another process')
+      expect(raw.entries[key].summary).toBe('mine')
     })
   })
 
@@ -226,6 +405,34 @@ describe('diffSummaryCache (#845, PR 5)', () => {
         expect(resolveDiffSummaryCacheRepoPath(notARepo)).toBe(notARepo)
       } finally {
         fs.rmSync(notARepo, { recursive: true, force: true })
+      }
+    })
+  })
+
+  describe('termination signal handling (#1923 review)', () => {
+    it('flushes, removes its own listener, then re-raises the signal instead of swallowing it', () => {
+      const key = diffSummaryKey('diff', 'gpt', 'p')
+      writeDiffSummary('/repo/sigint', key, { summary: 's', model: 'gpt', tokens: 1 })
+      expect(fs.existsSync(getDiffSummaryCachePath('/repo/sigint'))).toBe(false)
+
+      const removeListenerSpy = jest.spyOn(process, 'removeListener')
+      const killSpy = jest.spyOn(process, 'kill').mockImplementation(() => true)
+
+      try {
+        __testInternals.handleTerminationSignal('SIGINT')
+
+        // Cache was flushed to disk instead of being silently dropped.
+        expect(fs.existsSync(getDiffSummaryCachePath('/repo/sigint'))).toBe(true)
+        // The handler removes itself so it never suppresses the
+        // default "terminate immediately" disposition on later signals...
+        expect(removeListenerSpy).toHaveBeenCalledWith('SIGINT', __testInternals.handleTerminationSignal)
+        // ...and re-sends the signal so that default behavior (or any
+        // other listener) still runs, rather than leaving the process
+        // hanging around after an in-flight LLM request drains.
+        expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGINT')
+      } finally {
+        removeListenerSpy.mockRestore()
+        killSpy.mockRestore()
       }
     })
   })

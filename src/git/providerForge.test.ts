@@ -3,6 +3,7 @@ import { detectProvider, getProviderOverview, setForgeHostOverrides } from './pr
 import { getMergeRequestOverview } from './gitlabListData'
 import { getGiteaPullRequestOverview } from './giteaListData'
 import type { GiteaRunner } from './giteaCli'
+import type { BitbucketRunner } from './bitbucketCli'
 
 describe('detectProvider + forgeHosts overrides (#0.70)', () => {
   afterEach(() => setForgeHostOverrides(undefined))
@@ -278,5 +279,53 @@ describe('getGiteaPullRequestOverview (#826)', () => {
     const overview = await getGiteaPullRequestOverview(giteaGit(), factory)
     expect(overview.currentPullRequest).toBeUndefined()
     expect(overview.message).toContain('No pull request found')
+  })
+})
+
+function bitbucketGit(host = 'bitbucket.org'): SimpleGit {
+  return {
+    getRemotes: async () => [{ name: 'origin', refs: { fetch: `git@${host}:workspace/repo.git` } }],
+    raw: async (args: string[]) => {
+      if (args[0] === 'branch') return 'main\n'
+      throw new Error('no symbolic-ref / rev-parse in test')
+    },
+  } as unknown as SimpleGit
+}
+
+describe('getProviderOverview — Bitbucket branch (#1899)', () => {
+  afterEach(() => {
+    delete process.env.BITBUCKET_ACCESS_TOKEN
+  })
+
+  it('uses the Bitbucket Cloud REST API for a bitbucket.org remote', async () => {
+    process.env.BITBUCKET_ACCESS_TOKEN = 'test-token'
+    const bitbucketRunnerFactory = (): BitbucketRunner => async (endpoint: string) => {
+      if (endpoint === 'user') return '{}'
+      if (endpoint === 'repositories/workspace/repo') return JSON.stringify({ mainbranch: { name: 'main' } })
+      return JSON.stringify({ values: [] })
+    }
+    const gh = async (): Promise<string> => {
+      throw new Error('gh must not be called for a bitbucket repo')
+    }
+    const overview = await getProviderOverview(bitbucketGit(), gh, undefined, bitbucketRunnerFactory)
+    expect(overview.repository.provider).toBe('bitbucket')
+    expect(overview.authenticated).toBe(true)
+    expect(overview.repository.defaultBranch).toBe('main')
+  })
+
+  it('refuses a self-hosted Bitbucket Server/Data Center remote instead of hitting Bitbucket Cloud', async () => {
+    process.env.BITBUCKET_ACCESS_TOKEN = 'test-token'
+    const fetchSpy = jest.spyOn(global, 'fetch')
+    const gh = async (): Promise<string> => {
+      throw new Error('gh must not be called for a bitbucket repo')
+    }
+    // No explicit factory — exercises the real default (`makeBitbucketRunner`).
+    const overview = await getProviderOverview(bitbucketGit('bitbucket.acme.com'), gh)
+    expect(overview.repository.provider).toBe('bitbucket')
+    expect(overview.authenticated).toBe(false)
+    expect(overview.message).toContain('Bitbucket Server / Data Center')
+    expect(overview.message).toContain('not supported yet')
+    expect(fetchSpy).not.toHaveBeenCalled()
+    fetchSpy.mockRestore()
   })
 })

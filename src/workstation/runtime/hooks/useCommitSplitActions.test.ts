@@ -27,11 +27,16 @@ const runCommitSplitApplyWorkflowMock = runCommitSplitApplyWorkflow as jest.Mock
   typeof runCommitSplitApplyWorkflow
 >
 
-/** Fake React: `useCallback` returns the callback itself; `useRef` is a plain box. */
+/**
+ * Fake React: `useCallback` returns the callback itself; `useRef` is a plain
+ * box; `useEffect` runs its setup synchronously once (mirroring mount) since
+ * these tests don't simulate a render/unmount cycle.
+ */
 function fakeReact(): typeof import('react') {
   return {
     useCallback: (fn: unknown) => fn,
     useRef: (initial: unknown) => ({ current: initial }),
+    useEffect: (setup: () => void) => setup(),
   } as unknown as typeof import('react')
 }
 
@@ -157,6 +162,35 @@ describe('useCommitSplitActions — recentCommits timer ownership (#1627)', () =
     mountedRef.current = false
     jest.advanceTimersByTime(5000)
 
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'clearRecentCommits' }))
+  })
+
+  it('clears the pending timer on unmount so it cannot keep the event loop alive', async () => {
+    runCommitSplitApplyWorkflowMock.mockResolvedValueOnce({
+      ok: true,
+      message: 'applied',
+      commitHashes: ['def5678'],
+    })
+    const dispatch = jest.fn()
+    const deps = baseDeps({ dispatch, splitPlan: splitPlan as never })
+    let unmount: (() => void) | undefined
+    const react = {
+      useCallback: (fn: unknown) => fn,
+      useRef: (initial: unknown) => ({ current: initial }),
+      useEffect: (setup: () => void | (() => void)) => {
+        const cleanup = setup()
+        if (typeof cleanup === 'function') {
+          unmount = cleanup
+        }
+      },
+    } as unknown as typeof import('react')
+    const { applyCommitSplit } = useCommitSplitActions(react, deps)
+
+    await applyCommitSplit()
+    unmount?.()
+
+    expect(jest.getTimerCount()).toBe(0)
+    jest.advanceTimersByTime(5000)
     expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'clearRecentCommits' }))
   })
 })

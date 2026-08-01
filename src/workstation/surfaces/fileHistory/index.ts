@@ -16,7 +16,7 @@
 
 import type * as ReactTypes from 'react'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
-import { cellWidth, truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import type { FileHistoryResult } from '../../../git/fileHistoryData'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -63,6 +63,7 @@ export function renderFileHistorySurface(
 
   const commits = history && history.ok ? history.commits : []
   const failureMessage = history && !history.ok ? history.message : undefined
+  const truncated = history && history.ok ? history.truncated : false
 
   // Row budget: border(2) + title(1) + path(1) + both scroll indicators
   // (2, worst case) = 6 rows of chrome the list itself doesn't occupy.
@@ -83,7 +84,9 @@ export function renderFileHistorySurface(
   const headerRight = loading
     ? 'Loading history…'
     : commits.length
-      ? `${selected + 1}/${commits.length} commits`
+      ? truncated
+        ? `first ${commits.length} commits (showing ${selected + 1})`
+        : `${selected + 1}/${commits.length} commits`
       : '0 commits'
 
   const nowSeconds = Math.floor(Date.now() / 1000)
@@ -112,7 +115,7 @@ export function renderFileHistorySurface(
           const index = windowStart + offset
           const isSelected = index === selected
           const cursor = isSelected ? '>' : ' '
-          const author = truncateCells(commit.author, AUTHOR_COL_CAP).padEnd(AUTHOR_COL_CAP)
+          const author = padCells(truncateCells(commit.author, AUTHOR_COL_CAP), AUTHOR_COL_CAP)
           const age = formatCommitAge(commit.authorTime, nowSeconds)
           const gutterPart = `${cursor} ${commit.shortHash}  ${author}  ${age}  `
           const subjectWidth = Math.max(8, width - 4 - cellWidth(gutterPart))

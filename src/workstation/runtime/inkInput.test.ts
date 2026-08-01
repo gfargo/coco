@@ -1061,6 +1061,18 @@ describe('log Ink input interactions', () => {
     expect(state.statusMessage).toBe('jumped to reflog')
   })
 
+  it('dispatches undo-last-action with the gu chord and clears pendingKey (OSS-1606)', () => {
+    let state = createLogInkState(rows)
+    state = applyInput(state, 'g')
+    expect(state.pendingKey).toBe('g')
+
+    const events = getLogInkInputEvents(state, 'u', {}, {})
+    expect(events).toEqual([
+      { type: 'action', action: { type: 'setPendingKey', value: undefined } },
+      { type: 'runWorkflowAction', id: 'undo-last-action' },
+    ])
+  })
+
   it('moves the selected reflog entry with arrow keys when in reflog view (#781)', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'pushView', value: 'reflog' })
@@ -5176,37 +5188,102 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    // Enter on the [Notes] tab (#OSS-2057) opens the add/edit prompt for
+    // the cursored commit's `refs/notes/commits` note, seeded with
+    // whatever note text the caller has hydrated so far.
+    it('Enter on notes tab opens the edit-commit-note prompt seeded with the loaded note', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorTab: 'notes' }),
+        '',
+        { return: true },
+        { inspectorActionCount: 9, commitNoteText: 'existing note body' },
+      )
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: expect.objectContaining({
+            type: 'openInputPrompt',
+            kind: 'edit-commit-note',
+            initial: 'existing note body',
+            multiline: true,
+          }),
+        },
+      ])
+    })
+
+    it('Enter on notes tab opens the prompt blank when no note is loaded yet', () => {
+      const events = getLogInkInputEvents(
+        actionsFocusState({ inspectorTab: 'notes' }),
+        '',
+        { return: true },
+        { inspectorActionCount: 9 },
+      )
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: expect.objectContaining({
+            type: 'openInputPrompt',
+            kind: 'edit-commit-note',
+            initial: '',
+          }),
+        },
+      ])
+    })
+
     // ←/→ for inspector tab switching mirrors the sidebar pattern. The
     // bracketed `[/]` notation that previously appeared in the chrome
     // hint read as "press the / key" — which collides with the global
     // filter trigger and was confusing users. Arrow keys are
     // unambiguous + match the sidebar's existing left/right tab axis.
-    it('← on detail focus switches to the Inspector tab', () => {
+    //
+    // #OSS-2057 — a third [Notes] tab joined [Inspector]/[Actions], so
+    // ←/→ now cycle (wrapping) rather than jumping to a fixed tab.
+    it('← on detail focus cycles the inspector tab backward', () => {
       const events = getLogInkInputEvents(
         actionsFocusState(),
         '',
         { leftArrow: true },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'setInspectorTab', value: 'inspector' } },
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: -1 } },
       ])
     })
 
-    it('→ on detail focus switches to the Actions tab', () => {
+    it('→ on detail focus cycles the inspector tab forward', () => {
       const events = getLogInkInputEvents(
         actionsFocusState({ inspectorTab: 'inspector' }),
         '',
         { rightArrow: true },
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'setInspectorTab', value: 'actions' } },
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: 1 } },
       ])
+    })
+
+    it('→ cycles through all three tabs (Inspector → Actions → Notes → Inspector)', () => {
+      let state = actionsFocusState({ inspectorTab: 'inspector' })
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('actions')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('notes')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('inspector')
+    })
+
+    it('← wraps backward through all three tabs (Inspector → Notes → Actions → Inspector)', () => {
+      let state = actionsFocusState({ inspectorTab: 'inspector' })
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('notes')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('actions')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('inspector')
     })
 
     it('←/→ on detail focus does not affect the global filter trigger', () => {
       // The original `[/] switch` chrome hint suggested pressing `/` —
       // which fires the global filter, not the inspector tab swap.
-      // ←/→ should fire setInspectorTab and nothing else; the global
+      // ←/→ should fire cycleInspectorTab and nothing else; the global
       // filter event (`toggleFilterMode`) must not appear in the
       // dispatch list.
       const left = getLogInkInputEvents(actionsFocusState(), '', { leftArrow: true })
@@ -6053,6 +6130,64 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
       })
       const result = applyInput(state, 'x')
       expect(result.pendingConfirmationId).toBe('close-pr')
+    })
+
+    it('d sets pendingConfirmation to triage-pr-ready (#1933)', () => {
+      const state = applyInput(baseState(), 'd', {}, { pullRequestTriageCount: 3 })
+      expect(state.pendingConfirmationId).toBe('triage-pr-ready')
+    })
+
+    it('X sets pendingConfirmation to triage-pr-reopen (#1933)', () => {
+      const state = applyInput(baseState(), 'X', {}, { pullRequestTriageCount: 3 })
+      expect(state.pendingConfirmationId).toBe('triage-pr-reopen')
+    })
+
+    it('confirming triage-pr-ready fires runWorkflowAction (#1933)', () => {
+      const state = applyInput(baseState(), 'd', {}, { pullRequestTriageCount: 3 })
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events.find((e) => e.type === 'runWorkflowAction')).toEqual({
+        type: 'runWorkflowAction',
+        id: 'triage-pr-ready',
+        payload: undefined,
+      })
+    })
+  })
+
+  describe('pull-request view (#1933)', () => {
+    const baseState = (): LogInkState =>
+      applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'pull-request' })
+
+    it('d sets pendingConfirmation to ready-pr', () => {
+      const state = applyInput(baseState(), 'd')
+      expect(state.pendingConfirmationId).toBe('ready-pr')
+    })
+
+    it('X sets pendingConfirmation to reopen-pr', () => {
+      const state = applyInput(baseState(), 'X')
+      expect(state.pendingConfirmationId).toBe('reopen-pr')
+    })
+
+    it('does NOT collide with the triage view\'s d/X bindings', () => {
+      // Regression guard, mirroring the existing `x` collision test
+      // above: from the triage view, `d`/`X` route to the by-number
+      // triage variants, not the current-branch ones.
+      const state = applyInput(
+        applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'pull-request-triage' }),
+        'd',
+        {},
+        { pullRequestTriageCount: 3 }
+      )
+      expect(state.pendingConfirmationId).toBe('triage-pr-ready')
+    })
+
+    it('confirming ready-pr fires runWorkflowAction', () => {
+      const state = applyInput(baseState(), 'd')
+      const events = getLogInkInputEvents(state, 'y')
+      expect(events.find((e) => e.type === 'runWorkflowAction')).toEqual({
+        type: 'runWorkflowAction',
+        id: 'ready-pr',
+        payload: undefined,
+      })
     })
   })
 })

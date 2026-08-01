@@ -11,12 +11,16 @@ import {
   commentPullRequest,
   commentPullRequestByNumber,
   createPullRequest,
+  enableAutoMerge,
   isPullRequestMergeStrategy,
+  markPullRequestReadyByNumber,
   mergePullRequest,
   mergePullRequestByNumber,
   openPullRequest,
+  reopenPullRequestByNumber,
   requestChangesPullRequest,
   requestChangesPullRequestByNumber,
+  rerunFailedChecks,
 } from './pullRequestActions'
 
 describe('log pull request actions', () => {
@@ -363,6 +367,36 @@ describe('destructive PR by-number actions (#882 phase 5)', () => {
       ])
     })
   })
+
+  describe('markPullRequestReadyByNumber (#1933)', () => {
+    it('invokes `gh pr ready <#>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(markPullRequestReadyByNumber(962, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Marked pull request #962 as ready for review',
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'ready', '962'])
+    })
+
+    it('preserves trimmed gh stdout as the success message', async () => {
+      const runner = jest.fn().mockResolvedValue('Pull request #962 is marked as ready for review\n')
+      await expect(markPullRequestReadyByNumber(962, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Pull request #962 is marked as ready for review',
+      })
+    })
+  })
+
+  describe('reopenPullRequestByNumber (#1933)', () => {
+    it('invokes `gh pr reopen <#>`', async () => {
+      const runner = jest.fn().mockResolvedValue('')
+      await expect(reopenPullRequestByNumber(962, runner)).resolves.toEqual({
+        ok: true,
+        message: 'Reopened pull request #962',
+      })
+      expect(runner).toHaveBeenCalledWith(['pr', 'reopen', '962'])
+    })
+  })
 })
 
 describe('checkoutPullRequestByNumber (#1363)', () => {
@@ -392,5 +426,104 @@ describe('checkoutPullRequestByNumber (#1363)', () => {
     const result = await checkoutPullRequestByNumber(3, runner)
     expect(result.ok).toBe(false)
     expect(result.message).toContain('would be overwritten by checkout')
+  })
+})
+
+describe('rerunFailedChecks (OSS-1615)', () => {
+  function rollupJson(entries: Array<Record<string, unknown>>): string {
+    return JSON.stringify({ statusCheckRollup: entries })
+  }
+
+  it('reruns each distinct failed workflow run once', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]): Promise<string> => {
+      calls.push(args)
+      if (args[0] === 'pr' && args[1] === 'view') {
+        return rollupJson([
+          {
+            name: 'build',
+            conclusion: 'FAILURE',
+            detailsUrl: 'https://github.com/acme/widgets/actions/runs/111/job/1',
+          },
+          {
+            name: 'lint',
+            conclusion: 'FAILURE',
+            detailsUrl: 'https://github.com/acme/widgets/actions/runs/111/job/2',
+          },
+          {
+            name: 'test',
+            conclusion: 'SUCCESS',
+            detailsUrl: 'https://github.com/acme/widgets/actions/runs/222/job/3',
+          },
+        ])
+      }
+      return 'Requested a rerun of failed jobs.'
+    }
+
+    const result = await rerunFailedChecks(7, runner)
+
+    expect(result.ok).toBe(true)
+    // Two check rows share run 111 (same workflow run, different jobs) —
+    // rerun should fire once per DISTINCT run id, not once per row.
+    const rerunCalls = calls.filter((args) => args[0] === 'run')
+    expect(rerunCalls).toEqual([['run', 'rerun', '111', '--failed']])
+  })
+
+  it('reports failure when no failed check carries a run id', async () => {
+    const runner = async (): Promise<string> => rollupJson([
+      { name: 'lint', conclusion: 'SUCCESS' },
+    ])
+    const result = await rerunFailedChecks(7, runner)
+    expect(result).toEqual({
+      ok: false,
+      message: 'No re-runnable failed checks found for pull request #7.',
+    })
+  })
+
+  it('does not treat ACTION_REQUIRED as a re-runnable failure', async () => {
+    const runner = async (): Promise<string> => rollupJson([
+      {
+        name: 'deploy',
+        conclusion: 'ACTION_REQUIRED',
+        detailsUrl: 'https://github.com/acme/widgets/actions/runs/333/job/4',
+      },
+    ])
+    const result = await rerunFailedChecks(7, runner)
+    expect(result).toEqual({
+      ok: false,
+      message: 'No re-runnable failed checks found for pull request #7.',
+    })
+  })
+
+  it('propagates the checks-fetch failure', async () => {
+    const runner = async (): Promise<string> => {
+      throw new Error('gh: not authenticated')
+    }
+    const result = await rerunFailedChecks(7, runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not authenticated')
+  })
+})
+
+describe('enableAutoMerge (OSS-1615)', () => {
+  it('runs gh pr merge --auto with the chosen strategy', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]): Promise<string> => {
+      calls.push(args)
+      return 'Pull request #9 will be automatically merged'
+    }
+    const result = await enableAutoMerge(9, 'squash', runner)
+    expect(calls[0]).toEqual(['pr', 'merge', '9', '--auto', '--squash'])
+    expect(result.ok).toBe(true)
+  })
+
+  it('surfaces a rejection when the repo has not enabled auto-merge', async () => {
+    const failure = Object.assign(new Error('Command failed: gh pr merge 9 --auto --merge'), {
+      stderr: 'Auto-merge is not allowed for this repository',
+    })
+    const runner = jest.fn().mockRejectedValueOnce(failure).mockResolvedValue('ok')
+    const result = await enableAutoMerge(9, 'merge', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Auto-merge is not allowed')
   })
 })

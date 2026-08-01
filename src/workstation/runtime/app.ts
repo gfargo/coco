@@ -74,6 +74,7 @@ import { useContextHydration } from './hooks/useContextHydration'
 import { useBlameLoadingState, useDetailHydration, useFileHistoryLoadingState } from './hooks/useDetailHydration'
 import { useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState } from './hooks/useDiffHydration'
 import { usePullRequestDiffHydration, usePullRequestDiffState } from './hooks/usePullRequestDiffHydration'
+import { usePullRequestChecksHydration } from './hooks/usePullRequestChecksHydration'
 import { useDiffSyntaxHighlight, useDiffSyntaxState } from './hooks/useDiffSyntaxHighlight'
 import { useIdleTip } from './hooks/useIdleTip'
 import { useRefreshWatcher } from './hooks/useRefreshWatcher'
@@ -654,6 +655,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // path / host from `context.provider` and memoizes the `ForgeActions`
   // instance. Owned by `useForgeAdapter`.
   const { forge, forgeProvider } = useForgeAdapter(React, { context })
+
+  // OSS-1615 — lazy-load the per-check breakdown for the current branch's
+  // PR once the `pull-request` view is active. Sibling of the PR-overview
+  // effect in `useContextHydration`, but split into its own hook because
+  // it needs `forge` (resolved above, after that hook already ran).
+  usePullRequestChecksHydration(React, {
+    getPullRequestChecks: forge.getPullRequestChecks,
+    activeView: state.activeView,
+    pullRequestNumber: context.pullRequest?.currentPullRequest?.number,
+    pullRequestChecks: context.pullRequestChecks,
+    runtimes,
+    setContext,
+    setContextStatus,
+  })
 
   // #1363 — load the PR patch (via the forge facade) once the diff view
   // becomes active with diffSource='pr'. Same lazy-loader shape as the

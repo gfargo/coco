@@ -3,9 +3,11 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   getConflictMarkers,
+  getConflictedFiles,
   getGitOperationOverview,
   getHookOverview,
   getInProgressOperationType,
+  MAX_CONFLICT_MARKER_FILE_BYTES,
   parseConflictMarkers,
   parseConflictedFiles,
 } from './operationData'
@@ -210,5 +212,110 @@ describe('log operation data', () => {
       })
     }
   })
+
+  it('skips conflicted files above the size threshold (#1918)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'coco-conflicts-size-'))
+    const smallPath = join(root, 'small.ts')
+    const largePath = join(root, 'large.ts')
+
+    // Small file: normal conflicted content — should produce markers
+    writeFileSync(smallPath, [
+      '<<<<<<< HEAD',
+      'current',
+      '=======',
+      'incoming',
+      '>>>>>>> branch',
+    ].join('\n'))
+
+    // Large file: exceeds MAX_CONFLICT_MARKER_FILE_BYTES — should be skipped
+    // even if it were to contain conflict markers (e.g. a lockfile or minified bundle)
+    writeFileSync(largePath, 'x'.repeat(MAX_CONFLICT_MARKER_FILE_BYTES + 1))
+
+    const git = {
+      revparse: jest.fn().mockResolvedValue(root),
+    }
+
+    const files = [
+      { path: 'small.ts', indexStatus: 'U', worktreeStatus: 'U' },
+      { path: 'large.ts', indexStatus: 'U', worktreeStatus: 'U' },
+    ]
+
+    try {
+      const markers = await getConflictMarkers(git as never, files)
+
+      // Markers should come from the small file only
+      expect(markers.length).toBeGreaterThan(0)
+      expect(markers.every((m) => m.path === 'small.ts')).toBe(true)
+      expect(markers.some((m) => m.path === 'large.ts')).toBe(false)
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
 })
 
+
+describe('getConflictedFiles snapshot parameter (OSS-596)', () => {
+  it('skips git.raw status call when snapshot.statusOutput is supplied', async () => {
+    const git = { raw: jest.fn() }
+    const statusOutput = 'UU conflict.ts\0'
+
+    const result = await getConflictedFiles(git as never, { statusOutput })
+
+    expect(git.raw).not.toHaveBeenCalled()
+    expect(result).toHaveLength(1)
+    expect(result[0].path).toBe('conflict.ts')
+  })
+
+  it('fetches status --porcelain -z internally when no snapshot is supplied', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue('UU conflict.ts\0'),
+    }
+
+    const result = await getConflictedFiles(git as never)
+
+    expect(git.raw).toHaveBeenCalledWith(['status', '--porcelain', '-z'])
+    expect(result).toHaveLength(1)
+  })
+
+  it('fetches status --porcelain -z internally when snapshot.statusOutput is undefined', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue(''),
+    }
+
+    await getConflictedFiles(git as never, {})
+
+    expect(git.raw).toHaveBeenCalledWith(['status', '--porcelain', '-z'])
+  })
+})
+
+describe('getGitOperationOverview snapshot parameter (OSS-596)', () => {
+  it('skips the status --porcelain -z call when snapshot.statusOutput is supplied', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'coco-op-snapshot-'))
+    const gitDir = join(root, '.git')
+    const hooksPath = join(gitDir, 'hooks')
+
+    mkdirSync(hooksPath, { recursive: true })
+
+    const git = {
+      raw: jest.fn().mockImplementation(async (args: string[]) => {
+        if (args[0] === 'config') throw new Error('missing config')
+        return join(gitDir, (args as string[]).at(-1) as string)
+      }),
+      revparse: jest.fn().mockImplementation(async (args: string[]) => {
+        if (args.includes('--show-toplevel')) return root
+        return join(gitDir, (args as string[]).at(-1) as string)
+      }),
+    }
+
+    try {
+      await getGitOperationOverview(git as never, { statusOutput: '' })
+
+      const statusCalls = (git.raw as jest.Mock).mock.calls.filter(
+        (args: string[][]) => args[0][0] === 'status',
+      )
+      expect(statusCalls).toHaveLength(0)
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
+})

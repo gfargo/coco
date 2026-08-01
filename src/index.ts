@@ -11,6 +11,7 @@ import doctor from './commands/doctor'
 import hooks from './commands/hooks'
 import init from './commands/init'
 import issues from './commands/issues'
+import lint from './commands/lint'
 import log from './commands/log'
 import mcp from './commands/mcp'
 import prCreate from './commands/prCreate'
@@ -18,6 +19,7 @@ import prs from './commands/prs'
 import recap from './commands/recap'
 import review from './commands/review'
 import ui from './commands/ui'
+import watch from './commands/watch'
 import workspace from './commands/workspace'
 
 import { AgentCommandOptions } from './commands/agent/config'
@@ -32,6 +34,7 @@ import { DoctorOptions } from './commands/doctor/config'
 import { HooksOptions } from './commands/hooks/config'
 import { InitOptions } from './commands/init/config'
 import { IssuesOptions } from './commands/issues/config'
+import { LintOptions } from './commands/lint/config'
 import { LogOptions } from './commands/log/config'
 import { McpOptions } from './commands/mcp/config'
 import { PrCreateOptions } from './commands/prCreate/config'
@@ -39,6 +42,7 @@ import { PrsOptions } from './commands/prs/config'
 import { RecapOptions } from './commands/recap/config'
 import { ReviewOptions } from './commands/review/config'
 import { UiOptions } from './commands/ui/config'
+import { WatchOptions } from './commands/watch/config'
 import { WorkspaceOptions } from './commands/workspace/config'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
@@ -197,6 +201,13 @@ y.command<BlameOptions>(
   blame.handler
 )
 
+y.command<LintOptions>(
+  lint.command,
+  lint.desc,
+  lint.builder,
+  lint.handler
+)
+
 y.command<UiOptions>(
   ui.command,
   ui.desc,
@@ -209,6 +220,13 @@ y.command<WorkspaceOptions>(
   workspace.desc,
   workspace.builder,
   workspace.handler
+)
+
+y.command<WatchOptions>(
+  watch.command,
+  watch.desc,
+  watch.builder,
+  watch.handler
 )
 
 y.command<CacheOptions>(
@@ -277,7 +295,9 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(doctor.command), desc: doctor.desc },
   { name: firstCommandToken(log.command), desc: log.desc },
   { name: firstCommandToken(blame.command), desc: blame.desc },
+  { name: firstCommandToken(lint.command), desc: lint.desc },
   { name: firstCommandToken(ui.command), desc: ui.desc },
+  { name: firstCommandToken(watch.command), desc: watch.desc },
   { name: firstCommandToken(workspace.command), desc: workspace.desc },
   { name: firstCommandToken(cache.command), desc: cache.desc },
   { name: firstCommandToken(configCmd.command), desc: configCmd.desc },

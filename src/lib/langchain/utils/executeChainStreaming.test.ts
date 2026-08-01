@@ -385,6 +385,31 @@ describe('executeChainStreaming', () => {
         { color: 'cyan' }
       )
     })
+
+    it('captures inputTokens from usage_metadata.input_tokens (the real cache hit-rate denominator)', async () => {
+      const llm = new FakeUsageStreamChatModel(['hello', ' world'], {
+        input_tokens: 12,
+        output_tokens: 34,
+        total_tokens: 46,
+      })
+      const logger = { verbose: jest.fn() } as unknown as Logger
+      const { onChunk } = chunkRecorder()
+
+      await executeChainStreaming<string>({
+        llm: asLlm(llm as unknown as FakeListChatModel),
+        prompt,
+        variables,
+        parser: new StringOutputParser(),
+        onChunk,
+        logger,
+        metadata: { task: 'commit-message' },
+      })
+
+      expect(logger.verbose).toHaveBeenCalledWith(
+        expect.stringContaining('inputTokens=12'),
+        { color: 'cyan' }
+      )
+    })
   })
 
   it('rejects when required inputs are missing', async () => {

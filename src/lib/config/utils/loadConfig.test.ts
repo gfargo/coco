@@ -1,4 +1,5 @@
 import { BaseArgvOptions, BaseCommandOptions } from '../../../commands/types'
+import { CommitOptions } from '../../../commands/commit/config'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { DEFAULT_CONFIG, DEFAULT_IGNORED_EXTENSIONS, DEFAULT_IGNORED_FILES } from '../constants'
 import { loadConfig } from './loadConfig'
@@ -165,6 +166,116 @@ describe('loadConfig', () => {
     expect(config.includeBranchName).toBe(true)
   })
 
+  it('does not let an explicitly-undefined argv value clobber a resolved config value (#1922)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ verbose: true })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      verbose: undefined,
+      defaultBranch: undefined,
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.verbose).toBe(true)
+    expect(config.defaultBranch).toBe(DEFAULT_CONFIG.defaultBranch)
+  })
+
+  it('strips yargs bookkeeping keys (_, $0) out of the returned config (#1922)', () => {
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const config = loadConfig<BaseCommandOptions>(({
+      _: ['commit'],
+      $0: 'coco',
+    } as unknown) as BaseArgvOptions)
+
+    expect('_' in config).toBe(false)
+    expect('$0' in config).toBe(false)
+  })
+
+  it('deep-merges an argv-supplied service instead of replacing it wholesale (#1922)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama') })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      service: { provider: 'anthropic' },
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.service.provider).toBe('anthropic')
+    expect(config.service.model).toBe(getDefaultServiceConfigFromAlias('ollama').model)
+  })
+
+  it('does not let an explicitly-undefined field inside argv.service clobber a resolved service field (#1922)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama') })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      service: { provider: 'anthropic', model: undefined },
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.service.provider).toBe('anthropic')
+    expect(config.service.model).toBe(getDefaultServiceConfigFromAlias('ollama').model)
+  })
+
+  it('does not let an unset argv key clobber config-sourced noVerify (OSS-1742)', () => {
+    // Repro for OSS-1742: commit/split/amend all read `noVerify` off this
+    // merge, and the `noVerify` yargs option used to carry `default: false`
+    // — the same #1437 shape. That materialized `false` into argv on every
+    // run (whether or not the user passed --no-verify), so a `.coco.json`
+    // `noVerify: true` was always overwritten by the time any command saw
+    // it. argv here mirrors the post-fix shape: the key is simply absent
+    // when the flag isn't passed.
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ noVerify: true })
+      }
+      return ''
+    })
+
+    const config = loadConfig<CommitOptions>({} as BaseArgvOptions)
+
+    expect(config.noVerify).toBe(true)
+  })
+
+  it('still lets an explicitly-passed argv flag override config for noVerify (OSS-1742)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ noVerify: true })
+      }
+      return ''
+    })
+
+    const config = loadConfig<CommitOptions>(({ noVerify: false } as unknown) as BaseArgvOptions)
+
+    expect(config.noVerify).toBe(false)
+  })
+
   it('does not mutate the shared DEFAULT_CONFIG singleton across calls (#1695)', () => {
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
       return filepath ? ['.gitignore'].includes(filepath.toString()) : false
@@ -205,5 +316,72 @@ describe('loadConfig', () => {
 
     const repoBConfig = loadConfig<BaseCommandOptions>({} as BaseArgvOptions)
     expect(repoBConfig.ignoredFiles).not.toContain('docs/')
+  })
+
+  it('extends rather than replaces the ignore lists when argv provides ignoredFiles/ignoredExtensions (#1921)', () => {
+    // Repro for #1921: `--ignoredFiles secret.ts` used to wholesale
+    // replace the resolved list via `{ ...config, ...argv }`, wiping out
+    // the defaults (and any gitignore-derived secrets) instead of adding
+    // to them.
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const config = loadConfig<BaseCommandOptions>(({
+      ignoredFiles: ['secret.ts'],
+      ignoredExtensions: ['.secret'],
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.ignoredFiles).toContain('secret.ts')
+    expect(config.ignoredExtensions).toContain('.secret')
+    for (const fileName of DEFAULT_IGNORED_FILES) {
+      expect(config.ignoredFiles).toContain(fileName)
+    }
+    for (const ext of DEFAULT_IGNORED_EXTENSIONS) {
+      expect(config.ignoredExtensions).toContain(ext)
+    }
+  })
+
+  it('keeps gitignore-derived entries (e.g. .env) present even when argv narrows ignoredFiles (#1921)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? ['.gitignore'].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === '.gitignore') {
+        return '.env\n'
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      ignoredFiles: ['secret.ts'],
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.ignoredFiles).toContain('.env')
+    expect(config.ignoredFiles).toContain('secret.ts')
+  })
+
+  it('does not duplicate entries when argv re-supplies a default already in the ignore list (#1921)', () => {
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const config = loadConfig<BaseCommandOptions>(({
+      ignoredFiles: ['package-lock.json', 'secret.ts'],
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.ignoredFiles?.filter((f) => f === 'package-lock.json')).toHaveLength(1)
+  })
+
+  it('does not leak yargs meta keys (_ / $0) into the returned config (#1921)', () => {
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const config = loadConfig<BaseCommandOptions>(({
+      _: ['commit'],
+      $0: 'coco',
+      ignoredFiles: ['secret.ts'],
+    } as unknown) as BaseArgvOptions)
+
+    expect(config).not.toHaveProperty('_')
+    expect(config).not.toHaveProperty('$0')
   })
 })

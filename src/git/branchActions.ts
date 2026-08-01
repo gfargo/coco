@@ -1,11 +1,20 @@
 import { SimpleGit } from 'simple-git'
 import { BranchRef } from './branchData'
 import { rejectFlagLike } from './forgeArgGuards'
+import { listRemotes, resolveDefaultRemoteName } from './remoteResolution'
 
 export type BranchActionResult = {
   ok: boolean
   message: string
   details?: string[]
+  /**
+   * Identifiers of the batch items that actually completed — branch
+   * short names for `deleteBranches`, stash hashes for `dropStashes` —
+   * so a partial-failure caller can tell which of its
+   * speculatively-staged undo entries correspond to a real mutation
+   * (OSS-1606); `ok` alone only reflects the whole batch.
+   */
+  succeeded?: string[]
 }
 
 function localNameFromRemote(remoteBranch: string): string {
@@ -44,25 +53,6 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
       message: (error as Error).message,
     }
   }
-}
-
-/** Configured remote names (best-effort; `[]` if the call fails). */
-async function listRemotes(git: SimpleGit): Promise<string[]> {
-  try {
-    return (await git.getRemotes()).map((remote) => remote.name).filter(Boolean)
-  } catch {
-    return []
-  }
-}
-
-/**
- * Remote to push a not-yet-tracked branch to: `origin` when it exists,
- * else the first configured remote, else `undefined` (no remotes).
- */
-async function resolveDefaultRemote(git: SimpleGit): Promise<string | undefined> {
-  const remotes = await listRemotes(git)
-  if (remotes.length === 0) return undefined
-  return remotes.includes('origin') ? 'origin' : remotes[0]
 }
 
 /** Whether the remote-tracking ref `refs/remotes/<remote>/<branch>` exists locally. */
@@ -117,6 +107,8 @@ export function createBranch(
 export function checkoutBranchByName(git: SimpleGit, name: string): Promise<BranchActionResult> {
   const trimmed = name.trim()
   if (!trimmed) return Promise.resolve({ ok: false, message: 'Branch name required' })
+  const nameError = rejectFlagLike(trimmed, `Branch name '${trimmed}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
   return runAction(() => git.raw(['switch', trimmed]), `Checked out ${trimmed}`)
 }
 
@@ -195,13 +187,36 @@ export async function deleteBranches(
 
   if (failures.length === 0) {
     const verb = force ? 'Force-deleted' : 'Deleted'
-    return { ok: true, message: `${verb} ${deleted.length} branches: ${deleted.join(', ')}` }
+    return { ok: true, message: `${verb} ${deleted.length} branches: ${deleted.join(', ')}`, succeeded: deleted }
   }
   return {
     ok: false,
     message: `Deleted ${deleted.length} of ${branches.length} branches — ${failures.length} refused`,
     details: failures,
+    succeeded: deleted,
   }
+}
+
+/**
+ * Recreate a branch previously deleted by `deleteBranch(es)` at its
+ * recorded sha — the undo-stack inverse (OSS-1606). The deleted commit
+ * stays reachable in the object database until gc, so `git branch <name>
+ * <sha>` resurrects the ref exactly where it was. Does not restore the
+ * upstream link, if the branch had one — git has no way to recreate that
+ * from a sha alone.
+ */
+export function restoreDeletedBranch(
+  git: SimpleGit,
+  name: string,
+  sha: string
+): Promise<BranchActionResult> {
+  const nameError = rejectFlagLike(name, `Branch name '${name}'`)
+  if (nameError) return Promise.resolve({ ok: false, message: nameError })
+
+  return runAction(
+    () => git.raw(['branch', name, sha]),
+    `Restored branch ${name}`
+  )
 }
 
 /**
@@ -347,7 +362,7 @@ export async function pushCurrentBranch(git: SimpleGit): Promise<BranchActionRes
   }
   // No upstream yet — push with `-u` to create the remote branch AND set
   // tracking, instead of failing with git's bare "has no upstream" error.
-  const remote = await resolveDefaultRemote(git)
+  const remote = await resolveDefaultRemoteName(git)
   if (!remote) {
     return { ok: false, message: 'No upstream and no remote configured — add one with `git remote add origin <url>`.' }
   }
@@ -428,7 +443,7 @@ export async function pushBranch(
   if (!branch.upstream || !branch.remote) {
     // No upstream yet — push with `-u` to create the remote branch AND set
     // tracking, rather than refusing and sending the user to the shell.
-    const remote = await resolveDefaultRemote(git)
+    const remote = await resolveDefaultRemoteName(git)
     if (!remote) {
       return {
         ok: false,

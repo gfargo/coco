@@ -3,13 +3,21 @@
  * on the OpenAI provider already supports pointing at any OpenAI-compatible
  * API — these presets just make that capability discoverable from the
  * `coco init` wizard instead of requiring a hand-edited config file.
+ *
+ * OpenRouter, Groq, LM Studio, and vLLM used to live here too, but they're
+ * now first-class providers in their own right (`openrouter` / `groq` /
+ * `lmstudio` / `vllm` — #OSS-1623): registered in the provider registry with
+ * their own `tokenCorrectionFactor`, auth env var, and doctor support, none
+ * of which this `openai` + `baseURL` escape hatch gets. `custom` is what's
+ * left: the generic fallback for any OpenAI-compatible API that isn't (yet)
+ * one of the named providers.
  */
-export type OpenAiCompatiblePresetId = 'openrouter' | 'groq' | 'lmstudio' | 'vllm' | 'custom'
+export type OpenAiCompatiblePresetId = 'custom'
 
 export type OpenAiCompatiblePreset = {
   id: OpenAiCompatiblePresetId
   label: string
-  /** Fixed endpoint, or undefined when the user must supply one (vLLM / custom). */
+  /** Fixed endpoint, or undefined when the user must supply one (custom). */
   baseURL?: string
   /** Env var name hint shown in the API-key prompt. */
   apiKeyEnvVar: string
@@ -18,33 +26,6 @@ export type OpenAiCompatiblePreset = {
 }
 
 export const OPENAI_COMPATIBLE_PRESETS: OpenAiCompatiblePreset[] = [
-  {
-    id: 'openrouter',
-    label: 'OpenRouter',
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKeyEnvVar: 'OPENROUTER_API_KEY',
-    requiresApiKey: true,
-  },
-  {
-    id: 'groq',
-    label: 'Groq',
-    baseURL: 'https://api.groq.com/openai/v1',
-    apiKeyEnvVar: 'GROQ_API_KEY',
-    requiresApiKey: true,
-  },
-  {
-    id: 'lmstudio',
-    label: 'LM Studio',
-    baseURL: 'http://localhost:1234/v1',
-    apiKeyEnvVar: 'LMSTUDIO_API_KEY',
-    requiresApiKey: false,
-  },
-  {
-    id: 'vllm',
-    label: 'vLLM',
-    apiKeyEnvVar: 'VLLM_API_KEY',
-    requiresApiKey: false,
-  },
   {
     id: 'custom',
     label: 'Custom OpenAI-compatible URL',

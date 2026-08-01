@@ -1,6 +1,7 @@
-import { runGiteaAction, type GiteaRunner } from './giteaCli'
+import { resolveGiteaActionError, resolveGiteaLabelId, runGiteaAction, type GiteaRunner } from './giteaCli'
 import { findOpenGiteaPullRequestForBranch } from './giteaListData'
 import { rejectFlagLike, rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
+import { defaultOpenUrlRunner, type OpenUrlRunner } from './historyActions'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
 
 /**
@@ -53,8 +54,13 @@ export async function createGiteaPullRequest(
   })
 }
 
-export function openGiteaPullRequest(url: string): PullRequestActionResult {
-  return { ok: true, message: `Open this URL in your browser: ${url}`, url }
+export function openGiteaPullRequest(
+  url: string,
+  openUrl: OpenUrlRunner = defaultOpenUrlRunner
+): Promise<PullRequestActionResult> {
+  return openUrl(url)
+    .then(() => ({ ok: true, message: `Opened pull request: ${url}`, url }))
+    .catch((error) => ({ ok: false, message: (error as Error).message, url }))
 }
 
 // ---------------------------------------------------------------------------
@@ -74,6 +80,41 @@ export function mergeGiteaPullRequestByNumber(
     { Do: giteaMergeStrategy(strategy) },
     () => ({ ok: true, message: `Merged pull request #${pullRequestNumber} with ${strategy}` })
   )
+}
+
+/**
+ * `POST .../pulls/{n}/merge` with `merge_when_checks_succeed: true` —
+ * Gitea's auto-merge equivalent, on the same endpoint as a regular
+ * merge (unlike GitHub/GitLab, which have a distinct auto-merge call).
+ */
+export function enableGiteaAutoMerge(
+  projectPath: string,
+  pullRequestNumber: number,
+  strategy: PullRequestMergeStrategy,
+  runner: GiteaRunner
+): Promise<PullRequestActionResult> {
+  return runGiteaAction(
+    runner,
+    `repos/${projectPath}/pulls/${pullRequestNumber}/merge`,
+    'POST',
+    { Do: giteaMergeStrategy(strategy), merge_when_checks_succeed: true },
+    () => ({ ok: true, message: `Enabled auto-merge (${strategy}) for pull request #${pullRequestNumber}` })
+  )
+}
+
+/**
+ * Gitea's exposed check data (`GET .../commits/{sha}/statuses`) is the
+ * generic external-CI status API — any reporter (Gitea Actions, Drone,
+ * Woodpecker, a plain webhook) can post to it, and there's no reliable
+ * way to tell from a status entry alone whether Gitea Actions itself is
+ * the reporter (the only case with a matching "re-run" API). Left as an
+ * explicit gap (OSS-1615) rather than guessing.
+ */
+export function rerunFailedGiteaChecks(): Promise<PullRequestActionResult> {
+  return Promise.resolve({
+    ok: false,
+    message: 'Re-running checks is not supported for Gitea/Forgejo yet.',
+  })
 }
 
 export function approveGiteaPullRequestByNumber(
@@ -102,6 +143,91 @@ export function closeGiteaPullRequestByNumber(
     { state: 'closed' },
     () => ({ ok: true, message: `Closed pull request #${pullRequestNumber}` })
   )
+}
+
+export function reopenGiteaPullRequestByNumber(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: GiteaRunner
+): Promise<PullRequestActionResult> {
+  return runGiteaAction(
+    runner,
+    `repos/${projectPath}/pulls/${pullRequestNumber}`,
+    'PATCH',
+    { state: 'open' },
+    () => ({ ok: true, message: `Reopened pull request #${pullRequestNumber}` })
+  )
+}
+
+/**
+ * Draft-title prefix Gitea/Forgejo uses on older releases without a real
+ * `draft` field — mirrors the `[WIP]` prefix `createGiteaPullRequest` writes.
+ */
+const GITEA_DRAFT_TITLE_PREFIX = /^\s*\[WIP\]\s*/i
+
+async function fetchGiteaPullRequest(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: GiteaRunner
+): Promise<{ draft?: boolean; title?: string } | undefined> {
+  const out = (await runner(`repos/${projectPath}/pulls/${pullRequestNumber}`)).trim()
+  return out ? (JSON.parse(out) as { draft?: boolean; title?: string }) : undefined
+}
+
+/**
+ * Promote a draft PR to ready for review (#1933), the Gitea counterpart of
+ * `gh pr ready`. Mirrors `isDraftPR()` (`giteaListData.ts`): newer
+ * Gitea/Forgejo expose a real `draft` boolean, so that takes precedence;
+ * only when it's absent does this fall back to stripping the legacy `[WIP]`
+ * title prefix `createGiteaPullRequest` writes. A title with no prefix (and
+ * no `draft` field) is left untouched (already ready).
+ */
+export async function markGiteaPullRequestReadyByNumber(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: GiteaRunner
+): Promise<PullRequestActionResult> {
+  try {
+    const pr = await fetchGiteaPullRequest(projectPath, pullRequestNumber, runner)
+    if (pr === undefined) {
+      return { ok: false, message: `Could not fetch pull request #${pullRequestNumber}.` }
+    }
+
+    if (typeof pr.draft === 'boolean') {
+      if (!pr.draft) {
+        return { ok: true, message: `Pull request #${pullRequestNumber} is not a draft` }
+      }
+      return await runGiteaAction(
+        runner,
+        `repos/${projectPath}/pulls/${pullRequestNumber}`,
+        'PATCH',
+        { draft: false },
+        () => ({ ok: true, message: `Marked pull request #${pullRequestNumber} as ready for review` })
+      )
+    }
+
+    const title = pr.title ?? ''
+    if (!GITEA_DRAFT_TITLE_PREFIX.test(title)) {
+      return { ok: true, message: `Pull request #${pullRequestNumber} is not a draft` }
+    }
+    const readyTitle = title.replace(GITEA_DRAFT_TITLE_PREFIX, '')
+    if (!readyTitle.trim()) {
+      return {
+        ok: false,
+        message: `Cannot mark pull request #${pullRequestNumber} ready: the title is only the draft prefix. Rename it first.`,
+      }
+    }
+    return await runGiteaAction(
+      runner,
+      `repos/${projectPath}/pulls/${pullRequestNumber}`,
+      'PATCH',
+      { title: readyTitle },
+      () => ({ ok: true, message: `Marked pull request #${pullRequestNumber} as ready for review` })
+    )
+  } catch (error) {
+    const { message, details } = await resolveGiteaActionError(error, runner)
+    return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
 }
 
 export function commentGiteaPullRequestByNumber(
@@ -140,20 +266,6 @@ export function requestChangesGiteaPullRequestByNumber(
   )
 }
 
-async function resolveGiteaLabelId(
-  projectPath: string,
-  label: string,
-  runner: GiteaRunner
-): Promise<number | undefined> {
-  try {
-    const out = (await runner(`repos/${projectPath}/labels?limit=50`)).trim()
-    const labels = out ? (JSON.parse(out) as Array<{ id?: number; name?: string }>) : []
-    return labels.find((l) => l.name === label)?.id
-  } catch {
-    return undefined
-  }
-}
-
 /**
  * Gitea's "add label to issue" endpoint takes label IDs, not names, so this
  * resolves the name to an ID via the repo's label list first.
@@ -168,16 +280,19 @@ export async function addGiteaPullRequestLabel(
   const bad = rejectUnsafeLabel(label)
   if (bad) return { ok: false, message: bad }
 
-  const id = await resolveGiteaLabelId(projectPath, label, runner)
-  if (id === undefined) {
+  const lookup = await resolveGiteaLabelId(projectPath, label, runner)
+  if (lookup.status === 'not-found') {
     return { ok: false, message: `Label '${label}' not found on this repository. Create it in Gitea first.` }
+  }
+  if (lookup.status === 'error') {
+    return { ok: false, message: `Could not verify label '${label}': ${lookup.message}` }
   }
 
   return runGiteaAction(
     runner,
     `repos/${projectPath}/issues/${pullRequestNumber}/labels`,
     'POST',
-    { labels: [id] },
+    { labels: [lookup.id] },
     () => ({ ok: true, message: `Added label '${label}' to pull request #${pullRequestNumber}` })
   )
 }

@@ -18,9 +18,13 @@
  *      neutral cancel status). The `finally` re-clears the pending flag and
  *      nulls the ref only when it still owns the handle.
  *   2. `cancelPullRequestBodyDraft` — Esc during the draft. Soft-cancel:
- *      mutates `.cancelled = true` on the live handle (no-op when null); the
- *      workflow checks it after its await resolves and skips the prompt-open.
- *      The LLM call itself isn't aborted.
+ *      mutates `.cancelled = true` on the live handle (no-op when null), then
+ *      immediately dispatches `setPendingPullRequestBodyDraft(false)` and a
+ *      cancelled status so the loading spinner clears without waiting on the
+ *      workflow's await (#1858 — a loading status line blocks
+ *      `useStatusAutoDismiss`). The workflow also checks the handle after its
+ *      await resolves and skips the prompt-open. The LLM call itself isn't
+ *      aborted.
  *
  * The soft-cancel handle init + mutation sequencing is reproduced exactly — a
  * botched handle would either open a prompt the user cancelled or strand the
@@ -243,11 +247,17 @@ export function usePullRequestActions(
    * Soft-cancel the in-flight PR body draft (#881 phase 4). The
    * cancel ref's `.cancelled` flag is checked after the workflow's
    * await resolves; setting it true causes the workflow to skip the
-   * prompt-open and surface a neutral "cancelled" status. The LLM
-   * call itself isn't aborted (no signal threaded through the
-   * `changelogHandler` chain) so the user still pays for the in-flight
-   * tokens. Acceptable for a 5-15s draft; hard cancel lands in a
-   * follow-up if it becomes a real ask.
+   * prompt-open. The LLM call itself isn't aborted (no signal threaded
+   * through the `changelogHandler` chain) so the user still pays for
+   * the in-flight tokens. Acceptable for a 5-15s draft; hard cancel
+   * lands in a follow-up if it becomes a real ask.
+   *
+   * Dispatches the pending-flag clear and a cancelled status
+   * immediately, rather than waiting on the workflow's await to
+   * resolve — the loading status line set in `startCreatePullRequest`
+   * blocks `useStatusAutoDismiss` from clearing itself, so without an
+   * immediate dispatch here the spinner and "Esc to skip prompt" text
+   * would keep showing for the rest of the generation window (#1858).
    *
    * Idempotent — calling without an active draft is a no-op.
    */
@@ -255,7 +265,10 @@ export function usePullRequestActions(
     const handle = pullRequestBodyCancelRef.current
     if (!handle) return
     handle.cancelled = true
-  }, [])
+    const nouns = forgeNouns(forgeProvider)
+    dispatch({ type: 'setPendingPullRequestBodyDraft', value: false })
+    dispatch({ type: 'setStatus', value: `${nouns.abbrev} draft cancelled.` })
+  }, [forgeProvider, dispatch])
 
   return {
     startCreatePullRequest,

@@ -11,6 +11,7 @@ import { createPullRequest, openPullRequest } from '../../git/pullRequestActions
 import { createMergeRequest, openMergeRequest } from '../../git/mergeRequestActions'
 import { createBitbucketPullRequest, openBitbucketPullRequest } from '../../git/bitbucketPullRequestActions'
 import { defaultGlabRunner } from '../../git/glabCli'
+import { defaultBitbucketRunner } from '../../git/bitbucketCli'
 import { Logger } from '../../lib/utils/logger'
 
 jest.mock('../utils/applyRepoFlag')
@@ -70,7 +71,7 @@ describe('pr create command', () => {
     mockCreateMr.mockResolvedValue({ ok: true, message: 'Created merge request: https://gl/mr/1', url: 'https://gl/mr/1' })
     mockOpenMr.mockResolvedValue({ ok: true, message: 'opened' })
     mockCreateBitbucketPr.mockResolvedValue({ ok: true, message: 'Created pull request: https://bb/pr/1', url: 'https://bb/pr/1' })
-    mockOpenBitbucketPr.mockReturnValue({ ok: true, message: 'opened' })
+    mockOpenBitbucketPr.mockResolvedValue({ ok: true, message: 'opened' })
   })
 
   afterEach(() => jest.clearAllMocks())
@@ -163,7 +164,8 @@ describe('pr create command', () => {
     await handler(argv, logger)
     expect(mockCreateBitbucketPr).toHaveBeenCalledWith(
       'b/p',
-      expect.objectContaining({ base: 'main', head: 'feature/x', title: 'feat: add x' })
+      expect.objectContaining({ base: 'main', head: 'feature/x', title: 'feat: add x' }),
+      defaultBitbucketRunner
     )
     expect(mockOpenBitbucketPr).toHaveBeenCalledWith('https://bb/pr/1')
     expect(mockCreatePr).not.toHaveBeenCalled()

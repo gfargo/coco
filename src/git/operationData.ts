@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync } from 'fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs'
 import { isAbsolute, join } from 'path'
 import { SimpleGit } from 'simple-git'
 import {
@@ -41,6 +41,13 @@ const OPERATION_PATHS: Array<{ operation: Exclude<GitOperationType, 'none'>; pat
   { operation: 'cherry-pick', path: 'CHERRY_PICK_HEAD' },
   { operation: 'revert', path: 'REVERT_HEAD' },
 ]
+
+/**
+ * Maximum file size to read when scanning for conflict markers.
+ * Files larger than this are skipped to avoid reading large generated files
+ * (lockfiles, minified bundles) into memory. See #1918.
+ */
+export const MAX_CONFLICT_MARKER_FILE_BYTES = 1024 * 1024 // 1 MiB
 
 const UNMERGED_STATUSES = new Set([
   'DD',
@@ -101,8 +108,23 @@ export function parseConflictedFiles(statusOutput: string): ConflictFile[] {
   return files
 }
 
-export async function getConflictedFiles(git: SimpleGit): Promise<ConflictFile[]> {
-  return parseConflictedFiles(await git.raw(['status', '--porcelain', '-z']))
+/**
+ * Optional pre-fetched snapshot that callers may supply to avoid redundant
+ * `git status --porcelain -z` sub-processes.  When `statusOutput` is
+ * `undefined` (or the snapshot itself is omitted), the function fetches
+ * internally as before — preserving full backward compatibility for
+ * standalone callers.
+ */
+export type GitStatusSnapshot = {
+  /** Raw output of `git status --porcelain -z` (NUL-separated). */
+  statusOutput?: string
+}
+
+export async function getConflictedFiles(git: SimpleGit, snapshot?: GitStatusSnapshot): Promise<ConflictFile[]> {
+  const raw = snapshot?.statusOutput !== undefined
+    ? snapshot.statusOutput
+    : await git.raw(['status', '--porcelain', '-z'])
+  return parseConflictedFiles(raw)
 }
 
 export function parseConflictMarkers(path: string, content: string): ConflictMarker[] {
@@ -138,6 +160,17 @@ export async function getConflictMarkers(
     const filePath = join(root, file.path)
 
     if (!existsSync(filePath)) {
+      continue
+    }
+
+    let fileSize: number
+    try {
+      fileSize = statSync(filePath).size
+    } catch {
+      continue
+    }
+
+    if (fileSize > MAX_CONFLICT_MARKER_FILE_BYTES) {
       continue
     }
 
@@ -178,8 +211,8 @@ export async function getHookOverview(git: SimpleGit): Promise<GitHookOverview> 
   }
 }
 
-export async function getGitOperationOverview(git: SimpleGit): Promise<GitOperationOverview> {
-  const conflictedFiles = await getConflictedFiles(git)
+export async function getGitOperationOverview(git: SimpleGit, snapshot?: GitStatusSnapshot): Promise<GitOperationOverview> {
+  const conflictedFiles = await getConflictedFiles(git, snapshot)
 
   return {
     operation: await getInProgressOperationType(git),

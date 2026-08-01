@@ -1,8 +1,9 @@
-import type { GiteaRunner } from './giteaCli'
+import { resolveGiteaActionError, type GiteaRunner } from './giteaCli'
 import { paginate } from './forgeLoad'
 import { sanitizeIssueDetail, sanitizePullRequestDetail } from './forgeText'
 import type { IssueComment, IssueDetail, IssueDetailResult } from './issueDetailData'
 import type {
+  PullRequestChecksResult,
   PullRequestDetail,
   PullRequestDetailResult,
   PullRequestReview,
@@ -61,11 +62,17 @@ async function safeJson<T>(runner: GiteaRunner, endpoint: string): Promise<T | u
   }
 }
 
+/** Fetch and parse a primary PR/issue object, letting fetch errors propagate. */
+async function requireJson<T>(runner: GiteaRunner, endpoint: string): Promise<T | undefined> {
+  const out = (await runner(endpoint)).trim()
+  return out ? (JSON.parse(out) as T) : undefined
+}
+
 async function fetchAllComments(
   runner: GiteaRunner,
   projectPath: string,
   number: number
-): Promise<IssueComment[]> {
+): Promise<{ items: IssueComment[]; truncated: boolean }> {
   return paginate({
     fetchPage: async (page) =>
       (await runner(`repos/${projectPath}/issues/${number}/comments?limit=50&page=${page}`)).trim(),
@@ -136,7 +143,7 @@ export async function getGiteaPullRequestDetail(
   runner: GiteaRunner
 ): Promise<PullRequestDetailResult> {
   try {
-    const pr = await safeJson<{ body?: string; head?: { sha?: string } }>(
+    const pr = await requireJson<{ body?: string; head?: { sha?: string } }>(
       runner,
       `repos/${projectPath}/pulls/${pullRequestNumber}`
     )
@@ -145,7 +152,7 @@ export async function getGiteaPullRequestDetail(
       return { ok: false, message: `Empty response from Gitea for pull request #${pullRequestNumber}` }
     }
 
-    const [comments, reviewsRaw, statusChecks] = await Promise.all([
+    const [commentsResult, reviewsRaw, statusChecks] = await Promise.all([
       fetchAllComments(runner, projectPath, pullRequestNumber),
       safeJson<unknown>(runner, `repos/${projectPath}/pulls/${pullRequestNumber}/reviews`),
       fetchCommitStatuses(runner, projectPath, pr.head?.sha),
@@ -154,11 +161,37 @@ export async function getGiteaPullRequestDetail(
     const detail: PullRequestDetail = {
       number: pullRequestNumber,
       body: pr.body || '',
-      comments,
+      comments: commentsResult.items,
       reviews: parseReviews(reviewsRaw),
       statusCheckRollup: statusChecks,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
+  } catch (error) {
+    const { message } = await resolveGiteaActionError(error, runner)
+    return { ok: false, message }
+  }
+}
+
+/**
+ * CI-checks surface (OSS-1615) — lighter-weight sibling of
+ * `getGiteaPullRequestDetail` that fetches only the head commit's
+ * statuses, so a checks refresh doesn't re-hydrate comments/reviews too.
+ */
+export async function getGiteaPullRequestChecks(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: GiteaRunner
+): Promise<PullRequestChecksResult> {
+  try {
+    const pr = await safeJson<{ head?: { sha?: string } }>(
+      runner,
+      `repos/${projectPath}/pulls/${pullRequestNumber}`
+    )
+    if (!pr) {
+      return { ok: false, message: `Empty response from Gitea for pull request #${pullRequestNumber}` }
+    }
+    return { ok: true, checks: await fetchCommitStatuses(runner, projectPath, pr.head?.sha) }
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : String(error) }
   }
@@ -170,22 +203,24 @@ export async function getGiteaIssueDetail(
   runner: GiteaRunner
 ): Promise<IssueDetailResult> {
   try {
-    const issue = await safeJson<{ body?: string }>(runner, `repos/${projectPath}/issues/${issueNumber}`)
+    const issue = await requireJson<{ body?: string }>(runner, `repos/${projectPath}/issues/${issueNumber}`)
 
     if (!issue) {
       return { ok: false, message: `Empty response from Gitea for issue #${issueNumber}` }
     }
 
-    const comments = await fetchAllComments(runner, projectPath, issueNumber)
+    const commentsResult = await fetchAllComments(runner, projectPath, issueNumber)
 
     const detail: IssueDetail = {
       number: issueNumber,
       body: issue.body || '',
-      comments,
+      comments: commentsResult.items,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message : String(error) }
+    const { message } = await resolveGiteaActionError(error, runner)
+    return { ok: false, message }
   }
 }
 

@@ -100,17 +100,44 @@ export async function getBranchDivergence(
   return parseDivergence(await git.raw(['rev-list', '--left-right', '--count', `${upstream}...${branch}`]))
 }
 
-export async function getBranchOverview(git: SimpleGit): Promise<BranchOverview> {
-  const [branchOutput, statusOutput, currentBranchOutput] = await Promise.all([
+/**
+ * Optional pre-fetched snapshot that callers may supply to avoid redundant
+ * `git status --porcelain` and `git branch --show-current` sub-processes.
+ * When a field is `undefined` (or the snapshot itself is omitted), the
+ * function fetches that value internally as before — preserving full
+ * backward compatibility for standalone callers.
+ */
+export type GitStatusSnapshot = {
+  /** Raw output of `git status --porcelain` or `git status --porcelain -z`. */
+  statusOutput?: string
+  /** Trimmed output of `git branch --show-current`. */
+  currentBranch?: string
+}
+
+export async function getBranchOverview(git: SimpleGit, snapshot?: GitStatusSnapshot): Promise<BranchOverview> {
+  const fetchStatus = snapshot?.statusOutput === undefined
+  const fetchBranch = snapshot?.currentBranch === undefined
+
+  const fetches: [
+    Promise<string>,
+    Promise<string> | null,
+    Promise<string> | null,
+  ] = [
     git.raw([
       'for-each-ref',
       `--format=%(refname)${FIELD_SEPARATOR}%(refname:short)${FIELD_SEPARATOR}%(objectname:short)${FIELD_SEPARATOR}%(upstream:short)${FIELD_SEPARATOR}%(HEAD)${FIELD_SEPARATOR}%(committerdate:short)${FIELD_SEPARATOR}%(contents:subject)${FIELD_SEPARATOR}%(upstream:track)`,
       'refs/heads',
       'refs/remotes',
     ]),
-    git.raw(['status', '--porcelain']),
-    git.raw(['branch', '--show-current']),
-  ])
+    fetchStatus ? git.raw(['status', '--porcelain']) : null,
+    fetchBranch ? git.raw(['branch', '--show-current']) : null,
+  ]
+
+  const [branchOutput, fetchedStatus, fetchedBranch] = await Promise.all(fetches)
+
+  const statusOutput = fetchedStatus ?? snapshot?.statusOutput ?? ''
+  const currentBranchOutput = fetchedBranch ?? snapshot?.currentBranch ?? ''
+
   const refs = parseBranchRefs(branchOutput)
   const localBranches: BranchRef[] = refs
     .filter((entry) => entry.type === 'local')

@@ -63,7 +63,7 @@ export function writeChangelogFile({ filePath, title, content, date = todayIsoDa
 
   if (startIndex !== -1) {
     let endIndex = startIndex + 1
-    while (endIndex < lines.length && !lines[endIndex].startsWith('## ')) {
+    while (endIndex < lines.length && !/^#{1,2} /.test(lines[endIndex])) {
       endIndex += 1
     }
     // Trim the trailing blank lines the old section left behind so the
@@ -73,7 +73,7 @@ export function writeChangelogFile({ filePath, title, content, date = todayIsoDa
       trimmedEnd -= 1
     }
     const before = lines.slice(0, startIndex)
-    const after = lines.slice(endIndex)
+    const after = lines.slice(trimmedEnd)
     const next = [...before, ...section.split(/\r?\n/), ...after]
     writeFileAtomic(filePath, next.join('\n'), { preserveExistingMode: true })
     return

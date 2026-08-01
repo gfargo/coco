@@ -60,9 +60,13 @@ import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import { getBlame } from '../../../git/blameData'
 import { getFileHistory } from '../../../git/fileHistoryData'
+import { getCommitNote } from '../../../git/notesData'
 import type { ForgeActions } from '../../../git/forgeActions'
-import type { LogInkState } from '../inkViewModel'
+import { getSelectedInkCommit, type LogInkState } from '../inkViewModel'
 import type { LogInkContext } from '../types'
+
+/** Debounce window for the commit-note hydration effect (#OSS-2057). */
+export const COMMIT_NOTE_HYDRATION_DELAY_MS = 150
 
 /** Debounce window for issue / PR detail hydration. Lifted verbatim. */
 export const DETAIL_HYDRATION_DELAY_MS = 250
@@ -345,6 +349,44 @@ export function useDetailHydration(
     state.activeView,
     state.fileHistoryPath,
     context.fileHistoryByPath,
+    setContext,
+  ])
+
+  // Commit-note hydration (#OSS-2057). Same debounce / active-flag /
+  // frame-tag / cache-skip shape as the blame / file-history effects
+  // above, keyed by the cursored history commit's sha instead of a path.
+  // v1 scope: `getCommitNote` only reads the locally-fetched
+  // `refs/notes/commits` ref — it never fetches from the remote — so a
+  // cache hit with `undefined` means "no LOCAL note," not "definitely no
+  // note."
+  const selectedNoteHash = state.activeView === 'history' ? getSelectedInkCommit(state)?.hash : undefined
+  React.useEffect(() => {
+    if (!selectedNoteHash) return
+    if (context.commitNoteByHash?.has(selectedNoteHash)) return
+
+    const issuedAtDepth = runtimes.length - 1
+    let active = true
+    const timer = setTimeout(async () => {
+      const note = await getCommitNote(git, selectedNoteHash)
+      if (!active) return
+      setContext(
+        (current) => ({
+          ...current,
+          commitNoteByHash: new Map(current.commitNoteByHash || []).set(selectedNoteHash, note),
+        }),
+        issuedAtDepth,
+      )
+    }, COMMIT_NOTE_HYDRATION_DELAY_MS)
+
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [
+    runtimes.length,
+    git,
+    selectedNoteHash,
+    context.commitNoteByHash,
     setContext,
   ])
 }

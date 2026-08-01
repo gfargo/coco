@@ -22,7 +22,7 @@ import {
   formatLogInkLoading,
   formatLogInkPullRequestTriageEmpty,
 } from '../../chrome/surfaceStates'
-import { cellWidth, truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import { PULL_REQUEST_FILTER_LABELS } from '../../../git/triageFilterPresets'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
@@ -221,8 +221,8 @@ export function renderPullRequestTriageSurface(
         const reviewStr = reviewGlyph(pr.reviewDecision, { ascii: theme.ascii })
         // Truncate before padding: padEnd never shortens, so an author
         // longer than the capped column would silently widen the row.
-        const authorStr = truncateCells(pr.author || '', authorColWidth).padEnd(authorColWidth)
-        const branchStr = truncateCells(pr.headRefName, branchColWidth).padEnd(branchColWidth)
+        const authorStr = padCells(truncateCells(pr.author || '', authorColWidth), authorColWidth)
+        const branchStr = padCells(truncateCells(pr.headRefName, branchColWidth), branchColWidth)
         // Title and labels share the remaining row width. Labels are
         // budgeted (they can be arbitrarily long) but never squeeze the
         // title below a readable minimum — past that the labels

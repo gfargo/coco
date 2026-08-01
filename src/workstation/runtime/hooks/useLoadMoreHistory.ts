@@ -438,10 +438,18 @@ export function useLoadMoreHistory(
       })) return
       if (rows.length > 0) {
         dispatch({ type: 'appendRows', rows })
-        // Don't dispatch a setStatus here — the cursor-sync effect
-        // will re-fire on the appendRows-driven filteredCommits
-        // change and either jump (success) or report unreachable
-        // (failure), surfacing the right message.
+        // Explicitly clear the loading status here rather than relying
+        // solely on the cursor-sync effect's re-fire: if the user
+        // navigates off the branches/tags/stashes surface while this
+        // fetch is in flight, the re-fire early-returns before setting
+        // a terminal status (`useHistoryCursorSync`'s on-tab guard),
+        // and `useStatusAutoDismiss` refuses to reap a `loading`
+        // status — so the spinner would otherwise stick forever. In
+        // the normal on-tab case, the append's `filteredCommits`
+        // identity change still triggers the re-fire immediately
+        // after this dispatch, replacing the cleared status with the
+        // jump / unreachable message.
+        dispatch({ type: 'setStatus', value: undefined })
       } else {
         dispatch({
           type: 'setStatus',

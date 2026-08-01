@@ -18,9 +18,9 @@
  */
 import type { PullRequestListItem } from './pullRequestListData'
 import type { IssueListItem } from './issuesListData'
-import type { PullRequestDetail } from './pullRequestDetailData'
+import type { PullRequestDetail, PullRequestStatusCheck } from './pullRequestDetailData'
 import type { IssueComment, IssueDetail } from './issueDetailData'
-import type { PullRequestInfo } from './pullRequestData'
+import type { PullRequestInfo, PullRequestReviewInfo } from './pullRequestData'
 
 function isControl(codePoint: number, keepNewline: boolean): boolean {
   if (keepNewline && codePoint === 0x0a) return false
@@ -83,6 +83,15 @@ function sanitizeComment(comment: IssueComment): IssueComment {
   return { ...comment, author: clean(comment.author), body: stripControlMultiline(comment.body) }
 }
 
+function sanitizeStatusCheck(check: PullRequestStatusCheck): PullRequestStatusCheck {
+  return {
+    ...check,
+    name: stripControl(check.name),
+    status: clean(check.status),
+    conclusion: clean(check.conclusion),
+  }
+}
+
 export function sanitizePullRequestDetail(detail: PullRequestDetail): PullRequestDetail {
   return {
     ...detail,
@@ -93,6 +102,7 @@ export function sanitizePullRequestDetail(detail: PullRequestDetail): PullReques
       author: clean(review.author),
       body: stripControlMultiline(review.body),
     })),
+    statusCheckRollup: detail.statusCheckRollup.map(sanitizeStatusCheck),
   }
 }
 
@@ -113,5 +123,11 @@ export function sanitizePullRequestInfo(info: PullRequestInfo): PullRequestInfo 
     baseRefName: stripControl(info.baseRefName),
     body: info.body === undefined ? undefined : stripControlMultiline(info.body),
     author: clean(info.author),
+    statusCheckRollup: info.statusCheckRollup?.map(sanitizeStatusCheck),
+    reviews: info.reviews?.map((review): PullRequestReviewInfo => ({
+      ...review,
+      author: stripControl(review.author),
+      state: stripControl(review.state),
+    })),
   }
 }

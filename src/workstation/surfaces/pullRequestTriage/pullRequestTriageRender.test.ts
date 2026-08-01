@@ -214,6 +214,41 @@ describe('renderPullRequestTriageSurface', () => {
     expect(rows[0]).toContain(' [enh')
   })
 
+  it('keeps a CJK author cell-aligned with the following column (#1860)', () => {
+    // Regression for `truncateCells(x, W).padEnd(W)`: padEnd pads by
+    // UTF-16 code units, so a wide-glyph author overshoots the column by
+    // one cell per wide character and shoves the branch column right.
+    // With `padCells`, the author field occupies exactly `authorColWidth`
+    // cells regardless of content, so the branch column starts at the
+    // same cell offset for every row.
+    const width = 120
+    const tree = render(makeState(), {
+      width,
+      pullRequestList: {
+        available: true,
+        authenticated: true,
+        pullRequests: [
+          makePr({ number: 1, author: '山田太郎', headRefName: 'feature/a', title: 'CJK author row' }),
+          makePr({ number: 2, author: 'somebody-long', headRefName: 'feature/b', title: 'ASCII author row' }),
+        ],
+      },
+    })
+    const children = (tree.props as { children: unknown[] }).children
+    const rows = children.flat().map(treeText)
+    const cjkRow = rows.find((line) => line.includes('#1'))
+    const asciiRow = rows.find((line) => line.includes('#2'))
+    expect(cjkRow).toBeDefined()
+    expect(asciiRow).toBeDefined()
+
+    function branchOffset(row: string, branch: string): number {
+      const idx = row.indexOf(branch)
+      expect(idx).toBeGreaterThan(-1)
+      return cellWidth(row.slice(0, idx))
+    }
+
+    expect(branchOffset(cjkRow as string, 'feature/a')).toBe(branchOffset(asciiRow as string, 'feature/b'))
+  })
+
   it('structural snapshot — empty list', () => {
     expect(
       render(makeState(), {

@@ -161,12 +161,25 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
   })
 }
 
+/**
+ * Flush the trace buffer, then force-exit — but preserve any exit code
+ * an inner surface set (the old hard `process.exit(0)` masked failures).
+ * `exit` is a seam so the branch is unit-testable without killing jest.
+ */
+export function finalizeWorkspaceExit(
+  exit: (code?: number) => never = process.exit
+): never {
+  flushWorkspaceTrace()
+  return exit(process.exitCode === undefined ? 0 : Number(process.exitCode))
+}
+
 export const handler: CommandHandler<WorkspaceArgv> = async (argv) => {
   await startCocoWorkspace(argv)
   // Force-exit on clean quit. Without this, a still-pending background
   // gh PR-count fetch (or any other child process) keeps the event
   // loop alive after the user hits `q`, and the process lingers until
-  // the gh timeout (5s by default) fires.
-  flushWorkspaceTrace()
-  process.exit(0)
+  // the gh timeout (5s by default) fires. Exit code is preserved via
+  // `process.exitCode` rather than hardcoded, so an inner surface's
+  // failure isn't reported as success.
+  finalizeWorkspaceExit()
 }

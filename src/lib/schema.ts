@@ -190,6 +190,22 @@ export const schema = {
               "type": "boolean",
               "description": "Keep a local, cross-run record of AI usage — prompt-token estimate and latency per task / model / repo — that `coco doctor --cost` reads. The ledger is a plain JSONL file under the cache directory and never leaves the machine; it records no prompt, diff, or code content.\n\n`coco init` writes this preference, and on the first interactive command with no preference set anywhere coco defaults it on and prints a one-time notice (non-interactive / CI runs stay off). The `COCO_USAGE_LOG` environment variable overrides this setting either way: set it to `0` / `false` to force recording off, or to `1` / a file path to force it on. Unset everywhere means off.",
               "default": false
+            },
+            "budget": {
+              "type": "object",
+              "properties": {
+                "monthlyUsd": {
+                  "type": "number",
+                  "description": "Monthly estimated-spend cap in USD. Leave unset to disable the budget check entirely. `0` (or a negative value) is treated as \"warn on any priced spend\" rather than disabling the check."
+                },
+                "warnAtPercent": {
+                  "type": "number",
+                  "description": "Percentage of `monthlyUsd` at or above which `coco doctor` warns.",
+                  "default": 80
+                }
+              },
+              "additionalProperties": false,
+              "description": "Optional monthly spend guardrail checked against the local usage ledger. `coco doctor` sums the current calendar month's *estimated* cost (tokens priced via coco's built-in per-model table — see `coco doctor --cost`) and emits a warning once that total reaches `warnAtPercent` of `monthlyUsd`. This is advisory only: coco never blocks or throttles a call because of it, and the check is a no-op unless `telemetry.usage` (or `COCO_USAGE_LOG`) is actually recording, since there'd be no ledger to sum."
             }
           },
           "additionalProperties": false,
@@ -203,15 +219,16 @@ export const schema = {
               "github",
               "gitlab",
               "bitbucket",
+              "bitbucket-server",
               "gitea"
             ]
           },
-          "description": "Map self-hosted git remote hosts to a forge so coco talks to the right CLI. coco auto-detects github.com, gitlab.com, bitbucket.org, codeberg.org, and hosts whose name contains `gitlab` / `github` / `bitbucket` / `gitea` / `forgejo` / `codeberg`. For vanity hostnames that carry none of those words (e.g. `git.acme.com`), set the mapping here so detection and dispatch work.",
+          "description": "Map self-hosted git remote hosts to a forge so coco talks to the right CLI. coco auto-detects github.com, gitlab.com, bitbucket.org, codeberg.org, and hosts whose name contains `gitlab` / `github` / `bitbucket` / `gitea` / `forgejo` / `codeberg`. For vanity hostnames that carry none of those words (e.g. `git.acme.com`), set the mapping here so detection and dispatch work.\n\n`bitbucket-server` (Bitbucket Server / Data Center) can ONLY be reached through this map — its REST API (`/rest/api/1.0`) and web UI differ enough from Bitbucket Cloud that auto-detection isn't reliable, and a self-hosted install is commonly on a `*bitbucket*`-named host that would otherwise resolve to Cloud.",
           "examples": [
             {
               "git.acme.com": "gitea",
               "code.internal": "github",
-              "bb.corp.com": "bitbucket"
+              "bb.corp.com": "bitbucket-server"
             }
           ]
         }
@@ -244,6 +261,30 @@ export const schema = {
         },
         {
           "$ref": "#/definitions/BedrockLLMService"
+        },
+        {
+          "$ref": "#/definitions/DeepSeekLLMService"
+        },
+        {
+          "$ref": "#/definitions/GroqLLMService"
+        },
+        {
+          "$ref": "#/definitions/XaiLLMService"
+        },
+        {
+          "$ref": "#/definitions/TogetherLLMService"
+        },
+        {
+          "$ref": "#/definitions/FireworksLLMService"
+        },
+        {
+          "$ref": "#/definitions/OpenRouterLLMService"
+        },
+        {
+          "$ref": "#/definitions/LmStudioLLMService"
+        },
+        {
+          "$ref": "#/definitions/VllmLLMService"
         }
       ]
     },
@@ -387,6 +428,16 @@ export const schema = {
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
         },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
           "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
@@ -471,7 +522,15 @@ export const schema = {
         "gemini",
         "mistral",
         "azure",
-        "bedrock"
+        "bedrock",
+        "deepseek",
+        "groq",
+        "xai",
+        "together",
+        "fireworks",
+        "openrouter",
+        "lmstudio",
+        "vllm"
       ]
     },
     "ConfiguredLLMModel": {
@@ -763,6 +822,16 @@ export const schema = {
       ],
       "description": "AWS Bedrock model ids are free-form (model id strings and inference-profile ARNs). The `(string & {})` member keeps the literal suggestions while still accepting any AWS id. It must NOT collapse `LLMModel` to bare `string` — `(string & {})` preserves the literal union members of the other providers."
     },
+    "ReasoningEffort": {
+      "type": "string",
+      "enum": [
+        "minimal",
+        "low",
+        "medium",
+        "high"
+      ],
+      "description": "Reasoning/thinking effort for providers with a graded reasoning dial. Applied only by providers whose `ProviderDefinition` sets `supportsReasoningEffort` (OpenAI, Azure, Gemini, Anthropic); silently ignored elsewhere. Gemini and Anthropic have no `minimal` level and map it down to their lowest tier (`LOW` / `low` respectively)."
+    },
     "DynamicModelProfile": {
       "type": "object",
       "properties": {
@@ -937,6 +1006,16 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
         },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
@@ -1157,6 +1236,16 @@ export const schema = {
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
         },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
           "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
@@ -1363,6 +1452,16 @@ export const schema = {
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
         },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
           "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
@@ -1568,6 +1667,16 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
         },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
@@ -1783,6 +1892,16 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
         },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",
@@ -2001,6 +2120,1772 @@ export const schema = {
           "type": "number",
           "description": "The maximum number of attempts for schema parsing with retry logic.",
           "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go",
+                      "java",
+                      "cpp",
+                      "cs",
+                      "rb",
+                      "php",
+                      "kt",
+                      "swift",
+                      "lua",
+                      "bash"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`   - 'lua' : `.lua`   - 'bash' : `.sh` / `.bash`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ]
+    },
+    "DeepSeekLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "baseURL": {
+          "type": "string",
+          "description": "Custom base URL. Falls back to DeepSeek's default endpoint when unset."
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go",
+                      "java",
+                      "cpp",
+                      "cs",
+                      "rb",
+                      "php",
+                      "kt",
+                      "swift",
+                      "lua",
+                      "bash"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`   - 'lua' : `.lua`   - 'bash' : `.sh` / `.bash`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ],
+      "description": "The OpenAI-compatible provider presets (DeepSeek, Groq, xAI, Together, Fireworks, OpenRouter, LM Studio, vLLM) all share the same shape — each is an open model namespace (unlike OpenAI/Anthropic/Gemini/Mistral's closed, enumerable catalogs), so `model` is left as the inherited `ConfiguredLLMModel` (which already accepts any string via Bedrock's `(string & {})` member) rather than redeclared. Written out one type per provider (rather than a shared generic) so each still discriminates on its own `provider` literal for the `LLMService` union and schema generation."
+    },
+    "GroqLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "baseURL": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go",
+                      "java",
+                      "cpp",
+                      "cs",
+                      "rb",
+                      "php",
+                      "kt",
+                      "swift",
+                      "lua",
+                      "bash"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`   - 'lua' : `.lua`   - 'bash' : `.sh` / `.bash`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ]
+    },
+    "XaiLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "baseURL": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go",
+                      "java",
+                      "cpp",
+                      "cs",
+                      "rb",
+                      "php",
+                      "kt",
+                      "swift",
+                      "lua",
+                      "bash"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`   - 'lua' : `.lua`   - 'bash' : `.sh` / `.bash`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ]
+    },
+    "TogetherLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "baseURL": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go",
+                      "java",
+                      "cpp",
+                      "cs",
+                      "rb",
+                      "php",
+                      "kt",
+                      "swift",
+                      "lua",
+                      "bash"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`   - 'lua' : `.lua`   - 'bash' : `.sh` / `.bash`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ]
+    },
+    "FireworksLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "baseURL": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go",
+                      "java",
+                      "cpp",
+                      "cs",
+                      "rb",
+                      "php",
+                      "kt",
+                      "swift",
+                      "lua",
+                      "bash"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`   - 'lua' : `.lua`   - 'bash' : `.sh` / `.bash`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ]
+    },
+    "OpenRouterLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "baseURL": {
+          "type": "string"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go",
+                      "java",
+                      "cpp",
+                      "cs",
+                      "rb",
+                      "php",
+                      "kt",
+                      "swift",
+                      "lua",
+                      "bash"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`   - 'lua' : `.lua`   - 'bash' : `.sh` / `.bash`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ]
+    },
+    "LmStudioLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "baseURL": {
+          "type": "string",
+          "description": "Custom base URL. Falls back to `http://localhost:1234/v1` when unset."
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
+        },
+        "dynamicModels": {
+          "$ref": "#/definitions/DynamicModelProfile",
+          "description": "Optional task-to-model overrides used when model is set to \"dynamic\"."
+        },
+        "dynamicModelPreference": {
+          "$ref": "#/definitions/DynamicModelPreference",
+          "description": "Default dynamic routing preference when model is set to \"dynamic\".",
+          "default": "balanced"
+        },
+        "streaming": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. When `false` (default) every LLM call uses the existing non-streaming code path, regardless of which command or surface fires it.",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "description": "Streaming output (#881). Wires `chain.stream()` instead of `chain.invoke()` into LLM-driven TUI surfaces so the user sees a live preview of the model's output as it generates, rather than staring at a spinner until the full response arrives.\n\nOutput contract is unchanged when enabled: the final draft / plan still goes through the same parser, schema validator, and retry logic as the non-streaming path. The stream is a *preview only* — it relieves the \"is this hanging?\" anxiety without touching what gets committed.\n\nOff by default while we shake the UX out across providers; some models stream poorly (one-shot blob disguised as a stream) and the preview just blinks in those cases. Off-by-default also lets users who prefer the quieter spinner-only UX skip the visual chatter.\n\nScope today: workstation compose surface's AI commit draft (the `I` keystroke). Other TUI LLM calls (split-plan, PR body) stay non-streaming pending separate validation."
+        },
+        "fastPath": {
+          "type": "object",
+          "properties": {
+            "markdown": {
+              "type": "boolean",
+              "description": "Replace the LLM summary with a templated heading extract for `.md` / `.mdx` / `.markdown` modification diffs that have clear heading-level structural changes. Diffs without structural signals (paragraph-only edits) still go to the LLM regardless of this flag.\n\nBench impact (synthetic): collapses docs-update-shaped commits from ~24s cold to ~3ms (no LLM calls fire for the markdown files). Real-world wall-clock savings depend on per-call LLM latency.",
+              "default": false
+            },
+            "languageAware": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "description": "Master switch. When false (default) the languageAware path is skipped entirely regardless of `languages`.",
+                  "default": false
+                },
+                "languages": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "ts",
+                      "js",
+                      "py",
+                      "rs",
+                      "go",
+                      "java",
+                      "cpp",
+                      "cs",
+                      "rb",
+                      "php",
+                      "kt",
+                      "swift",
+                      "lua",
+                      "bash"
+                    ]
+                  },
+                  "description": "Languages to opt in. Omit / empty to enable all supported languages."
+                }
+              },
+              "additionalProperties": false,
+              "description": "Language-aware structural fast path (#883). Replace the LLM summary with a symbol-level extract (\"added parseRequest(); removed legacyParse()\") for source files in the listed languages. Off by default; quality is harder to validate than the markdown fast path so we don't enable it without opt-in.\n\nDiffs without top-level structural signals (paragraph-only body edits, formatting changes) still go to the LLM regardless of this flag.\n\nCurrently supports:   - 'ts' : `.ts` / `.tsx` / `.mts` / `.cts`   - 'js' : `.js` / `.jsx` / `.mjs` / `.cjs`   - 'py' : `.py` / `.pyi`   - 'rs' : `.rs`   - 'go' : `.go`   - 'java' : `.java`   - 'cpp' : `.c` / `.h` / `.cpp` / `.cc` / `.cxx` / `.hpp` / `.hh` / `.hxx`   - 'cs' : `.cs`   - 'rb' : `.rb`   - 'php' : `.php`   - 'kt' : `.kt` / `.kts`   - 'swift' : `.swift`   - 'lua' : `.lua`   - 'bash' : `.sh` / `.bash`"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Opt-in fast paths that trade summary detail for speed. Each flag here replaces an LLM summary call with a deterministic templated extract for a specific file shape. Off by default — when enabled, you accept that final commit messages on those file shapes may be blander than LLM-generated summaries (the templated extract names structural changes only).\n\nLossless optimizations (cache, trivial-shape skip on pure additions / deletions / renames / binary, sort discipline) ship default-on and are not configured here."
+        }
+      },
+      "required": [
+        "authentication",
+        "model",
+        "provider"
+      ]
+    },
+    "VllmLLMService": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "$ref": "#/definitions/LLMProvider"
+        },
+        "baseURL": {
+          "type": "string",
+          "description": "Custom base URL. Falls back to `http://localhost:8000/v1` when unset."
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": {}
+        },
+        "model": {
+          "$ref": "#/definitions/ConfiguredLLMModel"
+        },
+        "tokenLimit": {
+          "type": "number",
+          "description": "The maximum number of tokens per request.",
+          "default": 2048
+        },
+        "temperature": {
+          "type": "number",
+          "description": "The temperature value controls the randomness of the generated output. Higher values (e.g., 0.8) make the output more random, while lower values (e.g., 0.2) make it more deterministic.",
+          "default": 0.4
+        },
+        "maxConcurrent": {
+          "type": "number",
+          "description": "The maximum number of requests to make concurrently.",
+          "default": 6
+        },
+        "minTokensForSummary": {
+          "type": "number",
+          "description": "Minimum token count for a directory/file group to be eligible for summarization. Groups below this threshold preserve raw diffs to maintain detail.",
+          "default": 400
+        },
+        "maxFileTokens": {
+          "type": "number",
+          "description": "Maximum tokens allowed for a single file diff before it gets pre-summarized. Prevents large files from biasing the overall summary. If not set, defaults to 25% of tokenLimit.",
+          "default": "undefined (uses 0.25 * tokenLimit)"
+        },
+        "authentication": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "None"
+                },
+                "credentials": {
+                  "not": {}
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "OAuth"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "clientId": {
+                      "type": "string"
+                    },
+                    "clientSecret": {
+                      "type": "string"
+                    },
+                    "token": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "APIKey"
+                },
+                "credentials": {
+                  "type": "object",
+                  "properties": {
+                    "apiKey": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "apiKey"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "type",
+                "credentials"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "requestOptions": {
+          "type": "object",
+          "properties": {
+            "timeout": {
+              "type": "number"
+            },
+            "maxRetries": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "maxParsingAttempts": {
+          "type": "number",
+          "description": "The maximum number of attempts for schema parsing with retry logic.",
+          "default": 3
+        },
+        "promptCache": {
+          "type": "boolean",
+          "description": "Enable server-side prompt caching for providers that support it, so a repeated stable prefix (system prompt, few-shot examples) is billed at the cached-read rate instead of full input price on every call.\n\nAnthropic-only today (`cache_control` applied to the last cacheable block, advancing automatically as the conversation grows). OpenAI/Azure cache automatically server-side with no opt-in needed. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsPromptCache`.",
+          "default": false
+        },
+        "reasoningEffort": {
+          "$ref": "#/definitions/ReasoningEffort",
+          "description": "Reasoning effort for models with a graded or extended-thinking mode. Trades cost/latency for answer quality. See `ReasoningEffort` for the per-provider mapping. Silently ignored (never throws) on providers whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.",
+          "default": "undefined (provider's own default)"
         },
         "dynamicModels": {
           "$ref": "#/definitions/DynamicModelProfile",

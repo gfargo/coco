@@ -1,6 +1,21 @@
 import { type TiktokenModel } from '@langchain/openai'
 
-export type LLMProvider = 'openai' | 'ollama' | 'anthropic' | 'gemini' | 'mistral' | 'azure' | 'bedrock'
+export type LLMProvider =
+  | 'openai'
+  | 'ollama'
+  | 'anthropic'
+  | 'gemini'
+  | 'mistral'
+  | 'azure'
+  | 'bedrock'
+  | 'deepseek'
+  | 'groq'
+  | 'xai'
+  | 'together'
+  | 'fireworks'
+  | 'openrouter'
+  | 'lmstudio'
+  | 'vllm'
 export type DynamicModelTask =
   | 'summarize'
   | 'commit'
@@ -12,6 +27,14 @@ export type DynamicModelTask =
   | 'largeDiff'
   | 'blameExplain'
 export type DynamicModelPreference = 'cost' | 'balanced' | 'quality'
+/**
+ * Reasoning/thinking effort for providers with a graded reasoning dial.
+ * Applied only by providers whose `ProviderDefinition` sets
+ * `supportsReasoningEffort` (OpenAI, Azure, Gemini, Anthropic); silently
+ * ignored elsewhere. Gemini and Anthropic have no `minimal` level and map
+ * it down to their lowest tier (`LOW` / `low` respectively).
+ */
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high'
 
 export type OpenAIModel =
   | TiktokenModel
@@ -219,6 +242,29 @@ export type BaseLLMService = {
    * @default 3
    */
   maxParsingAttempts?: number
+  /**
+   * Enable server-side prompt caching for providers that support it, so a
+   * repeated stable prefix (system prompt, few-shot examples) is billed at
+   * the cached-read rate instead of full input price on every call.
+   *
+   * Anthropic-only today (`cache_control` applied to the last cacheable
+   * block, advancing automatically as the conversation grows). OpenAI/Azure
+   * cache automatically server-side with no opt-in needed. Silently ignored
+   * (never throws) on providers whose `ProviderDefinition` doesn't set
+   * `supportsPromptCache`.
+   *
+   * @default false
+   */
+  promptCache?: boolean
+  /**
+   * Reasoning effort for models with a graded or extended-thinking mode.
+   * Trades cost/latency for answer quality. See `ReasoningEffort` for the
+   * per-provider mapping. Silently ignored (never throws) on providers
+   * whose `ProviderDefinition` doesn't set `supportsReasoningEffort`.
+   *
+   * @default undefined (provider's own default)
+   */
+  reasoningEffort?: ReasoningEffort
   /**
    * Optional task-to-model overrides used when model is set to "dynamic".
    */
@@ -441,6 +487,68 @@ export type BedrockLLMService = BaseLLMService & {
   fields?: Record<string, unknown>
 }
 
+/**
+ * The OpenAI-compatible provider presets (DeepSeek, Groq, xAI, Together,
+ * Fireworks, OpenRouter, LM Studio, vLLM) all share the same shape — each is
+ * an open model namespace (unlike OpenAI/Anthropic/Gemini/Mistral's closed,
+ * enumerable catalogs), so `model` is left as the inherited
+ * `ConfiguredLLMModel` (which already accepts any string via Bedrock's
+ * `(string & {})` member) rather than redeclared. Written out one type per
+ * provider (rather than a shared generic) so each still discriminates on
+ * its own `provider` literal for the `LLMService` union and schema
+ * generation.
+ */
+export type DeepSeekLLMService = BaseLLMService & {
+  provider: 'deepseek'
+  /** Custom base URL. Falls back to DeepSeek's default endpoint when unset. */
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type GroqLLMService = BaseLLMService & {
+  provider: 'groq'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type XaiLLMService = BaseLLMService & {
+  provider: 'xai'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type TogetherLLMService = BaseLLMService & {
+  provider: 'together'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type FireworksLLMService = BaseLLMService & {
+  provider: 'fireworks'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type OpenRouterLLMService = BaseLLMService & {
+  provider: 'openrouter'
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type LmStudioLLMService = BaseLLMService & {
+  provider: 'lmstudio'
+  /** Custom base URL. Falls back to `http://localhost:1234/v1` when unset. */
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
+export type VllmLLMService = BaseLLMService & {
+  provider: 'vllm'
+  /** Custom base URL. Falls back to `http://localhost:8000/v1` when unset. */
+  baseURL?: string
+  fields?: Record<string, unknown>
+}
+
 export type LLMService =
   | OpenAILLMService
   | OllamaLLMService
@@ -449,3 +557,11 @@ export type LLMService =
   | MistralLLMService
   | AzureLLMService
   | BedrockLLMService
+  | DeepSeekLLMService
+  | GroqLLMService
+  | XaiLLMService
+  | TogetherLLMService
+  | FireworksLLMService
+  | OpenRouterLLMService
+  | LmStudioLLMService
+  | VllmLLMService

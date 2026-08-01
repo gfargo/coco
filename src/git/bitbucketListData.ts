@@ -5,7 +5,7 @@ import {
   getBitbucketProject,
   getBitbucketStatus,
   type BitbucketRunner,
-  defaultBitbucketRunner,
+  makeBitbucketRunner,
 } from './bitbucketCli'
 import { loadForgeList, loadForgeOverview, paginate } from './forgeLoad'
 import type { IssueListFilter, IssueListItem, IssueListOverview } from './issuesListData'
@@ -25,7 +25,10 @@ import {
  * Bitbucket list loaders. These produce the SAME overview shapes as the
  * GitHub and GitLab loaders so the triage surfaces and command handlers
  * consume them identically. Data is fetched via the Bitbucket REST API v2
- * using a runner that reads credentials from environment variables.
+ * using a runner bound to the detected repository's host (mirroring Gitea's
+ * per-host `runnerFactory`) — only `bitbucket.org` reaches the Cloud API; any
+ * other `*bitbucket*` host gets an explicit "not supported" refusal instead
+ * of silently addressing Atlassian's cloud (#1899, see `makeBitbucketRunner`).
  *
  * Field-mapping notes:
  *  - `author.nickname` → author (Bitbucket uses nickname, not login)
@@ -33,6 +36,8 @@ import {
  *  - Pull requests have no labels in Bitbucket Cloud; `labels` is omitted.
  *  - Issues use `kind` (bug/enhancement/proposal/task) as labels.
  */
+
+type RunnerFactory = (host: string) => BitbucketRunner
 
 type BitbucketPagedResponse<T> = {
   pagelen: number
@@ -72,7 +77,7 @@ async function fetchAllPages<T>(
 ): Promise<T[]> {
   const pagelen = Math.min(want, 50)
   const sep = baseEndpoint.includes('?') ? '&' : '?'
-  return paginate({
+  return (await paginate({
     fetchPage: (page) => runner(`${baseEndpoint}${sep}pagelen=${pagelen}&page=${page}`),
     parsePage: (output) => {
       const result = parsePage<T>(output, resource)
@@ -80,7 +85,7 @@ async function fetchAllPages<T>(
     },
     want,
     maxPages: 100,
-  })
+  })).items
 }
 
 function normalizeState(raw: unknown): string {
@@ -189,6 +194,19 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
     params.q = params.q ? `(${params.q}) AND ${searchQ}` : searchQ
   }
 
+  // '@me' is resolved to a real nickname by the caller before this runs;
+  // the guards keep a literal '@me' (a nickname Bitbucket doesn't know)
+  // out of the query if this is ever called without that resolution.
+  if (filter.author && filter.author !== '@me') {
+    const authorQ = `author.nickname = "${bbqlQuote(filter.author)}"`
+    params.q = params.q ? `(${params.q}) AND ${authorQ}` : authorQ
+  }
+
+  if (filter.assignee && filter.assignee !== '@me') {
+    const assigneeQ = `reviewers.nickname = "${bbqlQuote(filter.assignee)}"`
+    params.q = params.q ? `(${params.q}) AND ${assigneeQ}` : assigneeQ
+  }
+
   const pairs = Object.entries(params)
     .filter(([, v]) => v !== undefined)
     .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
@@ -200,12 +218,12 @@ function buildPullRequestEndpoint(path: string, filter: PullRequestListFilter): 
 export async function getBitbucketPullRequestList(
   git: SimpleGit,
   filter: PullRequestListFilter = {},
-  runner: BitbucketRunner = defaultBitbucketRunner
+  runnerFactory: RunnerFactory = makeBitbucketRunner
 ): Promise<PullRequestListOverview> {
   return loadForgeList({
     detect: () => getBitbucketProject(git),
     notDetectedMessage: 'No Bitbucket remote detected.',
-    probe: () => getBitbucketStatus(runner),
+    probe: (project) => getBitbucketStatus(runnerFactory(project.host)),
     describeStatus: describeBitbucketStatus,
     repository: (project) => ({ owner: project.owner, name: project.name }),
     filter,
@@ -214,20 +232,14 @@ export async function getBitbucketPullRequestList(
         throw new Error('Pull request labels are not supported on Bitbucket Cloud.')
       }
 
+      const runner = runnerFactory(project.host)
       const want = filter.limit ?? 30
-      let pullRequests: PullRequestListItem[] = []
 
-      const raw = await fetchAllPages<RawBitbucketPR>(
-        runner,
-        buildPullRequestEndpoint(project.path, filter),
-        'pull requests',
-        want
-      )
-
-      pullRequests = raw.map(mapPullRequestItem)
-
-      if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
-
+      // Resolve '@me' BEFORE building the endpoint so the nickname lands in
+      // the BBQL query and Bitbucket filters server-side. Filtering after
+      // the fetch (the old approach) ran against only the first `want` PRs
+      // of the unfiltered list, so a user whose PRs sat past that window
+      // saw them silently dropped.
       const wantsMe = filter.author === '@me' || filter.assignee === '@me'
       const me = wantsMe ? await resolveBitbucketMeNickname(runner) : undefined
       if (wantsMe && !me) {
@@ -235,18 +247,24 @@ export async function getBitbucketPullRequestList(
           'Could not resolve "@me" to a Bitbucket user (no nickname on the authenticated account).'
         )
       }
+      const effectiveFilter: PullRequestListFilter = wantsMe
+        ? {
+            ...filter,
+            author: filter.author === '@me' ? me : filter.author,
+            assignee: filter.assignee === '@me' ? me : filter.assignee,
+          }
+        : filter
 
-      if (filter.author) {
-        const authorFilter = filter.author === '@me' ? me : filter.author
-        pullRequests = pullRequests.filter((pr) => pr.author === authorFilter)
-      }
+      const raw = await fetchAllPages<RawBitbucketPR>(
+        runner,
+        buildPullRequestEndpoint(project.path, effectiveFilter),
+        'pull requests',
+        want
+      )
 
-      if (filter.assignee) {
-        const assigneeFilter = filter.assignee === '@me' ? me : filter.assignee
-        pullRequests = pullRequests.filter(
-          (pr) => assigneeFilter !== undefined && pr.assignees?.includes(assigneeFilter)
-        )
-      }
+      let pullRequests = raw.map(mapPullRequestItem)
+
+      if (filter.draft) pullRequests = pullRequests.filter((pr) => pr.isDraft)
 
       return { pullRequests: pullRequests.map(sanitizePullRequestListItem) }
     },
@@ -317,16 +335,17 @@ function buildIssueEndpoint(path: string, filter: IssueListFilter): string {
 export async function getBitbucketIssueList(
   git: SimpleGit,
   filter: IssueListFilter = {},
-  runner: BitbucketRunner = defaultBitbucketRunner
+  runnerFactory: RunnerFactory = makeBitbucketRunner
 ): Promise<IssueListOverview> {
   return loadForgeList({
     detect: () => getBitbucketProject(git),
     notDetectedMessage: 'No Bitbucket remote detected.',
-    probe: () => getBitbucketStatus(runner),
+    probe: (project) => getBitbucketStatus(runnerFactory(project.host)),
     describeStatus: describeBitbucketStatus,
     repository: (project) => ({ owner: project.owner, name: project.name }),
     filter,
     fetch: async (project) => {
+      const runner = runnerFactory(project.host)
       const want = filter.limit ?? 30
 
       // Resolve '@me' BEFORE building the endpoint so the nickname lands in
@@ -389,17 +408,18 @@ export async function findOpenBitbucketPullRequestForBranch(
 
 export async function getBitbucketPullRequestOverview(
   git: SimpleGit,
-  runner: BitbucketRunner = defaultBitbucketRunner
+  runnerFactory: RunnerFactory = makeBitbucketRunner
 ): Promise<PullRequestOverview> {
   return loadForgeOverview({
     git,
     detect: () => getBitbucketProject(git),
     notDetectedMessage: 'No Bitbucket remote detected.',
-    probe: () => getBitbucketStatus(runner),
+    probe: (project) => getBitbucketStatus(runnerFactory(project.host)),
     describeStatus: describeBitbucketStatus,
     repository: (project) => ({ owner: project.owner, name: project.name }),
     requireCurrentBranch: true,
     fetch: async (project, currentBranch) => {
+      const runner = runnerFactory(project.host)
       const pr = await findOpenBitbucketPullRequestForBranch(project.path, currentBranch as string, runner)
       return {
         currentPullRequest: pr ? sanitizePullRequestInfo(prToPullRequestInfo(pr)) : undefined,

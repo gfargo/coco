@@ -5,6 +5,7 @@ import {
   getProviderRepository,
   parseGitHubRemoteUrl,
   providerBranchName,
+  setForgeHostOverrides,
 } from './providerData'
 
 describe('log provider data', () => {
@@ -99,6 +100,47 @@ describe('log provider data', () => {
       name: 'coco',
       webUrl: 'https://bitbucket.org/gfargo/coco',
     })
+  })
+
+  it(
+    'resolves Bitbucket Server only via a forgeHosts override, stripping the /scm/ segment and building /projects/.../repos/... URLs',
+    async () => {
+      setForgeHostOverrides({ 'bb.acme.com': 'bitbucket-server' })
+      try {
+        const repo = getProviderRepository('origin', 'https://bb.acme.com/scm/TEAM/repo.git')
+        expect(repo).toEqual({
+          provider: 'bitbucket-server',
+          remote: 'origin',
+          host: 'bb.acme.com',
+          owner: 'TEAM',
+          name: 'repo',
+          webUrl: 'https://bb.acme.com/projects/TEAM/repos/repo',
+        })
+
+        expect(buildProviderUrl(repo, { type: 'repo' })).toBe(
+          'https://bb.acme.com/projects/TEAM/repos/repo/browse'
+        )
+        expect(buildProviderUrl(repo, { type: 'branch', branch: 'feat/x' })).toBe(
+          'https://bb.acme.com/projects/TEAM/repos/repo/browse?at=refs%2Fheads%2Ffeat%2Fx'
+        )
+        expect(buildProviderUrl(repo, { type: 'commit', commit: 'abc123' })).toBe(
+          'https://bb.acme.com/projects/TEAM/repos/repo/commits/abc123'
+        )
+        expect(buildProviderUrl(repo, { type: 'pull-request', number: 9 })).toBe(
+          'https://bb.acme.com/projects/TEAM/repos/repo/pull-requests/9/overview'
+        )
+        expect(buildProviderUrl(repo, { type: 'compare', base: 'main', head: 'feat/x' })).toBe(
+          'https://bb.acme.com/projects/TEAM/repos/repo/compare/commits?sourceBranch=refs%2Fheads%2Ffeat%2Fx&targetBranch=refs%2Fheads%2Fmain'
+        )
+      } finally {
+        setForgeHostOverrides(undefined)
+      }
+    }
+  )
+
+  it('without an override, a *bitbucket*-named host still resolves to Cloud (not Server)', () => {
+    const repo = getProviderRepository('origin', 'https://our-bitbucket.acme.com/scm/TEAM/repo.git')
+    expect(repo.provider).toBe('bitbucket')
   })
 
   it('builds GitLab provider URLs under the /-/ namespace', () => {

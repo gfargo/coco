@@ -1,9 +1,19 @@
 import * as fs from 'fs'
 import { Config } from '../../lib/config/types'
-import { resolveDynamicModel } from '../../lib/langchain/utils/dynamicModels'
+import {
+  DYNAMIC_MODEL_TASKS,
+  providerSupportsDynamicModel,
+  resolveDynamicModel,
+} from '../../lib/langchain/utils/dynamicModels'
 import { DEFAULT_OLLAMA_ENDPOINT, getOllamaStatus } from '../../lib/langchain/utils/ollamaStatus'
 import { DEPRECATED_MODELS, detectProviderMismatch } from '../../lib/langchain/modelValidity'
 import { LLMProvider } from '../../lib/langchain/types'
+import {
+  readUsageRecords,
+  summarizeUsageByTask,
+  totalUsageCost,
+} from '../../lib/langchain/utils/usageLedger'
+import { LLM_PROVIDER_IDS, providerRequiresAuth } from '../../lib/langchain/providers/registry'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
 
@@ -14,15 +24,9 @@ export interface Diagnostic {
   autoFix?: (config: Record<string, unknown>) => void
 }
 
-const SUPPORTED_PROVIDERS: LLMProvider[] = [
-  'openai',
-  'anthropic',
-  'azure',
-  'gemini',
-  'mistral',
-  'bedrock',
-  'ollama',
-]
+// Derived from the provider registry (rather than a hand-maintained list) so
+// a new registered provider never has to be added here too (#OSS-1623).
+const SUPPORTED_PROVIDERS: LLMProvider[] = LLM_PROVIDER_IDS
 
 const PROVIDER_ALIASES: Record<string, LLMProvider> = {
   claude: 'anthropic',
@@ -45,8 +49,49 @@ export function runDiagnostics(config: Config): Diagnostic[] {
   checkEndpointSupport(config, diagnostics)
   checkIgnoredFiles(config, diagnostics)
   checkProjectConfigFile(diagnostics)
+  checkUsageBudget(config, diagnostics)
+  checkCacheHitRate(diagnostics)
 
   return diagnostics
+}
+
+/**
+ * Diff-summary cache tasks (#1958). Only these two call sites consult
+ * `diffSummaryCache` — summing their hit/lookup counts gives the
+ * effective cache hit rate across a run of `coco commit`/`coco changelog`.
+ */
+const CACHE_ELIGIBLE_TASKS = ['summarize-large-file', 'summarize-directory-diff']
+
+/** Below this many lookups, a single miss/hit swings the rate too much to warn on. */
+const CACHE_HIT_RATE_MIN_LOOKUPS = 20
+
+/** Warn when the hit rate across eligible tasks falls below this fraction. */
+const CACHE_HIT_RATE_WARN_THRESHOLD = 0.3
+
+export function checkCacheHitRate(diagnostics: Diagnostic[]) {
+  const records = readUsageRecords()
+  if (records.length === 0) return
+
+  const { cacheHits, cacheLookups } = summarizeUsageByTask(records)
+    .filter((row) => CACHE_ELIGIBLE_TASKS.includes(row.key))
+    .reduce(
+      (acc, row) => ({
+        cacheHits: acc.cacheHits + row.cacheHits,
+        cacheLookups: acc.cacheLookups + row.cacheLookups,
+      }),
+      { cacheHits: 0, cacheLookups: 0 }
+    )
+
+  if (cacheLookups < CACHE_HIT_RATE_MIN_LOOKUPS) return
+
+  const rate = cacheHits / cacheLookups
+  if (rate < CACHE_HIT_RATE_WARN_THRESHOLD) {
+    diagnostics.push({
+      severity: 'warn',
+      message: `Diff-summary cache hit rate is low (${Math.round(rate * 100)}% over ${cacheLookups} lookup(s)).`,
+      fix: 'Run coco from the repo root (a stable cache key needs a stable repo path), keep service.model consistent across runs, and avoid COCO_NO_CACHE unless intentionally bypassing the cache. See `coco doctor --cost` for the full breakdown.',
+    })
+  }
 }
 
 function checkServiceBlock(config: Config, diagnostics: Diagnostic[]) {
@@ -63,7 +108,7 @@ function checkServiceBlock(config: Config, diagnostics: Diagnostic[]) {
     diagnostics.push({
       severity: 'error',
       message: 'No provider set in service config.',
-      fix: 'Set service.provider to "openai", "anthropic", "azure", "gemini", "mistral", "bedrock", or "ollama".',
+      fix: `Set service.provider to one of: ${SUPPORTED_PROVIDERS.map((p) => `"${p}"`).join(', ')}.`,
     })
   }
 
@@ -164,14 +209,20 @@ export function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
     // A custom baseURL on the openai provider means an OpenAI-compatible
     // endpoint (OpenRouter, Groq, LM Studio, vLLM, custom — #1610), not the
     // real OpenAI API. Self-hosted/local ones commonly run without auth, so
-    // this is a warning rather than a hard error for that case.
-    const isCompatEndpoint = provider === 'openai' && Boolean((config.service as { baseURL?: string }).baseURL)
+    // this is a warning rather than a hard error for that case. Also warn
+    // (rather than error) for any first-class provider whose registry entry
+    // says it doesn't require auth (LM Studio, vLLM — #OSS-1623), regardless
+    // of baseURL.
+    const isLegacyCompatEndpoint =
+      provider === 'openai' && Boolean((config.service as { baseURL?: string }).baseURL)
+    const isNoAuthProvider = provider ? !providerRequiresAuth(provider) : false
+    const isCompatEndpoint = isLegacyCompatEndpoint || isNoAuthProvider
     diagnostics.push({
       severity: isCompatEndpoint ? 'warn' : 'error',
       message: isCompatEndpoint
-        ? `No authentication configured for the OpenAI-compatible endpoint at "${(config.service as { baseURL?: string }).baseURL}". This is fine for a self-hosted/no-auth endpoint (LM Studio, vLLM, ...) — otherwise set an API key.`
+        ? `No authentication configured for "${provider}"${(config.service as { baseURL?: string }).baseURL ? ` at "${(config.service as { baseURL?: string }).baseURL}"` : ''}. This is fine for a self-hosted/no-auth endpoint (LM Studio, vLLM, ...) — otherwise set an API key.`
         : `Provider "${provider}" requires authentication but none is configured.`,
-      fix: `Set service.authentication to { "type": "APIKey", "credentials": { "apiKey": "..." } } or use the OPENAI_API_KEY / ANTHROPIC_API_KEY / AZURE_OPENAI_API_KEY / GEMINI_API_KEY / MISTRAL_API_KEY environment variable.`,
+      fix: `Set service.authentication to { "type": "APIKey", "credentials": { "apiKey": "..." } } or use the OPENAI_API_KEY / ANTHROPIC_API_KEY / AZURE_OPENAI_API_KEY / GEMINI_API_KEY / MISTRAL_API_KEY / DEEPSEEK_API_KEY / GROQ_API_KEY / XAI_API_KEY / TOGETHER_API_KEY / FIREWORKS_API_KEY / OPENROUTER_API_KEY environment variable.`,
     })
     return
   }
@@ -182,7 +233,7 @@ export function checkAuthentication(config: Config, diagnostics: Diagnostic[]) {
       diagnostics.push({
         severity: 'warn',
         message: 'API key appears to be a placeholder or empty. Coco may fall back to environment variables.',
-        fix: `Set the API key in your config or via environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY, GEMINI_API_KEY, or MISTRAL_API_KEY).`,
+        fix: `Set the API key in your config or via environment variable (OPENAI_API_KEY, ANTHROPIC_API_KEY, AZURE_OPENAI_API_KEY, GEMINI_API_KEY, MISTRAL_API_KEY, DEEPSEEK_API_KEY, GROQ_API_KEY, XAI_API_KEY, TOGETHER_API_KEY, FIREWORKS_API_KEY, or OPENROUTER_API_KEY).`,
       })
     }
   }
@@ -232,7 +283,7 @@ function checkModeConfig(config: Config, diagnostics: Diagnostic[]) {
   }
 }
 
-function checkDynamicRouting(config: Config, diagnostics: Diagnostic[]) {
+export function checkDynamicRouting(config: Config, diagnostics: Diagnostic[]) {
   if (!config.service) return
 
   if (config.service.model === 'dynamic') {
@@ -257,10 +308,24 @@ function checkDynamicRouting(config: Config, diagnostics: Diagnostic[]) {
       }
     }
 
-    diagnostics.push({
-      severity: 'info',
-      message: 'Dynamic model routing is active. Coco will select models per task based on your preference.',
-    })
+    const provider = config.service.provider as LLMProvider | undefined
+    const uncoveredTasks =
+      provider && !providerSupportsDynamicModel(provider)
+        ? DYNAMIC_MODEL_TASKS.filter((task) => !config.service?.dynamicModels?.[task])
+        : []
+
+    if (uncoveredTasks.length > 0) {
+      diagnostics.push({
+        severity: 'error',
+        message: `Provider "${provider}" has no tracked model catalog for model: "dynamic", so ${uncoveredTasks.join(', ')} will throw at runtime instead of routing.`,
+        fix: `Set service.model to a concrete model id, or add service.dynamicModels overrides for: ${uncoveredTasks.join(', ')}.`,
+      })
+    } else {
+      diagnostics.push({
+        severity: 'info',
+        message: 'Dynamic model routing is active. Coco will select models per task based on your preference.',
+      })
+    }
   } else {
     diagnostics.push({
       severity: 'info',
@@ -303,10 +368,71 @@ function checkTokenLimits(config: Config, diagnostics: Diagnostic[]) {
   }
 }
 
+/**
+ * Compares this calendar month's *estimated* ledger spend against
+ * `telemetry.budget.monthlyUsd` and warns at/above `warnAtPercent`. No-op
+ * when no cap is configured, or when nothing in this month's ledger priced
+ * out to a cost (unset ledger, or every call used an unpriced model).
+ *
+ * The month boundary is computed in UTC rather than the host's local time
+ * zone, so the same ledger reports the same "this month" total regardless of
+ * where `coco doctor` runs (and regardless of `t`'s own time zone — `t` is
+ * always an epoch millisecond timestamp).
+ */
+export function checkUsageBudget(config: Config, diagnostics: Diagnostic[]) {
+  const budget = config.telemetry?.budget
+  if (budget?.monthlyUsd === undefined) return
+
+  const now = new Date()
+  const records = readUsageRecords().filter((r) => {
+    const d = new Date(r.t)
+    return d.getUTCFullYear() === now.getUTCFullYear() && d.getUTCMonth() === now.getUTCMonth()
+  })
+
+  const { totalCostUsd, pricedCalls } = totalUsageCost(records)
+  if (pricedCalls === 0) return
+
+  // A zero or negative cap can't be expressed as a percentage of itself, so
+  // treat it as "warn on any priced spend" rather than silently no-op'ing
+  // (which `!budget.monthlyUsd` used to do for the common `monthlyUsd: 0` case).
+  if (budget.monthlyUsd <= 0) {
+    if (totalCostUsd > 0) {
+      diagnostics.push({
+        severity: 'warn',
+        message: `Estimated spend this month is $${totalCostUsd.toFixed(2)}, exceeding your telemetry.budget.monthlyUsd cap ($${budget.monthlyUsd}).`,
+        fix: 'Raise telemetry.budget.monthlyUsd above 0, or lower cost by setting service.dynamicModelPreference to "cost" (or a cheaper fixed service.model).',
+      })
+    }
+    return
+  }
+
+  const warnAtPercent = budget.warnAtPercent ?? 80
+  const percentSpent = (totalCostUsd / budget.monthlyUsd) * 100
+
+  if (percentSpent >= warnAtPercent) {
+    diagnostics.push({
+      severity: 'warn',
+      message: `Estimated spend this month is $${totalCostUsd.toFixed(2)}, ${percentSpent.toFixed(0)}% of your telemetry.budget.monthlyUsd cap ($${budget.monthlyUsd}).`,
+      fix: 'Raise telemetry.budget.monthlyUsd, or lower cost by setting service.dynamicModelPreference to "cost" (or a cheaper fixed service.model).',
+    })
+  }
+}
+
 // Providers whose client honors a custom host via service.endpoint.
-// Only Ollama reads service.endpoint; openai/anthropic use service.baseURL instead.
+// Only Ollama reads service.endpoint; the rest use service.baseURL instead.
 const ENDPOINT_AWARE_PROVIDERS: LLMProvider[] = ['ollama']
-const BASE_URL_PROVIDERS: LLMProvider[] = ['openai', 'anthropic']
+const BASE_URL_PROVIDERS: LLMProvider[] = [
+  'openai',
+  'anthropic',
+  'deepseek',
+  'groq',
+  'xai',
+  'together',
+  'fireworks',
+  'openrouter',
+  'lmstudio',
+  'vllm',
+]
 
 export function checkEndpointSupport(config: Config, diagnostics: Diagnostic[]) {
   const provider = config.service?.provider

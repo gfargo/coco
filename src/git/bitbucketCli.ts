@@ -101,6 +101,27 @@ export async function getBitbucketProject(git: SimpleGit): Promise<BitbucketProj
 }
 
 /**
+ * Build a runner bound to a specific remote host, mirroring `makeGiteaRunner`.
+ * Unlike Gitea, Bitbucket Server / Data Center serves a completely different
+ * API (`/rest/api/1.0/...`) than Bitbucket Cloud's `api.bitbucket.org/2.0` —
+ * coco only implements the Cloud API, so a non-cloud host must refuse rather
+ * than silently address `api.bitbucket.org` with a workspace slug that
+ * doesn't exist there (#1899).
+ */
+export function makeBitbucketRunner(host?: string): BitbucketRunner {
+  const normalized = (host ?? '').toLowerCase()
+  if (!normalized || normalized === 'bitbucket.org') {
+    return defaultBitbucketRunner
+  }
+
+  return async function unsupportedBitbucketServerRunner(): Promise<string> {
+    throw new Error(
+      `Bitbucket Server / Data Center ("${host}") is not supported yet; only bitbucket.org cloud is supported.`
+    )
+  }
+}
+
+/**
  * Probe Bitbucket auth by checking credentials in the environment and (if
  * present) calling GET /user. Credentials come from env vars; there is no
  * installed CLI binary. Missing or invalid credentials return
