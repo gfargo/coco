@@ -5660,6 +5660,25 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    it('r retries from the error state (setSplitPlanError over an existing plan)', () => {
+      // setSplitPlanError keeps status 'ready' (with `error` set) when a
+      // plan was already loaded — that's the actual "error state" the
+      // overlay's "Press `r` to retry" hint renders for (#1862). This is
+      // the case the previous test above didn't cover.
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      state = applyLogInkAction(state, { type: 'setSplitPlanError', error: 'apply failed' })
+
+      expect(state.splitPlan?.status).toBe('ready')
+      expect(state.splitPlan?.error).toBe('apply failed')
+      expect(getLogInkInputEvents(state, 'r', {}, { splitPlanLineCount: 10 })).toEqual([
+        { type: 'startCommitSplit' },
+      ])
+    })
+
     it('r is a no-op during loading / applying (no workflow stacking)', () => {
       const loadingState = applyLogInkAction(createLogInkState(rows), { type: 'startSplitPlanLoad' })
       expect(getLogInkInputEvents(loadingState, 'r')).toEqual([])
