@@ -49,6 +49,21 @@ describe('log Ink text helpers', () => {
     expect(cellWidth(truncateCells('🫡 approve deploy', 10))).toBeLessThanOrEqual(10)
   })
 
+  // OSS-1774 — the blanket [0x2600, 0x27bf] range treated every codepoint in
+  // Misc-Symbols + Dingbats as wide, including text-presentation status
+  // glyphs coco renders at 1 cell (✓ ✗ ⚠ ✚ ❯). Meanwhile ⏳/⌛ are genuinely
+  // East-Asian-Wide but fell outside every range and measured as 1.
+  it('measures status dingbats and hourglasses at their rendered cell width (OSS-1774)', () => {
+    for (const glyph of ['✓', '✗', '⚠', '✚', '❯']) {
+      expect(cellWidth(glyph)).toBe(1)
+    }
+    expect(cellWidth('⏳')).toBe(2)
+    expect(cellWidth('⌛')).toBe(2)
+    // Emoji-presentation glyphs in the same block stay wide.
+    expect(cellWidth('✨')).toBe(2)
+    expect(cellWidth('✅')).toBe(2)
+  })
+
   it('truncates without splitting wide characters past the target width', () => {
     expect(truncateCells('src/変更-summary.ts', 10)).toBe('src/変更-…')
     expect(cellWidth(truncateCells('emoji ✨ commit message', 12))).toBeLessThanOrEqual(12)
