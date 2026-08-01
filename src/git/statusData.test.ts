@@ -3,6 +3,7 @@ import {
   applyStatusFilterMask,
   findGroupForIndex,
   flattenWorktreeGroups,
+  getWorktreeOverview,
   groupWorktreeFiles,
   optimisticToggleWorktreeOverview,
   parsePorcelainStatus,
@@ -249,5 +250,38 @@ describe('optimisticToggleWorktreeOverview (#1353)', () => {
     const next = optimisticToggleWorktreeOverview(overview, 'zzz.ts')
     expect(next.files).toEqual(overview.files)
     expect(next.stagedCount).toBe(1)
+  })
+})
+
+describe('getWorktreeOverview snapshot parameter (OSS-596)', () => {
+  it('skips git.raw status call when snapshot.statusOutput is supplied', async () => {
+    const git = { raw: jest.fn() }
+    const statusOutput = 'M  staged.ts\0'
+
+    const result = await getWorktreeOverview(git as never, { statusOutput })
+
+    expect(git.raw).not.toHaveBeenCalled()
+    expect(result.stagedCount).toBe(1)
+  })
+
+  it('fetches status --porcelain -z internally when no snapshot is supplied', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue('?? untracked.ts\0'),
+    }
+
+    const result = await getWorktreeOverview(git as never)
+
+    expect(git.raw).toHaveBeenCalledWith(['status', '--porcelain', '-z'])
+    expect(result.untrackedCount).toBe(1)
+  })
+
+  it('fetches status --porcelain -z internally when snapshot.statusOutput is undefined', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue(''),
+    }
+
+    await getWorktreeOverview(git as never, {})
+
+    expect(git.raw).toHaveBeenCalledWith(['status', '--porcelain', '-z'])
   })
 })

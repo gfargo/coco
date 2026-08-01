@@ -3,6 +3,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   getConflictMarkers,
+  getConflictedFiles,
   getGitOperationOverview,
   getHookOverview,
   getInProgressOperationType,
@@ -252,3 +253,69 @@ describe('log operation data', () => {
   })
 })
 
+
+describe('getConflictedFiles snapshot parameter (OSS-596)', () => {
+  it('skips git.raw status call when snapshot.statusOutput is supplied', async () => {
+    const git = { raw: jest.fn() }
+    const statusOutput = 'UU conflict.ts\0'
+
+    const result = await getConflictedFiles(git as never, { statusOutput })
+
+    expect(git.raw).not.toHaveBeenCalled()
+    expect(result).toHaveLength(1)
+    expect(result[0].path).toBe('conflict.ts')
+  })
+
+  it('fetches status --porcelain -z internally when no snapshot is supplied', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue('UU conflict.ts\0'),
+    }
+
+    const result = await getConflictedFiles(git as never)
+
+    expect(git.raw).toHaveBeenCalledWith(['status', '--porcelain', '-z'])
+    expect(result).toHaveLength(1)
+  })
+
+  it('fetches status --porcelain -z internally when snapshot.statusOutput is undefined', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue(''),
+    }
+
+    await getConflictedFiles(git as never, {})
+
+    expect(git.raw).toHaveBeenCalledWith(['status', '--porcelain', '-z'])
+  })
+})
+
+describe('getGitOperationOverview snapshot parameter (OSS-596)', () => {
+  it('skips the status --porcelain -z call when snapshot.statusOutput is supplied', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'coco-op-snapshot-'))
+    const gitDir = join(root, '.git')
+    const hooksPath = join(gitDir, 'hooks')
+
+    mkdirSync(hooksPath, { recursive: true })
+
+    const git = {
+      raw: jest.fn().mockImplementation(async (args: string[]) => {
+        if (args[0] === 'config') throw new Error('missing config')
+        return join(gitDir, (args as string[]).at(-1) as string)
+      }),
+      revparse: jest.fn().mockImplementation(async (args: string[]) => {
+        if (args.includes('--show-toplevel')) return root
+        return join(gitDir, (args as string[]).at(-1) as string)
+      }),
+    }
+
+    try {
+      await getGitOperationOverview(git as never, { statusOutput: '' })
+
+      const statusCalls = (git.raw as jest.Mock).mock.calls.filter(
+        (args: string[][]) => args[0][0] === 'status',
+      )
+      expect(statusCalls).toHaveLength(0)
+    } finally {
+      rmSync(root, { force: true, recursive: true })
+    }
+  })
+})

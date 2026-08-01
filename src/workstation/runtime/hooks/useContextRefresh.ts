@@ -48,16 +48,32 @@ async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
   }
 }
 
-async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
+export async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
+  // Fetch status --porcelain -z and branch --show-current once, then thread
+  // the snapshot into the three consumers that would otherwise each issue an
+  // independent probe.  On failure the fields remain `undefined` and each
+  // consumer falls back to its own internal fetch, preserving the existing
+  // resilience.
+  let snapshot: { statusOutput?: string; currentBranch?: string } = {}
+  try {
+    const [statusOutput, currentBranchRaw] = await Promise.all([
+      git.raw(['status', '--porcelain', '-z']),
+      git.raw(['branch', '--show-current']),
+    ])
+    snapshot = { statusOutput, currentBranch: currentBranchRaw.trim() || undefined }
+  } catch {
+    // Fall through: snapshot fields stay undefined, consumers fetch fresh.
+  }
+
   const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, sparse, submodules, remotes] =
     await Promise.all([
-      safe(getBranchOverview(git)),
+      safe(getBranchOverview(git, snapshot)),
       safe(getForgePullRequestOverview(git)),
       safe(getTagOverview(git)),
-      safe(getWorktreeOverview(git)),
+      safe(getWorktreeOverview(git, snapshot)),
       safe(getStashOverview(git)),
       safe(getWorktreeListOverview(git)),
-      safe(getGitOperationOverview(git)),
+      safe(getGitOperationOverview(git, snapshot)),
       safe(getProviderOverview(git)),
       safe(getReflogOverview(git)),
       safe(getBisectStatus(git)),

@@ -7,7 +7,7 @@
  * `refreshWorktreeContext` caller, current and future, gets the reload
  * signal automatically instead of each call site having to remember it.
  */
-import { useContextRefresh, type UseContextRefreshDeps } from './useContextRefresh'
+import { loadLogInkContext, useContextRefresh, type UseContextRefreshDeps } from './useContextRefresh'
 import { getWorktreeOverview } from '../../../git/statusData'
 
 jest.mock('../../../git/statusData', () => ({
@@ -125,5 +125,39 @@ describe('useContextRefresh — refreshWorktreeContext stale-beats-blank on fail
     expect(result).toBe(fresh)
     expect(deps.setContext).toHaveBeenCalled()
     expect(deps.setWorktreeDiffRefreshToken).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('loadLogInkContext — issues exactly one top-level status --porcelain call (OSS-596)', () => {
+  it('fetches status --porcelain -z exactly once regardless of how many consumers accept it', async () => {
+    const callLog: string[][] = []
+
+    // A minimal fake SimpleGit that records every git.raw() invocation and
+    // returns safe defaults so all the downstream consumers can complete.
+    const git = {
+      raw: jest.fn().mockImplementation(async (args: string[]) => {
+        callLog.push([...args])
+        // Return enough data for each consumer to succeed without throwing.
+        if (args[0] === 'status') return ''
+        if (args[0] === 'branch') return 'main\n'
+        if (args[0] === 'for-each-ref') return ''
+        if (args[0] === 'tag') return ''
+        if (args[0] === 'stash') return ''
+        if (args[0] === 'config') throw new Error('no config')
+        return ''
+      }),
+      revparse: jest.fn().mockResolvedValue('/tmp/fake-repo'),
+    } as never
+
+    await loadLogInkContext(git)
+
+    // Only the top-level snapshot fetch should have called status --porcelain.
+    // getWorktreeListOverview may call `git -C <path> status --porcelain`
+    // (args[0] === '-C'), which is legitimately separate — filter to direct
+    // status calls only.
+    const statusCalls = callLog.filter(
+      (args) => args[0] === 'status' && args[1] === '--porcelain',
+    )
+    expect(statusCalls).toHaveLength(1)
   })
 })
