@@ -209,6 +209,32 @@ describe('hydrated triage preview sections (inspector hydration follow-up)', () 
     expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(true)
   })
 
+  it('issue preview shows the failure message instead of the loading hint when hydration failed', () => {
+    const lines = formatIssueTriagePreview(issue, undefined, 'HTTP 401: Bad credentials').map(stripLine)
+    expect(lines.some((l) => l.includes('Failed to load details: HTTP 401: Bad credentials'))).toBe(true)
+    expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(false)
+  })
+
+  it('issue preview ignores a cached error once detail is present', () => {
+    const detail = { number: 882, body: 'Body text.', comments: [] }
+    const lines = formatIssueTriagePreview(issue, detail, 'stale error').map(stripLine)
+    expect(lines.some((l) => l.includes('stale error'))).toBe(false)
+    expect(lines).toContain('Body text.')
+  })
+
+  it('PR preview shows the failure message instead of the loading hint when hydration failed', () => {
+    const lines = formatPullRequestTriagePreview(pr, undefined, 'pull request', 'rate limited').map(stripLine)
+    expect(lines.some((l) => l.includes('Failed to load details: rate limited'))).toBe(true)
+    expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(false)
+  })
+
+  it('PR preview ignores a cached error once detail is present', () => {
+    const detail = { number: 962, body: 'Body text.', comments: [], reviews: [], statusCheckRollup: [] }
+    const lines = formatPullRequestTriagePreview(pr, detail, 'pull request', 'stale error').map(stripLine)
+    expect(lines.some((l) => l.includes('stale error'))).toBe(false)
+    expect(lines).toContain('Body text.')
+  })
+
   it('PR preview renders body + checks + reviews + comments when detail is provided', () => {
     const detail = {
       number: 962,

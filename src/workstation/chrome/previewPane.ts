@@ -251,7 +251,8 @@ function statusChecksSection(
  */
 export function formatIssueTriagePreview(
   issue: IssueListItem | undefined,
-  detail?: IssueDetail
+  detail?: IssueDetail,
+  error?: string
 ): PreviewLine[] {
   if (!issue) {
     return [dim('Select an issue to preview.')]
@@ -292,6 +293,11 @@ export function formatIssueTriagePreview(
       out.push(blank())
       out.push(...comments)
     }
+  } else if (error) {
+    // #OSS-1770 — the debounced hydration effect failed; show the
+    // forge's message instead of a permanent "Loading…" placeholder.
+    out.push(blank())
+    out.push(dim(`⚠ Failed to load details: ${error}`))
   } else if (typeof issue.comments === 'number' && issue.comments > 0) {
     // Pre-hydration affordance — tell the user the body / comments
     // section is coming, so a 250ms wait doesn't look like a bug.
@@ -313,7 +319,8 @@ export function formatIssueTriagePreview(
 export function formatPullRequestTriagePreview(
   pr: PullRequestListItem | undefined,
   detail?: PullRequestDetail,
-  nounLower = 'pull request'
+  nounLower = 'pull request',
+  error?: string
 ): PreviewLine[] {
   if (!pr) {
     return [dim(`Select a ${nounLower} to preview.`)]
@@ -370,6 +377,11 @@ export function formatPullRequestTriagePreview(
       out.push(blank())
       out.push(...comments)
     }
+  } else if (error) {
+    // #OSS-1770 — the debounced hydration effect failed; show the
+    // forge's message instead of a permanent "Loading…" placeholder.
+    out.push(blank())
+    out.push(dim(`⚠ Failed to load details: ${error}`))
   } else {
     // Pre-hydration affordance — same as the issue preview.
     out.push(blank())

@@ -89,6 +89,17 @@ export function createForgeTriageWorkflowHandlers(
           next.issueDetailByNumber = undefined
         }
       }
+      // #OSS-1770 — clear any cached failure alongside the detail entry
+      // so a post-mutation re-hydration isn't blocked by a stale error.
+      if (current.issueDetailErrorByNumber) {
+        if (typeof issueNumber === 'number') {
+          const trimmed = new Map(current.issueDetailErrorByNumber)
+          trimmed.delete(issueNumber)
+          next.issueDetailErrorByNumber = trimmed
+        } else {
+          next.issueDetailErrorByNumber = undefined
+        }
+      }
       return next
     }, issuedAtDepth)
     setContextStatus(
@@ -107,6 +118,17 @@ export function createForgeTriageWorkflowHandlers(
           next.pullRequestDetailByNumber = trimmed
         } else {
           next.pullRequestDetailByNumber = undefined
+        }
+      }
+      // #OSS-1770 — clear any cached failure alongside the detail entry
+      // so a post-mutation re-hydration isn't blocked by a stale error.
+      if (current.pullRequestDetailErrorByNumber) {
+        if (typeof pullRequestNumber === 'number') {
+          const trimmed = new Map(current.pullRequestDetailErrorByNumber)
+          trimmed.delete(pullRequestNumber)
+          next.pullRequestDetailErrorByNumber = trimmed
+        } else {
+          next.pullRequestDetailErrorByNumber = undefined
         }
       }
       return next

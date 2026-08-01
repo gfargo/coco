@@ -1121,8 +1121,11 @@ export function renderIssueTriagePreviewPanel(
   const detail = issue
     ? context.issueDetailByNumber?.get(issue.number)
     : undefined
+  const detailError = issue
+    ? context.issueDetailErrorByNumber?.get(issue.number)
+    : undefined
   return renderPreviewPanel(h, { Box, Text }, 'Issue preview',
-    formatIssueTriagePreview(issue, detail), width, theme, focused)
+    formatIssueTriagePreview(issue, detail, detailError), width, theme, focused)
 }
 
 /**
@@ -1168,6 +1171,9 @@ export function renderPullRequestTriagePreviewPanel(
   const detail = pr
     ? context.pullRequestDetailByNumber?.get(pr.number)
     : undefined
+  const detailError = pr
+    ? context.pullRequestDetailErrorByNumber?.get(pr.number)
+    : undefined
   return renderPreviewPanel(h, { Box, Text }, `${nouns.singular} preview`,
-    formatPullRequestTriagePreview(pr, detail, nouns.singularLower), width, theme, focused)
+    formatPullRequestTriagePreview(pr, detail, nouns.singularLower, detailError), width, theme, focused)
 }
