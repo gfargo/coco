@@ -2,34 +2,7 @@ import { DiffNode, FileChange } from '../../../types'
 import { Logger } from '../../../utils/logger'
 import { DiffTreeNode } from './createDiffTree'
 import { TokenCounter } from '../../../utils/tokenizer'
-
-type Limit = <T>(operation: () => Promise<T>) => Promise<T>
-
-function createLimit(maxConcurrent: number): Limit {
-  const limit = Math.max(1, maxConcurrent)
-  let active = 0
-  const queue: (() => void)[] = []
-
-  const runNext = () => {
-    active--
-    const next = queue.shift()
-    if (next) next()
-  }
-
-  return async <T>(operation: () => Promise<T>): Promise<T> => {
-    if (active >= limit) {
-      await new Promise<void>((resolve) => queue.push(resolve))
-    }
-
-    active++
-
-    try {
-      return await operation()
-    } finally {
-      runNext()
-    }
-  }
-}
+import { createConcurrencyLimit, type Limit } from '../../../utils/createConcurrencyLimit'
 
 /**
  * Asynchronously collect diffs for a given node and its children.
@@ -40,7 +13,7 @@ export async function collectDiffs(
   tokenizer: TokenCounter,
   logger: Logger,
   maxConcurrent = 6,
-  limit: Limit = createLimit(maxConcurrent)
+  limit: Limit = createConcurrencyLimit(maxConcurrent)
 ): Promise<DiffNode> {
   // Collect diffs for the files of the current node
   const diffPromises = node.files.map((nodeFile) => limit(async () => {

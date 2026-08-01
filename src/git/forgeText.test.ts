@@ -2,6 +2,7 @@ import {
   sanitizeIssueDetail,
   sanitizeIssueListItem,
   sanitizePullRequestDetail,
+  sanitizePullRequestInfo,
   sanitizePullRequestListItem,
   stripControl,
   stripControlMultiline,
@@ -96,6 +97,23 @@ describe('forge text sanitization (terminal-injection hardening)', () => {
       expect(out.reviews[0]).toEqual({ author: 'r', state: 'APPROVED', body: 'ok', submittedAt: 't' })
     })
 
+    it('strips control bytes from statusCheckRollup name/status/conclusion in PR detail', () => {
+      const out = sanitizePullRequestDetail({
+        number: 3,
+        body: 'body',
+        comments: [],
+        reviews: [],
+        statusCheckRollup: [
+          { name: `ci${ESC}[31m/build`, status: `${ESC}IN_PROGRESS`, conclusion: `${ESC}SUCCESS` },
+          { name: 'clean', status: undefined, conclusion: undefined },
+        ],
+      })
+      expect(out.statusCheckRollup[0].name).toBe('ci[31m/build')
+      expect(out.statusCheckRollup[0].status).toBe('IN_PROGRESS')
+      expect(out.statusCheckRollup[0].conclusion).toBe('SUCCESS')
+      expect(out.statusCheckRollup[1]).toEqual({ name: 'clean', status: undefined, conclusion: undefined })
+    })
+
     it('strips issue detail body + comments', () => {
       const out = sanitizeIssueDetail({
         number: 4,
@@ -104,6 +122,43 @@ describe('forge text sanitization (terminal-injection hardening)', () => {
       })
       expect(out.body).toBe('[2Jhi')
       expect(out.comments[0].body).toBe('xy')
+    })
+
+    it('strips control bytes from statusCheckRollup and reviews in sanitizePullRequestInfo', () => {
+      const out = sanitizePullRequestInfo({
+        number: 5,
+        title: `${ESC}title`,
+        url: 'https://x',
+        state: 'OPEN',
+        isDraft: false,
+        headRefName: 'feat/x',
+        baseRefName: 'main',
+        statusCheckRollup: [
+          { name: `${ESC}[31mci/lint`, status: `${ESC}QUEUED`, conclusion: `${ESC}FAILURE` },
+        ],
+        reviews: [
+          { author: `${ESC}reviewer`, state: `${ESC}APPROVED` },
+        ],
+      })
+      expect(out.statusCheckRollup![0].name).toBe('[31mci/lint')
+      expect(out.statusCheckRollup![0].status).toBe('QUEUED')
+      expect(out.statusCheckRollup![0].conclusion).toBe('FAILURE')
+      expect(out.reviews![0].author).toBe('reviewer')
+      expect(out.reviews![0].state).toBe('APPROVED')
+    })
+
+    it('handles absent statusCheckRollup and reviews in sanitizePullRequestInfo', () => {
+      const out = sanitizePullRequestInfo({
+        number: 6,
+        title: 'clean',
+        url: 'https://x',
+        state: 'OPEN',
+        isDraft: false,
+        headRefName: 'feat/x',
+        baseRefName: 'main',
+      })
+      expect(out.statusCheckRollup).toBeUndefined()
+      expect(out.reviews).toBeUndefined()
     })
   })
 })

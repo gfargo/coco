@@ -106,6 +106,38 @@ describe('writeChangelogFile', () => {
     expect(written).toContain('- initial release')
   })
 
+  it('does not delete an intervening top-level `# ` release section when replacing a `## ` section', () => {
+    fs.writeFileSync(
+      filePath,
+      [
+        '# Changelog',
+        '',
+        '## v1.2 — 2026-07-01',
+        '',
+        '- old wording',
+        '',
+        '# [2.0.0]',
+        '',
+        '- breaking change',
+        '',
+        '## v1.1 — 2026-06-01',
+        '',
+        '- earlier release',
+        '',
+      ].join('\n')
+    )
+    writeChangelogFile({ filePath, title: 'v1.2', content: '- new wording', date: '2026-07-13' })
+    const written = fs.readFileSync(filePath, 'utf8')
+
+    expect(written).toContain('- new wording')
+    expect(written).not.toContain('old wording')
+    // The intervening major-release section must survive untouched.
+    expect(written).toContain('# [2.0.0]')
+    expect(written).toContain('- breaking change')
+    expect(written).toContain('## v1.1 — 2026-06-01')
+    expect(written).toContain('- earlier release')
+  })
+
   it('does not match a title that is a prefix of another title', () => {
     fs.writeFileSync(filePath, '# Changelog\n\n## v1.0 — 2026-07-01\n\n- old\n')
     writeChangelogFile({ filePath, title: 'v1.0.0', content: '- new', date: '2026-07-13' })

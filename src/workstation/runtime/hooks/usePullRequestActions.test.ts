@@ -59,3 +59,43 @@ describe('usePullRequestActions — defensive catch for an unexpected workflow t
     expect(dispatch).toHaveBeenCalledWith({ type: 'setPendingPullRequestBodyDraft', value: false })
   })
 })
+
+describe('usePullRequestActions — Esc cancel gives immediate feedback (#1858)', () => {
+  it('clears the pending flag and surfaces a cancelled status without waiting on the workflow', async () => {
+    // Regression for #1858: `cancelPullRequestBodyDraft` used to only
+    // mutate the soft-cancel handle, dispatching nothing. The loading
+    // status line set by `startCreatePullRequest` blocks
+    // `useStatusAutoDismiss` from clearing itself, so Esc produced no
+    // observable effect until the in-flight LLM call resolved.
+    let resolveWorkflow: (value: Awaited<ReturnType<typeof runPullRequestBodyWorkflow>>) => void = () => {}
+    runPullRequestBodyWorkflowMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveWorkflow = resolve
+      })
+    )
+    const dispatch = jest.fn()
+    const { startCreatePullRequest, cancelPullRequestBodyDraft } = usePullRequestActions(
+      fakeReact(),
+      baseDeps({ dispatch })
+    )
+
+    const pending = startCreatePullRequest()
+
+    cancelPullRequestBodyDraft()
+
+    expect(dispatch).toHaveBeenCalledWith({ type: 'setPendingPullRequestBodyDraft', value: false })
+    expect(dispatch).toHaveBeenCalledWith({ type: 'setStatus', value: 'PR draft cancelled.' })
+
+    resolveWorkflow({ ok: true, message: 'ok', title: 'title', body: 'body' })
+    await pending
+  })
+
+  it('is a no-op when no draft is in flight', () => {
+    const dispatch = jest.fn()
+    const { cancelPullRequestBodyDraft } = usePullRequestActions(fakeReact(), baseDeps({ dispatch }))
+
+    cancelPullRequestBodyDraft()
+
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+})

@@ -455,6 +455,12 @@ export function useInputHandler(
         startIndex: group.startIndex,
       })),
       inspectorActionCount: getInspectorActionsForState(state).length,
+      // Seeds the [Notes] tab's Enter-to-edit prompt with the cursored
+      // commit's currently-loaded note text (#OSS-2057), so editing an
+      // existing note starts from its current body instead of blank.
+      // Undefined when no note is cached yet (still hydrating, or the
+      // commit genuinely has none loaded locally).
+      commitNoteText: selected ? context.commitNoteByHash?.get(selected.hash) : undefined,
       commitDiffSelectedPath: state.diffSource === 'commit'
         ? selectedDetailFile?.path
         : undefined,

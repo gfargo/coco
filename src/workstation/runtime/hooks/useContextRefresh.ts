@@ -35,6 +35,7 @@ import { getForgePullRequestOverview } from '../../../git/forgeActions'
 import { getStashOverview } from '../../../git/stashData'
 import { getWorktreeOverview } from '../../../git/statusData'
 import { getBisectStatus } from '../../../git/bisectData'
+import { getSparseCheckoutStatus } from '../../../git/sparseCheckoutData'
 import { getReflogOverview } from '../../../git/reflogData'
 import { getTagOverview } from '../../../git/tagData'
 import { getWorktreeListOverview } from '../../../git/worktreeData'
@@ -64,7 +65,7 @@ export async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> 
     // Fall through: snapshot fields stay undefined, consumers fetch fresh.
   }
 
-  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules, remotes] =
+  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, sparse, submodules, remotes] =
     await Promise.all([
       safe(getBranchOverview(git, snapshot)),
       safe(getForgePullRequestOverview(git)),
@@ -77,6 +78,7 @@ export async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> 
       safe(getReflogOverview(git)),
       safe(getBisectStatus(git)),
       safe(getLfsAttributeStatus(git)),
+      safe(getSparseCheckoutStatus(git)),
       safe(getSubmoduleOverview(git)),
       safe(getRemoteOverview(git)),
     ])
@@ -85,6 +87,7 @@ export async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> 
     bisect,
     branches,
     lfs,
+    sparse,
     operation,
     provider,
     pullRequest,
@@ -112,6 +115,7 @@ export function loadLogInkContextEntries(git: SimpleGit): Array<{
     { key: 'reflog', load: () => safe(getReflogOverview(git)) },
     { key: 'bisect', load: () => safe(getBisectStatus(git)) },
     { key: 'lfs', load: () => safe(getLfsAttributeStatus(git)) },
+    { key: 'sparse', load: () => safe(getSparseCheckoutStatus(git)) },
     { key: 'submodules', load: () => safe(getSubmoduleOverview(git)) },
     { key: 'remotes', load: () => safe(getRemoteOverview(git)) },
     { key: 'worktree', load: () => safe(getWorktreeOverview(git)) },
@@ -128,7 +132,11 @@ export type UseContextRefreshDeps = {
   /**
    * The active frame's current worktree overview (#1617). Read — never
    * written — so a failed refresh can hand callers back the overview
-   * still in context instead of `undefined`.
+   * still in context instead of `undefined`. Consumed inside
+   * `refreshWorktreeContext` via a ref (OSS-1777), not a closure — the
+   * callback's own identity must stay stable across worktree refreshes,
+   * since it feeds `useRefreshWatcher`'s effect dep array and a fresh
+   * identity there re-subscribes the fs watcher on every refresh.
    */
   worktree: LogInkContext['worktree']
   dispatch: (action: LogInkAction) => void
@@ -190,6 +198,13 @@ export function useContextRefresh(
   // it lands.
   const refreshContextRequestRef = React.useRef<Record<number, number>>({})
   const refreshWorktreeRequestRef = React.useRef<Record<number, number>>({})
+  // OSS-1777 — read the previous overview through a ref so the stale-
+  // beats-blank return (#1617) doesn't force `refreshWorktreeContext` to
+  // re-memoize on every worktree write; a fresh identity there re-runs
+  // `useRefreshWatcher`'s effect, tearing down and rebuilding the fs
+  // watcher on every refresh. Assigned every render, read at call time.
+  const currentWorktreeRef = React.useRef(currentWorktree)
+  currentWorktreeRef.current = currentWorktree
 
   const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
     const issuedAtDepth = runtimesLength - 1
@@ -256,7 +271,7 @@ export function useContextRefresh(
         (current) => updateLogInkContextStatus(current, 'worktree', 'ready'),
         issuedAtDepth,
       )
-      return currentWorktree
+      return currentWorktreeRef.current
     }
 
     setContext(
@@ -280,7 +295,7 @@ export function useContextRefresh(
     // the cursored file's own status happens to change.
     setWorktreeDiffRefreshToken((token) => token + 1)
     return worktree
-  }, [git, runtimesLength, currentWorktree, setContext, setContextStatus, setWorktreeDiffRefreshToken])
+  }, [git, runtimesLength, setContext, setContextStatus, setWorktreeDiffRefreshToken])
 
   return { refreshContext, refreshWorktreeContext }
 }

@@ -128,6 +128,7 @@ export function createLogInkHeader(
       branch,
       dirty,
       bisecting,
+      sparse: Boolean(context.sparse?.enabled),
       operation,
       operationConflicts,
       pullRequest: prInfo ? {

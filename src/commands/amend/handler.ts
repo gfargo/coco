@@ -138,7 +138,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
       () => {
         logger.log('Pre-commit hook modified files; re-staging and retrying…', { color: 'yellow' })
       },
-      { amend: true, noVerify: argv.noVerify }
+      { amend: true, noVerify: config.noVerify || false }
     )
   } catch (error) {
     if (error instanceof PreCommitHookError) {

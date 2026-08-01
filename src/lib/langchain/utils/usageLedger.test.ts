@@ -14,6 +14,7 @@ import {
     summarizeUsageByRepo,
     summarizeUsageBySurface,
     summarizeUsageByTask,
+    totalUsageCost,
 } from './usageLedger'
 
 describe('usageLedger', () => {
@@ -66,6 +67,30 @@ describe('usageLedger', () => {
 
     const byModel = summarizeUsageByModel(readUsageRecords())
     expect(byModel.find((r) => r.key === 'gpt-4o')?.calls).toBe(2)
+  })
+
+  it('records and aggregates cachedInputTokens, leaving it out entirely when unset', () => {
+    recordUsage({ task: 'commit', model: 'claude-sonnet-4-6', promptTokens: 1000, cachedInputTokens: 800, elapsedMs: 100 })
+    recordUsage({ task: 'commit', model: 'claude-sonnet-4-6', promptTokens: 500, elapsedMs: 100 })
+
+    const records = readUsageRecords()
+    expect(records[0].cachedInputTokens).toBe(800)
+    expect(records[1]).not.toHaveProperty('cachedInputTokens')
+
+    const byTask = summarizeUsageByTask(records)
+    expect(byTask.find((r) => r.key === 'commit')?.cachedInputTokens).toBe(800)
+  })
+
+  it('records and aggregates inputTokens, leaving it out entirely when unset', () => {
+    recordUsage({ task: 'commit', model: 'claude-sonnet-4-6', promptTokens: 900, inputTokens: 1200, elapsedMs: 100 })
+    recordUsage({ task: 'commit', model: 'claude-sonnet-4-6', promptTokens: 500, elapsedMs: 100 })
+
+    const records = readUsageRecords()
+    expect(records[0].inputTokens).toBe(1200)
+    expect(records[1]).not.toHaveProperty('inputTokens')
+
+    const byTask = summarizeUsageByTask(records)
+    expect(byTask.find((r) => r.key === 'commit')?.inputTokens).toBe(1200)
   })
 
   it('persists and aggregates the invocation surface while treating legacy records as CLI', () => {
@@ -121,12 +146,84 @@ describe('usageLedger', () => {
     expect(parsed).not.toHaveProperty('code')
   })
 
+  it('aggregates cache hit/lookup counts and excludes records with no cacheHit field', () => {
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: true })
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false })
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false })
+    recordUsage({ task: 'commit', model: 'gpt-4o', promptTokens: 10 })
+
+    const byTask = summarizeUsageByTask(readUsageRecords())
+    const summarizeRow = byTask.find((r) => r.key === 'summarize-large-file')
+    // Only the 2 misses are real LLM calls — the hit is excluded from `calls`
+    // (and its token/latency accumulators) so it doesn't inflate cost metrics.
+    expect(summarizeRow).toMatchObject({ calls: 2, cacheHits: 1, cacheLookups: 3 })
+
+    const commitRow = byTask.find((r) => r.key === 'commit')
+    expect(commitRow).toMatchObject({ calls: 1, cacheHits: 0, cacheLookups: 0 })
+  })
+
+  it('excludes cache hits from calls, tokens, and avgMs so a zero-latency hit does not dilute latency', () => {
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false, promptTokens: 100, elapsedMs: 400 })
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false, promptTokens: 100, elapsedMs: 600 })
+    recordUsage({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: true })
+
+    const summarizeRow = summarizeUsageByTask(readUsageRecords()).find((r) => r.key === 'summarize-large-file')
+    // avgMs is 500 (the two real calls' average) — if the hit were counted as
+    // a call, it would dilute this to 333 (1000ms / 3 calls).
+    expect(summarizeRow).toMatchObject({
+      calls: 2,
+      promptTokens: 200,
+      totalMs: 1000,
+      avgMs: 500,
+      cacheHits: 1,
+      cacheLookups: 3,
+    })
+  })
+
+  it('omits cacheHit from the serialized record when undefined', () => {
+    recordUsage({ task: 'commit', promptTokens: 5 })
+    const serialized = JSON.parse(fs.readFileSync(logPath, 'utf8').trim())
+    expect(serialized).not.toHaveProperty('cacheHit')
+  })
+
   it('returns [] for a missing ledger and clears the file', () => {
     expect(readUsageRecords(path.join(dir, 'nope.jsonl'))).toEqual([])
     recordUsage({ task: 'commit', promptTokens: 1 })
     expect(fs.existsSync(logPath)).toBe(true)
     clearUsageLog()
     expect(fs.existsSync(logPath)).toBe(false)
+  })
+
+  it('aggregates estimated cost, distinguishing priced from unpriced calls', () => {
+    // gpt-5.4-mini: $1/1M in, $4/1M out -> (1M,1M) = $5
+    recordUsage({ task: 'commit', model: 'gpt-5.4-mini', promptTokens: 1_000_000, completionTokens: 1_000_000 })
+    // Unpriced model: contributes tokens but no cost.
+    recordUsage({ task: 'commit', model: 'some-unpriced-model', promptTokens: 500, completionTokens: 500 })
+
+    const records = readUsageRecords()
+    const byModel = summarizeUsageByModel(records)
+
+    const priced = byModel.find((r) => r.key === 'gpt-5.4-mini')
+    expect(priced).toMatchObject({ calls: 1, pricedCalls: 1, unpricedCalls: 0 })
+    expect(priced?.estimatedCostUsd).toBeCloseTo(5, 10)
+
+    const unpriced = byModel.find((r) => r.key === 'some-unpriced-model')
+    expect(unpriced).toMatchObject({ calls: 1, pricedCalls: 0, unpricedCalls: 1, estimatedCostUsd: 0 })
+
+    const byTask = summarizeUsageByTask(records)
+    const commit = byTask.find((r) => r.key === 'commit')
+    expect(commit).toMatchObject({ calls: 2, pricedCalls: 1, unpricedCalls: 1 })
+    expect(commit?.estimatedCostUsd).toBeCloseTo(5, 10)
+  })
+
+  it('totalUsageCost sums cost across records and counts priced/unpriced calls', () => {
+    recordUsage({ task: 'commit', model: 'gpt-5.4-nano', promptTokens: 1_000_000 })
+    recordUsage({ task: 'commit', model: 'unknown-model', promptTokens: 1_000_000 })
+
+    const { totalCostUsd, pricedCalls, unpricedCalls } = totalUsageCost(readUsageRecords())
+    expect(pricedCalls).toBe(1)
+    expect(unpricedCalls).toBe(1)
+    expect(totalCostUsd).toBeCloseTo(0.15, 10)
   })
 
   it('skips malformed lines without throwing', () => {

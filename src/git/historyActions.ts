@@ -102,14 +102,33 @@ export async function defaultClipboardRunner(value: string): Promise<void> {
   throw new Error(errors[0] || 'No clipboard command is available.')
 }
 
+function assertOpenableUrl(url: string): void {
+  let parsed: URL
+  try {
+    parsed = new URL(url)
+  } catch {
+    throw new Error(`Refusing to open invalid URL: ${url}`)
+  }
+
+  if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) {
+    throw new Error(`Refusing to open unsupported URL: ${url}`)
+  }
+}
+
 export async function defaultOpenUrlRunner(url: string): Promise<void> {
+  assertOpenableUrl(url)
+
   if (process.platform === 'darwin') {
     await runCommand('open', [url])
     return
   }
 
   if (process.platform === 'win32') {
-    await runCommand('cmd', ['/c', 'start', '', url])
+    // `cmd /c start` hands the URL to cmd.exe, which parses its own command
+    // line (`&`, `|`, `^`, `>` are shell metacharacters there) even though
+    // execFile itself never invokes a shell. rundll32's URL handler takes the
+    // URL as a plain argv entry, so no shell ever re-parses it.
+    await runCommand('rundll32', ['url.dll,FileProtocolHandler', url])
     return
   }
 
@@ -383,6 +402,30 @@ export function resetToCommit(
 }
 
 /**
+ * Reset back to the HEAD position recorded before a `resetToCommit` call
+ * — the undo-stack inverse (OSS-1606). Mirrors the ORIGINAL reset's mode
+ * rather than always forcing `--hard`: `--soft`/`--mixed` resets never
+ * touched the index/working tree, so undoing them with `--hard` would
+ * blow away any uncommitted work the user made after the reset (which
+ * the reflog cannot recover) — that's the wrong inverse for a
+ * non-destructive reset. Only a `--hard` original reset is undone with
+ * `--hard`, since that's the only mode where the recorded sha is also
+ * the correct index/working-tree state to restore.
+ */
+export function restorePreviousHead(
+  git: SimpleGit,
+  previousSha: string,
+  mode: ResetMode = 'hard'
+): Promise<BranchActionResult> {
+  return guardNoInProgressOperation(git).then((blocked) => (
+    blocked || runAction(
+      () => git.raw(['reset', `--${mode}`, previousSha]),
+      `Restored HEAD to ${previousSha.slice(0, 7)}`
+    )
+  ))
+}
+
+/**
  * Create a new local branch pointed at <commit>, without switching to it.
  *
  * This is the "create branch from cursored commit" history action — the
@@ -561,4 +604,5 @@ export const historyActionTestInternals = {
   compactOutputLines,
   getInProgressOperation,
   isHeadCommit,
+  assertOpenableUrl,
 }

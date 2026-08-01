@@ -3,7 +3,9 @@ import * as os from 'node:os'
 import * as path from 'node:path'
 
 import {
+    __testInternals,
     diffSummaryKey,
+    flushDiffSummaryCache,
     getDiffSummaryCachePath,
     writeDiffSummary,
 } from '../../lib/parsers/default/utils/diffSummaryCache'
@@ -22,6 +24,7 @@ describe('coco cache <subcommand>', () => {
   })
 
   afterEach(() => {
+    __testInternals.resetInMemoryCache()
     if (originalXdgCacheHome === undefined) {
       delete process.env.XDG_CACHE_HOME
     } else {
@@ -33,6 +36,7 @@ describe('coco cache <subcommand>', () => {
   it('clear: removes the cache file when present', async () => {
     const key = diffSummaryKey('diff', 'gpt', 'p')
     writeDiffSummary(process.cwd(), key, { summary: 's', model: 'gpt', tokens: 5 })
+    flushDiffSummaryCache()
     expect(fs.existsSync(getDiffSummaryCachePath(process.cwd()))).toBe(true)
 
     await handler({ subcommand: 'clear' } as never, logger as never)
@@ -49,6 +53,7 @@ describe('coco cache <subcommand>', () => {
   it('info: reports entry count + on-disk size when warm', async () => {
     const key = diffSummaryKey('diff', 'gpt', 'p')
     writeDiffSummary(process.cwd(), key, { summary: 'summary text', model: 'gpt', tokens: 9 })
+    flushDiffSummaryCache()
 
     await handler({ subcommand: 'info' } as never, logger as never)
 

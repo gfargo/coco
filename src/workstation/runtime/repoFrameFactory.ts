@@ -26,8 +26,9 @@ import type { RepoFrameRuntime } from './repoStackRuntime'
  * per-frame factory below share one canonical seed; the status surfaces
  * depend on the exact lazy-key `'idle'` seeding to avoid spurious loading
  * hints, so locking it down in one helper means the two paths can't drift.
+ *   - `pullRequestChecks` — per-check breakdown, lazy on the PR view (OSS-1615)
  */
-const LAZY_CONTEXT_KEYS = ['pullRequest', 'issueList', 'pullRequestList'] as const
+const LAZY_CONTEXT_KEYS = ['pullRequest', 'issueList', 'pullRequestList', 'pullRequestChecks'] as const
 
 export function createInitialContextStatus(): LogInkContextStatus {
   return LAZY_CONTEXT_KEYS.reduce(

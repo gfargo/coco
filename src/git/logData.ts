@@ -401,8 +401,18 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
 
   if (view === 'full' || argv.all) {
     args.push('--all')
-  } else if (argv.branch) {
-    args.push(argv.branch)
+  }
+
+  // Collect positional refs before pushing them so we can insert
+  // --end-of-options exactly once, immediately before the first ref.
+  // This prevents a dash-prefixed branch name (e.g. `-foo`) from being
+  // reinterpreted as an option flag, and prevents a branch name that
+  // collides with a filename from triggering git's ambiguity error.
+  // Requires git ≥ 2.24 — the same floor context.ts already relies on.
+  const positionalRefs: string[] = []
+
+  if (view !== 'full' && !argv.all && argv.branch) {
+    positionalRefs.push(argv.branch)
   }
 
   // Extra refs (stash commits etc.) — append after the --all / branch
@@ -410,7 +420,14 @@ export function buildLogArgs(argv: LogArgv, options: LogRowLoadOptions = {}): st
   // additional graph roots, so the traversal includes them alongside
   // whatever --all / --branch already covers.
   if (options.extraRefs && options.extraRefs.length > 0) {
-    args.push(...options.extraRefs)
+    positionalRefs.push(...options.extraRefs)
+  }
+
+  if (positionalRefs.length > 0) {
+    // --end-of-options tells git that everything following is a ref or
+    // path, not an option — safe even when combined with a later `--`
+    // pathspec separator (order: …flags --end-of-options <refs…> -- <paths…>).
+    args.push('--end-of-options', ...positionalRefs)
   }
 
   const paths = toArray(argv.path)
@@ -481,8 +498,10 @@ export async function getLogRowsAnchoredOn(
   // Splice the target as the positional ref. `buildLogArgs` already
   // appended any `--all`/`--branch`/`<extraRefs>` it considered;
   // since we cleared all those above, the only positional ref we
-  // add is the target.
-  baseArgs.push(targetHash)
+  // add is the target. Guard it with --end-of-options so a hash-like
+  // ref that starts with a dash (or collides with a filename) is
+  // treated as a ref, not an option.
+  baseArgs.push('--end-of-options', targetHash)
   return parseLogOutput(await git.raw(baseArgs))
 }
 

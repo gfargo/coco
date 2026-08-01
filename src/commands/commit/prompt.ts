@@ -10,6 +10,7 @@ import { PromptTemplate } from '@langchain/core/prompts'
  * - commit_history: Optional history of previous commits for context
  * - branch_name_context: String containing formatted branch name (or empty if disabled)
  * - language_context: Optional instruction to write the message in a configured language (empty if unset)
+ * - conventions_context: Optional project convention excerpts (AGENTS.md, CLAUDE.md, etc.), empty unless trusted
  */
 export const template = `Write informative git commit message, in the imperative, based on the diffs & file changes provided in the "Diff Summary" section.
 Commit Messages must have a short description that is less than 50 characters and a longer detailed summary around 300 characters, the shorter and more concise the better.
@@ -32,6 +33,8 @@ Please follow the guidelines below when writing your commit message:
 
 {{language_context}}
 
+{{conventions_context}}
+
 {{format_instructions}}
 
 {{commit_history}}
@@ -40,7 +43,7 @@ Please follow the guidelines below when writing your commit message:
 `
 
 // Define the variables that will be passed to the prompt template
-const inputVariables = ['summary', 'format_instructions', 'additional_context', 'commit_history', 'branch_name_context', 'commitlint_rules_context', 'language_context']
+const inputVariables = ['summary', 'format_instructions', 'additional_context', 'commit_history', 'branch_name_context', 'commitlint_rules_context', 'language_context', 'conventions_context']
 
 export const COMMIT_PROMPT = new PromptTemplate({
   template,
@@ -90,6 +93,8 @@ Based on the following diff summary, generate a conventional commit message that
 
 {{language_context}}
 
+{{conventions_context}}
+
 {{format_instructions}}
 
 {{commit_history}}
@@ -104,6 +109,7 @@ const conventionalInputVariables = [
   'branch_name_context',
   'commitlint_rules_context',
   'language_context',
+  'conventions_context',
 ]
 
 export const CONVENTIONAL_COMMIT_PROMPT = new PromptTemplate({

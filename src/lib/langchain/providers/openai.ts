@@ -1,8 +1,19 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
 import { DEFAULT_MAX_OUTPUT_TOKENS } from './constants'
+import { resolveTemperature } from './reasoning'
 import type { CreateLlmArgs, ProviderDefinition } from './types'
 
-async function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): Promise<BaseChatModel> {
+/**
+ * Builds a `ChatOpenAI` client from a service config. Shared by the `openai`
+ * provider itself and every OpenAI-compatible preset (DeepSeek, Groq, xAI,
+ * Together, Fireworks, OpenRouter, LM Studio, vLLM — see
+ * `openaiCompatible.ts`), which pass their own `defaultBaseURL` so
+ * `service.baseURL` only needs to be set to override it.
+ */
+export async function createOpenAiLlm(
+  { model, config, apiKey }: CreateLlmArgs,
+  defaultBaseURL?: string
+): Promise<BaseChatModel> {
   const { ChatOpenAI } = await import('@langchain/openai')
   const openaiConfig: Partial<ConstructorParameters<typeof ChatOpenAI>[0]> = {
     apiKey,
@@ -12,18 +23,24 @@ async function createOpenAiLlm({ model, config, apiKey }: CreateLlmArgs): Promis
     // are the single retry authority (#1677).
     maxRetries: config.service.requestOptions?.maxRetries ?? 0,
     model,
-    // `??` not `||` so an explicit `temperature: 0` (fully deterministic) is
-    // respected instead of being coerced to the 0.2 default.
-    temperature: config.service.temperature ?? 0.2,
+    // Reasoning models (o-/gpt-5 series) reject any temperature other than
+    // 1 — skip our 0.2 default (and normalize an explicit non-1 value away)
+    // whenever reasoningEffort is set. See `resolveTemperature`.
+    temperature: resolveTemperature(config.service.reasoningEffort, config.service.temperature),
     maxTokens: DEFAULT_MAX_OUTPUT_TOKENS,
+    ...(config.service.reasoningEffort ? { reasoning: { effort: config.service.reasoningEffort } } : {}),
     ...(config.service.requestOptions?.timeout
       ? { timeout: config.service.requestOptions.timeout }
       : {}),
   }
 
-  // Custom base URL for OpenAI-compatible APIs (OpenRouter, etc.).
-  if ('baseURL' in config.service && config.service.baseURL) {
-    openaiConfig.configuration = { baseURL: config.service.baseURL }
+  // Custom base URL for OpenAI-compatible APIs (OpenRouter, etc.), falling
+  // back to the preset's own default endpoint when the service doesn't
+  // override it.
+  const baseURL =
+    ('baseURL' in config.service && config.service.baseURL) || defaultBaseURL
+  if (baseURL) {
+    openaiConfig.configuration = { baseURL }
   }
 
   // Merge any additional provider fields.
@@ -41,4 +58,6 @@ export const openaiProvider: ProviderDefinition = {
   createLlm: createOpenAiLlm,
   resolveEndpoint: (config) =>
     'baseURL' in config.service ? config.service.baseURL : undefined,
+  supportsReasoningEffort: true,
+  supportsStructuredOutput: 'json-schema',
 }

@@ -20,6 +20,7 @@ jobs:
   verify:
     name: Verify release package
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -44,6 +45,7 @@ jobs:
   publish:
     name: Publish package to npm
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: verify
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
 

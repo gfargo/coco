@@ -168,17 +168,24 @@ function shortenLine(value: string, maxLength: number): string {
 
 function commentsSection(
   comments: ReadonlyArray<{ author?: string; body: string }>,
-  maxShown: number
+  maxShown: number,
+  truncated?: boolean
 ): PreviewLine[] {
-  if (comments.length === 0) return []
+  if (comments.length === 0 && !truncated) return []
+  if (comments.length === 0 && truncated) {
+    return [heading('Comments'), dim('… comments unavailable (fetch failed or limit reached)')]
+  }
   const recent = comments.slice(-maxShown)
-  const out: PreviewLine[] = [heading(`Comments (${comments.length})`)]
+  const out: PreviewLine[] = [heading(`Comments (${comments.length}${truncated ? '+' : ''})`)]
   for (const comment of recent) {
     const who = comment.author || 'anonymous'
     out.push(line(`@${who}: ${shortenLine(comment.body, 80)}`))
   }
   if (comments.length > recent.length) {
     out.push(dim(`… ${comments.length - recent.length} earlier comment(s)`))
+  }
+  if (truncated) {
+    out.push(dim('… more comments (fetch failed or limit reached)'))
   }
   return out
 }
@@ -280,7 +287,7 @@ export function formatIssueTriagePreview(
       out.push(blank())
       out.push(...body)
     }
-    const comments = commentsSection(detail.comments, 3)
+    const comments = commentsSection(detail.comments, 3, detail.commentsTruncated)
     if (comments.length > 0) {
       out.push(blank())
       out.push(...comments)
@@ -358,7 +365,7 @@ export function formatPullRequestTriagePreview(
       out.push(blank())
       out.push(...reviews)
     }
-    const comments = commentsSection(detail.comments, 3)
+    const comments = commentsSection(detail.comments, 3, detail.commentsTruncated)
     if (comments.length > 0) {
       out.push(blank())
       out.push(...comments)

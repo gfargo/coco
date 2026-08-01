@@ -206,6 +206,32 @@ type BaseConfig = {
      * @default false
      */
     usage?: boolean
+
+    /**
+     * Optional monthly spend guardrail checked against the local usage
+     * ledger. `coco doctor` sums the current calendar month's *estimated*
+     * cost (tokens priced via coco's built-in per-model table — see `coco
+     * doctor --cost`) and emits a warning once that total reaches
+     * `warnAtPercent` of `monthlyUsd`. This is advisory only: coco never
+     * blocks or throttles a call because of it, and the check is a no-op
+     * unless `telemetry.usage` (or `COCO_USAGE_LOG`) is actually recording,
+     * since there'd be no ledger to sum.
+     */
+    budget?: {
+      /**
+       * Monthly estimated-spend cap in USD. Leave unset to disable the
+       * budget check entirely. `0` (or a negative value) is treated as
+       * "warn on any priced spend" rather than disabling the check.
+       */
+      monthlyUsd?: number
+
+      /**
+       * Percentage of `monthlyUsd` at or above which `coco doctor` warns.
+       *
+       * @default 80
+       */
+      warnAtPercent?: number
+    }
   }
 
   /**
@@ -216,9 +242,15 @@ type BaseConfig = {
    * words (e.g. `git.acme.com`), set the mapping here so detection and
    * dispatch work.
    *
-   * @example { "git.acme.com": "gitea", "code.internal": "github", "bb.corp.com": "bitbucket" }
+   * `bitbucket-server` (Bitbucket Server / Data Center) can ONLY be reached
+   * through this map — its REST API (`/rest/api/1.0`) and web UI differ
+   * enough from Bitbucket Cloud that auto-detection isn't reliable, and a
+   * self-hosted install is commonly on a `*bitbucket*`-named host that would
+   * otherwise resolve to Cloud.
+   *
+   * @example { "git.acme.com": "gitea", "code.internal": "github", "bb.corp.com": "bitbucket-server" }
    */
-  forgeHosts?: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'gitea'>
+  forgeHosts?: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea'>
 }
 
 export type ConfigWithServiceObject = BaseConfig &

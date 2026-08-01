@@ -9,6 +9,7 @@ import {
     type GitHubRepository
 } from './githubCli'
 import { getGitHubRepositoryForGit } from './providerData'
+import { rejectFlagLike, rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
 
 export type PullRequestState = 'open' | 'closed' | 'merged' | 'all'
 
@@ -93,7 +94,13 @@ function parsePullRequestListItems(output: string): PullRequestListItem[] {
   const trimmed = output.trim()
   if (!trimmed) return []
 
-  const raw = JSON.parse(trimmed) as Array<Record<string, unknown>>
+  let raw: unknown
+  try {
+    raw = JSON.parse(trimmed)
+  } catch {
+    const firstLine = trimmed.split('\n', 1)[0]
+    throw new Error(`GitHub CLI returned unexpected output: ${firstLine}`)
+  }
   if (!Array.isArray(raw)) return []
 
   return raw.map((entry) => {
@@ -137,17 +144,25 @@ function parsePullRequestListItems(output: string): PullRequestListItem[] {
 }
 
 function buildGhArgs(filter: PullRequestListFilter): string[] {
-  const args = ['pr', 'list', '--json', PULL_REQUEST_LIST_JSON_FIELDS]
+  const bad =
+    (filter.assignee && rejectUnsafeUsername(filter.assignee)) ||
+    (filter.author && rejectUnsafeUsername(filter.author)) ||
+    (filter.label && rejectUnsafeLabel(filter.label)) ||
+    (filter.base && rejectFlagLike(filter.base, 'Base branch')) ||
+    (filter.head && rejectFlagLike(filter.head, 'Head branch'))
+  if (bad) throw new Error(bad)
 
-  if (filter.state) args.push('--state', filter.state)
-  if (filter.assignee) args.push('--assignee', filter.assignee)
-  if (filter.author) args.push('--author', filter.author)
-  if (filter.label) args.push('--label', filter.label)
-  if (filter.search) args.push('--search', filter.search)
+  const args = ['pr', 'list', `--json=${PULL_REQUEST_LIST_JSON_FIELDS}`]
+
+  if (filter.state) args.push(`--state=${filter.state}`)
+  if (filter.assignee) args.push(`--assignee=${filter.assignee}`)
+  if (filter.author) args.push(`--author=${filter.author}`)
+  if (filter.label) args.push(`--label=${filter.label}`)
+  if (filter.search) args.push(`--search=${filter.search}`)
   if (filter.draft) args.push('--draft')
-  if (filter.base) args.push('--base', filter.base)
-  if (filter.head) args.push('--head', filter.head)
-  if (typeof filter.limit === 'number') args.push('--limit', String(filter.limit))
+  if (filter.base) args.push(`--base=${filter.base}`)
+  if (filter.head) args.push(`--head=${filter.head}`)
+  if (typeof filter.limit === 'number') args.push(`--limit=${filter.limit}`)
 
   return args
 }
