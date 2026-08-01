@@ -71,7 +71,7 @@ async function fetchAllComments(
   runner: GiteaRunner,
   projectPath: string,
   number: number
-): Promise<IssueComment[]> {
+): Promise<{ items: IssueComment[]; truncated: boolean }> {
   return paginate({
     fetchPage: async (page) =>
       (await runner(`repos/${projectPath}/issues/${number}/comments?limit=50&page=${page}`)).trim(),
@@ -151,7 +151,7 @@ export async function getGiteaPullRequestDetail(
       return { ok: false, message: `Empty response from Gitea for pull request #${pullRequestNumber}` }
     }
 
-    const [comments, reviewsRaw, statusChecks] = await Promise.all([
+    const [commentsResult, reviewsRaw, statusChecks] = await Promise.all([
       fetchAllComments(runner, projectPath, pullRequestNumber),
       safeJson<unknown>(runner, `repos/${projectPath}/pulls/${pullRequestNumber}/reviews`),
       fetchCommitStatuses(runner, projectPath, pr.head?.sha),
@@ -160,9 +160,10 @@ export async function getGiteaPullRequestDetail(
     const detail: PullRequestDetail = {
       number: pullRequestNumber,
       body: pr.body || '',
-      comments,
+      comments: commentsResult.items,
       reviews: parseReviews(reviewsRaw),
       statusCheckRollup: statusChecks,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
@@ -183,12 +184,13 @@ export async function getGiteaIssueDetail(
       return { ok: false, message: `Empty response from Gitea for issue #${issueNumber}` }
     }
 
-    const comments = await fetchAllComments(runner, projectPath, issueNumber)
+    const commentsResult = await fetchAllComments(runner, projectPath, issueNumber)
 
     const detail: IssueDetail = {
       number: issueNumber,
       body: issue.body || '',
-      comments,
+      comments: commentsResult.items,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {

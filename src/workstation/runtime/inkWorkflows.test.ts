@@ -234,3 +234,15 @@ describe('triage PR checkout workflow (#1363)', () => {
     expect(getLogInkWorkflowActionByKey('C')?.id).toBe('create-pr')
   })
 })
+
+describe('PR ready-for-review / reopen workflows (#1933)', () => {
+  it('registers ready-pr / reopen-pr and their triage counterparts as keyless, confirm-gated, non-destructive', () => {
+    for (const id of ['ready-pr', 'reopen-pr', 'triage-pr-ready', 'triage-pr-reopen']) {
+      expect(getLogInkWorkflowActionById(id)).toMatchObject({
+        key: '',
+        kind: 'normal',
+        requiresConfirmation: true,
+      })
+    }
+  })
+})

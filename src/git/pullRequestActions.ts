@@ -336,3 +336,41 @@ export function checkoutPullRequestByNumber(
     })
   )
 }
+
+/**
+ * `gh pr ready <n>` — promote a draft PR to ready for review (#1933). The
+ * counterpart to `pr create -d/--draft`, which could create a draft but
+ * had no way to promote one.
+ */
+export function markPullRequestReadyByNumber(
+  pullRequestNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  return runGhAction(
+    runner,
+    ['pr', 'ready', String(pullRequestNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Marked pull request #${pullRequestNumber} as ready for review`,
+    })
+  )
+}
+
+/**
+ * `gh pr reopen <n>` — the PR counterpart of `reopenIssue` (#1933).
+ * Recovers a PR closed via the one-keystroke
+ * `closePullRequestByNumber` triage action.
+ */
+export function reopenPullRequestByNumber(
+  pullRequestNumber: number,
+  runner: GhRunner = defaultGhRunner
+): Promise<PullRequestActionResult> {
+  return runGhAction(
+    runner,
+    ['pr', 'reopen', String(pullRequestNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Reopened pull request #${pullRequestNumber}`,
+    })
+  )
+}

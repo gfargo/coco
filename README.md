@@ -67,6 +67,7 @@ coco commit -i       # generate your first commit (interactive)
 | [`coco pr create`](https://github.com/gfargo/coco/wiki/Command-Reference#pr-create) | Generate PR title + body and open via `gh` / `glab` / Bitbucket API |
 | [`coco recap`](https://github.com/gfargo/coco/wiki/Command-Reference#recap) | Summarize recent changes for standups or handoffs |
 | [`coco review`](https://github.com/gfargo/coco/wiki/Command-Reference#review) | AI code review with severity gating for CI (`--severity`) |
+| [`coco watch`](https://github.com/gfargo/coco/wiki/Command-Reference#watch) | Continuously re-run review / commit-draft as changes settle, `--json` for editors |
 | [`coco agent`](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) | Run commit-draft, review, changelog, or recap through versioned JSON/stdin |
 | [`coco mcp`](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP) | Start a local stdio MCP server with four read-only generation tools |
 | [`coco ui`](https://github.com/gfargo/coco/wiki/Coco-UI) | Full-screen git workstation — 16 views, keyboard-driven |

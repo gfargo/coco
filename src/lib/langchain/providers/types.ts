@@ -1,4 +1,7 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
+import type { BaseLanguageModelInput } from '@langchain/core/language_models/base'
+import type { AIMessageChunk } from '@langchain/core/messages'
+import type { Runnable } from '@langchain/core/runnables'
 import type { Config } from '../../../commands/types'
 import type { LLMModel, LLMProvider } from '../types'
 
@@ -9,6 +12,16 @@ export type CreateLlmArgs = {
   /** Resolved API key/token. Empty string for providers that don't need one. */
   apiKey: string
 }
+
+/**
+ * What a provider's `createLlm` may hand back. Usually a bare `BaseChatModel`,
+ * but a provider that binds per-call options via `withConfig` (e.g. Anthropic's
+ * `cache_control`, which is a call option rather than a constructor field)
+ * returns the resulting `Runnable` instead of forcing an unsound cast back to
+ * `BaseChatModel` — everything downstream (`getLlm`, `prompt.pipe(llm)`) only
+ * relies on the `Runnable` contract.
+ */
+export type ChatModel = BaseChatModel | Runnable<BaseLanguageModelInput, AIMessageChunk>
 
 /**
  * A self-contained description of one LLM provider. Adding a provider means
@@ -34,13 +47,20 @@ export type ProviderDefinition = {
    * CLI startup time (~2.5s of require cost across all of them, 1.2s for
    * Mistral alone), so none of them may be imported at module scope.
    */
-  createLlm: (args: CreateLlmArgs) => Promise<BaseChatModel>
+  createLlm: (args: CreateLlmArgs) => Promise<ChatModel>
   /**
    * Resolve the effective endpoint for observability / network-error
    * messages, when the provider has a meaningful one (e.g. Ollama's base
    * URL or a custom OpenAI baseURL). Optional.
    */
   resolveEndpoint?: (config: Config) => string | undefined
+  /**
+   * Endpoint used when `service.baseURL` is unset — the same value
+   * `resolveEndpoint` falls back to. Exposed directly (rather than making
+   * callers synthesize a `Config` to probe `resolveEndpoint`) so the init
+   * wizard can show/offer-to-override it before a `Config` exists yet.
+   */
+  defaultBaseURL?: string
   /**
    * Multiplier applied to the gpt-4o tiktoken baseline count when this
    * provider has no synchronous local tokenizer of its own. Undefined (the
@@ -49,4 +69,25 @@ export type ProviderDefinition = {
    * Bedrock hosts multiple model families under one provider).
    */
   tokenCorrectionFactor?: number | ((model: string) => number)
+  /**
+   * Whether `createLlm` translates `service.promptCache` into this
+   * provider's caching mechanism. Undefined/false means the option is
+   * silently ignored rather than causing an error.
+   */
+  supportsPromptCache?: boolean
+  /**
+   * Whether `createLlm` translates `service.reasoningEffort` into this
+   * provider's reasoning/thinking configuration. Undefined/false means the
+   * option is silently ignored rather than causing an error.
+   */
+  supportsReasoningEffort?: boolean
+  /**
+   * How this provider natively constrains output to a schema, if at all.
+   * `'json-schema'` binds the caller's zod schema via constrained decoding
+   * (OpenAI/Azure `response_format`, Gemini `responseSchema`, Mistral tool
+   * binding); `'json-mode'` is plain unconstrained JSON mode (Ollama
+   * `format=json`). Undefined means no native support — callers fall back
+   * to the text `StructuredOutputParser` + repair path.
+   */
+  supportsStructuredOutput?: 'json-schema' | 'json-mode'
 }

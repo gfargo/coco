@@ -44,7 +44,7 @@ import {
   formatStashPreview,
   formatTagPreview,
 } from '../../chrome/previewPane'
-import { formatLogInkLoading } from '../../chrome/surfaceStates'
+import { formatLogInkLoading, formatLogInkNotesEmpty } from '../../chrome/surfaceStates'
 import type { LfsAttributeStatus } from '../../../git/lfsAttributes'
 import { isPathLfsTracked } from '../../../git/lfsAttributes'
 import type { SubmoduleEntry, SubmoduleOverview } from '../../../git/submoduleData'
@@ -55,7 +55,7 @@ import type {
   GitCommitDetail,
   GitCommitFilePreview,
 } from '../../../git/logData'
-import type { LogInkState } from '../../../workstation/runtime/inkViewModel'
+import type { LogInkInspectorTab, LogInkState } from '../../../workstation/runtime/inkViewModel'
 import { getSelectedInkCommit } from '../../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../../git/providerData'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
@@ -415,6 +415,45 @@ function renderInspectorAtRest(
   ]
 }
 
+/**
+ * Render the [Notes] tab body (#OSS-2057): the loaded `refs/notes/commits`
+ * note for the cursored commit, a loading placeholder while the debounced
+ * hydration effect (`useDetailHydration`) is still in flight, or the
+ * `formatLogInkNotesEmpty` copy when the fetch found nothing. `noteLoaded`
+ * distinguishes "fetched, no note" from "not fetched yet" — both render as
+ * dim placeholder text, but the copy differs.
+ */
+function renderInspectorNotesSection(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  width: number,
+  theme: LogInkTheme,
+  note: string | undefined,
+  noteLoaded: boolean,
+  focused: boolean
+): ReactTypes.ReactElement[] {
+  const innerWidth = width - 4
+  const nodes: ReactTypes.ReactElement[] = [
+    h(Text, { key: 'notes-spacer' }, ''),
+    h(Text, { key: 'notes-title' }, focused ? '[Notes]' : 'Notes:'),
+  ]
+  if (!noteLoaded) {
+    nodes.push(h(Text, { key: 'notes-loading', dimColor: true }, 'Loading note…'))
+  } else if (note) {
+    const bodyLines = note.split('\n').flatMap((line) => wrapCells(line, innerWidth)).slice(0, 12)
+    nodes.push(...bodyLines.map((line, index) => h(Text, {
+      key: `notes-body-${index}`,
+    }, truncateCells(line, innerWidth, { ascii: theme.ascii }))))
+  } else {
+    nodes.push(h(Text, { key: 'notes-empty', dimColor: true },
+      truncateCells(formatLogInkNotesEmpty(), innerWidth, { ascii: theme.ascii })))
+  }
+  if (focused) {
+    nodes.push(h(Text, { key: 'notes-hint', dimColor: true }, 'enter to add/edit'))
+  }
+  return nodes
+}
+
 export function renderHistoryInspector(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -537,6 +576,15 @@ export function renderHistoryInspector(
     h, Text, width, cursoredFilePath, context.submodules
   )
 
+  // #OSS-2057 — [Notes] tab content. `noteLoaded` is `has(hash)`, not
+  // `get(hash)`, so "fetched, no note" (value undefined) is distinguished
+  // from "hydration hasn't run yet" (key absent).
+  const noteLoaded = Boolean(context.commitNoteByHash?.has(detail.hash))
+  const note = context.commitNoteByHash?.get(detail.hash)
+  const notesSectionNodes = renderInspectorNotesSection(
+    h, Text, width, theme, note, noteLoaded, focused && state.inspectorTab === 'notes'
+  )
+
   // Tab indicator. Renders in BOTH tabbed (short-terminal) mode and
   // tall-stacked mode so the user can always see which tab the cursor
   // owns and learn the `[/]` toggle. Without this on tall terminals,
@@ -551,23 +599,42 @@ export function renderHistoryInspector(
   // "Text string ' ' must be rendered inside <Text> component"
   // because Box only accepts component children, never bare strings.
   const activeTab = state.inspectorTab
-  // The two tab labels are fixed-width (bracketed vs space-padded reads
-  // the same length either way); the trailing hint is the only part
-  // that can be dropped, so only show it when it actually fits — the
-  // at-rest inspector column (~20-32 cells) is narrower than
-  // labels + hint combined and this row isn't otherwise truncated.
-  const tabLabelsWidth = cellWidth('[Inspector]') + cellWidth('[Actions]')
+  // Each label is fixed-width regardless of active state (bracketed
+  // `[Inspector]` and space-padded ` Inspector ` are both 11 cells, so
+  // adjacency reads cleanly without an extra separator — see the note
+  // above). Three tabs no longer always fit the narrowest inspector
+  // column (#OSS-2057 grew it from two), so the row degrades by
+  // omission like `renderInspectorRefs` / `smartPathLabel` elsewhere in
+  // this file: the active tab is always shown, the other two are added
+  // in canonical order only while they still fit, and the trailing hint
+  // is dropped first since it's the least essential part.
+  const TAB_LABELS: Record<LogInkInspectorTab, { active: string; inactive: string }> = {
+    inspector: { active: '[Inspector]', inactive: ' Inspector ' },
+    actions: { active: '[Actions]', inactive: ' Actions ' },
+    notes: { active: '[Notes]', inactive: ' Notes ' },
+  }
+  const TAB_ORDER: LogInkInspectorTab[] = ['inspector', 'actions', 'notes']
+  const tabBudget = Math.max(0, width - 4)
+  const includedTabs = new Set<LogInkInspectorTab>([activeTab])
+  let tabRowWidth = cellWidth(TAB_LABELS[activeTab].active)
+  for (const tab of TAB_ORDER) {
+    if (tab === activeTab) continue
+    const labelWidth = cellWidth(TAB_LABELS[tab].inactive)
+    if (tabRowWidth + labelWidth > tabBudget) continue
+    includedTabs.add(tab)
+    tabRowWidth += labelWidth
+  }
   const tabHint = '  · ←/→ switch'
-  const showTabHint = focused && (width - 4 - tabLabelsWidth) >= cellWidth(tabHint)
+  const showTabHint = focused && (tabBudget - tabRowWidth) >= cellWidth(tabHint)
   const tabHeader = h(Box, { key: 'inspector-tabs', flexDirection: 'row' },
-    h(Text, {
-      bold: activeTab === 'inspector',
-      dimColor: activeTab !== 'inspector',
-    }, activeTab === 'inspector' ? '[Inspector]' : ' Inspector '),
-    h(Text, {
-      bold: activeTab === 'actions',
-      dimColor: activeTab !== 'actions',
-    }, activeTab === 'actions' ? '[Actions]' : ' Actions '),
+    ...TAB_ORDER.filter((tab) => includedTabs.has(tab)).map((tab) => {
+      const isActive = tab === activeTab
+      return h(Text, {
+        key: `inspector-tab-${tab}`,
+        bold: isActive,
+        dimColor: !isActive,
+      }, isActive ? TAB_LABELS[tab].active : TAB_LABELS[tab].inactive)
+    }),
     ...(showTabHint
       ? [h(Text, { key: 'inspector-tabs-hint', dimColor: true }, tabHint)]
       : []))
@@ -575,6 +642,14 @@ export function renderHistoryInspector(
   // Tabbed mode (short terminals): render only the active tab's
   // content under the tab header.
   if (tabbed) {
+    const activeTabNodes = activeTab === 'inspector'
+      ? [...headerNodes, ...fileListNodes, ...submoduleBlockNodes]
+      : activeTab === 'actions'
+        ? renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
+            cursorIndex: state.inspectorActionIndex,
+            cursorActive: focused,
+          })
+        : notesSectionNodes
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
       borderStyle: theme.borderStyle,
@@ -585,15 +660,10 @@ export function renderHistoryInspector(
     h(Text, { bold: true }, panelTitle('Inspector', focused)),
     tabHeader,
     h(Text, { key: 'inspector-tabs-spacer' }, ''),
-    ...(activeTab === 'inspector'
-      ? [...headerNodes, ...fileListNodes, ...submoduleBlockNodes]
-      : renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
-          cursorIndex: state.inspectorActionIndex,
-          cursorActive: focused,
-        })))
+    ...activeTabNodes)
   }
 
-  // Tall mode: stack both sections so the user can read everything at
+  // Tall mode: stack every section so the user can read everything at
   // once, but show the tab header so the active section (and the
   // `[/]` switch affordance) is visible.
   return h(Box, {
@@ -609,6 +679,7 @@ export function renderHistoryInspector(
   ...headerNodes,
   ...fileListNodes,
   ...submoduleBlockNodes,
+  ...notesSectionNodes,
   ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
     cursorIndex: state.inspectorActionIndex,
     cursorActive: focused && state.inspectorTab === 'actions',

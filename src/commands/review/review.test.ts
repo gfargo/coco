@@ -424,6 +424,7 @@ describe('review command', () => {
 
       expect(MockTaskList).toHaveBeenCalledWith(
         expect.arrayContaining([expect.objectContaining({ title: 'Review finding' })]),
+        expect.anything(),
         expect.anything()
       )
       expect(mockTaskListStart).toHaveBeenCalledTimes(1)

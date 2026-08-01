@@ -14,7 +14,7 @@ import type {
   PullRequestActionResult,
   PullRequestMergeStrategy,
 } from './pullRequestActions'
-import type { IssueActionResult } from './issueActions'
+import type { CreateIssueInput, IssueActionResult } from './issueActions'
 
 // GitHub implementations.
 import { getPullRequestList } from './pullRequestListData'
@@ -33,9 +33,11 @@ import {
   commentPullRequest,
   commentPullRequestByNumber,
   createPullRequest,
+  markPullRequestReadyByNumber,
   mergePullRequest,
   mergePullRequestByNumber,
   openPullRequest,
+  reopenPullRequestByNumber,
   requestChangesPullRequest,
   requestChangesPullRequestByNumber,
 } from './pullRequestActions'
@@ -44,6 +46,7 @@ import {
   addIssueLabel,
   closeIssue,
   commentIssue,
+  createIssue,
   reopenIssue,
 } from './issueActions'
 
@@ -62,9 +65,11 @@ import {
   commentMergeRequestByNumber,
   createMergeRequest,
   getMergeRequestDiff,
+  markMergeRequestReadyByNumber,
   mergeMergeRequest,
   mergeMergeRequestByNumber,
   openMergeRequest,
+  reopenMergeRequestByNumber,
   requestChangesMergeRequest,
   requestChangesMergeRequestByNumber,
 } from './mergeRequestActions'
@@ -73,6 +78,7 @@ import {
   addGitLabIssueLabel,
   closeGitLabIssue,
   commentGitLabIssue,
+  createGitLabIssue,
   reopenGitLabIssue,
 } from './gitlabIssueActions'
 import { defaultGlabRunner } from './glabCli'
@@ -94,6 +100,8 @@ import {
   requestChangesBitbucketPullRequestByNumber,
   addBitbucketPullRequestLabel,
   addBitbucketPullRequestReviewer,
+  markBitbucketPullRequestReadyByNumber,
+  reopenBitbucketPullRequestByNumber,
   mergeBitbucketPullRequest,
   closeBitbucketPullRequest,
   approveBitbucketPullRequest,
@@ -105,6 +113,7 @@ import {
   addBitbucketIssueLabel,
   addBitbucketIssueAssignee,
   closeBitbucketIssue,
+  createBitbucketIssue,
   reopenBitbucketIssue,
 } from './bitbucketIssueActions'
 
@@ -121,6 +130,8 @@ import {
   requestChangesGiteaPullRequestByNumber,
   addGiteaPullRequestLabel,
   addGiteaPullRequestReviewer,
+  markGiteaPullRequestReadyByNumber,
+  reopenGiteaPullRequestByNumber,
   mergeGiteaPullRequest,
   closeGiteaPullRequest,
   approveGiteaPullRequest,
@@ -132,6 +143,7 @@ import {
   addGiteaIssueLabel,
   addGiteaIssueAssignee,
   closeGiteaIssue,
+  createGiteaIssue,
   reopenGiteaIssue,
 } from './giteaIssueActions'
 import { makeGiteaRunner } from './giteaCli'
@@ -164,6 +176,7 @@ import {
   addBitbucketServerIssueLabel,
   addBitbucketServerIssueAssignee,
   closeBitbucketServerIssue,
+  createBitbucketServerIssue,
   reopenBitbucketServerIssue,
 } from './bitbucketServerIssueActions'
 import { makeBitbucketServerRunner } from './bitbucketServerCli'
@@ -202,6 +215,21 @@ export type ForgeActions = {
    * counterpart, so its facade returns a graceful `{ ok: false }`.
    */
   checkoutPullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
+  /**
+   * Promote a draft PR/MR to ready for review (#1933), the counterpart
+   * to `pr create -d/--draft`. GitHub/Bitbucket flip a real `draft`
+   * flag; GitLab/Gitea's draft state is a title convention, so their
+   * facades rewrite the title instead.
+   */
+  markPullRequestReadyByNumber: (n: number) => Promise<PullRequestActionResult>
+  /**
+   * Reopen a closed PR/MR by number (#1933) — the PR/MR counterpart of
+   * `reopenIssue`, recovering from the one-keystroke
+   * `closePullRequestByNumber` triage action. Bitbucket's REST API has
+   * no reopen endpoint for a declined PR, so its facade returns a
+   * graceful `{ ok: false }`.
+   */
+  reopenPullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
   // Current-branch PR / MR mutations
   mergePullRequest: (strategy: PullRequestMergeStrategy) => Promise<PullRequestActionResult>
   closePullRequest: () => Promise<PullRequestActionResult>
@@ -216,6 +244,7 @@ export type ForgeActions = {
   addIssueAssignee: (n: number, assignee: string) => Promise<IssueActionResult>
   closeIssue: (n: number) => Promise<IssueActionResult>
   reopenIssue: (n: number) => Promise<IssueActionResult>
+  createIssue: (input: CreateIssueInput) => Promise<IssueActionResult>
 }
 
 const githubActions: ForgeActions = {
@@ -232,6 +261,8 @@ const githubActions: ForgeActions = {
   approvePullRequestByNumber,
   requestChangesPullRequestByNumber,
   checkoutPullRequestByNumber,
+  markPullRequestReadyByNumber,
+  reopenPullRequestByNumber,
   mergePullRequest,
   closePullRequest,
   approvePullRequest,
@@ -244,6 +275,7 @@ const githubActions: ForgeActions = {
   addIssueAssignee,
   closeIssue,
   reopenIssue,
+  createIssue,
 }
 
 /**
@@ -271,6 +303,11 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
     approvePullRequestByNumber: (n) => approveMergeRequestByNumber(n, defaultGlabRunner, host),
     requestChangesPullRequestByNumber: (n, body) => requestChangesMergeRequestByNumber(n, body, defaultGlabRunner, host),
     checkoutPullRequestByNumber: (n) => checkoutMergeRequestByNumber(n, defaultGlabRunner, host),
+    markPullRequestReadyByNumber: (n) =>
+      path
+        ? markMergeRequestReadyByNumber(path, n, defaultGlabRunner, host)
+        : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
+    reopenPullRequestByNumber: (n) => reopenMergeRequestByNumber(n, defaultGlabRunner, host),
     mergePullRequest: (strategy) => mergeMergeRequest(strategy, defaultGlabRunner, host),
     closePullRequest: () => closeMergeRequest(defaultGlabRunner, host),
     approvePullRequest: () => approveMergeRequest(defaultGlabRunner, host),
@@ -283,6 +320,7 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
     addIssueAssignee: (n, assignee) => addGitLabIssueAssignee(n, assignee, defaultGlabRunner, host),
     closeIssue: (n) => closeGitLabIssue(n, defaultGlabRunner, host),
     reopenIssue: (n) => reopenGitLabIssue(n, defaultGlabRunner, host),
+    createIssue: (input) => createGitLabIssue(input, defaultGlabRunner, host),
   }
 }
 
@@ -295,45 +333,44 @@ function bitbucketActions(
   path: string | undefined,
   currentBranch?: string
 ): ForgeActions {
+  const noProject = () => Promise.resolve({ ok: false as const, message: 'No Bitbucket project resolved' })
   return {
     getPullRequestList: (git, filter) => getBitbucketPullRequestList(git, filter),
     getIssueList: (git, filter) => getBitbucketIssueList(git, filter),
-    getPullRequestDetail: (n) =>
-      path
-        ? getBitbucketPullRequestDetail(path, n)
-        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
-    getIssueDetail: (n) =>
-      path
-        ? getBitbucketIssueDetail(path, n)
-        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
-    getPullRequestDiffByNumber: (n) =>
-      path
-        ? getBitbucketPullRequestDiff(path, n)
-        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
-    commentPullRequestByNumber: (n, body) => commentBitbucketPullRequestByNumber(path ?? '', n, body),
+    getPullRequestDetail: (n) => (path ? getBitbucketPullRequestDetail(path, n) : noProject()),
+    getIssueDetail: (n) => (path ? getBitbucketIssueDetail(path, n) : noProject()),
+    getPullRequestDiffByNumber: (n) => (path ? getBitbucketPullRequestDiff(path, n) : noProject()),
+    commentPullRequestByNumber: (n, body) =>
+      path ? commentBitbucketPullRequestByNumber(path, n, body) : noProject(),
     addPullRequestLabel: () => addBitbucketPullRequestLabel(),
-    addPullRequestAssignee: (n, assignee) => addBitbucketPullRequestReviewer(path ?? '', n, assignee),
-    mergePullRequestByNumber: (n, strategy) => mergeBitbucketPullRequestByNumber(path ?? '', n, strategy),
-    closePullRequestByNumber: (n) => closeBitbucketPullRequestByNumber(path ?? '', n),
-    approvePullRequestByNumber: (n) => approveBitbucketPullRequestByNumber(path ?? '', n),
-    requestChangesPullRequestByNumber: (n, body) => requestChangesBitbucketPullRequestByNumber(path ?? '', n, body),
+    addPullRequestAssignee: (n, assignee) =>
+      path ? addBitbucketPullRequestReviewer(path, n, assignee) : noProject(),
+    mergePullRequestByNumber: (n, strategy) =>
+      path ? mergeBitbucketPullRequestByNumber(path, n, strategy) : noProject(),
+    closePullRequestByNumber: (n) => (path ? closeBitbucketPullRequestByNumber(path, n) : noProject()),
+    approvePullRequestByNumber: (n) => (path ? approveBitbucketPullRequestByNumber(path, n) : noProject()),
+    requestChangesPullRequestByNumber: (n, body) =>
+      path ? requestChangesBitbucketPullRequestByNumber(path, n, body) : noProject(),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket yet.' }),
+    markPullRequestReadyByNumber: (n) => markBitbucketPullRequestReadyByNumber(path ?? '', n),
+    reopenPullRequestByNumber: () => reopenBitbucketPullRequestByNumber(),
     mergePullRequest: (strategy) => mergeBitbucketPullRequest(path, currentBranch, strategy),
     closePullRequest: () => closeBitbucketPullRequest(path, currentBranch),
     approvePullRequest: () => approveBitbucketPullRequest(path, currentBranch),
     commentPullRequest: (body) => commentBitbucketPullRequest(path, currentBranch, body),
     requestChangesPullRequest: (body) => requestChangesBitbucketPullRequest(path, currentBranch, body),
-    createPullRequest: (input) =>
-      path
-        ? createBitbucketPullRequest(path, input)
-        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
+    createPullRequest: (input) => (path ? createBitbucketPullRequest(path, input) : noProject()),
     openPullRequest: (url) => openBitbucketPullRequest(url),
-    commentIssue: (n, body) => commentBitbucketIssue(path ?? '', n, body),
+    commentIssue: (n, body) => (path ? commentBitbucketIssue(path, n, body) : noProject()),
     addIssueLabel: () => addBitbucketIssueLabel(),
-    addIssueAssignee: (n, assignee) => addBitbucketIssueAssignee(path ?? '', n, assignee),
-    closeIssue: (n) => closeBitbucketIssue(path ?? '', n),
-    reopenIssue: (n) => reopenBitbucketIssue(path ?? '', n),
+    addIssueAssignee: (n, assignee) => (path ? addBitbucketIssueAssignee(path, n, assignee) : noProject()),
+    closeIssue: (n) => (path ? closeBitbucketIssue(path, n) : noProject()),
+    reopenIssue: (n) => (path ? reopenBitbucketIssue(path, n) : noProject()),
+    createIssue: (input) =>
+      path
+        ? createBitbucketIssue(path, input)
+        : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
   }
 }
 
@@ -350,51 +387,54 @@ function giteaActions(
   host: string | undefined,
   currentBranch?: string
 ): ForgeActions {
-  const runner = makeGiteaRunner(host ?? '')
+  const runner = host ? makeGiteaRunner(host) : undefined
+  const noProject = () => Promise.resolve({ ok: false as const, message: 'No Gitea project resolved' })
 
   return {
     getPullRequestList: (git, filter) => getGiteaPullRequestList(git, filter),
     getIssueList: (git, filter) => getGiteaIssueList(git, filter),
-    getPullRequestDetail: (n) =>
-      path
-        ? getGiteaPullRequestDetail(path, n, runner)
-        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
-    getIssueDetail: (n) =>
-      path
-        ? getGiteaIssueDetail(path, n, runner)
-        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
-    getPullRequestDiffByNumber: (n) =>
-      path
-        ? getGiteaPullRequestDiff(path, n, runner)
-        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
-    commentPullRequestByNumber: (n, body) => commentGiteaPullRequestByNumber(path ?? '', n, body, runner),
-    addPullRequestLabel: (n, label) => addGiteaPullRequestLabel(path ?? '', n, label, runner),
-    addPullRequestAssignee: (n, assignee) => addGiteaPullRequestReviewer(path ?? '', n, assignee, runner),
-    mergePullRequestByNumber: (n, strategy) => mergeGiteaPullRequestByNumber(path ?? '', n, strategy, runner),
-    closePullRequestByNumber: (n) => closeGiteaPullRequestByNumber(path ?? '', n, runner),
-    approvePullRequestByNumber: (n) => approveGiteaPullRequestByNumber(path ?? '', n, runner),
+    getPullRequestDetail: (n) => (path && runner ? getGiteaPullRequestDetail(path, n, runner) : noProject()),
+    getIssueDetail: (n) => (path && runner ? getGiteaIssueDetail(path, n, runner) : noProject()),
+    getPullRequestDiffByNumber: (n) => (path && runner ? getGiteaPullRequestDiff(path, n, runner) : noProject()),
+    commentPullRequestByNumber: (n, body) =>
+      path && runner ? commentGiteaPullRequestByNumber(path, n, body, runner) : noProject(),
+    addPullRequestLabel: (n, label) =>
+      path && runner ? addGiteaPullRequestLabel(path, n, label, runner) : noProject(),
+    addPullRequestAssignee: (n, assignee) =>
+      path && runner ? addGiteaPullRequestReviewer(path, n, assignee, runner) : noProject(),
+    mergePullRequestByNumber: (n, strategy) =>
+      path && runner ? mergeGiteaPullRequestByNumber(path, n, strategy, runner) : noProject(),
+    closePullRequestByNumber: (n) => (path && runner ? closeGiteaPullRequestByNumber(path, n, runner) : noProject()),
+    approvePullRequestByNumber: (n) =>
+      path && runner ? approveGiteaPullRequestByNumber(path, n, runner) : noProject(),
     requestChangesPullRequestByNumber: (n, body) =>
-      requestChangesGiteaPullRequestByNumber(path ?? '', n, body, runner),
+      path && runner ? requestChangesGiteaPullRequestByNumber(path, n, body, runner) : noProject(),
     // Gitea has no CLI/API-friendly single-call checkout — surface the gap as
     // a graceful failure so the diff surface / status line explain it instead
     // of dead-ending (mirrors the Bitbucket facade, #1363).
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Gitea yet.' }),
-    mergePullRequest: (strategy) => mergeGiteaPullRequest(path, currentBranch, strategy, runner),
-    closePullRequest: () => closeGiteaPullRequest(path, currentBranch, runner),
-    approvePullRequest: () => approveGiteaPullRequest(path, currentBranch, runner),
-    commentPullRequest: (body) => commentGiteaPullRequest(path, currentBranch, body, runner),
-    requestChangesPullRequest: (body) => requestChangesGiteaPullRequest(path, currentBranch, body, runner),
-    createPullRequest: (input) =>
-      path
-        ? createGiteaPullRequest(path, input, runner)
-        : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
+    markPullRequestReadyByNumber: (n) =>
+      path && runner ? markGiteaPullRequestReadyByNumber(path, n, runner) : noProject(),
+    reopenPullRequestByNumber: (n) =>
+      path && runner ? reopenGiteaPullRequestByNumber(path, n, runner) : noProject(),
+    mergePullRequest: (strategy) =>
+      path && runner ? mergeGiteaPullRequest(path, currentBranch, strategy, runner) : noProject(),
+    closePullRequest: () => (path && runner ? closeGiteaPullRequest(path, currentBranch, runner) : noProject()),
+    approvePullRequest: () => (path && runner ? approveGiteaPullRequest(path, currentBranch, runner) : noProject()),
+    commentPullRequest: (body) =>
+      path && runner ? commentGiteaPullRequest(path, currentBranch, body, runner) : noProject(),
+    requestChangesPullRequest: (body) =>
+      path && runner ? requestChangesGiteaPullRequest(path, currentBranch, body, runner) : noProject(),
+    createPullRequest: (input) => (path && runner ? createGiteaPullRequest(path, input, runner) : noProject()),
     openPullRequest: (url) => openGiteaPullRequest(url),
-    commentIssue: (n, body) => commentGiteaIssue(path ?? '', n, body, runner),
-    addIssueLabel: (n, label) => addGiteaIssueLabel(path ?? '', n, label, runner),
-    addIssueAssignee: (n, assignee) => addGiteaIssueAssignee(path ?? '', n, assignee, runner),
-    closeIssue: (n) => closeGiteaIssue(path ?? '', n, runner),
-    reopenIssue: (n) => reopenGiteaIssue(path ?? '', n, runner),
+    commentIssue: (n, body) => (path && runner ? commentGiteaIssue(path, n, body, runner) : noProject()),
+    addIssueLabel: (n, label) => (path && runner ? addGiteaIssueLabel(path, n, label, runner) : noProject()),
+    addIssueAssignee: (n, assignee) =>
+      path && runner ? addGiteaIssueAssignee(path, n, assignee, runner) : noProject(),
+    closeIssue: (n) => (path && runner ? closeGiteaIssue(path, n, runner) : noProject()),
+    reopenIssue: (n) => (path && runner ? reopenGiteaIssue(path, n, runner) : noProject()),
+    createIssue: (input) => (path && runner ? createGiteaIssue(path, input, runner) : noProject()),
   }
 }
 
@@ -435,6 +475,10 @@ function bitbucketServerActions(
       requestChangesBitbucketServerPullRequestByNumber(path ?? '', n, body, runner),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket Server yet.' }),
+    markPullRequestReadyByNumber: () =>
+      Promise.resolve({ ok: false, message: 'Marking a pull request ready for review is not supported for Bitbucket Server yet.' }),
+    reopenPullRequestByNumber: () =>
+      Promise.resolve({ ok: false, message: 'Reopening a pull request is not supported for Bitbucket Server yet.' }),
     mergePullRequest: (strategy) => mergeBitbucketServerPullRequest(path, currentBranch, strategy, runner),
     closePullRequest: () => closeBitbucketServerPullRequest(path, currentBranch, runner),
     approvePullRequest: () => approveBitbucketServerPullRequest(path, currentBranch, runner),
@@ -450,6 +494,7 @@ function bitbucketServerActions(
     addIssueAssignee: () => addBitbucketServerIssueAssignee(),
     closeIssue: () => closeBitbucketServerIssue(),
     reopenIssue: () => reopenBitbucketServerIssue(),
+    createIssue: () => createBitbucketServerIssue(),
   }
 }
 

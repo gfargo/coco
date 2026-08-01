@@ -4,6 +4,7 @@ import { getPathFromFilePath } from '../../../utils/getPathFromFilePath'
 import { SummarizeContext, summarize } from '../../../langchain/chains/summarize'
 import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
 import { TokenCounter } from '../../../utils/tokenizer'
+import { recordUsage } from '../../../langchain/utils/usageLedger'
 import { createConcurrencyLimit } from '../../../utils/createConcurrencyLimit'
 import {
   diffSummaryKey,
@@ -81,6 +82,16 @@ export async function summarizeDirectoryDiff(
         { color: 'cyan' }
       )
       touchDiffSummary(cacheRepo, cacheKey)
+      // Mirror logLlmCall's no-op-without-a-logger behavior (observability.ts)
+      // so a logger-less caller can't record hits while dropping misses.
+      if (logger && metadata?.recordUsage !== false) {
+        recordUsage({
+          ...metadata,
+          task: 'summarize-directory-diff',
+          model: cacheModel,
+          cacheHit: true,
+        })
+      }
       return {
         diffs: directory.diffs,
         path: directory.path,
@@ -107,6 +118,7 @@ export async function summarizeDirectoryDiff(
         metadata: {
           ...metadata,
           task: 'summarize-directory-diff',
+          ...(cacheKey ? { cacheHit: false } : {}),
         },
         options: {
           returnIntermediateSteps: true,

@@ -91,6 +91,62 @@ describe('getMergeRequestDetail / getGitLabIssueDetail (#0.70)', () => {
     expect(result.ok).toBe(true)
     expect(result.ok && result.detail.comments).toHaveLength(105)
     expect(notesPage).toBe(2)
+    // 105 comments < 20-page ceiling: not truncated.
+    expect(result.ok && result.detail.commentsTruncated).toBeUndefined()
+  })
+
+  it('sets commentsTruncated when the page ceiling is hit while more notes remain', async () => {
+    // Simulate always-full pages to force the 20-page ceiling.
+    const fullPage = JSON.stringify(
+      Array.from({ length: 100 }, (_, i) => ({
+        body: `c${i}`,
+        created_at: 't',
+        system: false,
+        author: { username: 'a' },
+      }))
+    )
+    const runner = async (args: string[]): Promise<string> => {
+      const endpoint = args[1]
+      if (endpoint.includes('/notes')) return fullPage
+      if (endpoint.endsWith('/approvals')) return JSON.stringify({ approved_by: [] })
+      return JSON.stringify({ description: 'b', head_pipeline: { status: 'success' } })
+    }
+    const result = await getMergeRequestDetail('group/proj', 1, runner)
+    expect(result.ok).toBe(true)
+    // 20 pages × 100 notes each = 2000 comments.
+    expect(result.ok && result.detail.comments).toHaveLength(2000)
+    expect(result.ok && result.detail.commentsTruncated).toBe(true)
+  })
+
+  it('sets commentsTruncated when a notes page fetch fails mid-pagination', async () => {
+    let notesPage = 0
+    const runner = async (args: string[]): Promise<string> => {
+      const endpoint = args[1]
+      if (endpoint.includes('/notes')) {
+        notesPage += 1
+        if (notesPage === 1) {
+          // Return a full page (100 items) so hasMore is true and we proceed to page 2.
+          return JSON.stringify(
+            Array.from({ length: 100 }, (_, i) => ({
+              body: `c${i}`,
+              created_at: 't',
+              system: false,
+              author: { username: 'a' },
+            }))
+          )
+        }
+        // Page 2: empty output → parsePage returns undefined → truncated = true.
+        return ''
+      }
+      if (endpoint.endsWith('/approvals')) return JSON.stringify({ approved_by: [] })
+      return JSON.stringify({ description: 'b', head_pipeline: { status: 'success' } })
+    }
+    const result = await getMergeRequestDetail('group/proj', 1, runner)
+    expect(result.ok).toBe(true)
+    // Only the first page's comments survived.
+    expect(result.ok && result.detail.comments).toHaveLength(100)
+    // Truncation must be flagged so the inspector can show a notice.
+    expect(result.ok && result.detail.commentsTruncated).toBe(true)
   })
 
   it('assembles issue detail from issue + notes', async () => {

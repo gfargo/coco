@@ -66,7 +66,7 @@ async function requireJson<T>(runner: BitbucketRunner, endpoint: string): Promis
 async function fetchAllComments(
   runner: BitbucketRunner,
   base: string
-): Promise<IssueComment[]> {
+): Promise<{ items: IssueComment[]; truncated: boolean }> {
   return paginate({
     fetchPage: async (page) => (await runner(`${base}/comments?pagelen=50&page=${page}`)).trim(),
     parsePage: (output) => {
@@ -148,7 +148,7 @@ export async function getBitbucketPullRequestDetail(
       return { ok: false, message: `Empty response from Bitbucket for pull request #${pullRequestNumber}` }
     }
 
-    const [comments, statusChecks] = await Promise.all([
+    const [commentsResult, statusChecks] = await Promise.all([
       fetchAllComments(runner, base),
       fetchCommitStatuses(runner, projectPath, pr.source?.commit?.hash),
     ])
@@ -156,9 +156,10 @@ export async function getBitbucketPullRequestDetail(
     const detail: PullRequestDetail = {
       number: pullRequestNumber,
       body: pr.description || '',
-      comments,
+      comments: commentsResult.items,
       reviews: parseParticipantsAsReviews(pr.participants),
       statusCheckRollup: statusChecks,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizePullRequestDetail(detail) }
   } catch (error) {
@@ -182,12 +183,13 @@ export async function getBitbucketIssueDetail(
       return { ok: false, message: `Empty response from Bitbucket for issue #${issueNumber}` }
     }
 
-    const comments = await fetchAllComments(runner, base)
+    const commentsResult = await fetchAllComments(runner, base)
 
     const detail: IssueDetail = {
       number: issueNumber,
       body: issue.content?.raw || '',
-      comments,
+      comments: commentsResult.items,
+      ...(commentsResult.truncated ? { commentsTruncated: true } : {}),
     }
     return { ok: true, detail: sanitizeIssueDetail(detail) }
   } catch (error) {

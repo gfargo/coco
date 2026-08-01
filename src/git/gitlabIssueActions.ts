@@ -1,6 +1,6 @@
 import { defaultGlabRunner, runGlabAction, type GlabRunner } from './glabCli'
 import { rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
-import type { IssueActionResult } from './issueActions'
+import type { CreateIssueInput, IssueActionResult } from './issueActions'
 
 /**
  * GitLab issue mutations, the glab counterparts to `issueActions.ts`. Each wraps
@@ -10,6 +10,44 @@ import type { IssueActionResult } from './issueActions'
  * contract-locked by the arg-builder tests; smoke-test against a live GitLab
  * before relying on them.
  */
+
+function parseCreatedIssueUrl(output: string): string | undefined {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('https://'))
+}
+
+/**
+ * Unlike `gh issue create` (`issueActions.ts`), `glab issue create` has no
+ * `--body-file`/`--description-file` equivalent — its `-d/--description` flag
+ * either takes the value directly or, given `-`, opens an interactive editor
+ * (unusable here). So the body travels via argv; `runGlabAction` shells out
+ * through `execFile` (no shell), so there's no injection risk, just the OS
+ * argv-length ceiling for unusually large AI-drafted bodies.
+ */
+export function createGitLabIssue(
+  input: CreateIssueInput,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<IssueActionResult> {
+  if (!input.title.trim()) {
+    return Promise.resolve({ ok: false, message: 'Issue title required' })
+  }
+  return runGlabAction(
+    runner,
+    ['issue', 'create', `--title=${input.title}`, `--description=${input.body}`, '--yes'],
+    (output) => {
+      const url = parseCreatedIssueUrl(output)
+      return {
+        ok: true,
+        message: url ? `Created issue: ${url}` : 'Created issue',
+        url,
+      }
+    },
+    hostname
+  )
+}
 
 export function commentGitLabIssue(
   issueNumber: number,

@@ -11,11 +11,65 @@
  * mutations, all gated through the y-confirm path.
  */
 
+import { mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 import { defaultGhRunner, runGhAction, type GhRunner } from './githubCli'
 import { rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
 import type { ForgeActionResult } from './pullRequestActions'
 
 export type IssueActionResult = ForgeActionResult
+
+export type CreateIssueInput = {
+  title: string
+  body: string
+}
+
+function parseCreatedIssueUrl(output: string): string | undefined {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.startsWith('https://'))
+}
+
+export function buildCreateIssueArgs(input: CreateIssueInput, bodyFile?: string): string[] {
+  return [
+    'issue',
+    'create',
+    `--title=${input.title}`,
+    bodyFile ? `--body-file=${bodyFile}` : `--body=${input.body}`,
+  ]
+}
+
+/**
+ * `gh issue create` — the body travels via a temp file rather than argv,
+ * mirroring `createPullRequest`: generated bodies (review findings, AI
+ * drafts) run to multi-KB markdown, which both risks argv length limits
+ * and echoes back through error messages when gh fails.
+ */
+export async function createIssue(
+  input: CreateIssueInput,
+  runner: GhRunner = defaultGhRunner
+): Promise<IssueActionResult> {
+  if (!input.title.trim()) {
+    return { ok: false, message: 'Issue title required' }
+  }
+  const bodyDir = mkdtempSync(join(tmpdir(), 'coco-issue-'))
+  const bodyFile = join(bodyDir, 'body.md')
+  try {
+    writeFileSync(bodyFile, input.body, 'utf8')
+    return await runGhAction(runner, buildCreateIssueArgs(input, bodyFile), (output) => {
+      const url = parseCreatedIssueUrl(output)
+      return {
+        ok: true,
+        message: url ? `Created issue: ${url}` : 'Created issue',
+        url,
+      }
+    })
+  } finally {
+    rmSync(bodyDir, { recursive: true, force: true })
+  }
+}
 
 export function commentIssue(
   issueNumber: number,

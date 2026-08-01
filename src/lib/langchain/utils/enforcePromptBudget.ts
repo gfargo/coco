@@ -199,6 +199,11 @@ async function trimSummaryByCharSlice(
 /**
  * Ensure the fully rendered LLM prompt fits the configured request budget.
  *
+ * `maxTokens` is the *request* budget (prompt + the model's response), not the
+ * prompt budget alone — it is compared everywhere against `maxTokens -
+ * responseTokenReserve` so the reserve is always honored, whether or not
+ * trimming ends up engaging.
+ *
  * Diff condensation budgets only cover the diff summary itself. This guard accounts
  * for the rest of the rendered prompt, then trims the summary as a deterministic
  * fallback when additional context pushes the request over budget.
@@ -213,35 +218,32 @@ export async function enforcePromptBudget({
 }: EnforcePromptBudgetInput): Promise<EnforcePromptBudgetResult> {
   const renderedPrompt = await renderPrompt(prompt, variables)
   const promptTokenCount = tokenizer(renderedPrompt)
+  const tokenBudget = maxTokens - responseTokenReserve
 
-  if (promptTokenCount <= maxTokens) {
+  if (promptTokenCount <= tokenBudget) {
     return { variables, promptTokenCount, truncated: false }
   }
 
   const summary = variables[summaryKey] || ''
   const variablesWithoutSummary = { ...variables, [summaryKey]: '' }
   const overheadTokenCount = tokenizer(await renderPrompt(prompt, variablesWithoutSummary))
-  const summaryBudget = Math.max(0, maxTokens - overheadTokenCount - responseTokenReserve)
+  const summaryBudget = Math.max(0, tokenBudget - overheadTokenCount)
 
   if (summaryBudget === 0) {
-    const emptySummaryVariables = { ...variables, [summaryKey]: '' }
-    const emptySummaryTokenCount = tokenizer(await renderPrompt(prompt, emptySummaryVariables))
-
-    if (emptySummaryTokenCount > maxTokens) {
+    if (overheadTokenCount > tokenBudget) {
       throw new Error(
         `Rendered prompt exceeds token budget before adding ${summaryKey}: ` +
-        `${emptySummaryTokenCount} > ${maxTokens}`
+        `${overheadTokenCount} > ${tokenBudget}`
       )
     }
 
     return {
-      variables: emptySummaryVariables,
-      promptTokenCount: emptySummaryTokenCount,
+      variables: variablesWithoutSummary,
+      promptTokenCount: overheadTokenCount,
       truncated: true,
     }
   }
 
-  const tokenBudget = maxTokens - responseTokenReserve
   const rawParts = summary.split(DIRECTORY_BLOCK_SEPARATOR).filter(Boolean)
 
   const { summary: finalSummary, tokenCount: bestTokenCount } =

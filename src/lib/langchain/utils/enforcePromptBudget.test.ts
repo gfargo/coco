@@ -66,6 +66,60 @@ describe('enforcePromptBudget', () => {
     ).rejects.toThrow('Rendered prompt exceeds token budget')
   })
 
+  it('throws honoring the reserve even when overhead alone is within maxTokens but not the request budget', async () => {
+    // overhead ("Instructions\n\nContext: " + "context") = 30 tokens, which sits
+    // strictly between tokenBudget (35 - 10 = 25) and maxTokens (35). Before the
+    // fix, only `overhead > maxTokens` was checked, so this case would have
+    // silently returned an empty summary with no room reserved for the response.
+    await expect(
+      enforcePromptBudget({
+        prompt,
+        variables: {
+          summary: 'diff',
+          additional_context: 'context',
+        },
+        tokenizer,
+        maxTokens: 35,
+        responseTokenReserve: 10,
+      })
+    ).rejects.toThrow('Rendered prompt exceeds token budget before adding summary: 30 > 25')
+  })
+
+  it('ships a prompt untouched when it lands exactly on the reserve-adjusted budget', async () => {
+    const variables = {
+      summary: 'd',
+      additional_context: 'c',
+    }
+
+    const result = await enforcePromptBudget({
+      prompt,
+      variables,
+      tokenizer,
+      maxTokens: 30,
+      responseTokenReserve: 5,
+    })
+
+    expect(result.truncated).toBe(false)
+    expect(result.variables).toEqual(variables)
+    expect(result.promptTokenCount).toBe(25)
+  })
+
+  it('trims a prompt one token over the reserve-adjusted budget instead of waving it through', async () => {
+    const result = await enforcePromptBudget({
+      prompt,
+      variables: {
+        summary: 'dd',
+        additional_context: 'c',
+      },
+      tokenizer,
+      maxTokens: 30,
+      responseTokenReserve: 5,
+    })
+
+    expect(result.truncated).toBe(true)
+    expect(tokenizer(await prompt.format(renderVariables(result.variables)))).toBeLessThanOrEqual(25)
+  })
+
   it('drops a large mechanical directory block before a small pointed one, and marks the omission', async () => {
     const bigBlockBody = `* changes in "/generated"\n\n${FILE_BULLET_PREFIX}${'x'.repeat(300)}\n\n`
     const smallBlockBody = `* changes in "/src/auth"\n\n${FILE_BULLET_PREFIX}fix auth token bug\n\n`

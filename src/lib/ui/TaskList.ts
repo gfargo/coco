@@ -2,9 +2,14 @@ import chalk from 'chalk'
 import { execFile } from 'child_process'
 import * as readline from 'readline'
 import { promisify } from 'util'
+import { SimpleGit } from 'simple-git'
 import { ReviewFeedbackItem } from '../../commands/review/config'
+import { findingToIssue } from '../../commands/issues/findingToIssue'
 import { runAutoFix } from '../autofix'
 import { AutoFixConfig } from '../autofix/types'
+import { getProviderOverview } from '../../git/providerData'
+import { getForgeActions } from '../../git/forgeActions'
+import { confirmPrompt } from './inquirerPrompts'
 import { bannerWithHeader, DIVIDER, hotKey, severityColor, statusColor } from './helpers'
 
 const execFileAsync = promisify(execFile)
@@ -18,10 +23,12 @@ export class TaskList {
   private currentIndex: number = 0
   private rl: readline.Interface
   private config?: AutoFixConfig
+  private git?: SimpleGit
 
-  constructor(items: ReviewFeedbackItem[], config?: AutoFixConfig) {
+  constructor(items: ReviewFeedbackItem[], config?: AutoFixConfig, git?: SimpleGit) {
     this.items = items.map((item) => ({ ...item, status: 'pending' }))
     this.config = config
+    this.git = git
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -58,6 +65,7 @@ export class TaskList {
       { name: `✅ Mark as complete ${hotKey('d')}`, value: 'complete' },
       { name: `📂 Open file ${hotKey('o')}`, value: 'open' },
       { name: `🤖 Auto-fix ${hotKey('a')}`, value: 'autofix' },
+      { name: `📝 File issue ${hotKey('i')}`, value: 'fileIssue' },
       { name: `⏩ Skip ${hotKey('s')}`, value: 'skip' },
       { name: `🙈 Omit ${hotKey('x')}`, value: 'omit' },
       { name: `${exitText} ${hotKey('q')}`, value: 'exit' },
@@ -115,6 +123,80 @@ export class TaskList {
     }
   }
 
+  private async fileIssue(): Promise<void> {
+    if (!this.git) {
+      console.log(chalk.yellow('No repository context available for filing an issue.'))
+      return
+    }
+
+    const item = this.items[this.currentIndex]
+    const { title, body } = findingToIssue(item)
+
+    // Release raw mode so @inquirer/prompts (used for the confirm prompt) can
+    // manage stdin itself, same as autoFix() handing off to a child process.
+    process.stdin.setRawMode(false)
+    process.stdin.pause()
+
+    try {
+      const overview = await getProviderOverview(this.git)
+      const provider = overview.repository.provider
+
+      if (provider !== 'github' && provider !== 'gitlab' && provider !== 'bitbucket' && provider !== 'gitea') {
+        console.log(
+          chalk.yellow(
+            overview.repository.message || 'No supported remote (GitHub, GitLab, Bitbucket, or Gitea) detected.'
+          )
+        )
+        return
+      }
+
+      if (!overview.authenticated) {
+        console.log(chalk.yellow(overview.message || 'The forge CLI is unavailable.'))
+        return
+      }
+
+      console.log(chalk.bold('\nTitle:'))
+      console.log(title)
+      console.log(chalk.bold('\nBody:'))
+      console.log(body || chalk.dim('(empty)'))
+      console.log('')
+
+      const confirmed = await confirmPrompt({ message: 'File this as an issue?', default: true })
+      if (!confirmed) {
+        console.log(chalk.yellow('Issue creation cancelled.'))
+        return
+      }
+
+      const repoPath =
+        overview.repository.owner && overview.repository.name
+          ? `${overview.repository.owner}/${overview.repository.name}`
+          : undefined
+      const forge = getForgeActions(provider, {
+        gitlabPath: repoPath,
+        gitlabHost: overview.repository.host,
+        bitbucketPath: repoPath,
+        giteaPath: repoPath,
+        giteaHost: overview.repository.host,
+      })
+
+      const result = await forge.createIssue({ title, body })
+      if (!result.ok) {
+        console.log(chalk.red(result.message))
+        return
+      }
+
+      console.log(chalk.green(result.message))
+      this.markAsComplete()
+      await new Promise((r) => setTimeout(r, 1200))
+    } catch (err) {
+      console.log(chalk.red(`Failed to file issue: ${(err as Error).message}`))
+      await new Promise((r) => setTimeout(r, 1800))
+    } finally {
+      process.stdin.resume()
+      process.stdin.setRawMode(true)
+    }
+  }
+
   private skip() {
     this.items[this.currentIndex].status = 'skipped'
     this.navigate(1)
@@ -150,6 +232,9 @@ export class TaskList {
           break
         case 'autofix':
           await this.autoFix()
+          break
+        case 'fileIssue':
+          await this.fileIssue()
           break
         case 'skip':
           this.skip()
@@ -189,6 +274,7 @@ export class TaskList {
       const actionMap: Record<string, string> = {
         o: 'open',
         a: 'autofix',
+        i: 'fileIssue',
         d: 'complete',
         s: 'skip',
         x: 'omit',

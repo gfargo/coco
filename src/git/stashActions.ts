@@ -244,23 +244,31 @@ export async function dropStashes(
 
   const ordered = [...stashes].sort((a, b) => stashRefIndex(b.ref) - stashRefIndex(a.ref))
   const dropped: string[] = []
+  // Hashes of the stashes that actually dropped, in drop order — the
+  // primary undo-correlation key (OSS-1606). Captured undo entries key
+  // on `hash`, not `ref`: a ref like `stash@{1}` shifts meaning as soon
+  // as any later drop in the batch renumbers the list, but the hash
+  // stays stable.
+  const droppedHashes: string[] = []
   const failures: string[] = []
   for (const stash of ordered) {
     const result = await dropStash(git, stash)
     if (result.ok) {
       dropped.push(stash.ref)
+      if (stash.hash) droppedHashes.push(stash.hash)
     } else {
       failures.push(`${stash.ref}: ${result.message}`)
     }
   }
 
   if (failures.length === 0) {
-    return { ok: true, message: `Dropped ${dropped.length} stashes: ${dropped.join(', ')}` }
+    return { ok: true, message: `Dropped ${dropped.length} stashes: ${dropped.join(', ')}`, succeeded: droppedHashes }
   }
   return {
     ok: false,
     message: `Dropped ${dropped.length} of ${stashes.length} stashes — ${failures.length} refused`,
     details: failures,
+    succeeded: droppedHashes,
   }
 }
 

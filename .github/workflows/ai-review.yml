@@ -21,11 +21,16 @@ on:
       - synchronize
       - labeled
 
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   review:
     # Label-gated: only runs when the PR carries the "claude review" label.
     if: ${{ contains(github.event.pull_request.labels.*.name, 'claude review') }}
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
