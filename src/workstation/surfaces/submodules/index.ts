@@ -17,7 +17,7 @@ import {
   formatLogInkLoading,
   formatLogInkSubmodulesEmpty,
 } from '../../chrome/surfaceStates'
-import { cellWidth, truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { SubmoduleEntry } from '../../../git/submoduleData'
 import {
@@ -89,8 +89,8 @@ export function renderSubmodulesSurface(ctx: SurfaceRenderContext): ReactTypes.R
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
         const sha = entry.pinnedSha ? entry.pinnedSha.slice(0, 8) : '--------'
-        const namePadded = truncateCells(entry.name, nameColWidth).padEnd(nameColWidth)
-        const pathPadded = truncateCells(entry.path, pathColWidth).padEnd(pathColWidth)
+        const namePadded = padCells(truncateCells(entry.name, nameColWidth), nameColWidth)
+        const pathPadded = padCells(truncateCells(entry.path, pathColWidth), pathColWidth)
         const flagText = FLAG_LABEL[entry.flag]
         const branch = entry.trackingBranch ? ` · ${entry.trackingBranch}` : ''
         const lineText = truncateCells(

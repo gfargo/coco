@@ -13,7 +13,7 @@ import {
   formatLogInkLoading,
   formatLogInkRemotesEmpty,
 } from '../../chrome/surfaceStates'
-import { cellWidth, truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import type { RemoteEntry } from '../../../git/remoteData'
 import {
   matchesPromotedFilter,
@@ -65,7 +65,7 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
-        const namePadded = truncateCells(entry.name, nameColWidth).padEnd(nameColWidth)
+        const namePadded = padCells(truncateCells(entry.name, nameColWidth), nameColWidth)
         // Show the fetch URL inline; surface a distinct push URL with a
         // `↑` marker only when it diverges (the common case is a single
         // shared URL, where a second column would just be noise).

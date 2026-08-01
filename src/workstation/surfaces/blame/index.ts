@@ -18,7 +18,7 @@
 
 import type * as ReactTypes from 'react'
 import { formatLogInkBlameEmpty, formatLogInkLoading } from '../../chrome/surfaceStates'
-import { expandTabs, cellWidth, truncateCells } from '../../chrome/text'
+import { expandTabs, cellWidth, padCells, truncateCells } from '../../chrome/text'
 import type { BlameResult } from '../../../git/blameData'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -94,7 +94,7 @@ export function renderBlameSurface(
         const index = windowStart + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
-        const author = truncateCells(line.author, AUTHOR_COL_CAP).padEnd(AUTHOR_COL_CAP)
+        const author = padCells(truncateCells(line.author, AUTHOR_COL_CAP), AUTHOR_COL_CAP)
         const lineNo = String(line.lineNumber).padStart(lineNoWidth)
         // Dimmed blame gutter (`<shorthash> <author>`) + the line's
         // number, then the content. The gutter is rendered as its own
