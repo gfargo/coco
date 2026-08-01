@@ -117,6 +117,18 @@ export function useCommitSplitActions(
   // scheduling its own.
   const recentCommitsTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // Clear the pending auto-clear timer on unmount — otherwise the
+  // `setTimeout` keeps the event loop alive for up to 5s after `q`,
+  // delaying process exit even though `mountedRef` already guards its
+  // dispatch from reaching a torn-down tree.
+  React.useEffect(() => {
+    return () => {
+      if (recentCommitsTimerRef.current !== null) {
+        clearTimeout(recentCommitsTimerRef.current)
+      }
+    }
+  }, [])
+
   // AbortController for the in-flight plan generation (#1338 pattern —
   // same shape as the changelog / commit-draft cancels). Esc used to be
   // a "soft cancel": the overlay closed but the LLM call ran to
