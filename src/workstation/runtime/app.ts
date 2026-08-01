@@ -547,10 +547,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // slot, next to the bisect-candidate `useState`s) by `useBlameLoadingState`
   // to preserve hook ordering; the debounced effects that toggle it live in
   // `useDetailHydration` further down (0.72 app.ts decomposition, PR 7).
-  const { blameLoading, setBlameLoading } = useBlameLoadingState(React)
+  const { blameLoading, setBlameLoading, blameFailure, setBlameFailure } =
+    useBlameLoadingState(React)
   // On-demand file-history hydration flag (#COCO-14). Mirrors blameLoading —
   // issued here (hook ordering) and toggled by the hydration effect below.
-  const { fileHistoryLoading, setFileHistoryLoading } = useFileHistoryLoadingState(React)
+  const {
+    fileHistoryLoading,
+    setFileHistoryLoading,
+    fileHistoryFailure,
+    setFileHistoryFailure,
+  } = useFileHistoryLoadingState(React)
   const bisectCandidateSha = state.activeView === 'bisect' && context.bisect?.active
     ? context.bisect.currentSha
     : ''
@@ -739,6 +745,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setContext,
     setBlameLoading,
     setFileHistoryLoading,
+    setBlameFailure,
+    setFileHistoryFailure,
   })
 
   // Commit-detail loader, lifted verbatim into `useCommitDetailHydration`
@@ -1295,10 +1303,18 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       bisectCandidateLoading,
       blame: state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined,
       blameLoading,
+      blameFailure:
+        state.blamePath && blameFailure?.path === state.blamePath
+          ? blameFailure.message
+          : undefined,
       fileHistory: state.fileHistoryPath
         ? context.fileHistoryByPath?.get(state.fileHistoryPath)
         : undefined,
       fileHistoryLoading,
+      fileHistoryFailure:
+        state.fileHistoryPath && fileHistoryFailure?.path === state.fileHistoryPath
+          ? fileHistoryFailure.message
+          : undefined,
       hasMoreCommits,
       loadingMoreCommits,
       spinnerFrame,

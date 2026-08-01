@@ -234,10 +234,20 @@ export type MainPanelExtras = {
   blame: BlameSurfaceData['blame']
   /** True while the on-demand blame hydration is in flight (#0.71). */
   blameLoading: boolean
+  /**
+   * Message from the most recent failed blame attempt for `state.blamePath`
+   * (#OSS-1769). Undefined once a retry succeeds or no attempt has failed.
+   * Kept separate from `blame` because failures are intentionally never
+   * cached (so a retry can happen) — this is the only way the surface can
+   * tell "fetch failed" apart from "fetch still in flight".
+   */
+  blameFailure: string | undefined
   /** Cached file history for `state.fileHistoryPath` (#COCO-14). Undefined on a cache miss. */
   fileHistory: FileHistorySurfaceData['history']
   /** True while the on-demand file-history hydration is in flight (#COCO-14). */
   fileHistoryLoading: boolean
+  /** Message from the most recent failed file-history attempt (#OSS-1769). Mirrors `blameFailure`. */
+  fileHistoryFailure: string | undefined
   hasMoreCommits: boolean
   loadingMoreCommits: boolean
   spinnerFrame: number
@@ -272,8 +282,10 @@ export function renderMainPanel(
     bisectCandidateLoading,
     blame,
     blameLoading,
+    blameFailure,
     fileHistory,
     fileHistoryLoading,
+    fileHistoryFailure,
     hasMoreCommits,
     loadingMoreCommits,
     spinnerFrame,
@@ -369,12 +381,14 @@ export function renderMainPanel(
   }
 
   if (state.activeView === 'blame') {
-    return h(blameSurfaceComponent(React), { data: { blame, loading: blameLoading } })
+    return h(blameSurfaceComponent(React), {
+      data: { blame, loading: blameLoading, failure: blameFailure },
+    })
   }
 
   if (state.activeView === 'file-history') {
     return h(fileHistorySurfaceComponent(React), {
-      data: { history: fileHistory, loading: fileHistoryLoading },
+      data: { history: fileHistory, loading: fileHistoryLoading, failure: fileHistoryFailure },
     })
   }
 

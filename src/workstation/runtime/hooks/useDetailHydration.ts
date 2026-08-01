@@ -82,6 +82,21 @@ type PullRequestListItemType =
   NonNullable<NonNullable<LogInkContext['pullRequestList']>['pullRequests']>[number]
 
 /**
+ * Last-attempt failure for a hydrated path (#OSS-1769). Kept in local
+ * `useState` — NOT the `blameByPath` / `fileHistoryByPath` context caches —
+ * so a failed `git blame` / `git log` (e.g. transient `index.lock`
+ * contention) never permanently satisfies the cache-skip guard. The surface
+ * uses this to render the failure instead of spinning forever: without it,
+ * `loading` in the blame/file-history surfaces is derived from
+ * `!blame && Boolean(path)`, which stays true forever once the fetch
+ * resolves to a failure that was never cached.
+ */
+export type HydrationFailure = {
+  path: string
+  message: string
+}
+
+/**
  * Pure cache-skip predicate: should the cursored key be hydrated, i.e. is
  * it *absent* from its detail cache? Mirrors the original inline guard
  * `if (cache?.has(key)) return` — returns `false` when the key is already
@@ -110,13 +125,19 @@ export function shouldHydrate<K>(
 export function useBlameLoadingState(React: typeof ReactTypes): {
   blameLoading: boolean
   setBlameLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+  blameFailure: HydrationFailure | undefined
+  setBlameFailure: ReactTypes.Dispatch<ReactTypes.SetStateAction<HydrationFailure | undefined>>
 } {
   // On-demand blame hydration flag (#0.71). True while the debounced
   // `getBlame` for the active `state.blamePath` is in flight; the blame
   // surface shows a loading placeholder until the parse lands in the
   // `blameByPath` cache.
   const [blameLoading, setBlameLoading] = React.useState(false)
-  return { blameLoading, setBlameLoading }
+  // Last-attempt failure (#OSS-1769) — see `HydrationFailure` above. Issued
+  // in the same slot as `blameLoading` since the two are always read/reset
+  // together.
+  const [blameFailure, setBlameFailure] = React.useState<HydrationFailure | undefined>(undefined)
+  return { blameLoading, setBlameLoading, blameFailure, setBlameFailure }
 }
 
 /**
@@ -128,9 +149,15 @@ export function useBlameLoadingState(React: typeof ReactTypes): {
 export function useFileHistoryLoadingState(React: typeof ReactTypes): {
   fileHistoryLoading: boolean
   setFileHistoryLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+  fileHistoryFailure: HydrationFailure | undefined
+  setFileHistoryFailure: ReactTypes.Dispatch<ReactTypes.SetStateAction<HydrationFailure | undefined>>
 } {
   const [fileHistoryLoading, setFileHistoryLoading] = React.useState(false)
-  return { fileHistoryLoading, setFileHistoryLoading }
+  // Last-attempt failure (#OSS-1769) — mirrors `blameFailure` above.
+  const [fileHistoryFailure, setFileHistoryFailure] = React.useState<HydrationFailure | undefined>(
+    undefined,
+  )
+  return { fileHistoryLoading, setFileHistoryLoading, fileHistoryFailure, setFileHistoryFailure }
 }
 
 export type UseDetailHydrationDeps = {
@@ -157,6 +184,10 @@ export type UseDetailHydrationDeps = {
   setBlameLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
   /** File-history loading-flag setter, from {@link useFileHistoryLoadingState}. */
   setFileHistoryLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+  /** Blame failure setter, from {@link useBlameLoadingState} (#OSS-1769). */
+  setBlameFailure: ReactTypes.Dispatch<ReactTypes.SetStateAction<HydrationFailure | undefined>>
+  /** File-history failure setter, from {@link useFileHistoryLoadingState} (#OSS-1769). */
+  setFileHistoryFailure: ReactTypes.Dispatch<ReactTypes.SetStateAction<HydrationFailure | undefined>>
 }
 
 /**
@@ -182,6 +213,8 @@ export function useDetailHydration(
     setContext,
     setBlameLoading,
     setFileHistoryLoading,
+    setBlameFailure,
+    setFileHistoryFailure,
   } = deps
 
   React.useEffect(() => {
@@ -292,11 +325,16 @@ export function useDetailHydration(
       // Only cache a successful result (#OSS-1769) — caching a failure
       // (e.g. transient `index.lock` contention) would permanently
       // satisfy the cache-skip guard above and disable retry for this
-      // path until a worktree refresh clears `blameByPath`.
+      // path until a worktree refresh clears `blameByPath`. The failure
+      // still needs to be observable though, so it's tracked in the local
+      // (uncached) `blameFailure` state the surface renders instead of
+      // spinning forever — see `HydrationFailure` above.
       if (!result.ok) {
+        setBlameFailure({ path: result.path, message: result.message })
         setBlameLoading(false)
         return
       }
+      setBlameFailure(undefined)
       setContext(
         (current) => ({
           ...current,
@@ -339,11 +377,15 @@ export function useDetailHydration(
       if (!active) return
       // Only cache a successful result (#OSS-1769) — see the matching
       // guard in the blame effect above for why a cached failure must
-      // not permanently satisfy the cache-skip guard.
+      // not permanently satisfy the cache-skip guard. The failure is
+      // tracked in local (uncached) `fileHistoryFailure` state so the
+      // surface can render it instead of spinning forever.
       if (!result.ok) {
+        setFileHistoryFailure({ path: result.path, message: result.message })
         setFileHistoryLoading(false)
         return
       }
+      setFileHistoryFailure(undefined)
       setContext(
         (current) => ({
           ...current,
