@@ -23,6 +23,7 @@ import {
   isNonFastForwardPushError,
   pullCurrentBranchMerge,
   pullCurrentBranchRebase,
+  restoreDeletedBranch,
 } from './branchActions'
 import { BranchRef } from './branchData'
 
@@ -192,6 +193,13 @@ describe('log branch actions', () => {
       expect(result).toEqual({ ok: false, message: 'Branch name required' })
       expect(git.raw).not.toHaveBeenCalled()
     })
+
+    it('rejects a flag-like name to avoid arg injection', async () => {
+      const git = { raw: jest.fn() }
+      const result = await checkoutBranchByName(git as never, '--detach')
+      expect(result).toEqual({ ok: false, message: "Branch name '--detach' cannot start with '-'." })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
   })
 
   describe('deleteBranch force', () => {
@@ -223,6 +231,28 @@ describe('log branch actions', () => {
     })
   })
 
+  describe('restoreDeletedBranch', () => {
+    it('recreates the branch at its recorded sha', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+
+      await expect(restoreDeletedBranch(git as never, 'feature/test', 'abc1234')).resolves.toEqual({
+        ok: true,
+        message: 'Restored branch feature/test',
+      })
+      expect(git.raw).toHaveBeenCalledWith(['branch', 'feature/test', 'abc1234'])
+    })
+
+    it('rejects a flag-like branch name', async () => {
+      const git = { raw: jest.fn() }
+
+      await expect(restoreDeletedBranch(git as never, '--force', 'abc1234')).resolves.toEqual({
+        ok: false,
+        message: "Branch name '--force' cannot start with '-'.",
+      })
+      expect(git.raw).not.toHaveBeenCalled()
+    })
+  })
+
   // #1361 — batch delete for multi-select.
   describe('deleteBranches', () => {
     it('deletes every branch and summarizes on full success', async () => {
@@ -231,7 +261,7 @@ describe('log branch actions', () => {
         localBranch({ shortName: 'feat/a' }),
         localBranch({ shortName: 'feat/b' }),
       ])
-      expect(result).toEqual({ ok: true, message: 'Deleted 2 branches: feat/a, feat/b' })
+      expect(result).toEqual({ ok: true, message: 'Deleted 2 branches: feat/a, feat/b', succeeded: ['feat/a', 'feat/b'] })
       expect(git.raw).toHaveBeenNthCalledWith(1, ['branch', '-d', 'feat/a'])
       expect(git.raw).toHaveBeenNthCalledWith(2, ['branch', '-d', 'feat/b'])
     })
@@ -253,6 +283,31 @@ describe('log branch actions', () => {
       expect(isBranchNotFullyMergedError(result.details?.join('\n'))).toBe(true)
       // Refusal did NOT stop the batch — the second delete still ran.
       expect(git.raw).toHaveBeenCalledTimes(2)
+    })
+
+    // OSS-1606 — a partial batch must still report which branches
+    // actually deleted, so the undo stack can push entries for exactly
+    // those (not zero, not the refused ones).
+    it('reports the branches that actually deleted in `succeeded` on a partial failure', async () => {
+      const git = {
+        raw: jest.fn()
+          .mockRejectedValueOnce(new Error("error: the branch 'feat/a' is not fully merged."))
+          .mockResolvedValueOnce(''),
+      }
+      const result = await deleteBranches(git as never, [
+        localBranch({ shortName: 'feat/a' }),
+        localBranch({ shortName: 'feat/b' }),
+      ])
+      expect(result.succeeded).toEqual(['feat/b'])
+    })
+
+    it('reports every deleted branch in `succeeded` on full success', async () => {
+      const git = { raw: jest.fn().mockResolvedValue('') }
+      const result = await deleteBranches(git as never, [
+        localBranch({ shortName: 'feat/a' }),
+        localBranch({ shortName: 'feat/b' }),
+      ])
+      expect(result.succeeded).toEqual(['feat/a', 'feat/b'])
     })
 
     it('a batch of one delegates to the single-branch behavior verbatim', async () => {

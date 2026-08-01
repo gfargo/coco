@@ -7,6 +7,8 @@ import {
   commentBitbucketPullRequestByNumber,
   requestChangesBitbucketPullRequestByNumber,
   addBitbucketPullRequestLabel,
+  markBitbucketPullRequestReadyByNumber,
+  reopenBitbucketPullRequestByNumber,
   mergeBitbucketPullRequest,
   closeBitbucketPullRequest,
 } from './bitbucketPullRequestActions'
@@ -67,10 +69,23 @@ describe('createBitbucketPullRequest (1238)', () => {
 })
 
 describe('openBitbucketPullRequest (1238)', () => {
-  it('returns the URL to open in the browser', () => {
-    const result = openBitbucketPullRequest('https://bitbucket.org/ws/repo/pull-requests/1')
-    expect(result.ok).toBe(true)
-    expect(result.url).toBe('https://bitbucket.org/ws/repo/pull-requests/1')
+  it('invokes the opener with the URL and returns ok:true on success', async () => {
+    const opened: string[] = []
+    const runner = async (u: string) => { opened.push(u) }
+    const result = await openBitbucketPullRequest('https://bitbucket.org/ws/repo/pull-requests/1', runner)
+    expect(opened).toEqual(['https://bitbucket.org/ws/repo/pull-requests/1'])
+    expect(result).toEqual({
+      ok: true,
+      message: 'Opened pull request: https://bitbucket.org/ws/repo/pull-requests/1',
+      url: 'https://bitbucket.org/ws/repo/pull-requests/1',
+    })
+  })
+
+  it('returns ok:false when the opener rejects', async () => {
+    const runner = async () => { throw new Error('no browser found') }
+    const result = await openBitbucketPullRequest('https://bitbucket.org/ws/repo/pull-requests/1', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toBe('no browser found')
   })
 })
 
@@ -113,6 +128,46 @@ describe('closeBitbucketPullRequestByNumber (1238)', () => {
     expect(result.ok).toBe(true)
     expect(calls[0].endpoint).toBe('repositories/ws/repo/pullrequests/5/decline')
   }))
+})
+
+describe('markBitbucketPullRequestReadyByNumber (#1933)', () => {
+  it('GETs the current title, then PUTs it back with draft: false', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({
+      'repositories/ws/repo/pullrequests/5': JSON.stringify({ title: 'Add feature' }),
+    })
+    const result = await markBitbucketPullRequestReadyByNumber('ws/repo', 5, runner)
+    expect(result.ok).toBe(true)
+    expect(calls[0]).toEqual({ endpoint: 'repositories/ws/repo/pullrequests/5', method: undefined, body: undefined })
+    expect(calls[1].endpoint).toBe('repositories/ws/repo/pullrequests/5')
+    expect(calls[1].method).toBe('PUT')
+    const body = JSON.parse(calls[1].body ?? '{}')
+    expect(body.draft).toBe(false)
+    expect(body.title).toBe('Add feature')
+  }))
+
+  it('reports failure when the pull request cannot be fetched', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({ 'repositories/ws/repo/pullrequests/5': '' })
+    const result = await markBitbucketPullRequestReadyByNumber('ws/repo', 5, runner)
+    expect(result.ok).toBe(false)
+    expect(calls).toHaveLength(1)
+  }))
+
+  it('is a no-op when the pull request is already draft: false', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({
+      'repositories/ws/repo/pullrequests/5': JSON.stringify({ title: 'Add feature', draft: false }),
+    })
+    const result = await markBitbucketPullRequestReadyByNumber('ws/repo', 5, runner)
+    expect(result).toEqual({ ok: true, message: 'Pull request #5 is not a draft' })
+    expect(calls).toHaveLength(1)
+  }))
+})
+
+describe('reopenBitbucketPullRequestByNumber (#1933)', () => {
+  it('reports the Bitbucket API has no reopen endpoint', async () => {
+    const result = await reopenBitbucketPullRequestByNumber()
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not supported')
+  })
 })
 
 describe('commentBitbucketPullRequestByNumber (1238)', () => {

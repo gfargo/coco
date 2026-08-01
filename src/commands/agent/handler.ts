@@ -8,14 +8,18 @@ import {
     AGENT_PROTOCOL_VERSION,
     ChangelogDataSchema,
     CommitDraftDataSchema,
+    CondenseDiffDataSchema,
+    CondenseDiffRequestSchema,
     createAgentFailureEnvelope,
     createAgentInputJsonSchema,
     createAgentOperationContext,
     createAgentOutputSchema,
+    createCondenseDiffInputJsonSchema,
     RecapDataSchema,
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
+    runCondenseDiff,
     toAgentOperationError
 } from '../../operations/agent'
 import { armNonInteractiveUsageTelemetry } from '../utils/usageTelemetry'
@@ -50,14 +54,17 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, ChangelogDataSchema)
     case 'recap':
       return createAgentOutputSchema(operation, RecapDataSchema)
+    case 'condense-diff':
+      return createAgentOutputSchema(operation, CondenseDiffDataSchema)
   }
 }
 
 function emitSchema(operation: AgentOperation): void {
+  const isCondense = operation === 'condense-diff'
   emit({
     version: AGENT_PROTOCOL_VERSION,
     operation,
-    input: createAgentInputJsonSchema(),
+    input: isCondense ? createCondenseDiffInputJsonSchema() : createAgentInputJsonSchema(),
     output: z.toJSONSchema(outputSchemaFor(operation)),
   })
 }
@@ -75,20 +82,35 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
 
   try {
     const raw = await readRequest(argv.input)
-    const input = AgentTaskInputSchema.parse(raw)
-    const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
-    // Config discovery still uses cwd. The agent CLI is a one-shot process,
-    // so changing it once before creating the explicit git context is safe.
-    // Repository-defined prompts and executable commitlint config remain off
-    // unless the request explicitly sets trustRepositoryConfig.
-    process.chdir(repoRoot)
-    await armNonInteractiveUsageTelemetry(argv, repoRoot)
-    const context = await createAgentOperationContext({
-      repoRoot,
-      signal: controller.signal,
-      surface: 'agent-cli',
-    })
-    emit(await runAgentOperation(operation, input, context))
+
+    if (operation === 'condense-diff') {
+      // condense-diff uses its own request schema — parse and dispatch separately.
+      const input = CondenseDiffRequestSchema.parse(raw)
+      const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+      process.chdir(repoRoot)
+      await armNonInteractiveUsageTelemetry(argv, repoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot,
+        signal: controller.signal,
+        surface: 'agent-cli',
+      })
+      emit(await runCondenseDiff(input, context))
+    } else {
+      const input = AgentTaskInputSchema.parse(raw)
+      const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+      // Config discovery still uses cwd. The agent CLI is a one-shot process,
+      // so changing it once before creating the explicit git context is safe.
+      // Repository-defined prompts and executable commitlint config remain off
+      // unless the request explicitly sets trustRepositoryConfig.
+      process.chdir(repoRoot)
+      await armNonInteractiveUsageTelemetry(argv, repoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot,
+        signal: controller.signal,
+        surface: 'agent-cli',
+      })
+      emit(await runAgentOperation(operation, input, context))
+    }
   } catch (error) {
     const normalized = error instanceof SyntaxError
       ? new AgentOperationError('INVALID_JSON', error.message)

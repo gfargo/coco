@@ -117,9 +117,10 @@ describe('Conventional Commits Configuration', () => {
         'commit_history',
         'format_instructions',
         'branch_name_context',
-        'commitlint_rules_context'
+        'commitlint_rules_context',
+        'conventions_context'
       ]
-      
+
       expectedVariables.forEach(variable => {
         expect(CONVENTIONAL_COMMIT_PROMPT.inputVariables).toContain(variable)
       })
@@ -132,9 +133,10 @@ describe('Conventional Commits Configuration', () => {
         'additional_context',
         'commit_history',
         'branch_name_context',
-        'commitlint_rules_context'
+        'commitlint_rules_context',
+        'conventions_context'
       ]
-      
+
       expectedVariables.forEach(variable => {
         expect(COMMIT_PROMPT.inputVariables).toContain(variable)
       })

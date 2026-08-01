@@ -1,7 +1,12 @@
+import * as fs from 'node:fs'
+import * as os from 'node:os'
+import * as path from 'node:path'
 import { Document } from '@langchain/classic/document'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 
 import { summarize, SummarizeContext } from './index'
+import { Logger } from '../../../utils/logger'
+import { readUsageRecords } from '../../utils/usageLedger'
 
 /**
  * The summarize() helper wraps the chain.invoke() call in a
@@ -121,5 +126,53 @@ describe('summarize() empty-result handling (#1700)', () => {
     const invoke = jest.fn().mockResolvedValue({ text: '  summary  ' })
     const ctx = makeContext({ invoke })
     await expect(summarize([{ pageContent: 'hello' }], ctx)).resolves.toBe('summary')
+  })
+})
+
+describe('summarize() forwards cache-hit metadata to the usage ledger (#1958)', () => {
+  let dir: string
+  let logPath: string
+  const prevEnv = process.env.COCO_USAGE_LOG
+  const mockLogger = { verbose: jest.fn() } as unknown as Logger
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-summarize-usage-'))
+    logPath = path.join(dir, 'usage.jsonl')
+    process.env.COCO_USAGE_LOG = logPath
+  })
+
+  afterEach(() => {
+    if (prevEnv === undefined) delete process.env.COCO_USAGE_LOG
+    else process.env.COCO_USAGE_LOG = prevEnv
+    fs.rmSync(dir, { recursive: true, force: true })
+    jest.clearAllMocks()
+  })
+
+  it('records cacheHit:false on a cache-miss call', async () => {
+    const invoke = jest.fn().mockResolvedValue({ text: 'summary' })
+    const ctx = makeContext({ invoke })
+    await summarize([{ pageContent: 'hello' }], {
+      ...ctx,
+      logger: mockLogger,
+      metadata: { task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false },
+    })
+
+    const records = readUsageRecords(logPath)
+    expect(records).toHaveLength(1)
+    expect(records[0]).toMatchObject({ task: 'summarize-large-file', model: 'gpt-4o', cacheHit: false })
+  })
+
+  it('omits cacheHit from the ledger record when the cache was never consulted', async () => {
+    const invoke = jest.fn().mockResolvedValue({ text: 'summary' })
+    const ctx = makeContext({ invoke })
+    await summarize([{ pageContent: 'hello' }], {
+      ...ctx,
+      logger: mockLogger,
+      metadata: { task: 'summarize-large-file', model: 'gpt-4o' },
+    })
+
+    const records = readUsageRecords(logPath)
+    expect(records).toHaveLength(1)
+    expect(records[0].cacheHit).toBeUndefined()
   })
 })

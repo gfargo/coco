@@ -997,7 +997,7 @@ export async function handleCommitSplit({
       hunkInventory: context.hunkInventory,
       git,
       logger,
-      noVerify: argv.noVerify || config.noVerify || false,
+      noVerify: config.noVerify || false,
       fallback,
       onHookFailure,
     })
@@ -1033,7 +1033,7 @@ export async function handleCommitSplit({
 
   const shouldApply = await confirmPrompt({
     message: `Apply these ${plan.groups.filter((g) => !g.unclaimed).length} commits?`,
-    default: true,
+    default: false,
   })
 
   if (!shouldApply) {
@@ -1046,7 +1046,7 @@ export async function handleCommitSplit({
     hunkInventory: context.hunkInventory,
     git,
     logger,
-    noVerify: argv.noVerify || config.noVerify || false,
+    noVerify: config.noVerify || false,
     fallback,
     onHookFailure,
   })

@@ -1,7 +1,7 @@
 import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LogInkRefreshKind, createRefreshDebouncer, createRefreshWatcher } from './refreshWatcher'
+import { RepoChangeKind, createRepoChangeDebouncer, createRepoChangeWatcher } from './repoChangeWatcher'
 
 /**
  * Synchronous fake scheduler so we can run debounce timing without
@@ -39,12 +39,12 @@ function createFakeScheduler() {
   }
 }
 
-describe('createRefreshDebouncer', () => {
+describe('createRepoChangeDebouncer', () => {
   it('emits exactly one onSettle per debounce window', () => {
     const fake = createFakeScheduler()
-    const settles: LogInkRefreshKind[] = []
+    const settles: RepoChangeKind[] = []
 
-    const debouncer = createRefreshDebouncer({
+    const debouncer = createRepoChangeDebouncer({
       debounceMs: 100,
       scheduler: fake.scheduler,
       onSettle: (kind) => settles.push(kind),
@@ -61,9 +61,9 @@ describe('createRefreshDebouncer', () => {
 
   it('escalates to "full" when any trigger in the window is full', () => {
     const fake = createFakeScheduler()
-    const settles: LogInkRefreshKind[] = []
+    const settles: RepoChangeKind[] = []
 
-    const debouncer = createRefreshDebouncer({
+    const debouncer = createRepoChangeDebouncer({
       debounceMs: 100,
       scheduler: fake.scheduler,
       onSettle: (kind) => settles.push(kind),
@@ -79,9 +79,9 @@ describe('createRefreshDebouncer', () => {
 
   it('does NOT downgrade once a "full" is queued in the window', () => {
     const fake = createFakeScheduler()
-    const settles: LogInkRefreshKind[] = []
+    const settles: RepoChangeKind[] = []
 
-    const debouncer = createRefreshDebouncer({
+    const debouncer = createRepoChangeDebouncer({
       debounceMs: 100,
       scheduler: fake.scheduler,
       onSettle: (kind) => settles.push(kind),
@@ -97,9 +97,9 @@ describe('createRefreshDebouncer', () => {
 
   it('starts a fresh window after the previous one settles', () => {
     const fake = createFakeScheduler()
-    const settles: LogInkRefreshKind[] = []
+    const settles: RepoChangeKind[] = []
 
-    const debouncer = createRefreshDebouncer({
+    const debouncer = createRepoChangeDebouncer({
       debounceMs: 100,
       scheduler: fake.scheduler,
       onSettle: (kind) => settles.push(kind),
@@ -116,9 +116,9 @@ describe('createRefreshDebouncer', () => {
 
   it('close() cancels any pending settle without firing it', () => {
     const fake = createFakeScheduler()
-    const settles: LogInkRefreshKind[] = []
+    const settles: RepoChangeKind[] = []
 
-    const debouncer = createRefreshDebouncer({
+    const debouncer = createRepoChangeDebouncer({
       debounceMs: 100,
       scheduler: fake.scheduler,
       onSettle: (kind) => settles.push(kind),
@@ -143,7 +143,7 @@ describe('createRefreshDebouncer', () => {
  * external `git add`. The watcher now watches the parent directory and
  * filters by filename, which survives any number of renames.
  */
-describe('createRefreshWatcher rename survival', () => {
+describe('createRepoChangeWatcher rename survival', () => {
   // Environment-sensitive residue: real fs.watch + real timing under a
   // loaded CI runner can still drop an individual replacement's events
   // outright (see the comment on `waitFor` below). Retry once so a single
@@ -172,8 +172,8 @@ describe('createRefreshWatcher rename survival', () => {
     mkdirSync(gitDir)
     writeFileSync(join(gitDir, 'index'), 'v0')
 
-    const kinds: LogInkRefreshKind[] = []
-    const watcher = createRefreshWatcher({
+    const kinds: RepoChangeKind[] = []
+    const watcher = createRepoChangeWatcher({
       repoRoot,
       gitDir,
       debounceMs: 20,

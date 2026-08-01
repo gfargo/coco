@@ -6,7 +6,7 @@ export interface AmendOptions extends BaseCommandOptions {
   interactive: boolean
   conventional: boolean
   additional?: string
-  noVerify: boolean
+  noVerify?: boolean
   dryRun?: boolean
   apply?: boolean
 }
@@ -39,7 +39,6 @@ export const options = {
     type: 'boolean',
     alias: 'noVerify',
     description: 'Skip git hooks (passes --no-verify to the amend commit)',
-    default: false,
   },
   dryRun: {
     type: 'boolean',

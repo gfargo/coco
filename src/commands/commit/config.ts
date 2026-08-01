@@ -11,7 +11,7 @@ export interface CommitOptions extends BaseCommandOptions {
   withPreviousCommits: number
   conventional: boolean
   includeBranchName: boolean
-  noVerify: boolean
+  noVerify?: boolean
   /** Free-text appended to the end of the generated commit message. */
   append?: string
   /** Append the ticket ID parsed from the branch name to the message. */
@@ -125,7 +125,6 @@ export const options = {
   noVerify: {
     description: 'Skip pre-commit and commit-msg hooks (passes --no-verify to git commit)',
     type: 'boolean',
-    default: false,
     alias: 'n',
   },
   language: {

@@ -306,4 +306,53 @@ describe('hydrated triage preview sections (inspector hydration follow-up)', () 
     expect(lines.some((l) => l.includes('15 earlier review'))).toBe(true)
     expect(lines.some((l) => l.includes('@reviewer-0 '))).toBe(false)
   })
+
+  it('comments section shows a truncation notice when commentsTruncated is true', () => {
+    const detail = {
+      number: 1,
+      body: '',
+      comments: [
+        { author: 'alice', body: 'LGTM', createdAt: '' },
+        { author: 'bob', body: 'needs work', createdAt: '' },
+      ],
+      commentsTruncated: true as const,
+    }
+    const lines = formatIssueTriagePreview({ ...issue, comments: 2 }, detail).map(stripLine)
+    // The section heading should include the '+' marker.
+    expect(lines.some((l) => l.startsWith('Comments (2+)'))).toBe(true)
+    // The truncation notice must be present.
+    expect(lines.some((l) => l.includes('more comments') && l.includes('limit reached'))).toBe(true)
+  })
+
+  it('PR comments section shows a truncation notice when commentsTruncated is true', () => {
+    const detail = {
+      number: 1,
+      body: '',
+      comments: [{ author: 'alice', body: 'LGTM', createdAt: '' }],
+      reviews: [],
+      statusCheckRollup: [],
+      commentsTruncated: true as const,
+    }
+    const lines = formatPullRequestTriagePreview(pr, detail).map(stripLine)
+    expect(lines.some((l) => l.startsWith('Comments (1+)'))).toBe(true)
+    expect(lines.some((l) => l.includes('more comments') && l.includes('limit reached'))).toBe(true)
+  })
+
+  it('comments section shows a plain notice (no "0+" heading) when the first page fails', () => {
+    const detail = {
+      number: 1,
+      body: '',
+      comments: [],
+      reviews: [],
+      statusCheckRollup: [],
+      commentsTruncated: true as const,
+    }
+    const lines = formatPullRequestTriagePreview(pr, detail).map(stripLine)
+    // Should not render a misleading '0+' count heading.
+    expect(lines.some((l) => l.startsWith('Comments (0'))).toBe(false)
+    expect(lines.some((l) => l.startsWith('Comments'))).toBe(true)
+    expect(
+      lines.some((l) => l.includes('comments unavailable') && l.includes('limit reached'))
+    ).toBe(true)
+  })
 })

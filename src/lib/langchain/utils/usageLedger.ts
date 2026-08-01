@@ -2,6 +2,7 @@ import * as fs from 'node:fs'
 import * as path from 'node:path'
 import type { LlmCallMetadata } from './observability'
 import { getCocoCacheDir } from '../../utils/cocoPaths'
+import { estimateCostUsd } from './pricing'
 
 /**
  * Local LLM usage ledger. Records a compact line per LLM call so the
@@ -30,9 +31,21 @@ export type UsageRecord = {
   promptTokens?: number
   /** Output/completion tokens, when the provider's usage metadata reports them. */
   completionTokens?: number
+  /** Input tokens served from the provider's prompt cache, when reported. */
+  cachedInputTokens?: number
+  /** The provider's own reported total input-token count, when present — see `LlmCallMetadata.inputTokens`. */
+  inputTokens?: number
   elapsedMs?: number
   /** Readable `owner/repo` (or directory name) the call ran against. */
   repo?: string
+  /**
+   * Diff-summary cache outcome (#1958): `true` on a hit, `false` on a
+   * miss. Absent when the cache wasn't consulted for this call (disabled,
+   * or not a cache-eligible task) — records without this field predate
+   * the feature or are non-cache tasks, and are excluded from hit-rate
+   * aggregation rather than counted as misses.
+   */
+  cacheHit?: boolean
 }
 
 export type UsageAggregate = {
@@ -40,8 +53,21 @@ export type UsageAggregate = {
   calls: number
   promptTokens: number
   completionTokens: number
+  cachedInputTokens: number
+  /** Sum of the provider-reported `inputTokens`, when any records had it. */
+  inputTokens: number
   totalMs: number
   avgMs: number
+  /** Sum of {@link estimateCostUsd} across the priced calls in this group. `0` when none were priced. */
+  estimatedCostUsd: number
+  /** Calls whose model+tokens resolved to a cost. */
+  pricedCalls: number
+  /** Calls that contributed tokens but not cost — unpriced model, or no token counts recorded. */
+  unpricedCalls: number
+  /** Count of calls where the diff-summary cache was consulted and hit. */
+  cacheHits: number
+  /** Count of calls where the diff-summary cache was consulted (hit or miss). */
+  cacheLookups: number
 }
 
 /**
@@ -131,8 +157,11 @@ export function recordUsage(metadata: LlmCallMetadata): void {
     model: metadata.model,
     promptTokens: metadata.promptTokens,
     completionTokens: metadata.completionTokens,
+    cachedInputTokens: metadata.cachedInputTokens,
+    inputTokens: metadata.inputTokens,
     elapsedMs: metadata.elapsedMs,
     ...(repoTag ? { repo: repoTag } : {}),
+    ...(metadata.cacheHit !== undefined ? { cacheHit: metadata.cacheHit } : {}),
   }
 
   try {
@@ -188,14 +217,56 @@ export function readUsageRecords(filePath: string = getUsageLogPath()): UsageRec
 }
 
 function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): UsageAggregate[] {
-  const byKey = new Map<string, { calls: number; promptTokens: number; completionTokens: number; totalMs: number }>()
+  const byKey = new Map<
+    string,
+    {
+      calls: number
+      promptTokens: number
+      completionTokens: number
+      cachedInputTokens: number
+      inputTokens: number
+      totalMs: number
+      estimatedCostUsd: number
+      pricedCalls: number
+      unpricedCalls: number
+      cacheHits: number
+      cacheLookups: number
+    }
+  >()
   for (const r of records) {
     const key = keyOf(r) || 'unknown'
-    const current = byKey.get(key) || { calls: 0, promptTokens: 0, completionTokens: 0, totalMs: 0 }
-    current.calls += 1
-    current.promptTokens += r.promptTokens || 0
-    current.completionTokens += r.completionTokens || 0
-    current.totalMs += r.elapsedMs || 0
+    const current = byKey.get(key) || {
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      cachedInputTokens: 0,
+      inputTokens: 0,
+      totalMs: 0,
+      estimatedCostUsd: 0,
+      pricedCalls: 0,
+      unpricedCalls: 0,
+      cacheHits: 0,
+      cacheLookups: 0,
+    }
+    if (r.cacheHit !== true) {
+      current.calls += 1
+      current.promptTokens += r.promptTokens || 0
+      current.completionTokens += r.completionTokens || 0
+      current.cachedInputTokens += r.cachedInputTokens || 0
+      current.inputTokens += r.inputTokens || 0
+      current.totalMs += r.elapsedMs || 0
+      const cost = estimateCostUsd(r)
+      if (cost === undefined) {
+        current.unpricedCalls += 1
+      } else {
+        current.pricedCalls += 1
+        current.estimatedCostUsd += cost
+      }
+    }
+    if (typeof r.cacheHit === 'boolean') {
+      current.cacheLookups += 1
+      if (r.cacheHit) current.cacheHits += 1
+    }
     byKey.set(key, current)
   }
   return [...byKey.entries()]
@@ -204,10 +275,38 @@ function aggregate(records: UsageRecord[], keyOf: (r: UsageRecord) => string): U
       calls: v.calls,
       promptTokens: v.promptTokens,
       completionTokens: v.completionTokens,
+      cachedInputTokens: v.cachedInputTokens,
+      inputTokens: v.inputTokens,
       totalMs: v.totalMs,
       avgMs: v.calls > 0 ? Math.round(v.totalMs / v.calls) : 0,
+      estimatedCostUsd: v.estimatedCostUsd,
+      pricedCalls: v.pricedCalls,
+      unpricedCalls: v.unpricedCalls,
+      cacheHits: v.cacheHits,
+      cacheLookups: v.cacheLookups,
     }))
     .sort((a, b) => b.promptTokens - a.promptTokens || b.calls - a.calls)
+}
+
+/** Sum estimated cost across a set of records, e.g. a calendar month for the budget check. */
+export function totalUsageCost(records: UsageRecord[]): {
+  totalCostUsd: number
+  pricedCalls: number
+  unpricedCalls: number
+} {
+  let totalCostUsd = 0
+  let pricedCalls = 0
+  let unpricedCalls = 0
+  for (const r of records) {
+    const cost = estimateCostUsd(r)
+    if (cost === undefined) {
+      unpricedCalls += 1
+    } else {
+      pricedCalls += 1
+      totalCostUsd += cost
+    }
+  }
+  return { totalCostUsd, pricedCalls, unpricedCalls }
 }
 
 /** Aggregate usage by dynamic-model task label. */
