@@ -173,11 +173,11 @@ export function renderDetailPanel(
   }
 
   if (state.showCommandPalette) {
-    return renderCommandPalette(h, components, state, width, theme, focused)
+    return renderCommandPalette(h, components, state, width, theme, focused, bodyRows)
   }
 
   if (state.showThemePicker) {
-    return renderThemePickerOverlay(h, components, state.themePickerFilter, state.themePickerIndex, width, theme, focused)
+    return renderThemePickerOverlay(h, components, state.themePickerFilter, state.themePickerIndex, width, theme, focused, bodyRows)
   }
 
   if (state.gitignorePicker) {

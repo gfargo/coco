@@ -18,6 +18,7 @@
 
 import type * as ReactTypes from 'react'
 import { deriveGitignoreOptions } from '../chrome/gitignore'
+import { clampListWindowStart } from '../chrome/layout'
 import { pickSpinnerFrame } from '../chrome/spinner'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
@@ -526,7 +527,8 @@ export function renderCommandPalette(
   state: LogInkState,
   width: number,
   theme: LogInkTheme,
-  focused: boolean
+  focused: boolean,
+  bodyRows: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const all = getLogInkPaletteCommands()
@@ -539,9 +541,15 @@ export function renderCommandPalette(
     : Math.max(0, Math.min(state.paletteSelectedIndex, filtered.length - 1))
 
   // Slide a window of rows around the selection so the cursor stays visible
-  // even with hundreds of bindings.
-  const listRows = 14
-  const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
+  // even with hundreds of bindings. Row budget: title + border (3) + input
+  // + hint + blank (3), plus the recent-hint line when shown. When no
+  // bodyRows is given (legacy/test callers), fall back to the old fixed
+  // window. `clampListWindowStart` (#1340) also keeps the window full when
+  // the cursor is near the end instead of running off the list.
+  const chromeRows = 6 + (showingRecent ? 1 : 0)
+  const baseListRows = bodyRows > 0 ? Math.max(4, bodyRows - chromeRows) : 14
+  const listRows = filtered.length > baseListRows ? Math.max(4, baseListRows - 1) : baseListRows
+  const startIndex = clampListWindowStart(selectedIndex, filtered.length, listRows)
   const visible = filtered.slice(startIndex, startIndex + listRows)
 
   const inputLine = `> ${state.paletteFilter}_`
@@ -617,7 +625,8 @@ export function renderThemePickerOverlay(
   index: number,
   width: number,
   theme: LogInkTheme,
-  focused: boolean
+  focused: boolean,
+  bodyRows: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
   const filtered = filterThemePresets(filter)
@@ -626,8 +635,13 @@ export function renderThemePickerOverlay(
     ? 0
     : Math.max(0, Math.min(index, filtered.length - 1))
 
-  const listRows = 14
-  const startIndex = Math.max(0, selectedIndex - Math.floor(listRows / 2))
+  // Same row budget as the command palette (title + border + input + hint
+  // + blank = 6); no bodyRows means a legacy/test caller, so fall back to
+  // the old fixed window.
+  const chromeRows = 6
+  const baseListRows = bodyRows > 0 ? Math.max(4, bodyRows - chromeRows) : 14
+  const listRows = filtered.length > baseListRows ? Math.max(4, baseListRows - 1) : baseListRows
+  const startIndex = clampListWindowStart(selectedIndex, filtered.length, listRows)
   const visible = filtered.slice(startIndex, startIndex + listRows)
 
   const inputLine = `> ${filter}_`
