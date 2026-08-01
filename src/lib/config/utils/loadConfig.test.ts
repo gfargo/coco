@@ -166,6 +166,77 @@ describe('loadConfig', () => {
     expect(config.includeBranchName).toBe(true)
   })
 
+  it('does not let an explicitly-undefined argv value clobber a resolved config value (#1922)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ verbose: true })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      verbose: undefined,
+      defaultBranch: undefined,
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.verbose).toBe(true)
+    expect(config.defaultBranch).toBe(DEFAULT_CONFIG.defaultBranch)
+  })
+
+  it('strips yargs bookkeeping keys (_, $0) out of the returned config (#1922)', () => {
+    mockFs.existsSync.mockReturnValue(false)
+    mockFs.readFileSync.mockReturnValue('')
+
+    const config = loadConfig<BaseCommandOptions>(({
+      _: ['commit'],
+      $0: 'coco',
+    } as unknown) as BaseArgvOptions)
+
+    expect('_' in config).toBe(false)
+    expect('$0' in config).toBe(false)
+  })
+
+  it('deep-merges an argv-supplied service instead of replacing it wholesale (#1922)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama') })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      service: { provider: 'anthropic' },
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.service.provider).toBe('anthropic')
+    expect(config.service.model).toBe(getDefaultServiceConfigFromAlias('ollama').model)
+  })
+
+  it('does not let an explicitly-undefined field inside argv.service clobber a resolved service field (#1922)', () => {
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [PROJECT_CONFIG_PATH].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === PROJECT_CONFIG_PATH) {
+        return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama') })
+      }
+      return ''
+    })
+
+    const config = loadConfig<BaseCommandOptions>(({
+      service: { provider: 'anthropic', model: undefined },
+    } as unknown) as BaseArgvOptions)
+
+    expect(config.service.provider).toBe('anthropic')
+    expect(config.service.model).toBe(getDefaultServiceConfigFromAlias('ollama').model)
+  })
+
   it('does not let an unset argv key clobber config-sourced noVerify (OSS-1742)', () => {
     // Repro for OSS-1742: commit/split/amend all read `noVerify` off this
     // merge, and the `noVerify` yargs option used to carry `default: false`
