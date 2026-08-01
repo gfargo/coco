@@ -16,9 +16,9 @@ import {
   type GlabRunner,
 } from './glabCli'
 import {
-  defaultBitbucketRunner,
   describeBitbucketStatus,
   getBitbucketStatus,
+  makeBitbucketRunner,
   type BitbucketRunner,
 } from './bitbucketCli'
 import { findOpenBitbucketPullRequestForBranch } from './bitbucketListData'
@@ -127,6 +127,10 @@ export function detectProvider(host: string): GitProviderType {
   if (forgeHostOverrides[h]) return forgeHostOverrides[h]
   if (h === 'github.com') return 'github'
   if (h === 'gitlab.com') return 'gitlab'
+  // Any `*bitbucket*` host is classified as `bitbucket` — including self-hosted
+  // Bitbucket Server / Data Center, which coco doesn't implement. The runner
+  // (`makeBitbucketRunner`) gates non-`bitbucket.org` hosts with an explicit
+  // "not supported" refusal rather than silently hitting Bitbucket Cloud (#1899).
   if (h === 'bitbucket.org' || h.includes('bitbucket')) return 'bitbucket'
   if (h === 'codeberg.org') return 'gitea'
   if (h.includes('gitlab')) return 'gitlab'
@@ -419,13 +423,19 @@ async function getCurrentMergeRequest(
   }
 }
 
-/** Bitbucket overview via REST API: auth probe, default branch, current-branch PR. */
+/**
+ * Bitbucket overview via REST API: auth probe, default branch, current-branch
+ * PR. `runnerFactory` builds the host-bound runner — only `bitbucket.org`
+ * reaches Bitbucket Cloud; any other host is refused (mirrors
+ * `getGiteaProviderOverview`, see `makeBitbucketRunner`).
+ */
 async function getBitbucketProviderOverview(
   repository: ProviderRepository,
   currentBranch: string | undefined,
   localDefaultBranch: string | undefined,
-  runner: BitbucketRunner
+  runnerFactory: (host: string) => BitbucketRunner
 ): Promise<ProviderOverview> {
+  const runner = runnerFactory(repository.host ?? '')
   const status = await getBitbucketStatus(runner)
   if (status.kind !== 'ok') {
     return {
@@ -646,7 +656,7 @@ export async function getProviderOverview(
   git: SimpleGit,
   runner: GhRunner = defaultGhRunner,
   glabRunner: GlabRunner = defaultGlabRunner,
-  bitbucketRunner: BitbucketRunner = defaultBitbucketRunner,
+  bitbucketRunnerFactory: (host: string) => BitbucketRunner = makeBitbucketRunner,
   giteaRunnerFactory: (host: string) => GiteaRunner = makeGiteaRunner,
   bitbucketServerRunnerFactory: (host: string) => BitbucketServerRunner = makeBitbucketServerRunner
 ): Promise<ProviderOverview> {
@@ -671,7 +681,7 @@ export async function getProviderOverview(
   }
 
   if (repository.provider === 'bitbucket') {
-    return getBitbucketProviderOverview(repository, currentBranch, localDefaultBranch, bitbucketRunner)
+    return getBitbucketProviderOverview(repository, currentBranch, localDefaultBranch, bitbucketRunnerFactory)
   }
 
   if (repository.provider === 'gitea') {

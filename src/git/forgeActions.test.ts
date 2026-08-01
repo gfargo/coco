@@ -77,6 +77,35 @@ describe('getForgeActions (#0.70)', () => {
     expect(result.message).toContain('not supported for Gitea')
   })
 
+  it('a self-hosted Bitbucket Server host refuses PR/issue mutations instead of hitting Bitbucket Cloud (#1899)', async () => {
+    process.env.BITBUCKET_ACCESS_TOKEN = 'test-token'
+    try {
+      const fetchSpy = jest.spyOn(global, 'fetch')
+      const forge = getForgeActions('bitbucket', {
+        bitbucketPath: 'ws/repo',
+        bitbucketHost: 'bitbucket.acme.com',
+      })
+
+      const results = await Promise.all([
+        forge.commentPullRequestByNumber(1, 'hi'),
+        forge.mergePullRequestByNumber(1, 'squash'),
+        forge.approvePullRequestByNumber(1),
+        forge.commentIssue(1, 'hi'),
+        forge.closeIssue(1),
+      ])
+
+      for (const result of results) {
+        expect(result.ok).toBe(false)
+        expect(result.message).toContain('Bitbucket Server / Data Center')
+        expect(result.message).toContain('not supported yet')
+      }
+      expect(fetchSpy).not.toHaveBeenCalled()
+      fetchSpy.mockRestore()
+    } finally {
+      delete process.env.BITBUCKET_ACCESS_TOKEN
+    }
+  })
+
   describe('CI-checks facade (OSS-1615)', () => {
     it('GitLab checks/rerun/auto-merge fail gracefully without a resolved project path', async () => {
       const forge = getForgeActions('gitlab', {})

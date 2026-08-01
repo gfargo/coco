@@ -166,6 +166,7 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
     gitlabPath: repoPath,
     gitlabHost: overview.repository.host,
     bitbucketPath: repoPath,
+    bitbucketHost: overview.repository.host,
     bitbucketServerPath: repoPath,
     bitbucketServerHost: overview.repository.host,
     giteaPath: repoPath,
