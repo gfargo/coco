@@ -289,6 +289,14 @@ export function useDetailHydration(
     const timer = setTimeout(async () => {
       const result = await getBlame(git, path)
       if (!active) return
+      // Only cache a successful result (#OSS-1769) — caching a failure
+      // (e.g. transient `index.lock` contention) would permanently
+      // satisfy the cache-skip guard above and disable retry for this
+      // path until a worktree refresh clears `blameByPath`.
+      if (!result.ok) {
+        setBlameLoading(false)
+        return
+      }
       setContext(
         (current) => ({
           ...current,
@@ -329,6 +337,13 @@ export function useDetailHydration(
     const timer = setTimeout(async () => {
       const result = await getFileHistory(git, path)
       if (!active) return
+      // Only cache a successful result (#OSS-1769) — see the matching
+      // guard in the blame effect above for why a cached failure must
+      // not permanently satisfy the cache-skip guard.
+      if (!result.ok) {
+        setFileHistoryLoading(false)
+        return
+      }
       setContext(
         (current) => ({
           ...current,
