@@ -159,6 +159,43 @@ describe('renderIssuesTriageSurface', () => {
     expect(rows[0]).toContain(' [bug')
   })
 
+  it('keeps a CJK author cell-aligned with the following column (#1860)', () => {
+    // Regression for `truncateCells(x, W).padEnd(W)`: padEnd pads by
+    // UTF-16 code units, so a wide-glyph author overshoots the column by
+    // one cell per wide character and shoves the title column right.
+    // With `padCells`, the author field occupies exactly `authorColWidth`
+    // cells regardless of content, so the title starts at the same cell
+    // offset for every row.
+    const width = 120
+    const tree = render(makeState(), {
+      width,
+      issueList: {
+        available: true,
+        authenticated: true,
+        issues: [
+          makeIssue({ number: 1, author: '山田太郎', title: 'CJK-AUTHOR-TITLE' }),
+          makeIssue({ number: 2, author: 'somebody-long', title: 'ASCII-AUTHOR-TITLE' }),
+        ],
+      },
+    })
+    const children = (tree.props as { children: unknown[] }).children
+    const rows = children.flat().map(treeText)
+    const cjkRow = rows.find((line) => line.includes('#1'))
+    const asciiRow = rows.find((line) => line.includes('#2'))
+    expect(cjkRow).toBeDefined()
+    expect(asciiRow).toBeDefined()
+
+    function titleOffset(row: string, title: string): number {
+      const idx = row.indexOf(title)
+      expect(idx).toBeGreaterThan(-1)
+      return cellWidth(row.slice(0, idx))
+    }
+
+    expect(titleOffset(cjkRow as string, 'CJK-AUTHOR-TITLE')).toBe(
+      titleOffset(asciiRow as string, 'ASCII-AUTHOR-TITLE')
+    )
+  })
+
   it('structural snapshot — empty list', () => {
     expect(
       render(makeState(), { issueList: { available: true, authenticated: true, issues: [] } })

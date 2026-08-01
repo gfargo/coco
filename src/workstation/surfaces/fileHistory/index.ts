@@ -16,7 +16,7 @@
 
 import type * as ReactTypes from 'react'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
-import { cellWidth, truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import type { FileHistoryResult } from '../../../git/fileHistoryData'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
@@ -115,7 +115,7 @@ export function renderFileHistorySurface(
           const index = windowStart + offset
           const isSelected = index === selected
           const cursor = isSelected ? '>' : ' '
-          const author = truncateCells(commit.author, AUTHOR_COL_CAP).padEnd(AUTHOR_COL_CAP)
+          const author = padCells(truncateCells(commit.author, AUTHOR_COL_CAP), AUTHOR_COL_CAP)
           const age = formatCommitAge(commit.authorTime, nowSeconds)
           const gutterPart = `${cursor} ${commit.shortHash}  ${author}  ${age}  `
           const subjectWidth = Math.max(8, width - 4 - cellWidth(gutterPart))

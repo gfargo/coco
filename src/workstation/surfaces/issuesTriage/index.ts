@@ -20,7 +20,7 @@ import {
   formatLogInkIssuesEmpty,
   formatLogInkLoading,
 } from '../../chrome/surfaceStates'
-import { cellWidth, truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import { ISSUE_FILTER_LABELS } from '../../../git/triageFilterPresets'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
@@ -133,7 +133,7 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
         const stateStr = issue.state.toLowerCase().padEnd(6)
         // Truncate before padding: padEnd never shortens, so an author
         // longer than the capped column would silently widen the row.
-        const authorStr = truncateCells(issue.author || '', authorColWidth).padEnd(authorColWidth)
+        const authorStr = padCells(truncateCells(issue.author || '', authorColWidth), authorColWidth)
         const commentsStr =
           typeof issue.comments === 'number' && issue.comments > 0
             ? ` ${issue.comments}c`

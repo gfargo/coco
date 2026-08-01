@@ -12,7 +12,7 @@ import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
 import { formatLogInkLoading, formatLogInkReflogEmpty } from '../../chrome/surfaceStates'
-import { truncateCells } from '../../chrome/text'
+import { padCells, truncateCells } from '../../chrome/text'
 import { splitReflogSubject } from '../../../git/reflogData'
 import {
   matchesPromotedFilter,
@@ -75,9 +75,9 @@ export function renderReflogSurface(ctx: SurfaceRenderContext): ReactTypes.React
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
-        const datePadded = truncateCells(entry.relativeDate, dateColWidth).padEnd(dateColWidth)
-        const actionPadded = truncateCells(parts.action, actionColWidth).padEnd(actionColWidth)
-        const hashPadded = truncateCells(entry.hash, hashColWidth).padEnd(hashColWidth)
+        const datePadded = padCells(truncateCells(entry.relativeDate, dateColWidth), dateColWidth)
+        const actionPadded = padCells(truncateCells(parts.action, actionColWidth), actionColWidth)
+        const hashPadded = padCells(truncateCells(entry.hash, hashColWidth), hashColWidth)
         const message = parts.message || entry.subject
         const lineText = truncateCells(
           `${cursor} ${datePadded} ${actionPadded} ${hashPadded} ${message}`,
