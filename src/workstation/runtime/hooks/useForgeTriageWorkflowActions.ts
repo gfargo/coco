@@ -362,9 +362,7 @@ export function createForgeTriageWorkflowHandlers(
     'triage-pr-rerun-checks': async () => {
       const pr = getSelectedPullRequestTriage(state, context)
       if (!pr) return { ok: false, message: 'No pull request under cursor' }
-      const result = await forge.rerunFailedChecks(pr.number)
-      if (result.ok) invalidatePullRequestChecksCache()
-      return result
+      return forge.rerunFailedChecks(pr.number)
     },
     'triage-pr-automerge': async () => {
       const strategy = payload?.trim()
