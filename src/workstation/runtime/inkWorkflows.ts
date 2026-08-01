@@ -575,6 +575,45 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'normal',
       requiresConfirmation: false,
     },
+    // OSS-1615 — CI-checks surface. Re-run is non-destructive (it just
+    // re-triggers CI) so it fires straight from the key; auto-merge
+    // prompts for a strategy the same way `merge-pr` does since it
+    // schedules a real merge once checks pass.
+    {
+      id: 'rerun-pr-checks',
+      key: '',
+      label: 'Re-run failed checks',
+      description: 'Re-run the current pull request\'s failed CI checks.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'automerge-pr',
+      key: '',
+      label: 'Enable auto-merge',
+      description: 'Merge the current pull request automatically once its checks pass (prompts for merge / squash / rebase).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // #1933 — the draft→ready promotion, gated like `approve-pr` /
+      // `triage-issue-reopen` since it rewrites publicly-visible forge
+      // state even though it isn't destructive.
+      id: 'ready-pr',
+      key: '',
+      label: 'Mark pull request ready for review',
+      description: 'Promote the current branch\'s draft pull request to ready for review.',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'reopen-pr',
+      key: '',
+      label: 'Reopen pull request',
+      description: 'Reopen the current branch\'s closed pull request.',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
     // #882 phase 5 — triage-view destructive verbs. Each routed
     // through the y-confirm path so single-keystroke `x` / `a` /
     // `R` / `m` never silently rewrites publicly-visible state.
@@ -626,6 +665,41 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       key: '',
       label: 'Request changes on pull request',
       description: 'Submit a change-request review on the cursored pull request (prompts for body, then confirms).',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      // OSS-1615 — CI-checks surface, triage-view siblings of
+      // `rerun-pr-checks` / `automerge-pr`.
+      id: 'triage-pr-rerun-checks',
+      key: '',
+      label: 'Re-run failed checks',
+      description: 'Re-run the cursored pull request\'s failed CI checks.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
+      id: 'triage-pr-automerge',
+      key: '',
+      label: 'Enable auto-merge',
+      description: 'Merge the cursored pull request automatically once its checks pass (prompts for merge / squash / rebase).',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    },
+    {
+      // #1933 — triage counterpart of `ready-pr`.
+      id: 'triage-pr-ready',
+      key: '',
+      label: 'Mark pull request ready for review',
+      description: 'Promote the cursored draft pull request to ready for review.',
+      kind: 'normal',
+      requiresConfirmation: true,
+    },
+    {
+      id: 'triage-pr-reopen',
+      key: '',
+      label: 'Reopen pull request',
+      description: 'Reopen the cursored closed pull request on the triage list view.',
       kind: 'normal',
       requiresConfirmation: true,
     },
@@ -772,6 +846,24 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
       warning: (state) => state.pendingConfirmationPayload
         || 'Undo the last git operation using the reflog.',
+    },
+    {
+      // OSS-1606 — session-scoped undo stack, dispatched by the `gu`
+      // chord (inkInput.ts). Distinct from `global-undo` above (the
+      // reflog-powered single-shot `z` safety net for ANY operation):
+      // this pops MULTIPLE recorded steps, but ONLY the ones the
+      // workstation itself just performed with a known real inverse
+      // (delete-branch, drop-stash, reset-to-commit, delete-tag — see
+      // `capturedUndoEntries` in useWorkflowAction.ts). Restorative by
+      // construction — recreate a ref / restore a stash / reset back to
+      // a recorded sha — so no confirmation gate, same reasoning as
+      // `undo-drop-stash` below.
+      id: 'undo-last-action',
+      key: '',
+      label: 'Undo last action',
+      description: 'Undo the most recent invertible destructive action from this session (branch delete, stash drop, reset, or tag delete).',
+      kind: 'normal',
+      requiresConfirmation: false,
     },
     {
       // #0.71 — submodule maintenance actions. All three are scoped

@@ -3,6 +3,7 @@ import {
   addBitbucketIssueLabel,
   addBitbucketIssueAssignee,
   closeBitbucketIssue,
+  createBitbucketIssue,
   reopenBitbucketIssue,
 } from './bitbucketIssueActions'
 
@@ -101,4 +102,29 @@ describe('reopenBitbucketIssue (1238)', () => {
     expect(calls[0].method).toBe('PUT')
     expect(JSON.parse(calls[0].body ?? '{}').status).toBe('open')
   }))
+})
+
+describe('createBitbucketIssue', () => {
+  it('POSTs to the issues endpoint and parses the URL', withCredentials(async () => {
+    const calls: RunnerCall[] = []
+    const runner = async (endpoint: string, opts?: { method?: string; body?: string }) => {
+      calls.push({ endpoint, method: opts?.method, body: opts?.body })
+      return JSON.stringify({ links: { html: { href: 'https://bitbucket.org/ws/repo/issues/9' } } })
+    }
+    const result = await createBitbucketIssue('ws/repo', { title: 'Bug', body: 'details' }, runner)
+    expect(result).toEqual({
+      ok: true,
+      message: 'Created issue: https://bitbucket.org/ws/repo/issues/9',
+      url: 'https://bitbucket.org/ws/repo/issues/9',
+    })
+    expect(calls[0].endpoint).toBe('repositories/ws/repo/issues')
+    expect(calls[0].method).toBe('POST')
+    expect(JSON.parse(calls[0].body ?? '{}')).toEqual({ title: 'Bug', content: { raw: 'details' } })
+  }))
+
+  it('rejects a blank title without shelling out', async () => {
+    const result = await createBitbucketIssue('ws/repo', { title: '   ', body: 'b' }, async () => '{}')
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Issue title required')
+  })
 })

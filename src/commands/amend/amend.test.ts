@@ -160,7 +160,36 @@ describe('amend command', () => {
   })
 
   it('passes --no-verify through to the amend commit', async () => {
+    // handler.ts reads noVerify off the resolved `config` (loadConfig's
+    // return value), never off raw argv — loadConfig itself is
+    // responsible for folding an explicit --no-verify over any
+    // config-sourced value (see loadConfig.test.ts). This mock stands in
+    // for that already-resolved output.
+    mockLoadConfig.mockReturnValue({
+      service: { provider: 'openai' },
+      noVerify: true,
+    } as unknown as Config)
     argv.noVerify = true
+    argv.apply = true
+    const { restore } = spyStdout()
+    try {
+      await handler(argv, logger)
+    } finally {
+      restore()
+    }
+    expect(mockCreateCommit).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.anything(),
+      expect.any(Function),
+      expect.objectContaining({ amend: true, noVerify: true })
+    )
+  })
+
+  it('honors noVerify from config when the CLI flag is not set', async () => {
+    mockLoadConfig.mockReturnValue({
+      service: { provider: 'openai' },
+      noVerify: true,
+    } as unknown as Config)
     argv.apply = true
     const { restore } = spyStdout()
     try {

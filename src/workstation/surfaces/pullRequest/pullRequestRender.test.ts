@@ -55,16 +55,22 @@ function render(
     pullRequest?: PullRequestOverview
     loading?: boolean
     provider?: LogInkContext['provider']
+    pullRequestChecks?: LogInkContext['pullRequestChecks']
+    checksLoading?: boolean
   } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = {
     ...(options.pullRequest ? { pullRequest: options.pullRequest } : {}),
     ...(options.provider ? { provider: options.provider } : {}),
+    ...(options.pullRequestChecks ? { pullRequestChecks: options.pullRequestChecks } : {}),
   }
-  const contextStatus = options.loading
+  let contextStatus = options.loading
     ? updateLogInkContextStatus(createLogInkContextStatus('idle'), 'pullRequest', 'loading')
     : createLogInkContextStatus('ready')
+  if (options.checksLoading) {
+    contextStatus = updateLogInkContextStatus(contextStatus, 'pullRequestChecks', 'loading')
+  }
   return renderPullRequestSurface({
     h: createElement,
     components,
@@ -179,5 +185,53 @@ describe('renderPullRequestSurface', () => {
         },
       })
     ).toMatchSnapshot()
+  })
+
+  describe('checks section (OSS-1615)', () => {
+    const overview: PullRequestOverview = {
+      available: true,
+      authenticated: true,
+      currentPullRequest: makePr({
+        statusCheckRollup: [{ name: 'pipeline', conclusion: 'SUCCESS' }],
+      }),
+    }
+
+    it('prefers the hydrated per-check breakdown over the rollup', () => {
+      const tree = render(makeState(), {
+        pullRequest: overview,
+        pullRequestChecks: {
+          ok: true,
+          checks: [
+            { name: 'build', conclusion: 'SUCCESS' },
+            { name: 'lint', conclusion: 'FAILURE' },
+            { name: 'test', conclusion: 'SUCCESS' },
+          ],
+        },
+      })
+      const text = treeText(tree)
+      expect(text).toContain('build')
+      expect(text).toContain('lint')
+      expect(text).toContain('test')
+      expect(text).not.toContain('pipeline')
+    })
+
+    it('falls back to the overview rollup when no hydrated checks are cached', () => {
+      const tree = render(makeState(), { pullRequest: overview })
+      const text = treeText(tree)
+      expect(text).toContain('pipeline')
+    })
+
+    it('shows a loading line while checks are hydrating', () => {
+      const tree = render(makeState(), { pullRequest: overview, checksLoading: true })
+      expect(treeText(tree)).toContain('loading checks')
+    })
+
+    it('shows the unsupported-forge message when the fetch failed', () => {
+      const tree = render(makeState(), {
+        pullRequest: overview,
+        pullRequestChecks: { ok: false, message: 'Checks are not supported for this forge.' },
+      })
+      expect(treeText(tree)).toContain('Checks are not supported for this forge.')
+    })
   })
 })

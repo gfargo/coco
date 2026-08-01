@@ -93,20 +93,43 @@ describe('pullRequestListData', () => {
     expect(runner).toHaveBeenNthCalledWith(2, [
       'pr',
       'list',
-      '--json',
-      PULL_REQUEST_LIST_JSON_FIELDS,
-      '--state',
-      'open',
-      '--assignee',
-      '@me',
+      `--json=${PULL_REQUEST_LIST_JSON_FIELDS}`,
+      '--state=open',
+      '--assignee=@me',
       '--draft',
-      '--base',
-      'main',
-      '--head',
-      'feature/x',
-      '--limit',
-      '25',
+      '--base=main',
+      '--head=feature/x',
+      '--limit=25',
     ])
+  })
+
+  it('surfaces a guard rejection as overview.message without calling gh', async () => {
+    const runner = jest.fn().mockResolvedValueOnce('') // auth status probe
+
+    const overview = await getPullRequestList(
+      githubRemoteGit(),
+      { assignee: '-injected' },
+      runner
+    )
+
+    expect(overview.available).toBe(true)
+    expect(overview.authenticated).toBe(true)
+    // runner called once (auth probe) but not a second time (fetch was aborted)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(overview.message).toMatch(/cannot start with '-'/)
+  })
+
+  it('surfaces a non-JSON gh response as "GitHub CLI returned unexpected output"', async () => {
+    const runner = jest
+      .fn()
+      .mockResolvedValueOnce('') // auth status
+      .mockResolvedValueOnce('gh: A new release of gh is available! v2.99.0\n[{"not":"json"')
+
+    const overview = await getPullRequestList(githubRemoteGit(), {}, runner)
+
+    expect(overview.pullRequests).toBeUndefined()
+    expect(overview.message).toContain('GitHub CLI returned unexpected output')
+    expect(overview.message).toContain('gh: A new release of gh is available!')
   })
 
   it('degrades to an empty list when the gh body is not an array', async () => {

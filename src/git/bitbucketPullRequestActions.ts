@@ -1,6 +1,7 @@
-import { defaultBitbucketRunner, runBitbucketAction, type BitbucketRunner } from './bitbucketCli'
+import { defaultBitbucketRunner, resolveBitbucketActionError, runBitbucketAction, type BitbucketRunner } from './bitbucketCli'
 import { findOpenBitbucketPullRequestForBranch } from './bitbucketListData'
 import { rejectFlagLike, rejectUnsafeUsername } from './forgeArgGuards'
+import { defaultOpenUrlRunner, type OpenUrlRunner } from './historyActions'
 import type { CreatePullRequestInput, PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
 
 /**
@@ -52,8 +53,13 @@ export async function createBitbucketPullRequest(
   )
 }
 
-export function openBitbucketPullRequest(url: string): PullRequestActionResult {
-  return { ok: true, message: `Open this URL in your browser: ${url}`, url }
+export function openBitbucketPullRequest(
+  url: string,
+  openUrl: OpenUrlRunner = defaultOpenUrlRunner
+): Promise<PullRequestActionResult> {
+  return openUrl(url)
+    .then(() => ({ ok: true, message: `Opened pull request: ${url}`, url }))
+    .catch((error) => ({ ok: false, message: (error as Error).message, url }))
 }
 
 // ---------------------------------------------------------------------------
@@ -145,6 +151,90 @@ export function addBitbucketPullRequestLabel(): Promise<PullRequestActionResult>
   return Promise.resolve({
     ok: false,
     message: 'Pull request labels are not supported on Bitbucket Cloud.',
+  })
+}
+
+/**
+ * Bitbucket Cloud's Pipelines API has no per-check-name re-run — a
+ * pipeline step retry needs the pipeline UUID, which the commit-status
+ * entries this facade exposes (`fetchCommitStatuses`) don't carry. Left
+ * as an explicit gap (OSS-1615) rather than guessing at Pipelines UUIDs.
+ */
+export function rerunFailedBitbucketChecks(): Promise<PullRequestActionResult> {
+  return Promise.resolve({
+    ok: false,
+    message: 'Re-running checks is not supported for Bitbucket yet.',
+  })
+}
+
+/**
+ * Bitbucket Cloud has no per-PR "merge when pipeline succeeds" toggle —
+ * the closest equivalent is a repository-level merge check / branch
+ * restriction configured outside the PR itself, not an action this
+ * facade can take on a single pull request.
+ */
+export function enableBitbucketAutoMerge(): Promise<PullRequestActionResult> {
+  return Promise.resolve({
+    ok: false,
+    message: 'Auto-merge is not supported for Bitbucket yet.',
+  })
+}
+
+/**
+ * Promote a draft PR to ready for review (#1933). Unlike GitLab/Gitea,
+ * Bitbucket Cloud's pull request resource carries a real `draft` boolean
+ * (set on create by `createBitbucketPullRequest`), so this is a direct
+ * field update rather than a title rewrite. Bitbucket's `PUT` is a
+ * full-resource update where `title` is required, so the current title is
+ * fetched first and echoed back alongside `draft: false` to avoid a 400 or
+ * clobbering it. Mirrors the GitLab/Gitea no-op short-circuit: if the fetch
+ * shows the PR is already `draft: false`, this returns early instead of
+ * issuing a redundant PUT.
+ */
+export async function markBitbucketPullRequestReadyByNumber(
+  projectPath: string,
+  pullRequestNumber: number,
+  runner: BitbucketRunner = defaultBitbucketRunner
+): Promise<PullRequestActionResult> {
+  let title: string | undefined
+  let isDraft: boolean | undefined
+  try {
+    const out = (await runner(`repositories/${projectPath}/pullrequests/${pullRequestNumber}`)).trim()
+    const pr = out ? (JSON.parse(out) as { title?: string; draft?: boolean }) : undefined
+    title = pr?.title
+    isDraft = pr?.draft
+  } catch (error) {
+    const { message, details } = await resolveBitbucketActionError(error, runner)
+    return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
+
+  if (title === undefined) {
+    return { ok: false, message: `Could not fetch pull request #${pullRequestNumber}.` }
+  }
+
+  if (isDraft === false) {
+    return { ok: true, message: `Pull request #${pullRequestNumber} is not a draft` }
+  }
+
+  return runBitbucketAction(
+    runner,
+    `repositories/${projectPath}/pullrequests/${pullRequestNumber}`,
+    'PUT',
+    { title, draft: false },
+    () => ({ ok: true, message: `Marked pull request #${pullRequestNumber} as ready for review` })
+  )
+}
+
+/**
+ * Bitbucket Cloud's REST API has no endpoint to reopen a declined pull
+ * request (only `.../decline`, `.../approve`, `.../merge` exist) — reopening
+ * is a web-UI-only action. Surface the gap as a graceful failure, mirroring
+ * `addBitbucketPullRequestLabel` and the checkout gap above.
+ */
+export function reopenBitbucketPullRequestByNumber(): Promise<PullRequestActionResult> {
+  return Promise.resolve({
+    ok: false,
+    message: 'Reopening a declined pull request is not supported by the Bitbucket API. Reopen it from the Bitbucket web UI.',
   })
 }
 

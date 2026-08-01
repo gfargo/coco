@@ -238,6 +238,25 @@ describe('renderFooter', () => {
     expect(global.props.dimColor).toBe(true)
   })
 
+  describe('undo stack hint (OSS-1606)', () => {
+    it('is absent from the global cluster when the undo stack is empty', () => {
+      const tree = asNode(render(makeState({ undoStack: [] })))
+      const global = childAt(childAt(tree, 0), 1)
+      expect(String(global.props.children)).not.toContain('gu undo')
+    })
+
+    it('surfaces "gu undo (N)" in the global cluster once entries are pushed', () => {
+      const tree = asNode(render(makeState({
+        undoStack: [
+          { kind: 'delete-branch', label: 'delete branch feature/test', depth: 0, name: 'feature/test', sha: 'abc' },
+          { kind: 'delete-tag', label: 'delete tag v1', depth: 0, name: 'v1', sha: 'def' },
+        ],
+      })))
+      const global = childAt(childAt(tree, 0), 1)
+      expect(String(global.props.children)).toContain('gu undo (2)')
+    })
+  })
+
   // Single-pane fallback (#1135) — narrow terminals show one pane at a
   // time, so the footer prepends a Tab pane switcher for orientation.
   describe('single-pane pane switcher', () => {

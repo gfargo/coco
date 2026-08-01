@@ -3,6 +3,7 @@ import {
   addGitLabIssueLabel,
   closeGitLabIssue,
   commentGitLabIssue,
+  createGitLabIssue,
   reopenGitLabIssue,
 } from './gitlabIssueActions'
 
@@ -51,5 +52,30 @@ describe('GitLab issue action arg contracts (#0.70)', () => {
     const result = await closeGitLabIssue(7, runner)
     expect(result.ok).toBe(false)
     expect(result.message).toContain('glab')
+  })
+})
+
+describe('createGitLabIssue', () => {
+  it('builds `glab issue create --title --description --yes` and parses the URL', async () => {
+    const { calls, runner } = capturingRunner()
+    const wrapped = async (a: string[]) => {
+      await runner(a)
+      return 'https://gitlab.com/g/p/-/issues/9'
+    }
+    const result = await createGitLabIssue({ title: 'Bug', body: 'details' }, wrapped)
+    expect(result).toEqual({
+      ok: true,
+      message: 'Created issue: https://gitlab.com/g/p/-/issues/9',
+      url: 'https://gitlab.com/g/p/-/issues/9',
+    })
+    expect(calls).toEqual([
+      ['issue', 'create', '--title=Bug', '--description=details', '--yes'],
+    ])
+  })
+
+  it('rejects a blank title without shelling out', async () => {
+    const { calls } = capturingRunner()
+    expect((await createGitLabIssue({ title: '   ', body: 'b' })).ok).toBe(false)
+    expect(calls).toHaveLength(0)
   })
 })

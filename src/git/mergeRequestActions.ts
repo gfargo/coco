@@ -1,7 +1,13 @@
 import { defaultGlabRunner, resolveGlabActionError, runGlabAction, type GlabRunner } from './glabCli'
 import { rejectFlagLike, rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
-import type { PullRequestActionResult } from './pullRequestActions'
+import type { PullRequestActionResult, PullRequestMergeStrategy } from './pullRequestActions'
 import { parsePullRequestDiffLines, type PullRequestDiffResult } from './pullRequestDiffData'
+import { normalizePipelineConclusion } from './gitlabDetailData'
+import type { PullRequestChecksResult, PullRequestStatusCheck } from './pullRequestDetailData'
+
+function enc(path: string): string {
+  return encodeURIComponent(path)
+}
 
 /**
  * GitLab merge-request create/open, the glab counterparts to the gh
@@ -315,12 +321,222 @@ export function checkoutMergeRequestByNumber(
 }
 
 /**
+ * CI-checks surface (OSS-1615). Unlike `gitlabDetailData.ts`'s
+ * `parsePipelineAsChecks` — which collapses the whole head pipeline into
+ * one synthetic `'pipeline'` row for the general MR detail view — this
+ * resolves the actual per-job breakdown so re-run has something to act
+ * on and the checks surface can show real job names.
+ */
+async function resolveHeadPipelineId(
+  projectPath: string,
+  mergeRequestNumber: number,
+  runner: GlabRunner
+): Promise<number | undefined> {
+  const out = (await runner(['api', `projects/${enc(projectPath)}/merge_requests/${mergeRequestNumber}`])).trim()
+  if (!out) return undefined
+  const mr = JSON.parse(out) as { head_pipeline?: { id?: number } }
+  return mr.head_pipeline?.id
+}
+
+export async function getMergeRequestChecks(
+  projectPath: string,
+  mergeRequestNumber: number,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestChecksResult> {
+  try {
+    const pipelineId = await resolveHeadPipelineId(projectPath, mergeRequestNumber, runner)
+    if (!pipelineId) return { ok: true, checks: [] }
+
+    const out = (await runner(['api', `projects/${enc(projectPath)}/pipelines/${pipelineId}/jobs?per_page=100`])).trim()
+    const jobs = out ? (JSON.parse(out) as Array<{ id?: number; name?: string; status?: string }>) : []
+    if (!Array.isArray(jobs)) return { ok: true, checks: [] }
+
+    const checks: PullRequestStatusCheck[] = jobs.map((job) => ({
+      name: job.name || 'job',
+      status: job.status,
+      conclusion: job.status ? normalizePipelineConclusion(job.status) : undefined,
+      runId: job.id != null ? String(job.id) : undefined,
+    }))
+    return { ok: true, checks }
+  } catch (error) {
+    const { message } = await resolveGlabActionError(error, runner, hostname)
+    return { ok: false, message }
+  }
+}
+
+/**
+ * `POST /pipelines/:id/retry` — GitLab retries only the failed/canceled
+ * jobs of the pipeline (not the whole thing), so this needs just the
+ * head pipeline id, not the per-job breakdown `getMergeRequestChecks`
+ * fetches. If nothing on the pipeline is retryable, GitLab's API
+ * rejects the retry and the error surfaces through the normal
+ * `runGlabAction` path.
+ */
+export async function rerunFailedMergeRequestChecks(
+  projectPath: string,
+  mergeRequestNumber: number,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestActionResult> {
+  try {
+    const pipelineId = await resolveHeadPipelineId(projectPath, mergeRequestNumber, runner)
+    if (!pipelineId) {
+      return { ok: false, message: `No pipeline found for merge request !${mergeRequestNumber}.` }
+    }
+    return await runGlabAction(
+      runner,
+      ['api', '--method', 'POST', `projects/${enc(projectPath)}/pipelines/${pipelineId}/retry`],
+      () => ({
+        ok: true,
+        message: `Retried pipeline #${pipelineId} for merge request !${mergeRequestNumber}.`,
+      }),
+      hostname
+    )
+  } catch (error) {
+    const { message } = await resolveGlabActionError(error, runner, hostname)
+    return { ok: false, message }
+  }
+}
+
+/**
+ * `PUT /merge_requests/:iid/merge` with `merge_when_pipeline_succeeds`
+ * — GitLab's auto-merge equivalent. There is no rebase-strategy
+ * counterpart on this endpoint (GitLab models rebase as a separate
+ * `mr rebase` action, not a merge-time strategy), so that strategy is
+ * declined with an explanation rather than silently falling back to a
+ * plain merge.
+ */
+export async function enableMergeRequestAutoMerge(
+  projectPath: string,
+  mergeRequestNumber: number,
+  strategy: PullRequestMergeStrategy,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestActionResult> {
+  if (strategy === 'rebase') {
+    return {
+      ok: false,
+      message: 'GitLab auto-merge does not support the rebase strategy. Use merge or squash, or run `glab mr rebase` first.',
+    }
+  }
+
+  const body: Record<string, unknown> = { merge_when_pipeline_succeeds: true }
+  if (strategy === 'squash') body.squash = true
+
+  return runGlabAction(
+    runner,
+    [
+      'api',
+      '--method', 'PUT',
+      `projects/${enc(projectPath)}/merge_requests/${mergeRequestNumber}/merge`,
+      // `-F` (not `-f`) so booleans serialize as real JSON `true`, not
+      // the string `"true"` — `merge_when_pipeline_succeeds`/`squash`
+      // are both booleans on this endpoint.
+      ...Object.entries(body).flatMap(([field, fieldValue]) => ['-F', `${field}=${fieldValue}`]),
+    ],
+    () => ({
+      ok: true,
+      message: `Enabled auto-merge (${strategy}) for merge request !${mergeRequestNumber}`,
+    }),
+    hostname
+  )
+}
+
+/**
  * `glab mr diff <n>` argv (#1363). `--color=never` keeps the patch free
  * of ANSI escapes regardless of glab's TTY detection — the workstation
  * applies its own +/- theming per line.
  */
 export function buildMergeRequestDiffArgs(mergeRequestNumber: number): string[] {
   return ['mr', 'diff', String(mergeRequestNumber), '--color=never']
+}
+
+/**
+ * `glab mr reopen <n>` — the GitLab counterpart of `reopenIssue` (#1933).
+ * Recovers an MR closed via `closeMergeRequestByNumber`.
+ */
+export function reopenMergeRequestByNumber(
+  mergeRequestNumber: number,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestActionResult> {
+  return runGlabAction(
+    runner,
+    ['mr', 'reopen', String(mergeRequestNumber)],
+    (output) => ({
+      ok: true,
+      message: output.trim() || `Reopened merge request !${mergeRequestNumber}`,
+    }),
+    hostname
+  )
+}
+
+/**
+ * Draft prefixes GitLab recognizes on an MR title — "Draft:" is current,
+ * "WIP:" is the legacy convention it still honors, and both also match in
+ * their bracket (`[Draft]`) and paren (`(Draft)`) forms, which GitLab's own
+ * draft detection treats identically to the colon form.
+ */
+const DRAFT_TITLE_PREFIX = /^\s*(?:\[\s*(?:draft|wip)\s*\]|\(\s*(?:draft|wip)\s*\)|(?:draft|wip)\s*:)\s*/i
+
+async function fetchMergeRequestTitle(
+  projectPath: string,
+  mergeRequestNumber: number,
+  runner: GlabRunner
+): Promise<string | undefined> {
+  const out = (
+    await runner(['api', `projects/${encodeURIComponent(projectPath)}/merge_requests/${mergeRequestNumber}`])
+  ).trim()
+  const mr = out ? (JSON.parse(out) as { title?: string }) : undefined
+  return mr?.title
+}
+
+/**
+ * Promote a draft MR to ready for review (#1933), the glab counterpart of
+ * `gh pr ready`. glab has no dedicated "ready" verb — GitLab's draft state
+ * is carried by a `Draft:` (or legacy `WIP:`) title prefix, so this fetches
+ * the current title via `glab api` and PUTs it back with the prefix
+ * stripped. A title with neither prefix is left untouched (already ready)
+ * so a user-authored title that merely mentions "draft" mid-sentence is
+ * never rewritten.
+ */
+export async function markMergeRequestReadyByNumber(
+  projectPath: string,
+  mergeRequestNumber: number,
+  runner: GlabRunner = defaultGlabRunner,
+  hostname?: string
+): Promise<PullRequestActionResult> {
+  try {
+    const title = await fetchMergeRequestTitle(projectPath, mergeRequestNumber, runner)
+    if (title === undefined) {
+      return { ok: false, message: `Could not fetch merge request !${mergeRequestNumber}.` }
+    }
+    if (!DRAFT_TITLE_PREFIX.test(title)) {
+      return { ok: true, message: `Merge request !${mergeRequestNumber} is not a draft` }
+    }
+    const readyTitle = title.replace(DRAFT_TITLE_PREFIX, '')
+    if (!readyTitle.trim()) {
+      return {
+        ok: false,
+        message: `Cannot mark merge request !${mergeRequestNumber} ready: the title is only the draft prefix. Rename it first.`,
+      }
+    }
+    return await runGlabAction(
+      runner,
+      [
+        'api',
+        `projects/${encodeURIComponent(projectPath)}/merge_requests/${mergeRequestNumber}`,
+        '-X', 'PUT',
+        '-f', `title=${readyTitle}`,
+      ],
+      () => ({ ok: true, message: `Marked merge request !${mergeRequestNumber} as ready for review` }),
+      hostname
+    )
+  } catch (error) {
+    const { message, details } = await resolveGlabActionError(error, runner, hostname)
+    return { ok: false, message, ...(details && details.length ? { details } : {}) }
+  }
 }
 
 /**

@@ -3,6 +3,8 @@ import { SummarizeContext, summarize } from '../../../langchain/chains/summarize
 import { SUMMARIZE_PROMPT_HASH } from '../../../langchain/chains/summarize/prompt'
 import { TokenCounter } from '../../../utils/tokenizer'
 import { Logger } from '../../../utils/logger'
+import { recordUsage } from '../../../langchain/utils/usageLedger'
+import { createConcurrencyLimit } from '../../../utils/createConcurrencyLimit'
 import {
   diffSummaryKey,
   readDiffSummary,
@@ -39,7 +41,7 @@ import { summarizeTrivialDiff } from './trivialDiff'
  * generation) and register a parser chain entry in
  * `structuralParserRegistry.ts`.
  */
-function detectStructuralLanguageId(path: string): StructuralLanguageId | undefined {
+export function detectStructuralLanguageId(path: string): StructuralLanguageId | undefined {
   const ts = detectTsLanguage(path)
   if (ts) return ts
   if (isPythonFile(path)) return 'py'
@@ -248,6 +250,14 @@ async function summarizeFileDiff(
         { color: 'cyan' }
       )
       touchDiffSummary(cacheRepo, cacheKey)
+      if (metadata?.recordUsage !== false) {
+        recordUsage({
+          ...metadata,
+          task: 'summarize-large-file',
+          model: cacheModel,
+          cacheHit: true,
+        })
+      }
       return {
         ...fileDiff,
         diff: cached.summary,
@@ -275,6 +285,7 @@ async function summarizeFileDiff(
         metadata: {
           ...metadata,
           task: 'summarize-large-file',
+          ...(cacheKey ? { cacheHit: false } : {}),
         },
         options: {
           returnIntermediateSteps: false,
@@ -319,32 +330,8 @@ async function processInWaves<T, R>(
   processor: (item: T) => Promise<R>,
   maxConcurrent: number
 ): Promise<R[]> {
-  const limit = createLimit(maxConcurrent)
+  const limit = createConcurrencyLimit(maxConcurrent)
   return Promise.all(items.map((item) => limit(() => processor(item))))
-}
-
-function createLimit(maxConcurrent: number) {
-  const limit = Math.max(1, maxConcurrent)
-  let active = 0
-  const queue: (() => void)[] = []
-
-  const runNext = () => {
-    active--
-    const next = queue.shift()
-    if (next) next()
-  }
-
-  return async <T>(operation: () => Promise<T>): Promise<T> => {
-    if (active >= limit) {
-      await new Promise<void>((resolve) => queue.push(resolve))
-    }
-    active++
-    try {
-      return await operation()
-    } finally {
-      runNext()
-    }
-  }
 }
 
 /**

@@ -21,6 +21,7 @@ function makeInput(overrides: Partial<BuildHeaderChipsInput> = {}): BuildHeaderC
     branch: 'main',
     dirty: false,
     bisecting: false,
+    sparse: false,
     pullRequest: undefined,
     breadcrumb: '',
     loading: '',
@@ -124,6 +125,27 @@ describe('buildHeaderChips', () => {
       const theme = createLogInkTheme({ noColor: false, ascii: true })
       const chips = buildHeaderChips(makeInput({ theme, operation: 'rebase', operationConflicts: 2 }))
       expect(chips.find((c) => c.id === 'operation')!.label).toBe('! REBASING (2 conflicts)')
+    })
+  })
+
+  describe('sparse-checkout chip (OSS-2056)', () => {
+    it('renders an informational SPARSE chip when sparse-checkout is active', () => {
+      const chips = buildHeaderChips(makeInput({ sparse: true }))
+      const sparse = chips.find((c) => c.id === 'sparse')!
+      expect(sparse).toBeDefined()
+      expect(sparse.label).toBe('◔ SPARSE')
+      expect(sparse.color).toBe('gray') // theme.colors.muted
+    })
+
+    it('omits the sparse chip when sparse-checkout is not active', () => {
+      const chips = buildHeaderChips(makeInput({ sparse: false }))
+      expect(chips.find((c) => c.id === 'sparse')).toBeUndefined()
+    })
+
+    it('falls back to the ASCII glyph per theme.ascii', () => {
+      const theme = createLogInkTheme({ noColor: false, ascii: true })
+      const chips = buildHeaderChips(makeInput({ theme, sparse: true }))
+      expect(chips.find((c) => c.id === 'sparse')!.label).toBe('~ SPARSE')
     })
   })
 

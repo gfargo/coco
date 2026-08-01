@@ -2,6 +2,8 @@ import {
   addMergeRequestAssignee,
   buildMergeRequestDiffArgs,
   checkoutMergeRequestByNumber,
+  enableMergeRequestAutoMerge,
+  getMergeRequestChecks,
   getMergeRequestDiff,
   addMergeRequestLabel,
   approveMergeRequest,
@@ -12,10 +14,13 @@ import {
   commentMergeRequest,
   commentMergeRequestByNumber,
   createMergeRequest,
+  markMergeRequestReadyByNumber,
   mergeMergeRequest,
   mergeMergeRequestByNumber,
   openMergeRequest,
+  reopenMergeRequestByNumber,
   requestChangesMergeRequestByNumber,
+  rerunFailedMergeRequestChecks,
 } from './mergeRequestActions'
 
 /** Capture the args a glab action passes to the runner. */
@@ -168,5 +173,174 @@ describe('MR checkout + diff (#1363)', () => {
     if (!result.ok) {
       expect(result.message).toContain('404 Not Found')
     }
+  })
+})
+
+describe('MR CI checks (OSS-1615)', () => {
+  it('getMergeRequestChecks resolves the head pipeline then maps its jobs', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]): Promise<string> => {
+      calls.push(args)
+      if (args[1].includes('/merge_requests/9')) {
+        return JSON.stringify({ head_pipeline: { id: 555 } })
+      }
+      return JSON.stringify([
+        { id: 1, name: 'build', status: 'success' },
+        { id: 2, name: 'test', status: 'failed' },
+      ])
+    }
+
+    const result = await getMergeRequestChecks('acme/widgets', 9, runner)
+
+    expect(calls[0]).toEqual(['api', 'projects/acme%2Fwidgets/merge_requests/9'])
+    expect(calls[1]).toEqual(['api', 'projects/acme%2Fwidgets/pipelines/555/jobs?per_page=100'])
+    expect(result).toEqual({
+      ok: true,
+      checks: [
+        { name: 'build', status: 'success', conclusion: 'success', runId: '1' },
+        { name: 'test', status: 'failed', conclusion: 'failure', runId: '2' },
+      ],
+    })
+  })
+
+  it('getMergeRequestChecks returns no checks when there is no head pipeline', async () => {
+    const runner = async (): Promise<string> => JSON.stringify({})
+    await expect(getMergeRequestChecks('acme/widgets', 9, runner)).resolves.toEqual({ ok: true, checks: [] })
+  })
+
+  it('rerunFailedMergeRequestChecks retries the head pipeline', async () => {
+    const calls: string[][] = []
+    const runner = async (args: string[]): Promise<string> => {
+      calls.push(args)
+      if (args[1].includes('/merge_requests/9')) {
+        return JSON.stringify({ head_pipeline: { id: 555 } })
+      }
+      return ''
+    }
+
+    const result = await rerunFailedMergeRequestChecks('acme/widgets', 9, runner)
+
+    expect(calls[1]).toEqual(['api', '--method', 'POST', 'projects/acme%2Fwidgets/pipelines/555/retry'])
+    expect(result.ok).toBe(true)
+    expect(result.message).toBe('Retried pipeline #555 for merge request !9.')
+  })
+
+  it('rerunFailedMergeRequestChecks fails gracefully when there is no head pipeline', async () => {
+    const runner = async (): Promise<string> => JSON.stringify({})
+    const result = await rerunFailedMergeRequestChecks('acme/widgets', 9, runner)
+    expect(result).toEqual({ ok: false, message: 'No pipeline found for merge request !9.' })
+  })
+
+  it('enableMergeRequestAutoMerge sets merge_when_pipeline_succeeds via the API', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await enableMergeRequestAutoMerge('acme/widgets', 9, 'merge', runner)
+    expect(calls[0]).toEqual([
+      'api', '--method', 'PUT',
+      'projects/acme%2Fwidgets/merge_requests/9/merge',
+      '-F', 'merge_when_pipeline_succeeds=true',
+    ])
+    expect(result.ok).toBe(true)
+  })
+
+  it('enableMergeRequestAutoMerge also sets squash for the squash strategy', async () => {
+    const { calls, runner } = capturingRunner()
+    await enableMergeRequestAutoMerge('acme/widgets', 9, 'squash', runner)
+    expect(calls[0]).toEqual([
+      'api', '--method', 'PUT',
+      'projects/acme%2Fwidgets/merge_requests/9/merge',
+      '-F', 'merge_when_pipeline_succeeds=true',
+      '-F', 'squash=true',
+    ])
+  })
+
+  it('enableMergeRequestAutoMerge declines the rebase strategy without calling glab', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await enableMergeRequestAutoMerge('acme/widgets', 9, 'rebase', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('rebase')
+    expect(calls).toEqual([])
+  })
+})
+
+describe('reopenMergeRequestByNumber (#1933)', () => {
+  it('runs glab mr reopen <n>', async () => {
+    const { calls, runner } = capturingRunner()
+    const result = await reopenMergeRequestByNumber(5, runner)
+    expect(calls).toEqual([['mr', 'reopen', '5']])
+    expect(result).toEqual({ ok: true, message: 'Reopened merge request !5' })
+  })
+})
+
+describe('markMergeRequestReadyByNumber (#1933)', () => {
+  it('strips a Draft: title prefix via glab api PUT', async () => {
+    const runner = jest.fn()
+      .mockResolvedValueOnce(JSON.stringify({ title: 'Draft: Add feature' }))
+      .mockResolvedValueOnce('')
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenNthCalledWith(1, ['api', 'projects/g%2Fp/merge_requests/5'])
+    expect(runner).toHaveBeenNthCalledWith(2, [
+      'api', 'projects/g%2Fp/merge_requests/5', '-X', 'PUT', '-f', 'title=Add feature',
+    ])
+    expect(result).toEqual({ ok: true, message: 'Marked merge request !5 as ready for review' })
+  })
+
+  it('strips a legacy WIP: title prefix case-insensitively', async () => {
+    const runner = jest.fn()
+      .mockResolvedValueOnce(JSON.stringify({ title: 'wip: Add feature' }))
+      .mockResolvedValueOnce('')
+    await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenNthCalledWith(2, [
+      'api', 'projects/g%2Fp/merge_requests/5', '-X', 'PUT', '-f', 'title=Add feature',
+    ])
+  })
+
+  it('strips a bracketed [Draft] title prefix', async () => {
+    const runner = jest.fn()
+      .mockResolvedValueOnce(JSON.stringify({ title: '[Draft] Add feature' }))
+      .mockResolvedValueOnce('')
+    await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenNthCalledWith(2, [
+      'api', 'projects/g%2Fp/merge_requests/5', '-X', 'PUT', '-f', 'title=Add feature',
+    ])
+  })
+
+  it('strips a parenthesized (WIP) title prefix', async () => {
+    const runner = jest.fn()
+      .mockResolvedValueOnce(JSON.stringify({ title: '(WIP) Add feature' }))
+      .mockResolvedValueOnce('')
+    await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenNthCalledWith(2, [
+      'api', 'projects/g%2Fp/merge_requests/5', '-X', 'PUT', '-f', 'title=Add feature',
+    ])
+  })
+
+  it('is a no-op when the title has no draft prefix', async () => {
+    const runner = jest.fn().mockResolvedValueOnce(JSON.stringify({ title: 'Add feature' }))
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(result).toEqual({ ok: true, message: 'Merge request !5 is not a draft' })
+  })
+
+  it('never rewrites a user title that merely mentions "draft" mid-sentence', async () => {
+    const runner = jest.fn().mockResolvedValueOnce(JSON.stringify({ title: 'Fix the draft renderer' }))
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(true)
+  })
+
+  it('surfaces glab failures as { ok: false }', async () => {
+    const runner = jest.fn().mockRejectedValueOnce(new Error('404 Not Found')).mockResolvedValue('ok')
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.message).toContain('404 Not Found')
+    }
+  })
+
+  it('refuses to PUT an empty title when it is only the Draft: prefix', async () => {
+    const runner = jest.fn().mockResolvedValueOnce(JSON.stringify({ title: 'Draft:' }))
+    const result = await markMergeRequestReadyByNumber('g/p', 5, runner)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(result.ok).toBe(false)
   })
 })

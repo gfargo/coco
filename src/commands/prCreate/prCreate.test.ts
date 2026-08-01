@@ -71,7 +71,7 @@ describe('pr create command', () => {
     mockCreateMr.mockResolvedValue({ ok: true, message: 'Created merge request: https://gl/mr/1', url: 'https://gl/mr/1' })
     mockOpenMr.mockResolvedValue({ ok: true, message: 'opened' })
     mockCreateBitbucketPr.mockResolvedValue({ ok: true, message: 'Created pull request: https://bb/pr/1', url: 'https://bb/pr/1' })
-    mockOpenBitbucketPr.mockReturnValue({ ok: true, message: 'opened' })
+    mockOpenBitbucketPr.mockResolvedValue({ ok: true, message: 'opened' })
   })
 
   afterEach(() => jest.clearAllMocks())

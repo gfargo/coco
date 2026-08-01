@@ -101,7 +101,7 @@ describe('issuesListData', () => {
       {
         state: 'closed',
         assignee: '@me',
-        label: 'bug,critical',
+        label: 'bug',
         search: 'auth flow',
         limit: 50,
       },
@@ -111,19 +111,42 @@ describe('issuesListData', () => {
     expect(runner).toHaveBeenNthCalledWith(2, [
       'issue',
       'list',
-      '--json',
-      ISSUE_LIST_JSON_FIELDS,
-      '--state',
-      'closed',
-      '--assignee',
-      '@me',
-      '--label',
-      'bug,critical',
-      '--search',
-      'auth flow',
-      '--limit',
-      '50',
+      `--json=${ISSUE_LIST_JSON_FIELDS}`,
+      '--state=closed',
+      '--assignee=@me',
+      '--label=bug',
+      '--search=auth flow',
+      '--limit=50',
     ])
+  })
+
+  it('surfaces a guard rejection as overview.message without calling gh a second time', async () => {
+    const runner = jest.fn().mockResolvedValueOnce('') // auth status probe
+
+    const overview = await getIssueList(
+      githubRemoteGit(),
+      { label: 'a,b' },
+      runner
+    )
+
+    expect(overview.available).toBe(true)
+    expect(overview.authenticated).toBe(true)
+    // runner called once (auth probe) but not a second time (fetch was aborted)
+    expect(runner).toHaveBeenCalledTimes(1)
+    expect(overview.message).toContain('comma')
+  })
+
+  it('surfaces a non-JSON gh response as "GitHub CLI returned unexpected output"', async () => {
+    const runner = jest
+      .fn()
+      .mockResolvedValueOnce('') // auth status
+      .mockResolvedValueOnce('gh: A new release of gh is available! v2.99.0\n[{"not":"json"')
+
+    const overview = await getIssueList(githubRemoteGit(), {}, runner)
+
+    expect(overview.issues).toBeUndefined()
+    expect(overview.message).toContain('GitHub CLI returned unexpected output')
+    expect(overview.message).toContain('gh: A new release of gh is available!')
   })
 
   it('returns an empty issue list rather than crashing on missing fields', async () => {
