@@ -9,6 +9,7 @@ import {
     type GitHubRepository
 } from './githubCli'
 import { getGitHubRepositoryForGit } from './providerData'
+import { rejectUnsafeLabel, rejectUnsafeUsername } from './forgeArgGuards'
 
 export type IssueState = 'open' | 'closed' | 'all'
 
@@ -77,7 +78,13 @@ function parseIssueListItems(output: string): IssueListItem[] {
   const trimmed = output.trim()
   if (!trimmed) return []
 
-  const raw = JSON.parse(trimmed) as Array<Record<string, unknown>>
+  let raw: unknown
+  try {
+    raw = JSON.parse(trimmed)
+  } catch {
+    const firstLine = trimmed.split('\n', 1)[0]
+    throw new Error(`GitHub CLI returned unexpected output: ${firstLine}`)
+  }
   if (!Array.isArray(raw)) return []
 
   return raw.map((entry) => {
@@ -114,14 +121,20 @@ function parseIssueListItems(output: string): IssueListItem[] {
 }
 
 function buildGhArgs(filter: IssueListFilter): string[] {
-  const args = ['issue', 'list', '--json', ISSUE_LIST_JSON_FIELDS]
+  const bad =
+    (filter.assignee && rejectUnsafeUsername(filter.assignee)) ||
+    (filter.author && rejectUnsafeUsername(filter.author)) ||
+    (filter.label && rejectUnsafeLabel(filter.label))
+  if (bad) throw new Error(bad)
 
-  if (filter.state) args.push('--state', filter.state)
-  if (filter.assignee) args.push('--assignee', filter.assignee)
-  if (filter.author) args.push('--author', filter.author)
-  if (filter.label) args.push('--label', filter.label)
-  if (filter.search) args.push('--search', filter.search)
-  if (typeof filter.limit === 'number') args.push('--limit', String(filter.limit))
+  const args = ['issue', 'list', `--json=${ISSUE_LIST_JSON_FIELDS}`]
+
+  if (filter.state) args.push(`--state=${filter.state}`)
+  if (filter.assignee) args.push(`--assignee=${filter.assignee}`)
+  if (filter.author) args.push(`--author=${filter.author}`)
+  if (filter.label) args.push(`--label=${filter.label}`)
+  if (filter.search) args.push(`--search=${filter.search}`)
+  if (typeof filter.limit === 'number') args.push(`--limit=${filter.limit}`)
 
   return args
 }
