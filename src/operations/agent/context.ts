@@ -319,20 +319,30 @@ export async function getBranchContext(context: AgentOperationContext): Promise<
   const branch = (await runAgentGit(context, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
   const lines = [`Branch: ${branch}`]
 
+  let upstream: string | undefined
   try {
-    const upstream = (await runAgentGit(
+    upstream = (await runAgentGit(
       context,
       ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
     )).trim()
-    const counts = (await runAgentGit(
-      context,
-      ['rev-list', '--left-right', '--count', `${upstream}...HEAD`],
-    )).trim()
-    const [behind, ahead] = counts.split(/\s+/)
-    lines.push(`Upstream: ${upstream}`, `Ahead: ${ahead}`, `Behind: ${behind}`)
   } catch (error) {
     if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
     lines.push('Upstream: none configured')
+  }
+
+  if (upstream) {
+    lines.push(`Upstream: ${upstream}`)
+    try {
+      const counts = (await runAgentGit(
+        context,
+        ['rev-list', '--left-right', '--count', `${upstream}...HEAD`],
+      )).trim()
+      const [behind, ahead] = counts.split(/\s+/)
+      lines.push(`Ahead: ${ahead}`, `Behind: ${behind}`)
+    } catch (error) {
+      if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+      lines.push('Ahead/Behind: unavailable (git error)')
+    }
   }
 
   return lines.join('\n')

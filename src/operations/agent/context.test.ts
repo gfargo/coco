@@ -246,6 +246,65 @@ describe('agent repository context', () => {
     expect(branchContext).toContain('Upstream: none configured')
   })
 
+  it('reports ahead/behind counts against a real diverged upstream', async () => {
+    const bareRemote = path.join(tempRoot, 'origin.git')
+    await simpleGit(tempRoot).raw(['init', '--bare', bareRemote])
+
+    const git = simpleGit(repoRoot)
+    const branchName = (await git.raw(['symbolic-ref', '--short', 'HEAD'])).trim()
+    await git.raw(['remote', 'add', 'origin', bareRemote])
+    await git.raw(['push', '-u', 'origin', branchName])
+
+    const cloneDir = path.join(tempRoot, 'clone')
+    await simpleGit(tempRoot).clone(bareRemote, cloneDir)
+    const cloneGit = simpleGit(cloneDir)
+    await cloneGit.addConfig('user.name', 'Agent Test')
+    await cloneGit.addConfig('user.email', 'agent@example.test')
+    fs.writeFileSync(path.join(cloneDir, 'tracked.txt'), 'remote change\n')
+    await cloneGit.add('tracked.txt')
+    await cloneGit.commit('remote commit')
+    await cloneGit.push('origin', branchName)
+
+    for (let index = 0; index < 2; index += 1) {
+      fs.writeFileSync(path.join(repoRoot, 'tracked.txt'), `local change ${index}\n`)
+      await git.add('tracked.txt')
+      await git.commit(`local commit ${index}`)
+    }
+    await git.fetch('origin', branchName)
+
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const branchContext = await getBranchContext(context)
+
+    expect(branchContext).toContain(`Upstream: origin/${branchName}`)
+    expect(branchContext).toContain('Ahead: 2')
+    expect(branchContext).toContain('Behind: 1')
+  })
+
+  it('labels a genuine git failure while computing counts distinctly from no-upstream', async () => {
+    const bareRemote = path.join(tempRoot, 'origin-corrupt.git')
+    await simpleGit(tempRoot).raw(['init', '--bare', bareRemote])
+
+    const git = simpleGit(repoRoot)
+    const branchName = (await git.raw(['symbolic-ref', '--short', 'HEAD'])).trim()
+    await git.raw(['remote', 'add', 'origin', bareRemote])
+    await git.raw(['push', '-u', 'origin', branchName])
+
+    // Resolve @{u}'s ref without needing the object it points to, then delete that
+    // object from the store so rev-list fails while @{u} itself still resolves.
+    const remoteSha = (await git.raw(['rev-parse', `origin/${branchName}`])).trim()
+    const objectPath = path.join(repoRoot, '.git', 'objects', remoteSha.slice(0, 2), remoteSha.slice(2))
+    fs.rmSync(objectPath)
+
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const branchContext = await getBranchContext(context)
+
+    expect(branchContext).toContain(`Upstream: origin/${branchName}`)
+    expect(branchContext).toContain('Ahead/Behind: unavailable (git error)')
+    expect(branchContext).not.toContain('Upstream: none configured')
+  })
+
   it('bounds the recent log to the maximum allowed entries', async () => {
     const git = simpleGit(repoRoot)
     for (let index = 0; index < 25; index += 1) {
