@@ -10,6 +10,7 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { getCommitLogCurrentBranch } from '../../lib/simple-git/getCommitLogCurrentBranch'
 import { getCommitLogRangeDetails } from '../../lib/simple-git/getCommitLogRangeDetails'
 import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
+import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
 import { executeChain } from '../../lib/langchain/utils/executeChain'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -59,6 +60,7 @@ const mockGetCommitLogCurrentBranch = getCommitLogCurrentBranch as jest.MockedFu
   typeof getCommitLogCurrentBranch
 >
 const mockGetCurrentBranchName = getCurrentBranchName as jest.MockedFunction<typeof getCurrentBranchName>
+const mockGetDiffForBranch = getDiffForBranch as jest.MockedFunction<typeof getDiffForBranch>
 const mockGetCommitLogRangeDetails = getCommitLogRangeDetails as jest.MockedFunction<
   typeof getCommitLogRangeDetails
 >
@@ -446,6 +448,78 @@ describe('changelog command', () => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('--range'),
         expect.anything()
+      )
+    })
+  })
+
+  describe('--only-diff (#1889)', () => {
+    it('rejects --only-diff combined with --range instead of silently ignoring --range', async () => {
+      argv.onlyDiff = true
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        range: 'abc123:def456',
+      } as unknown as Config)
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('--only-diff'),
+        expect.anything()
+      )
+    })
+
+    it('rejects --only-diff combined with --tag instead of silently ignoring --tag', async () => {
+      argv.onlyDiff = true
+      argv.tag = 'v1.0.0'
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('--only-diff'),
+        expect.anything()
+      )
+    })
+
+    it('rejects --only-diff combined with --since-last-tag instead of silently ignoring it', async () => {
+      argv.onlyDiff = true
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        sinceLastTag: true,
+      } as unknown as Config)
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('--only-diff'),
+        expect.anything()
+      )
+    })
+
+    it('still allows --only-diff combined with --branch (branch is the diff base)', async () => {
+      argv.onlyDiff = true
+      argv.branch = 'develop'
+      mockGetDiffForBranch.mockResolvedValue({ staged: [], unstaged: [], untracked: [] })
+
+      await handler(argv, logger)
+
+      expect(logger.error).not.toHaveBeenCalled()
+      expect(mockGetDiffForBranch).toHaveBeenCalledWith(
+        expect.objectContaining({ baseBranch: 'develop' })
       )
     })
   })

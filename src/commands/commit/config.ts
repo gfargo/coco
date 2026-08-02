@@ -164,5 +164,33 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(command))
+  return yargs
+    .options(options)
+    .check((argv) => {
+      const a = argv as {
+        split?: boolean
+        plan?: boolean
+        apply?: boolean
+        strictSplit?: boolean
+        printMessage?: boolean
+        _: Array<string | number>
+      }
+      const positionalSplit = a._.includes('split')
+      const splitMode = Boolean(a.split || a.plan || positionalSplit)
+
+      if (a.plan && a.apply) {
+        throw new Error('--plan and --apply cannot be combined — --plan previews, --apply commits.')
+      }
+      if (a.printMessage && (a.split || a.plan || a.apply || a.strictSplit)) {
+        throw new Error('--print-message cannot be combined with --split, --plan, --apply, or --strict-split.')
+      }
+      if (a.apply && !splitMode) {
+        throw new Error('--apply requires --split (it applies a split plan).')
+      }
+      if (a.strictSplit && !splitMode) {
+        throw new Error('--strict-split requires --split or --plan.')
+      }
+      return true
+    })
+    .usage(getCommandUsageHeader(command))
 }

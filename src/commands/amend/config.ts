@@ -55,5 +55,14 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(command))
+  return yargs
+    .options(options)
+    .check((argv) => {
+      const a = argv as { dryRun?: boolean; apply?: boolean }
+      if (a.dryRun && a.apply) {
+        throw new Error('--dry-run and --apply cannot be combined — --dry-run previews, --apply amends.')
+      }
+      return true
+    })
+    .usage(getCommandUsageHeader(command))
 }
