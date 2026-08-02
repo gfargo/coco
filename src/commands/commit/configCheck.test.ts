@@ -77,4 +77,44 @@ describe('commit config validation (#1889)', () => {
   it('accepts no split-related flags', () => {
     expect(check({ _: [] })).toBe(true)
   })
+
+  // handler.ts:58 emits a structured `emitJson({ error })` payload when
+  // `--json` is combined with `--split`/`--plan`/`--apply`, for machine
+  // consumers. These combos must NOT throw here — check() runs before the
+  // handler, so throwing would replace that JSON contract with a plain-text
+  // yargs failure (#2039 review feedback).
+  it('defers to the handler for --json + --plan + --apply instead of throwing', () => {
+    expect(check({ json: true, plan: true, apply: true, _: [] })).toBe(true)
+  })
+
+  it('defers to the handler for --json + --apply without --split', () => {
+    expect(check({ json: true, apply: true, _: [] })).toBe(true)
+  })
+
+  it('defers to the handler for --json + --apply + --strict-split without --split', () => {
+    expect(check({ json: true, apply: true, strictSplit: true, _: [] })).toBe(true)
+  })
+
+  it('defers to the handler for --json + --print-message + --split', () => {
+    expect(check({ json: true, printMessage: true, split: true, _: [] })).toBe(true)
+  })
+
+  // `--strict-split` alone isn't covered by handler.ts's json guard (it only
+  // checks split/plan/apply), so it must still be validated here even under
+  // `--json` — otherwise `coco commit --json --strict-split` would silently
+  // fall into the draft-only path and drop `--strict-split` (the exact bug
+  // #1889 was opened to fix).
+  it('still rejects --json + --strict-split without --split or --plan', () => {
+    expect(() => check({ json: true, strictSplit: true, _: [] })).toThrow(
+      '--strict-split requires --split or --plan.'
+    )
+  })
+
+  it('accepts --json alone', () => {
+    expect(check({ json: true, _: [] })).toBe(true)
+  })
+
+  it('accepts --json + --split (handler enforces the json/split conflict)', () => {
+    expect(check({ json: true, split: true, _: [] })).toBe(true)
+  })
 })

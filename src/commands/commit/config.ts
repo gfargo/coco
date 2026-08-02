@@ -168,6 +168,7 @@ export const builder = (yargs: Argv) => {
     .options(options)
     .check((argv) => {
       const a = argv as {
+        json?: boolean
         split?: boolean
         plan?: boolean
         apply?: boolean
@@ -177,6 +178,21 @@ export const builder = (yargs: Argv) => {
       }
       const positionalSplit = a._.includes('split')
       const splitMode = Boolean(a.split || a.plan || positionalSplit)
+
+      // handler.ts:58 already rejects `--json` combined with `--split`,
+      // `--plan`, or `--apply` — emitting a structured `emitJson({ error })`
+      // payload for machine consumers instead of exiting via yargs' plain-text
+      // `.fail()` handler. `.check()` runs during yargs parsing, strictly
+      // before the handler, so any of the rules below that only fire because
+      // one of those three flags is set must defer to that handler-level
+      // check instead of throwing here first. Rules that don't depend on
+      // split/plan/apply (e.g. `--strict-split` with none of them set) aren't
+      // covered by that handler guard, so they still validate here even
+      // under `--json`.
+      const jsonHandledByCommand = Boolean(a.json && (a.split || a.plan || a.apply))
+      if (jsonHandledByCommand) {
+        return true
+      }
 
       if (a.plan && a.apply) {
         throw new Error('--plan and --apply cannot be combined — --plan previews, --apply commits.')
