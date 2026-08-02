@@ -160,12 +160,23 @@ describe('renderCostReport', () => {
   }
 
   it('reports that recording is off when the ledger is empty and logging is disabled', () => {
+    // To reach the "Usage recording is off" branch we need COCO_USAGE_LOG='0'
+    // (booleanish → disables logging) AND records.length===0. With '0' the
+    // getUsageLogPath falls back to the default cache dir; redirect it via
+    // XDG_CACHE_HOME to the empty temp dir so readUsageRecords finds no file.
+    const prevXdg = process.env.XDG_CACHE_HOME
+    process.env.XDG_CACHE_HOME = dir
     process.env.COCO_USAGE_LOG = '0'
+    resetUsageLedgerState()
     const logger = createLogger()
     renderCostReport(fixedModelConfig(), logger, false)
 
     const lines = (logger.log as jest.Mock).mock.calls.map((c) => c[0]).join('\n')
     expect(lines).toContain('Usage recording is off')
+
+    // Restore
+    if (prevXdg === undefined) delete process.env.XDG_CACHE_HOME
+    else process.env.XDG_CACHE_HOME = prevXdg
   })
 
   it('sums estimated cost across priced calls and labels it with the pricing date', () => {
