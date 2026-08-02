@@ -297,7 +297,7 @@ export function formatIssueTriagePreview(
     // #OSS-1770 — the debounced hydration effect failed; show the
     // forge's message instead of a permanent "Loading…" placeholder.
     out.push(blank())
-    out.push(dim(`⚠ Failed to load details: ${error}`))
+    out.push(dim(`Failed to load details: ${error}`))
   } else if (typeof issue.comments === 'number' && issue.comments > 0) {
     // Pre-hydration affordance — tell the user the body / comments
     // section is coming, so a 250ms wait doesn't look like a bug.
@@ -381,7 +381,7 @@ export function formatPullRequestTriagePreview(
     // #OSS-1770 — the debounced hydration effect failed; show the
     // forge's message instead of a permanent "Loading…" placeholder.
     out.push(blank())
-    out.push(dim(`⚠ Failed to load details: ${error}`))
+    out.push(dim(`Failed to load details: ${error}`))
   } else {
     // Pre-hydration affordance — same as the issue preview.
     out.push(blank())
