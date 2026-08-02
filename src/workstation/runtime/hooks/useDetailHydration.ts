@@ -223,13 +223,29 @@ export function useDetailHydration(
       Math.min(state.selectedIssueIndex, Math.max(0, filteredIssueList.length - 1))
     ]
     if (!cursored) return
-    if (context.issueDetailByNumber?.has(cursored.number)) return
+    if (
+      context.issueDetailByNumber?.has(cursored.number) ||
+      context.issueDetailErrorByNumber?.has(cursored.number)
+    ) return
 
     const issuedAtDepth = runtimes.length - 1
     let active = true
     const timer = setTimeout(async () => {
       const result = await forge.getIssueDetail(cursored.number)
-      if (!active || !result.ok) return
+      if (!active) return
+      if (!result.ok) {
+        setContext(
+          (current) => ({
+            ...current,
+            issueDetailErrorByNumber: new Map(current.issueDetailErrorByNumber || []).set(
+              cursored.number,
+              result.message
+            ),
+          }),
+          issuedAtDepth,
+        )
+        return
+      }
       setContext(
         (current) => ({
           ...current,
@@ -252,6 +268,7 @@ export function useDetailHydration(
     state.selectedIssueIndex,
     filteredIssueList,
     context.issueDetailByNumber,
+    context.issueDetailErrorByNumber,
     setContext,
   ])
 
@@ -269,13 +286,28 @@ export function useDetailHydration(
       )
     ]
     if (!cursored) return
-    if (context.pullRequestDetailByNumber?.has(cursored.number)) return
+    if (
+      context.pullRequestDetailByNumber?.has(cursored.number) ||
+      context.pullRequestDetailErrorByNumber?.has(cursored.number)
+    ) return
 
     const issuedAtDepth = runtimes.length - 1
     let active = true
     const timer = setTimeout(async () => {
       const result = await forge.getPullRequestDetail(cursored.number)
-      if (!active || !result.ok) return
+      if (!active) return
+      if (!result.ok) {
+        setContext(
+          (current) => ({
+            ...current,
+            pullRequestDetailErrorByNumber: new Map(
+              current.pullRequestDetailErrorByNumber || []
+            ).set(cursored.number, result.message),
+          }),
+          issuedAtDepth,
+        )
+        return
+      }
       setContext(
         (current) => ({
           ...current,
@@ -301,6 +333,7 @@ export function useDetailHydration(
     state.selectedPullRequestTriageIndex,
     filteredPullRequestTriageList,
     context.pullRequestDetailByNumber,
+    context.pullRequestDetailErrorByNumber,
     setContext,
   ])
 

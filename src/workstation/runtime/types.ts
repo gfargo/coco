@@ -124,11 +124,27 @@ export type LogInkContext = {
    */
   issueDetailByNumber?: Map<number, IssueDetail>
   /**
+   * Per-issue detail *failure* cache keyed by issue number (OSS-1770).
+   * Set when `forge.getIssueDetail` resolves `{ ok: false, message }` so
+   * the triage preview pane can render the forge's message instead of a
+   * permanent "Loading…" placeholder, and so the hydration effect's
+   * cache-skip guard stops silently re-issuing the same failing fetch
+   * every time the row is re-cursored. Cleared by the mutation
+   * invalidation path so a resolved transient failure (e.g. rate limit)
+   * retries on the next hydration.
+   */
+  issueDetailErrorByNumber?: Map<number, string>
+  /**
    * Per-PR detail cache keyed by pull-request number (#882
    * inspector hydration). Mirrors `issueDetailByNumber` — fetched
    * via `gh pr view <#>` and cached per session.
    */
   pullRequestDetailByNumber?: Map<number, PullRequestDetail>
+  /**
+   * Per-PR detail *failure* cache keyed by pull-request number
+   * (OSS-1770). Mirrors `issueDetailErrorByNumber`.
+   */
+  pullRequestDetailErrorByNumber?: Map<number, string>
   reflog?: ReflogOverview
   /**
    * Remote overview (#0.71). Carries every configured remote's name +
