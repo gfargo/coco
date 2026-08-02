@@ -548,7 +548,9 @@ export function renderCommandPalette(
   // the cursor is near the end instead of running off the list.
   const chromeRows = 6 + (showingRecent ? 1 : 0)
   const baseListRows = bodyRows > 0 ? Math.max(4, bodyRows - chromeRows) : 14
-  const listRows = filtered.length > baseListRows ? Math.max(4, baseListRows - 1) : baseListRows
+  // A mid-list cursor can show both the "more above" and "more below" hints
+  // at once, so reserve 2 rows (not 1) whenever the list overflows.
+  const listRows = filtered.length > baseListRows ? Math.max(4, baseListRows - 2) : baseListRows
   const startIndex = clampListWindowStart(selectedIndex, filtered.length, listRows)
   const visible = filtered.slice(startIndex, startIndex + listRows)
 
@@ -640,7 +642,9 @@ export function renderThemePickerOverlay(
   // the old fixed window.
   const chromeRows = 6
   const baseListRows = bodyRows > 0 ? Math.max(4, bodyRows - chromeRows) : 14
-  const listRows = filtered.length > baseListRows ? Math.max(4, baseListRows - 1) : baseListRows
+  // A mid-list cursor can show both the "more above" and "more below" hints
+  // at once, so reserve 2 rows (not 1) whenever the list overflows.
+  const listRows = filtered.length > baseListRows ? Math.max(4, baseListRows - 2) : baseListRows
   const startIndex = clampListWindowStart(selectedIndex, filtered.length, listRows)
   const visible = filtered.slice(startIndex, startIndex + listRows)
 
