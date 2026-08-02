@@ -111,6 +111,19 @@ export async function generateChangelogResult(
     commandExit(1)
   }
 
+  if (argv.onlyDiff) {
+    const ignoredByOnlyDiff = [
+      config.range ? '--range' : null,
+      argv.tag ? '--tag' : null,
+      config.sinceLastTag ? '--since-last-tag' : null,
+    ].filter(Boolean)
+
+    if (ignoredByOnlyDiff.length > 0) {
+      logger.error(`--only-diff cannot be combined with ${ignoredByOnlyDiff.join(', ')}.`, { color: 'red' })
+      commandExit(1)
+    }
+  }
+
   if (config.service.authentication.type !== 'None' && !key) {
     handleMissingApiKey(logger, config, { command: 'changelog' })
   }

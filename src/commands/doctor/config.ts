@@ -33,5 +33,15 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(command))
+  return yargs
+    .options(options)
+    .check((argv) => {
+      const a = argv as { clear?: boolean; cost?: boolean; fix?: boolean }
+      const picked = [a.clear && '--clear', a.cost && '--cost', a.fix && '--fix'].filter(Boolean)
+      if (picked.length > 1) {
+        throw new Error(`Options ${picked.join(', ')} cannot be used together.`)
+      }
+      return true
+    })
+    .usage(getCommandUsageHeader(command))
 }
