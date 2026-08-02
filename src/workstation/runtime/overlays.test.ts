@@ -8,10 +8,18 @@
 import { createElement } from 'react'
 import * as React from 'react'
 import { createLogInkContextStatus } from '../chrome/context'
-import { createLogInkTheme } from '../chrome/theme'
+import { createLogInkTheme, getLogInkThemePresets } from '../chrome/theme'
 import { createLogInkState } from '../../workstation/runtime/inkViewModel'
+import { getLogInkPaletteCommands } from './inkKeymap'
 import { renderDetailPanel } from './detailPanel'
-import { renderChoicePanel, renderConfirmationPanel, renderHelpPanel, renderSplitPlanOverlay } from './overlays'
+import {
+  renderChoicePanel,
+  renderCommandPalette,
+  renderConfirmationPanel,
+  renderHelpPanel,
+  renderSplitPlanOverlay,
+  renderThemePickerOverlay,
+} from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
 type StubProps = Record<string, unknown>
@@ -449,5 +457,47 @@ describe('help overlay filter line cell-truncation (#1431)', () => {
     const text = flattenText(renderHelpPanel(createElement, components, state, width, theme, false))
     expect(text).toContain('No bindings match')
     expect(text).not.toContain(longFilter)
+  })
+})
+
+describe('command palette / theme picker row budget (#1861)', () => {
+  const components: LogInkComponents = { Box, Text }
+  // Documented 80x24 floor: bodyRows = Math.max(8, 24 - 5).
+  const bodyRows = 19
+
+  // Every top-level child of the returned Box is one rendered row; the
+  // overlay's own border adds 2 more that aren't part of this array.
+  function countRows(element: React.ReactElement): number {
+    const children = (element.props as { children?: unknown }).children
+    return Array.isArray(children) ? children.length : children == null ? 0 : 1
+  }
+
+  it('keeps the command palette within bodyRows with both scroll hints showing', () => {
+    const all = getLogInkPaletteCommands()
+    // A cursor in the middle of the full (unfiltered) list shows both the
+    // "more above" and "more below" hints at once — the exact repro the
+    // ticket describes (arrow-scrolling a long filtered list).
+    const state = {
+      ...createLogInkState([]),
+      paletteFilter: '',
+      paletteRecent: [],
+      paletteSelectedIndex: Math.floor(all.length / 2),
+    }
+    const element = renderCommandPalette(createElement, components, state, 80, theme, false, bodyRows)
+    const text = flattenText(element)
+    expect(text).toContain('more above')
+    expect(text).toContain('more below')
+    expect(countRows(element) + 2).toBeLessThanOrEqual(bodyRows)
+  })
+
+  it('keeps the theme picker within bodyRows with both scroll hints showing', () => {
+    const presetCount = getLogInkThemePresets().length
+    const element = renderThemePickerOverlay(
+      createElement, components, '', Math.floor(presetCount / 2), 80, theme, false, bodyRows
+    )
+    const text = flattenText(element)
+    expect(text).toContain('more above')
+    expect(text).toContain('more below')
+    expect(countRows(element) + 2).toBeLessThanOrEqual(bodyRows)
   })
 })

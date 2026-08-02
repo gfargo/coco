@@ -1009,7 +1009,8 @@ export function renderWorkspaceApp(deps: RenderWorkspaceAppDeps): ReactTypes.Rea
         deps.state.themePickerIndex,
         bodyWidth,
         deps.theme,
-        true
+        true,
+        computeBodyHeight(deps)
       ),
       renderFooter(deps)
     )
