@@ -25,6 +25,7 @@ export type DynamicModelTask =
   | 'recap'
   | 'repair'
   | 'largeDiff'
+  | 'blameExplain'
 export type DynamicModelPreference = 'cost' | 'balanced' | 'quality'
 /**
  * Reasoning/thinking effort for providers with a graded reasoning dial.

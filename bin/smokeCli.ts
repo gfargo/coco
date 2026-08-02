@@ -441,6 +441,11 @@ async function main(): Promise<void> {
     })
     runHelpCheck({
       command: packagedBinPath(prefix),
+      args: ['blame', '--help'],
+      label: 'packaged blame command help',
+    })
+    runHelpCheck({
+      command: packagedBinPath(prefix),
       args: ['ui', '--help'],
       label: 'packaged ui command help',
     })
@@ -483,6 +488,16 @@ async function main(): Promise<void> {
     })
     assertOutputIncludes('packaged log command', logOutput, 'feat: smoke log command')
     console.log('✓ packaged log command')
+
+    const blameOutput = runCheck({
+      command: packagedBinPath(prefix),
+      args: ['blame', 'README.md'],
+      cwd: smokeRepo,
+      label: 'packaged blame command',
+      env: { NO_COLOR: '1' },
+    })
+    assertOutputIncludes('packaged blame command', blameOutput, 'Coco Smoke')
+    console.log('✓ packaged blame command')
 
     const interactiveLogOutput = runCheck({
       command: packagedBinPath(prefix),

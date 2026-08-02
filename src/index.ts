@@ -2,6 +2,7 @@
 import yargs from 'yargs'
 import agent from './commands/agent'
 import amend from './commands/amend'
+import blame from './commands/blame'
 import cache from './commands/cache'
 import changelog from './commands/changelog'
 import commit from './commands/commit'
@@ -23,6 +24,7 @@ import workspace from './commands/workspace'
 
 import { AgentCommandOptions } from './commands/agent/config'
 import { AmendOptions } from './commands/amend/config'
+import { BlameOptions } from './commands/blame/config'
 import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
@@ -192,6 +194,13 @@ y.command<LogOptions>(
   log.handler
 )
 
+y.command<BlameOptions>(
+  blame.command,
+  blame.desc,
+  blame.builder,
+  blame.handler
+)
+
 y.command<LintOptions>(
   lint.command,
   lint.desc,
@@ -285,6 +294,7 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(init.command), desc: init.desc },
   { name: firstCommandToken(doctor.command), desc: doctor.desc },
   { name: firstCommandToken(log.command), desc: log.desc },
+  { name: firstCommandToken(blame.command), desc: blame.desc },
   { name: firstCommandToken(lint.command), desc: lint.desc },
   { name: firstCommandToken(ui.command), desc: ui.desc },
   { name: firstCommandToken(watch.command), desc: watch.desc },
@@ -387,6 +397,7 @@ main().catch((error) => {
 
 export {
   agent,
+  blame,
   cache,
   changelog,
   commit,

@@ -606,6 +606,7 @@ describe('checkDynamicRouting', () => {
             recap: 'deepseek-chat',
             repair: 'deepseek-chat',
             largeDiff: 'deepseek-chat',
+            blameExplain: 'deepseek-chat',
           },
         },
       } as unknown as Config,
