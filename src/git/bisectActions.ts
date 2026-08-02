@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { rejectFlagLike } from './forgeArgGuards'
 
 /**
  * Thin wrappers around `git bisect <verb>` for the TUI's in-bisect
@@ -19,24 +20,40 @@ export async function bisectStart(
   badRef: string,
   goodRef: string
 ): Promise<string> {
+  const badErr = rejectFlagLike(badRef, `Bad ref '${badRef}'`)
+  if (badErr) throw new Error(badErr)
+  const goodErr = rejectFlagLike(goodRef, `Good ref '${goodRef}'`)
+  if (goodErr) throw new Error(goodErr)
   return git.raw(['bisect', 'start', badRef, goodRef])
 }
 
 export async function bisectGood(git: SimpleGit, ref?: string): Promise<string> {
   const args = ['bisect', 'good']
-  if (ref) args.push(ref)
+  if (ref) {
+    const err = rejectFlagLike(ref, `Good ref '${ref}'`)
+    if (err) throw new Error(err)
+    args.push(ref)
+  }
   return git.raw(args)
 }
 
 export async function bisectBad(git: SimpleGit, ref?: string): Promise<string> {
   const args = ['bisect', 'bad']
-  if (ref) args.push(ref)
+  if (ref) {
+    const err = rejectFlagLike(ref, `Bad ref '${ref}'`)
+    if (err) throw new Error(err)
+    args.push(ref)
+  }
   return git.raw(args)
 }
 
 export async function bisectSkip(git: SimpleGit, ref?: string): Promise<string> {
   const args = ['bisect', 'skip']
-  if (ref) args.push(ref)
+  if (ref) {
+    const err = rejectFlagLike(ref, `Skip ref '${ref}'`)
+    if (err) throw new Error(err)
+    args.push(ref)
+  }
   return git.raw(args)
 }
 

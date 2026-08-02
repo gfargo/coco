@@ -17,6 +17,24 @@ describe('bisect action wrappers', () => {
     expect(raw).toHaveBeenCalledWith(['bisect', 'start', 'main', 'v1.0'])
   })
 
+  it('bisectStart rejects a flag-like bad ref', async () => {
+    const raw = jest.fn()
+    const git = { raw } as unknown as SimpleGit
+    await expect(bisectStart(git, '--term-new', 'v1.0')).rejects.toThrow(
+      "Bad ref '--term-new' cannot start with '-'."
+    )
+    expect(raw).not.toHaveBeenCalled()
+  })
+
+  it('bisectStart rejects a flag-like good ref', async () => {
+    const raw = jest.fn()
+    const git = { raw } as unknown as SimpleGit
+    await expect(bisectStart(git, 'main', '--no-checkout')).rejects.toThrow(
+      "Good ref '--no-checkout' cannot start with '-'."
+    )
+    expect(raw).not.toHaveBeenCalled()
+  })
+
   it('bisectGood / bisectBad / bisectSkip omit the ref when not provided', async () => {
     const raw = jest.fn().mockResolvedValue('')
     const git = { raw } as unknown as SimpleGit
@@ -41,6 +59,33 @@ describe('bisect action wrappers', () => {
       [['bisect', 'bad', 'def5678']],
       [['bisect', 'skip', '9012abcd']],
     ])
+  })
+
+  it('bisectGood rejects a flag-like ref', async () => {
+    const raw = jest.fn()
+    const git = { raw } as unknown as SimpleGit
+    await expect(bisectGood(git, '--term-old')).rejects.toThrow(
+      "Good ref '--term-old' cannot start with '-'."
+    )
+    expect(raw).not.toHaveBeenCalled()
+  })
+
+  it('bisectBad rejects a flag-like ref', async () => {
+    const raw = jest.fn()
+    const git = { raw } as unknown as SimpleGit
+    await expect(bisectBad(git, '--term-new')).rejects.toThrow(
+      "Bad ref '--term-new' cannot start with '-'."
+    )
+    expect(raw).not.toHaveBeenCalled()
+  })
+
+  it('bisectSkip rejects a flag-like ref', async () => {
+    const raw = jest.fn()
+    const git = { raw } as unknown as SimpleGit
+    await expect(bisectSkip(git, '-x')).rejects.toThrow(
+      "Skip ref '-x' cannot start with '-'."
+    )
+    expect(raw).not.toHaveBeenCalled()
   })
 
   it('bisectReset invokes `git bisect reset`', async () => {
