@@ -8,6 +8,7 @@ import { createLogInkTheme } from '../../chrome/theme'
 import { createLogInkContextStatus } from '../../chrome/context'
 import type { BlameLine, BlameResult } from '../../../git/blameData'
 import type { LogInkComponents } from '../../runtime/types'
+import { renderToLines } from '../../runtime/testSupport/renderToLines'
 import { renderBlameSurface, type BlameSurfaceData } from './index'
 
 type StubProps = Record<string, unknown>
@@ -68,6 +69,21 @@ describe('renderBlameSurface', () => {
     const failed: BlameResult = { ok: false, path: 'logo.png', message: 'binary file' }
     const tree = render(makeState({ blamePath: 'logo.png' }), { blame: failed, loading: false })
     expect(tree).toBeDefined()
+  })
+
+  it('surfaces an uncached failure instead of spinning forever (#OSS-1769)', () => {
+    // A failed hydration is never written into `blameByPath` (so a retry is
+    // possible), so `blame` stays undefined here — the surface must still
+    // stop showing the loading placeholder and render the failure message
+    // once `data.failure` is set and the in-flight flag has cleared.
+    const tree = render(makeState(), {
+      blame: undefined,
+      loading: false,
+      failure: 'fatal: Unable to create index.lock',
+    })
+    const text = renderToLines(tree, Text, Box).join('\n')
+    expect(text).not.toContain('Loading blame')
+    expect(text).toContain('Unable to create index.lock')
   })
 
   it('renders gutter + content rows for populated blame', () => {

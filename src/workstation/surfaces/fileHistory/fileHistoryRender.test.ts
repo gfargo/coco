@@ -90,6 +90,21 @@ describe('renderFileHistorySurface', () => {
     expect(tree).toBeDefined()
   })
 
+  it('surfaces an uncached failure instead of spinning forever (#OSS-1769)', () => {
+    // A failed hydration is never written into `fileHistoryByPath` (so a
+    // retry is possible), so `history` stays undefined here — the surface
+    // must still stop showing the loading placeholder and render the
+    // failure message once `data.failure` is set.
+    const tree = render(makeState(), {
+      history: undefined,
+      loading: false,
+      failure: 'fatal: Unable to create index.lock',
+    })
+    const text = collectText(tree)
+    expect(text).not.toContain('Loading history')
+    expect(text).toContain('Unable to create index.lock')
+  })
+
   it('renders commit rows for populated history', () => {
     const history: FileHistoryResult = {
       ok: true,

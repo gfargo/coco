@@ -48,6 +48,14 @@ export type FileHistorySurfaceData = {
   history: FileHistoryResult | undefined
   /** True while the on-demand hydration for this path is in flight. */
   loading: boolean
+  /**
+   * Message from the most recent failed hydration attempt for this path
+   * (#OSS-1769), or undefined. Failures are never written into
+   * `fileHistoryByPath` (so a retry is possible), so this is how the
+   * surface learns a fetch resolved to an error instead of staying
+   * loading forever.
+   */
+  failure?: string
 }
 
 export function renderFileHistorySurface(
@@ -59,10 +67,14 @@ export function renderFileHistorySurface(
   const focused = state.focus === 'commits'
   const path = state.fileHistoryPath
   const history = data.history
-  const loading = data.loading || (!history && Boolean(path))
+  // A resolved failure (`data.failure`) ends the cold-cache loading window
+  // even though nothing landed in `fileHistoryByPath` — a failed fetch is
+  // deliberately never cached, so without this check the surface would
+  // spin forever on any git failure (#OSS-1769).
+  const loading = data.loading || (!history && !data.failure && Boolean(path))
 
   const commits = history && history.ok ? history.commits : []
-  const failureMessage = history && !history.ok ? history.message : undefined
+  const failureMessage = (history && !history.ok ? history.message : undefined) ?? data.failure
   const truncated = history && history.ok ? history.truncated : false
 
   // Row budget: border(2) + title(1) + path(1) + both scroll indicators

@@ -41,6 +41,13 @@ export type BlameSurfaceData = {
   blame: BlameResult | undefined
   /** True while the on-demand hydration for this path is in flight. */
   loading: boolean
+  /**
+   * Message from the most recent failed hydration attempt for this path
+   * (#OSS-1769), or undefined. Failures are never written into
+   * `blameByPath` (so a retry is possible), so this is how the surface
+   * learns a fetch resolved to an error instead of staying loading forever.
+   */
+  failure?: string
 }
 
 export function renderBlameSurface(
@@ -53,11 +60,15 @@ export function renderBlameSurface(
   const path = state.blamePath
   const blame = data.blame
   // Loading covers both the explicit in-flight flag and the cold-cache
-  // window before the debounced fetch resolves into `blameByPath`.
-  const loading = data.loading || (!blame && Boolean(path))
+  // window before the debounced fetch resolves into `blameByPath`. A
+  // resolved failure (`data.failure`) ends the cold-cache window even
+  // though nothing landed in `blameByPath` — without this check the
+  // surface would spin forever on any git failure (#OSS-1769), since a
+  // failed fetch is deliberately never cached.
+  const loading = data.loading || (!blame && !data.failure && Boolean(path))
 
   const lines = blame && blame.ok ? blame.lines : []
-  const failureMessage = blame && !blame.ok ? blame.message : undefined
+  const failureMessage = (blame && !blame.ok ? blame.message : undefined) ?? data.failure
 
   // Row budget: border(2) + title(1) + path(1) + both scroll indicators
   // (2, worst case) = 6 rows of chrome the list itself doesn't occupy.
