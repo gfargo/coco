@@ -247,6 +247,7 @@ export const handler: CommandHandler<RecapArgv> = async (argv, logger) => {
           timeframe,
           language_context: getLanguageContext(argv.language || config.language, { taskDescription: 'summary' }),
           additional_context: '',
+          conventions_context: '',
         }
         const budgetedPrompt = await enforcePromptBudget({
           prompt,

@@ -122,29 +122,34 @@ function makeContext(): AgentOperationContext {
   }
 }
 
+// Shared infrastructure setup — mock return values that differ per operation
+// are overridden in the individual describe blocks' beforeEach.
+beforeEach(() => {
+  jest.clearAllMocks()
+  mockResolveChangeSource.mockResolvedValue({
+    text: 'diff content',
+    meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
+  })
+  mockLoadConfig.mockReturnValue({
+    service: {
+      tokenLimit: 100000,
+      authentication: { type: 'None' },
+      streaming: { enabled: false },
+      provider: 'test-provider',
+    },
+    prompt: undefined,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } as any)
+  mockGetApiKeyForModel.mockReturnValue('test-key')
+  mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'test-provider' } as never)
+  mockResolveDynamicService.mockReturnValue({ model: 'test-model' } as never)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  mockGetLlm.mockResolvedValue({} as any)
+  mockGetTokenCounterForProvider.mockResolvedValue(((text: string) => text.length) as never)
+})
+
 describe('generateAgentReview — additionalContext forwarding', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
-    mockResolveChangeSource.mockResolvedValue({
-      text: 'diff content',
-      meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
-    })
-    mockLoadConfig.mockReturnValue({
-      service: {
-        tokenLimit: 100000,
-        authentication: { type: 'None' },
-        streaming: { enabled: false },
-        provider: 'test-provider',
-      },
-      prompt: undefined,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any)
-    mockGetApiKeyForModel.mockReturnValue('test-key')
-    mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'test-provider' } as never)
-    mockResolveDynamicService.mockReturnValue({ model: 'test-model' } as never)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockGetLlm.mockResolvedValue({} as any)
-    mockGetTokenCounterForProvider.mockResolvedValue(((text: string) => text.length) as never)
     mockExecuteChain.mockResolvedValue([{
       title: 'finding',
       summary: 'summary',
@@ -186,27 +191,6 @@ describe('generateAgentReview — additionalContext forwarding', () => {
 
 describe('generateAgentRecap — additionalContext forwarding', () => {
   beforeEach(() => {
-    jest.clearAllMocks()
-    mockResolveChangeSource.mockResolvedValue({
-      text: 'diff content',
-      meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
-    })
-    mockLoadConfig.mockReturnValue({
-      service: {
-        tokenLimit: 100000,
-        authentication: { type: 'None' },
-        streaming: { enabled: false },
-        provider: 'test-provider',
-      },
-      prompt: undefined,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any)
-    mockGetApiKeyForModel.mockReturnValue('test-key')
-    mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'test-provider' } as never)
-    mockResolveDynamicService.mockReturnValue({ model: 'test-model' } as never)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    mockGetLlm.mockResolvedValue({} as any)
-    mockGetTokenCounterForProvider.mockResolvedValue(((text: string) => text.length) as never)
     mockExecuteChain.mockResolvedValue({ title: 'Recap title', summary: 'Recap summary.' } as never)
     mockExecuteChainStreaming.mockResolvedValue({ title: 'Recap title', summary: 'Recap summary.' } as never)
   })
