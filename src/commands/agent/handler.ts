@@ -15,11 +15,15 @@ import {
     createAgentOperationContext,
     createAgentOutputSchema,
     createCondenseDiffInputJsonSchema,
+    createRepoContextInputJsonSchema,
     RecapDataSchema,
+    RepoContextDataSchema,
+    RepoContextRequestSchema,
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
     runCondenseDiff,
+    runRepoContext,
     toAgentOperationError
 } from '../../operations/agent'
 import { armNonInteractiveUsageTelemetry } from '../utils/usageTelemetry'
@@ -56,15 +60,22 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, RecapDataSchema)
     case 'condense-diff':
       return createAgentOutputSchema(operation, CondenseDiffDataSchema)
+    case 'repo-context':
+      return createAgentOutputSchema(operation, RepoContextDataSchema)
   }
 }
 
 function emitSchema(operation: AgentOperation): void {
   const isCondense = operation === 'condense-diff'
+  const isRepoContext = operation === 'repo-context'
   emit({
     version: AGENT_PROTOCOL_VERSION,
     operation,
-    input: isCondense ? createCondenseDiffInputJsonSchema() : createAgentInputJsonSchema(),
+    input: isCondense
+      ? createCondenseDiffInputJsonSchema()
+      : isRepoContext
+      ? createRepoContextInputJsonSchema()
+      : createAgentInputJsonSchema(),
     output: z.toJSONSchema(outputSchemaFor(operation)),
   })
 }
@@ -95,6 +106,20 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
         surface: 'agent-cli',
       })
       emit(await runCondenseDiff(input, context))
+    } else if (operation === 'repo-context') {
+      // repo-context uses its own request schema — parse and dispatch separately.
+      // No LLM call, no API key required. No trustRepositoryConfig opt-in needed
+      // (this path only reads git state, never repo-defined prompts or commitlint).
+      const input = RepoContextRequestSchema.parse(raw)
+      const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+      process.chdir(repoRoot)
+      await armNonInteractiveUsageTelemetry(argv, repoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot,
+        signal: controller.signal,
+        surface: 'agent-cli',
+      })
+      emit(await runRepoContext(input, context))
     } else {
       const input = AgentTaskInputSchema.parse(raw)
       const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
