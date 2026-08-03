@@ -159,7 +159,7 @@ describe('TaskList — keyboard shortcuts', () => {
 
     expect(mockExecFile).toHaveBeenCalledWith(
       'code',
-      ['src/open-me.ts'],
+      [expect.stringContaining('src/open-me.ts')],
       expect.any(Function)
     )
 
@@ -179,7 +179,7 @@ describe('TaskList — keyboard shortcuts', () => {
 
     expect(mockExecFile).toHaveBeenCalledWith(
       'code',
-      ['-w', 'src/open-me.ts'],
+      ['-w', expect.stringContaining('src/open-me.ts')],
       expect.any(Function)
     )
 
@@ -236,7 +236,8 @@ describe('TaskList — keyboard shortcuts', () => {
 
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 2' }),
-      config
+      config,
+      expect.any(String)
     )
   })
 
@@ -255,7 +256,8 @@ describe('TaskList — keyboard shortcuts', () => {
 
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 1' }),
-      config
+      config,
+      expect.any(String)
     )
   })
 
@@ -334,7 +336,8 @@ describe('TaskList — autoFix() on successful runAutoFix', () => {
 
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Fix me' }),
-      config
+      config,
+      expect.any(String)
     )
   })
 
@@ -353,7 +356,8 @@ describe('TaskList — autoFix() on successful runAutoFix', () => {
     expect(mockRunAutoFix).toHaveBeenCalledTimes(1)
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 1' }),
-      config
+      config,
+      expect.any(String)
     )
   })
 })
@@ -391,8 +395,8 @@ describe('TaskList — autoFix() when runAutoFix throws', () => {
     await startPromise.catch(() => undefined)
 
     expect(mockRunAutoFix).toHaveBeenCalledTimes(2)
-    expect(mockRunAutoFix).toHaveBeenNthCalledWith(1, expect.objectContaining({ title: 'Item 1' }), config)
-    expect(mockRunAutoFix).toHaveBeenNthCalledWith(2, expect.objectContaining({ title: 'Item 1' }), config)
+    expect(mockRunAutoFix).toHaveBeenNthCalledWith(1, expect.objectContaining({ title: 'Item 1' }), config, expect.any(String))
+    expect(mockRunAutoFix).toHaveBeenNthCalledWith(2, expect.objectContaining({ title: 'Item 1' }), config, expect.any(String))
   })
 })
 
