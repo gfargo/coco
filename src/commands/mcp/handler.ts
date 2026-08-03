@@ -7,9 +7,11 @@ export async function handler(argv: McpArgv): Promise<void> {
   let repoRoot: string | undefined
   if (argv.repo) {
     repoRoot = await resolveAgentRepoRoot(argv.repo)
-    // Bind config discovery to one repository for the lifetime of this stdio
-    // server. Tool calls may not switch roots, avoiding process-wide cwd races.
-    process.chdir(repoRoot)
+    // Bound mode no longer needs a `chdir` here: config loading (loadConfig
+    // → loadProjectJsonConfig/loadGitignore/loadIgnore) and telemetry arming
+    // both take an explicit root, so binding to one repository for the
+    // lifetime of this stdio server no longer requires mutating process-wide
+    // cwd (which used to race against overlapping tool calls).
     await armNonInteractiveUsageTelemetry(argv, repoRoot)
   }
   // When --repo is omitted, the server starts in deferred-binding mode:

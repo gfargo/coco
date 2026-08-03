@@ -19,7 +19,7 @@ export async function armNonInteractiveUsageTelemetry<T extends object>(
   repoRoot: string,
 ): Promise<void> {
   try {
-    const config = loadConfig<Record<string, never>, T>(argv)
+    const config = loadConfig<Record<string, never>, T>(argv, { cwd: repoRoot })
     setUsageConfigPreference(config.telemetry?.usage)
     setUsageRepoTag(
       isUsageLoggingEnabled()

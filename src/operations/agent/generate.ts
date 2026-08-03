@@ -126,7 +126,10 @@ async function createRuntime(
   options: AgentOptions,
   context: AgentOperationContext,
 ): Promise<GenerationRuntime> {
-  const config = loadConfig<Record<string, unknown>, Record<string, unknown>>(baseArgv(options))
+  const config = loadConfig<Record<string, unknown>, Record<string, unknown>>(
+    baseArgv(options),
+    { cwd: context.repoRoot },
+  )
   const key = getApiKeyForModel(config)
   if (config.service.authentication.type !== 'None' && !key) {
     throw new AgentOperationError('AUTHENTICATION_REQUIRED', `No API key configured for the ${task} service.`)
@@ -274,6 +277,7 @@ export async function generateAgentCommitDraft(
   const result = await generateCommitDraft({
     git: context.git,
     argv,
+    cwd: context.repoRoot,
     logger: context.logger,
     signal: context.signal,
     preparedSummary: changeContext,

@@ -29,6 +29,12 @@ const FAKE_REPO_ROOT = '/fake/repo/root'
 // silently mismatch (and existsSync's mock returns false for everything)
 // on Windows CI.
 const PROJECT_CONFIG_PATH = path.join(FAKE_REPO_ROOT, '.coco.config.json')
+// loadGitignore/loadIgnore resolve against an explicit cwd (defaulting to
+// process.cwd()) via path.join rather than a bare relative filename — build
+// the expected paths the same way, or the mocked existsSync/readFileSync
+// below silently never match.
+const GITIGNORE_PATH = path.join(process.cwd(), '.gitignore')
+const IGNORE_PATH = path.join(process.cwd(), '.ignore')
 
 describe('loadConfig', () => {
   beforeEach(() => {
@@ -47,7 +53,7 @@ describe('loadConfig', () => {
   it('should correctly combine all config sources', () => {
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
       return filepath
-        ? ['.gitignore', '.ignore', 'config.json', '.gitconfig', PROJECT_CONFIG_PATH].includes(
+        ? [GITIGNORE_PATH, IGNORE_PATH, 'config.json', '.gitconfig', PROJECT_CONFIG_PATH].includes(
             filepath.toString()
           )
         : false
@@ -55,9 +61,9 @@ describe('loadConfig', () => {
 
     mockFs.readFileSync.mockImplementation((filepath) => {
       switch (filepath.toString()) {
-        case '.gitignore':
+        case GITIGNORE_PATH:
           return 'gitignorefile.txt\n'
-        case '.ignore':
+        case IGNORE_PATH:
           return 'ignorefile.txt\n'
         case 'config.json':
           return JSON.stringify({ openAIApiKey: 'xdgConfigKey' })
@@ -278,10 +284,10 @@ describe('loadConfig', () => {
 
   it('does not mutate the shared DEFAULT_CONFIG singleton across calls (#1695)', () => {
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
-      return filepath ? ['.gitignore'].includes(filepath.toString()) : false
+      return filepath ? [GITIGNORE_PATH].includes(filepath.toString()) : false
     })
     mockFs.readFileSync.mockImplementation((filepath) => {
-      if (filepath.toString() === '.gitignore') {
+      if (filepath.toString() === GITIGNORE_PATH) {
         return 'docs/\n*.md\n'
       }
       return ''
@@ -298,10 +304,10 @@ describe('loadConfig', () => {
 
   it('does not leak gitignore patterns from one repo into the next call (#1695)', () => {
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
-      return filepath ? ['.gitignore'].includes(filepath.toString()) : false
+      return filepath ? [GITIGNORE_PATH].includes(filepath.toString()) : false
     })
     mockFs.readFileSync.mockImplementation((filepath) => {
-      if (filepath.toString() === '.gitignore') {
+      if (filepath.toString() === GITIGNORE_PATH) {
         return 'docs/\n'
       }
       return ''
@@ -343,10 +349,10 @@ describe('loadConfig', () => {
 
   it('keeps gitignore-derived entries (e.g. .env) present even when argv narrows ignoredFiles (#1921)', () => {
     mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
-      return filepath ? ['.gitignore'].includes(filepath.toString()) : false
+      return filepath ? [GITIGNORE_PATH].includes(filepath.toString()) : false
     })
     mockFs.readFileSync.mockImplementation((filepath) => {
-      if (filepath.toString() === '.gitignore') {
+      if (filepath.toString() === GITIGNORE_PATH) {
         return '.env\n'
       }
       return ''
@@ -383,5 +389,83 @@ describe('loadConfig', () => {
 
     expect(config).not.toHaveProperty('_')
     expect(config).not.toHaveProperty('$0')
+  })
+
+  it('resolves project config and .gitignore/.ignore against an explicit opts.cwd instead of process.cwd() (deferred MCP binding)', () => {
+    // Repro for the MCP deferred-binding bug: a stdio server started without
+    // `--repo` never chdirs, so process.cwd() is the editor's spawn
+    // directory (often `/`), not the resolved target repository. Every
+    // config source that only ever looked at process.cwd() silently
+    // ignored the target repo's .coco.json / .gitignore / .ignore. Callers
+    // that resolve a repo root without mutating cwd (createRuntime,
+    // generateCommitDraft) must be able to pass that root through
+    // explicitly and have it actually honored.
+    const otherRepoRoot = '/some/other/repo'
+    const otherProjectConfigPath = path.join(otherRepoRoot, '.coco.json')
+    const otherGitignorePath = path.join(otherRepoRoot, '.gitignore')
+    const otherIgnorePath = path.join(otherRepoRoot, '.ignore')
+    mockResolveGitRepoRoot.mockReturnValue(otherRepoRoot)
+
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath
+        ? [otherProjectConfigPath, otherGitignorePath, otherIgnorePath].includes(filepath.toString())
+        : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      switch (filepath.toString()) {
+        case otherProjectConfigPath:
+          return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama', 'other-repo-model') })
+        case otherGitignorePath:
+          return 'other-repo-secret.txt\n'
+        case otherIgnorePath:
+          return 'other-repo-ignore.txt\n'
+        default:
+          return ''
+      }
+    })
+
+    const config = loadConfig<BaseCommandOptions>({} as BaseArgvOptions, { cwd: otherRepoRoot })
+
+    expect(mockResolveGitRepoRoot).toHaveBeenCalledWith(otherRepoRoot)
+    expect(config.service.provider).toBe('ollama')
+    expect(config.service.model).toBe('other-repo-model')
+    expect(config.ignoredFiles).toContain('other-repo-secret.txt')
+    expect(config.ignoredFiles).toContain('other-repo-ignore.txt')
+  })
+
+  it('does not leak one repo\'s config into a second call resolved against a different cwd', () => {
+    // Two consecutive tool calls against two different repositories must
+    // each get their own repository's config; neither should leak into
+    // the other, even though neither call ever chdirs.
+    const repoA = '/repo/a'
+    const repoAProjectConfig = path.join(repoA, '.coco.json')
+    const repoB = '/repo/b'
+    const repoBProjectConfig = path.join(repoB, '.coco.json')
+
+    mockResolveGitRepoRoot.mockReturnValueOnce(repoA)
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [repoAProjectConfig].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === repoAProjectConfig) {
+        return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama', 'repo-a-model') })
+      }
+      return ''
+    })
+    const configA = loadConfig<BaseCommandOptions>({} as BaseArgvOptions, { cwd: repoA })
+    expect(configA.service.model).toBe('repo-a-model')
+
+    mockResolveGitRepoRoot.mockReturnValueOnce(repoB)
+    mockFs.existsSync.mockImplementation((filepath: fs.PathLike | undefined) => {
+      return filepath ? [repoBProjectConfig].includes(filepath.toString()) : false
+    })
+    mockFs.readFileSync.mockImplementation((filepath) => {
+      if (filepath.toString() === repoBProjectConfig) {
+        return JSON.stringify({ service: getDefaultServiceConfigFromAlias('ollama', 'repo-b-model') })
+      }
+      return ''
+    })
+    const configB = loadConfig<BaseCommandOptions>({} as BaseArgvOptions, { cwd: repoB })
+    expect(configB.service.model).toBe('repo-b-model')
   })
 })

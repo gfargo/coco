@@ -53,9 +53,18 @@ export function getConfigSources(): ConfigSourceInfo[] {
  * \* 7. .ignore
  * \* 8. Default config
  *
+ * @param argv Command-line/agent arguments, merged over the loaded config.
+ * @param opts.cwd Repository root to resolve cwd-relative sources (project
+ *   config, `.gitignore`/`.ignore`) against. Defaults to `process.cwd()` —
+ *   callers that already `chdir`'d (interactive CLI commands) can omit it;
+ *   callers that resolve a repo root without mutating cwd (e.g. the MCP
+ *   server's deferred-binding mode) must pass it explicitly.
  * @returns {Config} application config
  **/
-export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} as ArgvType) {
+export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(
+  argv = {} as ArgvType,
+  opts?: { cwd?: string }
+) {
   const sources: ConfigSourceInfo[] = [{ source: 'default' }]
 
   // Default config (copy — never mutate the shared DEFAULT_CONFIG singleton)
@@ -65,8 +74,8 @@ export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} 
     ignoredExtensions: [...DEFAULT_IGNORED_EXTENSIONS],
   }
 
-  config = loadGitignore(config)
-  config = loadIgnore(config)
+  config = loadGitignore(config, opts?.cwd)
+  config = loadIgnore(config, opts?.cwd)
 
   const { config: xdgConfig, path: xdgPath } = loadXDGConfig(config, { returnSource: true })
   config = xdgConfig
@@ -76,7 +85,10 @@ export function loadConfig<ConfigType, ArgvType = BaseCommandOptions>(argv = {} 
   config = gitConfig
   if (gitPath) sources.push({ source: 'git', path: gitPath })
 
-  const { config: projectConfig, path: projectPath } = loadProjectJsonConfig(config, { returnSource: true })
+  const { config: projectConfig, path: projectPath } = loadProjectJsonConfig(config, {
+    returnSource: true,
+    cwd: opts?.cwd,
+  })
   config = projectConfig
   if (projectPath) sources.push({ source: 'project', path: projectPath })
 
