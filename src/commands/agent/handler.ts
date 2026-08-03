@@ -15,6 +15,7 @@ import {
     createAgentOperationContext,
     createAgentOutputSchema,
     createCondenseDiffInputJsonSchema,
+    describeRepoResolutionFailure,
     RecapDataSchema,
     requiresRepository,
     resolveAgentDirectoryRoot,
@@ -111,7 +112,7 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
           if (error instanceof AgentOperationError && error.code === 'INVALID_REPOSITORY' && operation === 'commit-draft') {
             throw new AgentOperationError(
               'INVALID_REPOSITORY',
-              `commit-draft requires a git repository: it reads branch context and recent commit history even when a prepared summary is supplied. ${error.message}`,
+              `commit-draft requires a git repository: it reads branch context and recent commit history even when a prepared summary is supplied (${describeRepoResolutionFailure(error)}).`,
               false,
             )
           }

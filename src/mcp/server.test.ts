@@ -314,6 +314,56 @@ describe('createCocoMcpServer', () => {
     )
   })
 
+  it('emits a commit-draft-specific INVALID_REPOSITORY message when no repository resolves', async () => {
+    const { AgentOperationError } = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
+    mockResolveAgentRepoRoot.mockRejectedValueOnce(
+      new AgentOperationError('INVALID_REPOSITORY', 'Not a git repository: /tmp/notgit'),
+    )
+    createServer()
+
+    const result = await tool('coco_commit_draft').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'commit-draft',
+        error: {
+          code: 'INVALID_REPOSITORY',
+          message: expect.stringContaining('commit-draft requires a git repository'),
+          retryable: false,
+        },
+      },
+    })
+    expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
+  })
+
+  it('re-throws CANCELLED instead of falling back to a no-repo context for supplied sources', async () => {
+    const { AgentOperationError } = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
+    mockResolveAgentRepoRoot.mockRejectedValueOnce(
+      new AgentOperationError('CANCELLED', 'Request was cancelled.'),
+    )
+    // Bound mode guarantees resolveEffectiveRepoRoot calls through to
+    // resolveAgentRepoRoot (mocked above) regardless of the input's repo field.
+    createServer()
+
+    const result = await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'review',
+        error: { code: 'CANCELLED' },
+      },
+    })
+    expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
+  })
+
   it('rejects the unsafe repository-config option with a structured error', async () => {
     createServer()
 

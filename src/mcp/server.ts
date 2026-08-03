@@ -22,6 +22,7 @@ import {
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
+    describeRepoResolutionFailure,
     digestOf,
     getBranchContext,
     getRecentLog,
@@ -167,7 +168,18 @@ function registerGenerationTool(
 
       if (needsRepo) {
         // Repository-derived sources and commit-draft require a real repository.
-        repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+        try {
+          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+        } catch (error) {
+          if (error instanceof AgentOperationError && error.code === 'INVALID_REPOSITORY' && operation === 'commit-draft') {
+            throw new AgentOperationError(
+              'INVALID_REPOSITORY',
+              `commit-draft requires a git repository: it reads branch context and recent commit history even when a prepared summary is supplied (${describeRepoResolutionFailure(error)}).`,
+              false,
+            )
+          }
+          throw error
+        }
         await assertClientAllowsRoot(server, repoRoot)
         requireRepository = true
       } else {
@@ -179,9 +191,9 @@ function registerGenerationTool(
           requireRepository = true
         } catch (error) {
           if (error instanceof AgentOperationError) {
-            // Re-throw confinement violations — these are policy errors, not
-            // "no repo" conditions.
-            if (error.code === 'REPOSITORY_OUTSIDE_ROOT' || error.code === 'REPOSITORY_MISMATCH') throw error
+            // Re-throw confinement/cancellation errors — these are real policy
+            // violations, not "no repo" conditions.
+            if (error.code === 'REPOSITORY_OUTSIDE_ROOT' || error.code === 'REPOSITORY_MISMATCH' || error.code === 'CANCELLED') throw error
             // INVALID_REPOSITORY is expected when the client has no git roots
             // and no repo field was supplied. Fall back to cwd for config only.
           } else {

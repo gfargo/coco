@@ -285,6 +285,15 @@ export function resolveAgentDirectoryRoot(directory: string): string {
   return resolved
 }
 
+/**
+ * Extracts the path (or other detail) from an INVALID_REPOSITORY error message
+ * so callers can fold it into a more specific message without repeating the
+ * "not a git repository" phrasing twice.
+ */
+export function describeRepoResolutionFailure(error: AgentOperationError): string {
+  return error.message.replace(/^(?:Not a git repository|Repository path is not a directory): /, '')
+}
+
 export async function resolveAgentRepoRoot(
   repo?: string,
   allowedRoot?: string,
