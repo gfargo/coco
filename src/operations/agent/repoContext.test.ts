@@ -282,6 +282,46 @@ describe('repo-context readers', () => {
       expect(conflicts.files.length).toBeGreaterThan(0)
       expect(conflicts.files[0].path).toBe('README.md')
     })
+
+    it('regionCounts.totalCount counts one per conflict region, not per marker line', async () => {
+      const git = simpleGit(repoRoot)
+      const defaultBranch = (await git.revparse(['--abbrev-ref', 'HEAD'])).trim()
+
+      // Create a feature branch with TWO conflict hunks in the same file
+      await git.checkoutBranch('feature-regions', 'HEAD')
+      fs.writeFileSync(
+        path.join(repoRoot, 'README.md'),
+        '# Feature\n\nline A\n\nline B\n',
+      )
+      await git.add('README.md')
+      await git.commit('feat: feature regions')
+
+      await git.checkout(defaultBranch)
+      fs.writeFileSync(
+        path.join(repoRoot, 'README.md'),
+        '# Main\n\nline X\n\nline Y\n',
+      )
+      await git.add('README.md')
+      await git.commit('feat: main regions')
+
+      try {
+        await git.merge(['feature-regions'])
+      } catch {
+        // Expected conflict
+      }
+
+      const context = await createAgentOperationContext({ repoRoot })
+      const conflicts = await readRepoConflictsContext(context)
+
+      expect(conflicts.inProgress).toBe(true)
+      // regionCounts.totalCount must equal the number of <<<<<<< opening markers,
+      // not triple-count by also counting ======= and >>>>>>> lines.
+      const regionCount = conflicts.regionCounts.totalCount
+      const fileContent = fs.readFileSync(path.join(repoRoot, 'README.md'), 'utf8')
+      const expectedRegions = fileContent.split('\n').filter((l) => /^<{7}( |$)/.test(l.trim())).length
+      expect(regionCount).toBe(expectedRegions)
+      expect(regionCount).toBeGreaterThan(0)
+    })
   })
 
   // ─── Capabilities section ────────────────────────────────────────────────

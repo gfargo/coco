@@ -954,8 +954,6 @@ export async function readRepoConflictsContext(context: AgentOperationContext): 
   // Count conflict regions in conflicted files (bounded, 1 MiB per file)
   const MAX_REGION_FILE_SIZE = 1024 * 1024
   const CONFLICT_OURS = /^<{7}( |$)/
-  const CONFLICT_SEP = /^={7}$/
-  const CONFLICT_THEIRS = /^>{7}( |$)/
   let regionCount = 0
   let regionsTruncated = false
   const REGION_COUNT_CAP = 200
@@ -971,7 +969,10 @@ export async function readRepoConflictsContext(context: AgentOperationContext): 
         const content = fsReadFileSync(filePath, 'utf8')
         for (const line of content.split('\n')) {
           const trimmed = line.trim()
-          if (CONFLICT_OURS.test(trimmed) || CONFLICT_SEP.test(trimmed) || CONFLICT_THEIRS.test(trimmed)) {
+          // Count only the opening marker so each conflict region increments once.
+          // Counting all three markers (<<<<<<, =======, >>>>>>>) would triple-count
+          // every region and make REGION_COUNT_CAP cap at ~66 real conflicts, not 200.
+          if (CONFLICT_OURS.test(trimmed)) {
             regionCount++
           }
           if (regionCount >= REGION_COUNT_CAP) {
