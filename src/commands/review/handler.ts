@@ -315,6 +315,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
         changes: context,
         format_instructions: formatInstructions,
         language_context: getLanguageContext(argv.language || config.language, { taskDescription: 'code review feedback' }),
+        additional_context: '',
       }
       const budgetedPrompt = await enforcePromptBudget({
         prompt,

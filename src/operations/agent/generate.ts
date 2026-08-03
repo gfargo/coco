@@ -340,6 +340,7 @@ export async function generateAgentReview(
       format_instructions: 'Return a JSON array of findings with title, summary, severity (1-10), category, and filePath.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'code review feedback' }),
       conventions_context: conventions.text,
+      additional_context: input.options.additionalContext ? `## Additional Context\n${input.options.additionalContext}` : '',
     },
   })
   findings.sort((a, b) => b.severity - a.severity)
@@ -408,6 +409,7 @@ export async function generateAgentRecap(
       format_instructions: 'Return a JSON object with string fields title and summary.',
       language_context: getLanguageContext(input.options.language, { taskDescription: 'summary' }),
       conventions_context: conventions.text,
+      additional_context: input.options.additionalContext ? `## Additional Context\n${input.options.additionalContext}` : '',
     },
   })
   report(context, 'Completed', 1)
