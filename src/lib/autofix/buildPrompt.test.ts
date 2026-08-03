@@ -78,6 +78,24 @@ describe('buildPrompt — found/not-found (mocked fs)', () => {
     expect(prompt).toContain(item.category)
     expect(prompt).toContain(item.filePath)
   })
+
+  it('truncates by byte count, not string length, for multibyte content', async () => {
+    // Each '雪' is 3 bytes in UTF-8 but 1 UTF-16 code unit. A naive
+    // contents.slice(0, MAX_FILE_BYTES) would keep MAX_FILE_BYTES characters
+    // (~3x too many bytes); the fix must cap on the encoded byte count.
+    const MAX_FILE_BYTES = 128_000
+    const oversized = '雪'.repeat(MAX_FILE_BYTES)
+    mockReadFile.mockResolvedValue(Buffer.from(oversized, 'utf-8'))
+
+    const prompt = await buildPrompt(item, FAKE_REPO_ROOT)
+
+    expect(prompt).toContain('[truncated: file exceeded inline size limit]')
+
+    const fenceStart = prompt.indexOf('```ts\n') + '```ts\n'.length
+    const fenceEnd = prompt.indexOf('\n[truncated:')
+    const embedded = prompt.slice(fenceStart, fenceEnd)
+    expect(Buffer.byteLength(embedded, 'utf-8')).toBeLessThanOrEqual(MAX_FILE_BYTES)
+  })
 })
 
 describe('buildPrompt — path confinement rejection (mocked fs)', () => {

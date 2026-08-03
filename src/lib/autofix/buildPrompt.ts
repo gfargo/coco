@@ -22,10 +22,15 @@ export async function buildPrompt(item: ReviewFeedbackItem, repoRoot: string): P
     fileSection = `[REJECTED: "${item.filePath}" — ${reasonMsg}. Contents not read.]`
   } else {
     try {
-      let contents = await fs.promises.readFile(confinement.absPath, 'utf-8')
-      if (Buffer.byteLength(contents, 'utf-8') > MAX_FILE_BYTES) {
-        contents = contents.slice(0, MAX_FILE_BYTES) + '\n[truncated: file exceeded inline size limit]'
-      }
+      const buf = await fs.promises.readFile(confinement.absPath)
+      const truncated = buf.byteLength > MAX_FILE_BYTES
+      // Slice by byte, not UTF-16 code unit, so multibyte characters can't push the
+      // decoded string past MAX_FILE_BYTES. toString() drops any partial trailing
+      // sequence cut mid-character rather than emitting a replacement character.
+      const contents = truncated
+        ? buf.subarray(0, MAX_FILE_BYTES).toString('utf-8').replace(/�+$/, '') +
+          '\n[truncated: file exceeded inline size limit]'
+        : buf.toString('utf-8')
       fileSection = `\`\`\`${ext}\n${contents}\n\`\`\``
     } catch {
       fileSection = `[WARNING: File "${item.filePath}" was not found on disk. Fix based on the issue description alone.]`

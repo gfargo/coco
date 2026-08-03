@@ -205,6 +205,23 @@ describe('TaskList — keyboard shortcuts', () => {
     expect(hasErrorMsg).toBe(true)
   })
 
+  it('rejects a path that escapes the repo root and does not spawn an editor', async () => {
+    const tl = new TaskList([makeItem({ filePath: '../secret.txt' })])
+    const startPromise = tl.start()
+
+    await press('o')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockExecFile).not.toHaveBeenCalled()
+
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    const hasRejectionMsg = logCalls.some(
+      (arg) => typeof arg === 'string' && arg.includes('Cannot open') && arg.includes('../secret.txt')
+    )
+    expect(hasRejectionMsg).toBe(true)
+  })
+
   it.each([
     ['d', 'completed: 1'],
     ['s', 'skipped: 1'],
