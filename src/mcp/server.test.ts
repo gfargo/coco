@@ -110,6 +110,7 @@ jest.mock('../operations/agent', () => {
     ...errors,
     digestOf: context.digestOf,
     requiresRepository: context.requiresRepository,
+    describeRepoResolutionFailure: context.describeRepoResolutionFailure,
     createAgentOperationContext: (...args: unknown[]) => mockCreateAgentOperationContext(...args),
     resolveAgentDirectoryRoot: jest.fn((value: string) => value),
     resolveAgentRepoRoot: (...args: unknown[]) => mockResolveAgentRepoRoot(...args),
@@ -293,10 +294,6 @@ describe('createCocoMcpServer', () => {
   })
 
   it('dispatches review with a supplied source without calling resolveEffectiveRepoRoot when INVALID_REPOSITORY is thrown', async () => {
-    const { AgentOperationError } = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
-    mockResolveAgentRepoRoot.mockRejectedValueOnce(
-      new AgentOperationError('INVALID_REPOSITORY', 'No repository specified.'),
-    )
     // Create server in deferred mode (no bound root) so resolveEffectiveRepoRoot falls through to INVALID_REPOSITORY.
     // This overwrites the registrations map with the deferred-mode server's handlers.
     createCocoMcpServer()

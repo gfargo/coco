@@ -22,6 +22,7 @@ jest.mock('../../operations/agent', () => {
     ...errors,
     requiresRepository: context.requiresRepository,
     resolveAgentDirectoryRoot: context.resolveAgentDirectoryRoot,
+    describeRepoResolutionFailure: context.describeRepoResolutionFailure,
     createAgentOperationContext: (...args: unknown[]) => mockCreateAgentOperationContext(...args),
     resolveAgentRepoRoot: (...args: unknown[]) => mockResolveAgentRepoRoot(...args),
     runAgentOperation: (...args: unknown[]) => mockRunAgentOperation(...args),
