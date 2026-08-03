@@ -32,6 +32,11 @@ beforeEach(() => {
 describe('ClaudeAdapter', () => {
   const adapter = new ClaudeAdapter()
 
+  it('has vendor anthropic and envVar ANTHROPIC_API_KEY', () => {
+    expect(adapter.vendor).toBe('anthropic')
+    expect(adapter.envVar).toBe('ANTHROPIC_API_KEY')
+  })
+
   it('spawns claude with --print and the prompt as the last argument', async () => {
     mockSpawn.mockReturnValue(makeChild(0))
 
@@ -69,16 +74,44 @@ describe('ClaudeAdapter', () => {
     expect(args[args.length - 1]).toBe('fix the bug')
   })
 
-  it('overrides ANTHROPIC_API_KEY when an explicit apiKey is provided', async () => {
+  it('injects ANTHROPIC_API_KEY when apiKey is provided and ambient is unset', async () => {
+    const previousApiKey = process.env.ANTHROPIC_API_KEY
+    delete process.env.ANTHROPIC_API_KEY
     mockSpawn.mockReturnValue(makeChild(0))
 
-    await adapter.run('fix the bug', undefined, 'override-key')
+    try {
+      await adapter.run('fix the bug', undefined, 'explicit-key')
+    } finally {
+      if (previousApiKey !== undefined) {
+        process.env.ANTHROPIC_API_KEY = previousApiKey
+      }
+    }
 
     expect(mockSpawn).toHaveBeenCalledWith(
       'claude',
       expect.any(Array),
       expect.objectContaining({
-        env: expect.objectContaining({ ANTHROPIC_API_KEY: 'override-key' }),
+        env: expect.objectContaining({ ANTHROPIC_API_KEY: 'explicit-key' }),
+      })
+    )
+  })
+
+  it('does NOT override an ambient ANTHROPIC_API_KEY with an explicit apiKey', async () => {
+    const previousApiKey = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = 'ambient-anthropic-key'
+    mockSpawn.mockReturnValue(makeChild(0))
+
+    try {
+      await adapter.run('fix the bug', undefined, 'some-other-key')
+    } finally {
+      process.env.ANTHROPIC_API_KEY = previousApiKey
+    }
+
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'claude',
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.objectContaining({ ANTHROPIC_API_KEY: 'ambient-anthropic-key' }),
       })
     )
   })
@@ -103,24 +136,21 @@ describe('ClaudeAdapter', () => {
     )
   })
 
-  it('does not replace inherited ANTHROPIC_API_KEY with an empty apiKey', async () => {
+  it('does not inject ANTHROPIC_API_KEY when apiKey is empty string', async () => {
     const previousApiKey = process.env.ANTHROPIC_API_KEY
-    process.env.ANTHROPIC_API_KEY = 'inherited-key'
+    delete process.env.ANTHROPIC_API_KEY
     mockSpawn.mockReturnValue(makeChild(0))
 
     try {
       await adapter.run('fix the bug', undefined, '')
     } finally {
-      process.env.ANTHROPIC_API_KEY = previousApiKey
+      if (previousApiKey !== undefined) {
+        process.env.ANTHROPIC_API_KEY = previousApiKey
+      }
     }
 
-    expect(mockSpawn).toHaveBeenCalledWith(
-      'claude',
-      expect.any(Array),
-      expect.objectContaining({
-        env: expect.objectContaining({ ANTHROPIC_API_KEY: 'inherited-key' }),
-      })
-    )
+    const envArg = mockSpawn.mock.calls[0][2].env
+    expect(envArg.ANTHROPIC_API_KEY).toBeUndefined()
   })
 
   it('resolves when child process exits with code 0', async () => {

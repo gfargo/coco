@@ -1,7 +1,10 @@
 import { spawn } from 'child_process'
-import { BaseAdapter } from '../types'
+import { BaseAdapter, AutoFixVendor } from '../types'
 
 export class CodexAdapter implements BaseAdapter {
+  readonly vendor: AutoFixVendor = 'openai'
+  readonly envVar = 'OPENAI_API_KEY'
+
   async run(prompt: string, options?: Record<string, string>, apiKey?: string): Promise<void> {
     const args: string[] = ['exec']
 
@@ -19,10 +22,13 @@ export class CodexAdapter implements BaseAdapter {
 
     args.push('--full-auto', prompt)
 
-    // Preserve the caller's environment by default and only override the API key
-    // when an explicit non-empty key is provided through auto-fix config.
+    // Preserve the caller's environment.  Only set the API key when an
+    // explicit non-empty key is provided AND the ambient variable is not
+    // already populated — never clobber a valid working credential.
     const env = { ...process.env }
-    if (apiKey) env['OPENAI_API_KEY'] = apiKey
+    if (apiKey && !env[this.envVar]) {
+      env[this.envVar] = apiKey
+    }
 
     return new Promise((resolve, reject) => {
       const child = spawn('codex', args, { stdio: 'inherit', env })

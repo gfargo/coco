@@ -32,6 +32,11 @@ beforeEach(() => {
 describe('CodexAdapter', () => {
   const adapter = new CodexAdapter()
 
+  it('has vendor openai and envVar OPENAI_API_KEY', () => {
+    expect(adapter.vendor).toBe('openai')
+    expect(adapter.envVar).toBe('OPENAI_API_KEY')
+  })
+
   it('spawns codex exec with full-auto and the prompt as the last argument', async () => {
     mockSpawn.mockReturnValue(makeChild(0))
 
@@ -49,7 +54,10 @@ describe('CodexAdapter', () => {
 
     await adapter.run('fix the bug')
 
-    expect(mockSpawn).toHaveBeenCalledWith('codex', expect.any(Array), expect.objectContaining({ env: process.env }))
+    const envArg = mockSpawn.mock.calls[0][2].env
+    for (const key of Object.keys(process.env)) {
+      expect(envArg).toHaveProperty(key, process.env[key])
+    }
   })
 
   it('maps supported options and passes other options as config overrides', async () => {
@@ -67,16 +75,44 @@ describe('CodexAdapter', () => {
     expect(args[args.length - 1]).toBe('fix the bug')
   })
 
-  it('overrides OPENAI_API_KEY when an explicit api key is provided', async () => {
+  it('injects OPENAI_API_KEY when apiKey is provided and ambient is unset', async () => {
+    const previousApiKey = process.env.OPENAI_API_KEY
+    delete process.env.OPENAI_API_KEY
     mockSpawn.mockReturnValue(makeChild(0))
 
-    await adapter.run('fix the bug', undefined, 'override-key')
+    try {
+      await adapter.run('fix the bug', undefined, 'explicit-key')
+    } finally {
+      if (previousApiKey !== undefined) {
+        process.env.OPENAI_API_KEY = previousApiKey
+      }
+    }
 
     expect(mockSpawn).toHaveBeenCalledWith(
       'codex',
       expect.any(Array),
       expect.objectContaining({
-        env: expect.objectContaining({ OPENAI_API_KEY: 'override-key' }),
+        env: expect.objectContaining({ OPENAI_API_KEY: 'explicit-key' }),
+      })
+    )
+  })
+
+  it('does NOT override an ambient OPENAI_API_KEY with an explicit apiKey', async () => {
+    const previousApiKey = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = 'ambient-openai-key'
+    mockSpawn.mockReturnValue(makeChild(0))
+
+    try {
+      await adapter.run('fix the bug', undefined, 'some-other-key')
+    } finally {
+      process.env.OPENAI_API_KEY = previousApiKey
+    }
+
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'codex',
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.objectContaining({ OPENAI_API_KEY: 'ambient-openai-key' }),
       })
     )
   })
@@ -101,24 +137,21 @@ describe('CodexAdapter', () => {
     )
   })
 
-  it('does not replace inherited OPENAI_API_KEY with an empty api key', async () => {
+  it('does not inject OPENAI_API_KEY when apiKey is empty string', async () => {
     const previousApiKey = process.env.OPENAI_API_KEY
-    process.env.OPENAI_API_KEY = 'inherited-key'
+    delete process.env.OPENAI_API_KEY
     mockSpawn.mockReturnValue(makeChild(0))
 
     try {
       await adapter.run('fix the bug', undefined, '')
     } finally {
-      process.env.OPENAI_API_KEY = previousApiKey
+      if (previousApiKey !== undefined) {
+        process.env.OPENAI_API_KEY = previousApiKey
+      }
     }
 
-    expect(mockSpawn).toHaveBeenCalledWith(
-      'codex',
-      expect.any(Array),
-      expect.objectContaining({
-        env: expect.objectContaining({ OPENAI_API_KEY: 'inherited-key' }),
-      })
-    )
+    const envArg = mockSpawn.mock.calls[0][2].env
+    expect(envArg.OPENAI_API_KEY).toBeUndefined()
   })
 
   it('resolves when child process exits with code 0', async () => {

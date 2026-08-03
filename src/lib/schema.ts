@@ -131,6 +131,10 @@ export const schema = {
             }
           ]
         },
+        "autoFixToolApiKey": {
+          "type": "string",
+          "description": "Explicit API key for the auto-fix CLI tool.  Use this when coco is configured for one provider (e.g. openai) but the auto-fix tool belongs to a different vendor (e.g. gemini), so the correct credential can be supplied without relying on the ambient environment. When set, this key is injected into the tool's vendor environment variable regardless of coco's own provider setting."
+        },
         "logTui": {
           "type": "object",
           "properties": {
