@@ -14,6 +14,7 @@ import {
     getRepoStatus,
     getStagedDiff,
     isPathWithinRoot,
+    requiresRepository,
     resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
     resolveChangeSource,
@@ -423,6 +424,124 @@ describe('agent repository context', () => {
     const log = await getRecentLog(context, 100)
 
     expect(log.trim().split('\n')).toHaveLength(20)
+  })
+})
+
+describe('requiresRepository', () => {
+  const patchSource = { kind: 'patch' as const, patch: 'diff --git a/a.ts b/a.ts\n+const x = 1\n' }
+  const summarySource = { kind: 'summary' as const, summary: 'Added feature.' }
+  const filesSource = { kind: 'files' as const, files: [{ path: 'a.ts', status: 'modified' as const, summary: 'Changed constant.' }] }
+  const repoSource = { kind: 'repository' as const, scope: { type: 'staged' as const } }
+
+  it('returns true for commit-draft regardless of source kind', () => {
+    expect(requiresRepository('commit-draft', patchSource)).toBe(true)
+    expect(requiresRepository('commit-draft', summarySource)).toBe(true)
+    expect(requiresRepository('commit-draft', repoSource)).toBe(true)
+  })
+
+  it('returns true for any operation with a repository source', () => {
+    expect(requiresRepository('review', repoSource)).toBe(true)
+    expect(requiresRepository('changelog', repoSource)).toBe(true)
+    expect(requiresRepository('recap', repoSource)).toBe(true)
+  })
+
+  it('returns false for review/changelog/recap with supplied sources', () => {
+    for (const operation of ['review', 'changelog', 'recap'] as const) {
+      expect(requiresRepository(operation, patchSource)).toBe(false)
+      expect(requiresRepository(operation, summarySource)).toBe(false)
+      expect(requiresRepository(operation, filesSource)).toBe(false)
+    }
+  })
+})
+
+describe('createAgentOperationContext with requireRepository: false', () => {
+  let tempRoot: string
+  let nonGitDir: string
+
+  beforeEach(() => {
+    tempRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'coco-agent-nogit-')))
+    nonGitDir = path.join(tempRoot, 'not-a-repo')
+    fs.mkdirSync(nonGitDir, { recursive: true })
+  })
+
+  afterEach(() => {
+    fs.rmSync(tempRoot, { recursive: true, force: true })
+  })
+
+  it('creates a context with git: undefined when requireRepository is false', async () => {
+    const context = await createAgentOperationContext({
+      repoRoot: nonGitDir,
+      requireRepository: false,
+    })
+
+    expect(context.git).toBeUndefined()
+    expect(context.repoRoot).toBe(fs.realpathSync(nonGitDir))
+  })
+
+  it('resolves supplied summary source without a git repository', async () => {
+    const context = await createAgentOperationContext({
+      repoRoot: nonGitDir,
+      requireRepository: false,
+    })
+
+    const resolved = await resolveChangeSource({
+      kind: 'summary',
+      summary: 'Implemented safe agent transport.',
+      files: [{ path: 'src/agent.ts', status: 'added' }],
+    }, context)
+
+    expect(resolved.text).toBe('Implemented safe agent transport.\n\nFiles:\n- added: src/agent.ts')
+    expect(resolved.meta.verification).toBe('provided-unverified')
+    expect(resolved.meta.repositoryHead).toBeUndefined()
+    expect(resolved.warnings).toHaveLength(0)
+  })
+
+  it('resolves supplied patch source without a git repository', async () => {
+    const context = await createAgentOperationContext({
+      repoRoot: nonGitDir,
+      requireRepository: false,
+    })
+    const patch = 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-const a = 1\n+const a = 2\n'
+
+    const resolved = await resolveChangeSource({ kind: 'patch', patch }, context)
+
+    expect(resolved.meta.verification).toBe('provided-unverified')
+    expect(resolved.meta.repositoryHead).toBeUndefined()
+    expect(resolved.warnings).toHaveLength(0)
+  })
+
+  it('emits a warning and stays provided-unverified when headRevision is supplied but no git repo is available', async () => {
+    const context = await createAgentOperationContext({
+      repoRoot: nonGitDir,
+      requireRepository: false,
+    })
+    const patch = 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-const a = 1\n+const a = 2\n'
+
+    const resolved = await resolveChangeSource({
+      kind: 'patch',
+      patch,
+      headRevision: 'abc1234def5678',
+    }, context)
+
+    expect(resolved.meta.verification).toBe('provided-unverified')
+    expect(resolved.meta.repositoryHead).toBeUndefined()
+    expect(resolved.warnings).toHaveLength(1)
+    expect(resolved.warnings[0]).toContain('Head verification skipped')
+    expect(resolved.warnings[0]).toContain('headRevision')
+  })
+
+  it('rejects kind: repository source when context has no git', async () => {
+    const context = await createAgentOperationContext({
+      repoRoot: nonGitDir,
+      requireRepository: false,
+    })
+
+    await expect(resolveChangeSource(
+      { kind: 'repository', scope: { type: 'staged' } },
+      context,
+    )).rejects.toMatchObject({
+      code: 'INVALID_REPOSITORY',
+    })
   })
 })
 

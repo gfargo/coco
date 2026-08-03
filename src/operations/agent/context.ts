@@ -9,7 +9,7 @@ import type { LlmUsageSurface } from '../../lib/langchain/utils/observability'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { Logger } from '../../lib/utils/logger'
 import { AgentOperationError } from './errors'
-import { ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
+import { AgentOperation, ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
 
 /**
  * Transport-agnostic progress callback. Operations report coarse stage
@@ -21,7 +21,7 @@ export type AgentProgressReporter = (update: { message?: string; fraction?: numb
 
 export type AgentOperationContext = {
   repoRoot: string
-  git: SimpleGit
+  git: SimpleGit | undefined
   logger: Logger
   surface: LlmUsageSurface
   signal?: AbortSignal
@@ -36,6 +36,7 @@ type CleanFilterProbeResult =
 export type ResolvedChangeContext = {
   text: string
   meta: SourceMetadata
+  warnings: string[]
 }
 
 const execFileAsync = promisify(execFile)
@@ -318,14 +319,34 @@ export async function resolveAgentRepoRoot(
   return repoRoot
 }
 
+/**
+ * Returns true when the operation/source combination requires a git repository
+ * to be present. commit-draft always requires one (reads history/branch context
+ * even for supplied sources). kind: 'repository' requires one by definition.
+ * All other supplied-source operations (review, changelog, recap with
+ * patch/summary/files) do not.
+ */
+export function requiresRepository(operation: AgentOperation, source: ChangeSource): boolean {
+  return operation === 'commit-draft' || source.kind === 'repository'
+}
+
 export async function createAgentOperationContext(input: {
   repoRoot: string
+  requireRepository?: boolean
   signal?: AbortSignal
   surface?: LlmUsageSurface
   onProgress?: AgentProgressReporter
 }): Promise<AgentOperationContext> {
-  const repoRoot = await resolveAgentRepoRoot(input.repoRoot, undefined, input.signal)
-  const git = getRepo(repoRoot)
+  const needsRepo = input.requireRepository !== false
+  let repoRoot: string
+  let git: SimpleGit | undefined
+  if (needsRepo) {
+    repoRoot = await resolveAgentRepoRoot(input.repoRoot, undefined, input.signal)
+    git = getRepo(repoRoot)
+  } else {
+    repoRoot = resolveAgentDirectoryRoot(input.repoRoot)
+    git = undefined
+  }
   return {
     repoRoot,
     git,
@@ -494,15 +515,37 @@ export async function resolveChangeSource(
     throw new AgentOperationError('CANCELLED', 'Operation was cancelled.', false)
   }
 
+  // kind: 'repository' always requires a real git context.
+  if (source.kind === 'repository' && !context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'A git repository is required to use a repository-derived change source. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
+
   const providedHead = source.kind === 'patch'
     ? source.headRevision
     : source.kind === 'files' || source.kind === 'summary'
     ? source.provenance?.headRevision
     : undefined
   const shouldReadRepositoryHead = source.kind === 'repository' || Boolean(providedHead)
-  const repositoryHead = shouldReadRepositoryHead
-    ? await runAgentGit(context, ['rev-parse', 'HEAD']).then((value) => value.trim()).catch(() => undefined)
-    : undefined
+
+  const warnings: string[] = []
+  let repositoryHead: string | undefined
+  if (shouldReadRepositoryHead) {
+    if (context.git) {
+      repositoryHead = await runAgentGit(context, ['rev-parse', 'HEAD'])
+        .then((value) => value.trim())
+        .catch(() => undefined)
+    } else if (providedHead) {
+      // Caller supplied a headRevision but there is no repository available to
+      // verify it against. Degrade gracefully to provided-unverified and warn.
+      warnings.push(
+        'Head verification skipped: no git repository was available to verify the supplied headRevision.',
+      )
+    }
+  }
+
   const text = source.kind === 'repository'
     ? await repositoryText(source, context, options.trustRepositoryConfig === true)
     : providedText(source)
@@ -519,6 +562,7 @@ export async function resolveChangeSource(
 
   return {
     text,
+    warnings,
     meta: {
       kind: source.kind,
       digest: digestOf(text),

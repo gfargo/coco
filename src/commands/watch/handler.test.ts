@@ -63,7 +63,7 @@ const reviewSuccess = {
 }
 
 function resolved(digest: string) {
-  return { text: 'diff', meta: { kind: 'repository' as const, digest, verification: 'repository-derived' as const } }
+  return { text: 'diff', warnings: [] as string[], meta: { kind: 'repository' as const, digest, verification: 'repository-derived' as const } }
 }
 
 describe('watch command handler', () => {

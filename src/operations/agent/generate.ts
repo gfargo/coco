@@ -247,6 +247,12 @@ export async function generateAgentCommitDraft(
   context: AgentOperationContext,
   preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<CommitDraftData>> {
+  if (!context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'commit-draft requires a git repository: it reads branch context and recent commit history even when a prepared summary is supplied. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
   const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
@@ -312,7 +318,7 @@ export async function generateAgentCommitDraft(
   return envelope('commit-draft', {
     ...result.message,
     validationErrors: result.validationErrors,
-  }, result.warnings, resolved.meta, conventions.provenance)
+  }, [...resolved.warnings, ...result.warnings], resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentReview(
@@ -349,7 +355,7 @@ export async function generateAgentReview(
   })
   findings.sort((a, b) => b.severity - a.severity)
   report(context, 'Completed', 1)
-  return envelope('review', { findings }, [], resolved.meta, conventions.provenance)
+  return envelope('review', { findings }, resolved.warnings, resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentChangelog(
@@ -384,7 +390,7 @@ export async function generateAgentChangelog(
     },
   })
   report(context, 'Completed', 1)
-  return envelope('changelog', result, [], resolved.meta, conventions.provenance)
+  return envelope('changelog', result, resolved.warnings, resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentRecap(
@@ -417,7 +423,7 @@ export async function generateAgentRecap(
     },
   })
   report(context, 'Completed', 1)
-  return envelope('recap', result, [], resolved.meta, conventions.provenance)
+  return envelope('recap', result, resolved.warnings, resolved.meta, conventions.provenance)
 }
 
 export async function runAgentOperation(
