@@ -43,6 +43,14 @@ import { salvageCommitMessageFromText } from './salvageCommitMessage'
 export type CommitDraftInput = {
   git: SimpleGit
   argv: Arguments<CommitOptions>
+  /**
+   * Repository root to resolve cwd-relative config sources (project config,
+   * `.gitignore`/`.ignore`) against. Interactive `coco commit` already
+   * `chdir`'d via `applyRepoFlag` so it can omit this; agent/MCP callers
+   * resolve a repo root without mutating cwd and must pass it explicitly, or
+   * the repository's `.coco.json` is silently skipped.
+   */
+  cwd?: string
   logger?: Logger
   /**
    * Optional streaming callback (#881 phase 2). When provided AND
@@ -293,6 +301,7 @@ export function repairDraftAgainstValidationErrors(
 export async function generateCommitDraft({
   git,
   argv,
+  cwd,
   logger = new Logger({ silent: true }),
   onStreamChunk,
   signal,
@@ -303,7 +312,7 @@ export async function generateCommitDraft({
   usageSurface,
   recordUsage,
 }: CommitDraftInput): Promise<CommitDraftResult> {
-  const config = loadConfig<CommitOptions, CommitArgv>(argv as Arguments<CommitArgv>)
+  const config = loadConfig<CommitOptions, CommitArgv>(argv as Arguments<CommitArgv>, { cwd })
   const key = getApiKeyForModel(config)
   const { provider } = getModelAndProviderFromConfig(config)
   const commitService = resolveDynamicService(config, 'commit')

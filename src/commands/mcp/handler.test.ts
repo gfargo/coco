@@ -17,28 +17,22 @@ jest.mock('../../operations/agent', () => {
 const mockStartCocoMcpServer = startCocoMcpServer as jest.MockedFunction<typeof startCocoMcpServer>
 
 describe('mcp command handler', () => {
-  let chdirSpy: jest.SpyInstance
-
   beforeEach(() => {
     jest.clearAllMocks()
-    chdirSpy = jest.spyOn(process, 'chdir').mockImplementation(() => undefined)
     mockResolveAgentRepoRoot.mockResolvedValue('/bound/repo')
     mockStartCocoMcpServer.mockResolvedValue(undefined)
   })
 
-  afterEach(() => {
-    chdirSpy.mockRestore()
-  })
-
-  it('binds cwd, privacy-safe telemetry, and the server to one resolved repository', async () => {
+  it('binds privacy-safe telemetry and the server to one resolved repository without mutating cwd', async () => {
     const argv = { $0: 'coco', _: ['mcp'], repo: '/requested/repo', quiet: true } as never
+    const cwdBefore = process.cwd()
 
     await handler(argv)
 
     expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith('/requested/repo')
-    expect(chdirSpy).toHaveBeenCalledWith('/bound/repo')
     expect(mockArmNonInteractiveUsageTelemetry).toHaveBeenCalledWith(argv, '/bound/repo')
     expect(mockStartCocoMcpServer).toHaveBeenCalledWith('/bound/repo')
+    expect(process.cwd()).toBe(cwdBefore)
   })
 
   it('does not start the server when repository resolution fails', async () => {
@@ -46,7 +40,6 @@ describe('mcp command handler', () => {
 
     await expect(handler({ $0: 'coco', _: ['mcp'], repo: '/bad/path' } as never)).rejects.toThrow('not a repository')
 
-    expect(chdirSpy).not.toHaveBeenCalled()
     expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
     expect(mockStartCocoMcpServer).not.toHaveBeenCalled()
   })
@@ -65,7 +58,6 @@ describe('mcp command handler', () => {
     await handler({ $0: 'coco', _: ['mcp'] } as never)
 
     expect(mockResolveAgentRepoRoot).not.toHaveBeenCalled()
-    expect(chdirSpy).not.toHaveBeenCalled()
     expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
     expect(mockStartCocoMcpServer).toHaveBeenCalledWith(undefined)
   })

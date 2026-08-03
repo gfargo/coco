@@ -38,7 +38,7 @@ describe('armNonInteractiveUsageTelemetry', () => {
   it('uses only the existing config preference and records a metadata-only repo tag', async () => {
     await armNonInteractiveUsageTelemetry(argv, '/repo')
 
-    expect(mockLoadConfig).toHaveBeenCalledWith(argv)
+    expect(mockLoadConfig).toHaveBeenCalledWith(argv, { cwd: '/repo' })
     expect(mockSetUsageConfigPreference).toHaveBeenCalledWith(true)
     expect(mockIsUsageLoggingEnabled).toHaveBeenCalledTimes(1)
     expect(mockResolveRepoIdentifier).toHaveBeenCalledWith({ cwd: '/repo' })

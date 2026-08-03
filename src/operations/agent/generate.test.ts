@@ -108,6 +108,21 @@ describe('agent generate progress reporting', () => {
       expect(mockExecuteChain).toHaveBeenCalledTimes(1)
     })
 
+    it('loads config against the resolved repo root, not process.cwd() (OSS-1220)', async () => {
+      // createRuntime's loadConfig call must be given the context's
+      // resolved repoRoot explicitly — deferred-binding MCP mode never
+      // chdirs, so falling back to process.cwd() would silently skip the
+      // target repository's .coco.json.
+      const context = makeContext(undefined)
+
+      await generateAgentReview(baseInput, context)
+
+      expect(mockLoadConfig).toHaveBeenCalledWith(
+        expect.anything(),
+        { cwd: context.repoRoot },
+      )
+    })
+
     it('streams via executeChainStreaming and reports stage + chunk progress when onProgress is set', async () => {
       const onProgress = jest.fn()
       const context = makeContext(onProgress)
@@ -297,6 +312,19 @@ describe('agent generate progress reporting', () => {
 
       expect(mockGenerateCommitDraft).toHaveBeenCalledTimes(1)
       expect(mockGenerateCommitDraft.mock.calls[0][0].onStreamChunk).toBeUndefined()
+    })
+
+    it('passes the resolved repo root as cwd so config loading is not silently dropped (OSS-1220)', async () => {
+      // In MCP deferred-binding mode the server never chdirs, so any config
+      // load that only ever checked process.cwd() would silently ignore
+      // the target repository's .coco.json. Both loadConfig (via
+      // createRuntime, exercised by generateAgentReview above) and
+      // generateCommitDraft must receive the context's resolved repoRoot
+      // explicitly instead of relying on cwd.
+      const context = makeContext(undefined)
+      await generateAgentCommitDraft(baseInput, context)
+
+      expect(mockGenerateCommitDraft.mock.calls[0][0].cwd).toBe(context.repoRoot)
     })
 
     it('passes an onStreamChunk that forwards progress when onProgress is set', async () => {

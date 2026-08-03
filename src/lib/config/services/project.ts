@@ -74,24 +74,27 @@ export function resetConfigLoadWarnings(): void {
  **/
 export function loadProjectJsonConfig<ConfigType = Config>(
   config: Partial<Config>,
-  opts: { returnSource: true }
+  opts: { returnSource: true; cwd?: string }
 ): { config: ConfigType; path?: string }
 export function loadProjectJsonConfig<ConfigType = Config>(
   config: Partial<Config>,
-  opts?: { returnSource?: false }
+  opts?: { returnSource?: false; cwd?: string }
 ): ConfigType
 export function loadProjectJsonConfig<ConfigType = Config>(
   config: Partial<Config>,
-  opts?: { returnSource?: boolean }
+  opts?: { returnSource?: boolean; cwd?: string }
 ): ConfigType | { config: ConfigType; path?: string } {
   // `coco init` writes `.coco.json` at the repo root (via
   // getProjectConfigFilePath → findProjectRoot), but this loader used to
   // test bare relative filenames — resolved against `process.cwd()`, not
   // the repo root. Running any command from a subdirectory silently
   // dropped the entire project config with no warning (#1616). Resolve
-  // the repo root once (falling back to cwd outside a git repo) so a
-  // subdirectory invocation finds the same file `coco init` wrote.
-  const repoRoot = resolveGitRepoRoot()
+  // the repo root once (falling back to the given/current cwd outside a
+  // git repo) so a subdirectory invocation finds the same file `coco init`
+  // wrote. `opts.cwd` lets callers that already know the target repo root
+  // (e.g. the MCP server's deferred-binding mode, which never `chdir`s)
+  // resolve against it instead of `process.cwd()`.
+  const repoRoot = resolveGitRepoRoot(opts?.cwd)
   let resolvedPath: string | undefined
 
   for (const candidate of PROJECT_CONFIG_CANDIDATES) {
