@@ -96,7 +96,7 @@ export const AgentOptionsSchema = z.object({
     'ISO language code or plain name (e.g. "en", "Spanish") for generated output. Honored by: all operations.',
   ),
   additionalContext: z.string().max(32 * 1024).optional().describe(
-    'Extra free-text context appended to the prompt (e.g. ticket description, scope notes). Honored by: commit-draft, changelog. Ignored by review and recap.',
+    'Extra free-text context appended to the prompt (e.g. ticket description, scope notes). Honored by: all operations.',
   ),
   conventional: z.boolean().default(false).describe(
     'Constrain generated commit message to the Conventional Commits specification. Honored by: commit-draft. Ignored by other operations.',
