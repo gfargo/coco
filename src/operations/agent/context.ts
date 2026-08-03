@@ -596,7 +596,7 @@ import {
   readFileSync as fsReadFileSync,
   statSync as fsStatSync,
 } from 'node:fs'
-import { join as pathJoin } from 'node:path'
+import { join as pathJoin, resolve as pathResolve } from 'node:path'
 
 import type {
   RepoContextBranch,
@@ -938,8 +938,9 @@ export async function readRepoConflictsContext(context: AgentOperationContext): 
     try {
       const resolved = (await runAgentGit(context, ['rev-parse', '--git-path', entry.gitPath])).trim()
       if (resolved) {
-        // --git-path may return a relative path; resolve it against the repo root
-        const absPath = pathJoin(context.repoRoot, resolved)
+        // --git-path may return an absolute path in linked worktrees; path.resolve
+        // handles both relative (joins against repoRoot) and absolute (returns as-is)
+        const absPath = pathResolve(context.repoRoot, resolved)
         if (existsSync(absPath)) {
           operation = entry.op
           break
