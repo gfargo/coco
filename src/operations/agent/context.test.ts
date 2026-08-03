@@ -265,6 +265,26 @@ describe('agent repository context', () => {
     })
   })
 
+  it('returns CONTEXT_TOO_LARGE when a staged repository diff exceeds maxBuffer', async () => {
+    // Write a file whose diff will exceed maxBuffer = MAX_AGENT_CONTEXT_BYTES + 64 KiB.
+    // 3 MiB of newline-delimited text is well above that limit and forces git's output
+    // to overflow the buffer, exercising the maxBuffer backstop rather than the
+    // post-hoc byte check.
+    const git = simpleGit(repoRoot)
+    const largeContent = Array.from({ length: 3 * 1024 * 1024 / 16 }, (_, i) => `line-${String(i).padStart(9, '0')}`).join('\n') + '\n'
+    fs.writeFileSync(path.join(repoRoot, 'large.txt'), largeContent)
+    await git.add('large.txt')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    await expect(resolveChangeSource(
+      { kind: 'repository', scope: { type: 'staged' } },
+      context,
+    )).rejects.toMatchObject({
+      code: 'CONTEXT_TOO_LARGE',
+      message: expect.stringContaining('byte limit'),
+    })
+  })
+
   it('stores the supplied onProgress reporter on the context', async () => {
     const onProgress = jest.fn()
     const context = await createAgentOperationContext({ repoRoot, onProgress })

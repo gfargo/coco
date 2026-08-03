@@ -40,6 +40,10 @@ export type ResolvedChangeContext = {
 
 const execFileAsync = promisify(execFile)
 
+function isMaxBufferError(error: unknown): boolean {
+  return (error as ExecFileException)?.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER'
+}
+
 async function runGitAtPath(
   cwd: string,
   args: string[],
@@ -65,6 +69,12 @@ async function runGitAtPath(
   } catch (error) {
     if (signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
       throw new AgentOperationError('CANCELLED', 'Operation was cancelled.', false)
+    }
+    if (isMaxBufferError(error)) {
+      throw new AgentOperationError(
+        'CONTEXT_TOO_LARGE',
+        `Resolved change context exceeds the ${MAX_AGENT_CONTEXT_BYTES}-byte limit. Supply a consolidated summary instead.`,
+      )
     }
     throw error
   }
