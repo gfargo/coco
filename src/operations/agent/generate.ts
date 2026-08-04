@@ -504,7 +504,7 @@ export async function runRepoContext(
   const snapshot = JSON.stringify(data)
   let repositoryHead: string | undefined
   try {
-    repositoryHead = (await context.git.revparse(['HEAD'])).trim()
+    repositoryHead = (await context.git!.revparse(['HEAD'])).trim()
   } catch {
     // No commits yet — leave undefined
   }

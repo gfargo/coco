@@ -23,6 +23,7 @@ import {
     requiresRepository,
     resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
+    ReviewDataSchema,
     runAgentOperation,
     runCondenseDiff,
     runRepoContext,
