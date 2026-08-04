@@ -42,7 +42,7 @@ describe('runAutoFix', () => {
   it('is a no-op when autoFixTool is unset', async () => {
     const config: AutoFixConfig = {}
 
-    await expect(runAutoFix(item, config)).resolves.toBeUndefined()
+    await expect(runAutoFix(item, config, '/fake/repo')).resolves.toBeUndefined()
     expect(buildPrompt).not.toHaveBeenCalled()
     expect(mockRun).not.toHaveBeenCalled()
   })
@@ -50,25 +50,25 @@ describe('runAutoFix', () => {
   it('throws on unrecognized autoFixTool', async () => {
     const config: AutoFixConfig = { autoFixTool: 'unknown-tool' }
 
-    await expect(runAutoFix(item, config)).rejects.toThrow('Unknown autoFixTool: "unknown-tool"')
+    await expect(runAutoFix(item, config, '/fake/repo')).rejects.toThrow('Unknown autoFixTool: "unknown-tool"')
   })
 
   it('resolves the correct adapter and calls run with the built prompt and options', async () => {
     const options = { model: 'o4-mini' }
     const config: AutoFixConfig = { autoFixTool: 'codex', autoFixToolOptions: options }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
-    expect(buildPrompt).toHaveBeenCalledWith(item)
+    expect(buildPrompt).toHaveBeenCalledWith(item, '/fake/repo')
     expect(mockRun).toHaveBeenCalledWith('mocked prompt', options, undefined)
   })
 
   it('calls run without options when autoFixToolOptions is unset', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
-    expect(buildPrompt).toHaveBeenCalledWith(item)
+    expect(buildPrompt).toHaveBeenCalledWith(item, '/fake/repo')
     expect(mockRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
   })
 })

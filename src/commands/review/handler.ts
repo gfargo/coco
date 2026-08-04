@@ -26,6 +26,7 @@ import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
 import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
+import { resolveGitRepoRoot } from '../../lib/utils/resolveGitRepoRoot'
 import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbackItem } from './config'
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
@@ -403,7 +404,8 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     logger.log(formatFindings(findings))
     logger.log(chalk.dim('\nNon-interactive session detected — re-run with --json for machine-readable output.'))
   } else {
-    const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined }, git)
+    const repoRoot = resolveGitRepoRoot(process.cwd())
+    const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined }, git, repoRoot)
     logLlmTelemetrySummary(logger, 'review')
     await reviewer.start()
   }

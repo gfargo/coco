@@ -8,8 +8,13 @@ import { SimpleGit } from 'simple-git'
 import type { LlmUsageSurface } from '../../lib/langchain/utils/observability'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { Logger } from '../../lib/utils/logger'
+import { isPathWithinRoot } from '../../lib/utils/pathWithinRoot'
 import { AgentOperationError } from './errors'
 import { ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
+
+// Re-export so existing importers (mcp/server.ts, context.test.ts) continue to
+// resolve from this module without changes.
+export { isPathWithinRoot } from '../../lib/utils/pathWithinRoot'
 
 /**
  * Transport-agnostic progress callback. Operations report coarse stage
@@ -88,45 +93,8 @@ export function digestOf(text: string): string {
   return `sha256:${createHash('sha256').update(text).digest('hex')}`
 }
 
-export function isPathWithinRoot(candidate: string, root: string): boolean {
-  let resolvedCandidate: string
-  let resolvedRoot: string
-  try {
-    resolvedCandidate = realpathSync(candidate)
-    resolvedRoot = realpathSync(root)
-  } catch {
-    return false
-  }
-
-  const relative = path.relative(resolvedRoot, resolvedCandidate)
-  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
-    return true
-  }
-
-  // Windows can spell the same directory with either a long path or an 8.3
-  // alias. If the lexical check disagrees, compare filesystem identities while
-  // walking the already-realpathed candidate's ancestors. This preserves the
-  // symlink boundary while accepting equivalent Windows path spellings.
-  if (process.platform !== 'win32') return false
-
-  try {
-    const rootStats = statSync(resolvedRoot)
-    if (rootStats.ino === 0) return false
-
-    let current = resolvedCandidate
-    while (true) {
-      const currentStats = statSync(current)
-      if (currentStats.dev === rootStats.dev && currentStats.ino === rootStats.ino) {
-        return true
-      }
-      const parent = path.dirname(current)
-      if (parent === current) return false
-      current = parent
-    }
-  } catch {
-    return false
-  }
-}
+// isPathWithinRoot is now defined in lib/utils/pathWithinRoot and re-exported
+// at the top of this file so all existing importers continue to work.
 
 const CONVENTION_FILE_ALLOWLIST = ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md']
 const STEERING_DIRECTORY = path.join('.kiro', 'steering')

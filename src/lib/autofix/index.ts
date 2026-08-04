@@ -11,7 +11,7 @@ const registry: Record<string, BaseAdapter> = {
   gemini: new GeminiAdapter(),
 }
 
-export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig): Promise<void> {
+export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig, repoRoot: string): Promise<void> {
   if (!config.autoFixTool) {
     return
   }
@@ -21,6 +21,6 @@ export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig
     throw new Error(`Unknown autoFixTool: "${config.autoFixTool}"`)
   }
 
-  const prompt = await buildPrompt(item)
+  const prompt = await buildPrompt(item, repoRoot)
   await adapter.run(prompt, config.autoFixToolOptions, config.apiKey)
 }
