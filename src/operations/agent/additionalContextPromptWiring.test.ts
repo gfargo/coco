@@ -128,6 +128,7 @@ beforeEach(() => {
   jest.clearAllMocks()
   mockResolveChangeSource.mockResolvedValue({
     text: 'diff content',
+    warnings: [],
     meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
   })
   mockLoadConfig.mockReturnValue({

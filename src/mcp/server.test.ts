@@ -110,6 +110,8 @@ jest.mock('../operations/agent', () => {
     ...schemas,
     ...errors,
     digestOf: context.digestOf,
+    requiresRepository: context.requiresRepository,
+    describeRepoResolutionFailure: context.describeRepoResolutionFailure,
     createAgentOperationContext: (...args: unknown[]) => mockCreateAgentOperationContext(...args),
     resolveAgentDirectoryRoot: jest.fn((value: string) => value),
     resolveAgentRepoRoot: (...args: unknown[]) => mockResolveAgentRepoRoot(...args),
@@ -302,6 +304,7 @@ describe('createCocoMcpServer', () => {
     expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith(undefined, '/repo', controller.signal)
     expect(mockCreateAgentOperationContext).toHaveBeenCalledWith({
       repoRoot: '/repo',
+      requireRepository: true,
       signal: controller.signal,
       surface: 'mcp',
       onProgress: undefined,
@@ -318,6 +321,74 @@ describe('createCocoMcpServer', () => {
       structuredContent: reviewSuccess,
       content: [{ type: 'text', text: expect.stringContaining('"ok": true') }],
     })
+  })
+
+  it('dispatches review with a supplied source without calling resolveEffectiveRepoRoot when INVALID_REPOSITORY is thrown', async () => {
+    // Create server in deferred mode (no bound root) so resolveEffectiveRepoRoot falls through to INVALID_REPOSITORY.
+    // This overwrites the registrations map with the deferred-mode server's handlers.
+    createCocoMcpServer()
+
+    const result = await registrations.get('coco_review')!.handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    // Should succeed: supplied source + no repo → requireRepository: false, falls back to cwd.
+    expect(result).toMatchObject({
+      structuredContent: { ok: true, operation: 'review' },
+    })
+    expect(mockCreateAgentOperationContext).toHaveBeenCalledWith(
+      expect.objectContaining({ requireRepository: false }),
+    )
+  })
+
+  it('emits a commit-draft-specific INVALID_REPOSITORY message when no repository resolves', async () => {
+    const { AgentOperationError } = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
+    mockResolveAgentRepoRoot.mockRejectedValueOnce(
+      new AgentOperationError('INVALID_REPOSITORY', 'Not a git repository: /tmp/notgit'),
+    )
+    createServer()
+
+    const result = await tool('coco_commit_draft').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'commit-draft',
+        error: {
+          code: 'INVALID_REPOSITORY',
+          message: expect.stringContaining('commit-draft requires a git repository'),
+          retryable: false,
+        },
+      },
+    })
+    expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
+  })
+
+  it('re-throws CANCELLED instead of falling back to a no-repo context for supplied sources', async () => {
+    const { AgentOperationError } = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
+    mockResolveAgentRepoRoot.mockRejectedValueOnce(
+      new AgentOperationError('CANCELLED', 'Request was cancelled.'),
+    )
+    // Bound mode guarantees resolveEffectiveRepoRoot calls through to
+    // resolveAgentRepoRoot (mocked above) regardless of the input's repo field.
+    createServer()
+
+    const result = await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'review',
+        error: { code: 'CANCELLED' },
+      },
+    })
+    expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
   })
 
   it('rejects the unsafe repository-config option with a structured error', async () => {

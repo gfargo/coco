@@ -16,9 +16,12 @@ import {
     createAgentOutputSchema,
     createCondenseDiffInputJsonSchema,
     createRepoContextInputJsonSchema,
+    describeRepoResolutionFailure,
     RecapDataSchema,
     RepoContextDataSchema,
     RepoContextRequestSchema,
+    requiresRepository,
+    resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
@@ -122,7 +125,45 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
       emit(await runRepoContext(input, context))
     } else {
       const input = AgentTaskInputSchema.parse(raw)
-      const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+      const needsRepo = requiresRepository(operation, input.source)
+      let repoRoot: string
+      let requireRepository: boolean
+
+      if (needsRepo) {
+        // Repository-derived sources and commit-draft always require a real repo.
+        try {
+          repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+        } catch (error) {
+          if (error instanceof AgentOperationError && error.code === 'INVALID_REPOSITORY' && operation === 'commit-draft') {
+            throw new AgentOperationError(
+              'INVALID_REPOSITORY',
+              `commit-draft requires a git repository: it reads branch context and recent commit history even when a prepared summary is supplied (${describeRepoResolutionFailure(error)}).`,
+              false,
+            )
+          }
+          throw error
+        }
+        requireRepository = true
+      } else {
+        // Supplied-source operations (review, changelog, recap with patch/summary/files):
+        // try to resolve a repo for head verification, but fall back gracefully if none exists.
+        try {
+          repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+          requireRepository = true
+        } catch (error) {
+          if (error instanceof AgentOperationError) {
+            // Re-throw confinement/cancellation errors — these are real policy violations.
+            if (error.code === 'REPOSITORY_OUTSIDE_ROOT' || error.code === 'CANCELLED') throw error
+            // INVALID_REPOSITORY is expected when running from a non-git directory.
+            // Fall back to using the requested path (or cwd) as just a directory.
+          } else {
+            throw error
+          }
+          repoRoot = resolveAgentDirectoryRoot(argv.repo || input.repo || process.cwd())
+          requireRepository = false
+        }
+      }
+
       // Config discovery still uses cwd. The agent CLI is a one-shot process,
       // so changing it once before creating the explicit git context is safe.
       // Repository-defined prompts and executable commitlint config remain off
@@ -131,6 +172,7 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
       await armNonInteractiveUsageTelemetry(argv, repoRoot)
       const context = await createAgentOperationContext({
         repoRoot,
+        requireRepository,
         signal: controller.signal,
         surface: 'agent-cli',
       })

@@ -22,6 +22,7 @@ import {
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
+    describeRepoResolutionFailure,
     digestOf,
     getBranchContext,
     getRecentLog,
@@ -31,6 +32,7 @@ import {
     RecapDataSchema,
     RepoContextDataSchema,
     RepoContextRequestSchema,
+    requiresRepository,
     resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
     ReviewDataSchema,
@@ -164,8 +166,50 @@ function registerGenerationTool(
           'MCP tools do not execute repository-defined prompts or commitlint configuration. Use the one-shot agent CLI only for explicitly trusted repositories.',
         )
       }
-      const repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
-      await assertClientAllowsRoot(server, repoRoot)
+
+      const needsRepo = requiresRepository(operation, input.source)
+      let repoRoot: string
+      let requireRepository: boolean
+
+      if (needsRepo) {
+        // Repository-derived sources and commit-draft require a real repository.
+        try {
+          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+        } catch (error) {
+          if (error instanceof AgentOperationError && error.code === 'INVALID_REPOSITORY' && operation === 'commit-draft') {
+            throw new AgentOperationError(
+              'INVALID_REPOSITORY',
+              `commit-draft requires a git repository: it reads branch context and recent commit history even when a prepared summary is supplied (${describeRepoResolutionFailure(error)}).`,
+              false,
+            )
+          }
+          throw error
+        }
+        await assertClientAllowsRoot(server, repoRoot)
+        requireRepository = true
+      } else {
+        // Supplied-source operations: try repo resolution for head verification,
+        // but skip it gracefully when no repository is available or declared.
+        try {
+          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+          await assertClientAllowsRoot(server, repoRoot)
+          requireRepository = true
+        } catch (error) {
+          if (error instanceof AgentOperationError) {
+            // Re-throw confinement/cancellation errors — these are real policy
+            // violations, not "no repo" conditions.
+            if (error.code === 'REPOSITORY_OUTSIDE_ROOT' || error.code === 'REPOSITORY_MISMATCH' || error.code === 'CANCELLED') throw error
+            // INVALID_REPOSITORY is expected when the client has no git roots
+            // and no repo field was supplied. Fall back to cwd for config only.
+          } else {
+            throw error
+          }
+          // Use process.cwd() for config discovery only — never bound as a repo.
+          repoRoot = resolveAgentDirectoryRoot(process.cwd())
+          requireRepository = false
+        }
+      }
+
       const progressToken = extra._meta?.progressToken
       let progressCounter = 0
       const onProgress = progressToken === undefined
@@ -185,6 +229,7 @@ function registerGenerationTool(
         }
       const context = await createAgentOperationContext({
         repoRoot,
+        requireRepository,
         signal: extra.signal,
         surface: 'mcp',
         onProgress,
