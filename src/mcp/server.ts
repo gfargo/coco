@@ -30,12 +30,15 @@ import {
     getStagedDiff,
     isPathWithinRoot,
     RecapDataSchema,
+    RepoContextDataSchema,
+    RepoContextRequestSchema,
     requiresRepository,
     resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
     runCondenseDiff,
+    runRepoContext,
     toAgentOperationError,
 } from '../operations/agent'
 
@@ -51,6 +54,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, RecapDataSchema)
     case 'condense-diff':
       return createAgentMcpOutputSchema(operation, CondenseDiffDataSchema)
+    case 'repo-context':
+      return createAgentMcpOutputSchema(operation, RepoContextDataSchema)
   }
 }
 
@@ -429,6 +434,55 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       }
     } catch (error) {
       const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+        structuredContent: failure,
+      }
+    }
+  })
+
+  // coco_repo_context uses its own input schema (RepoContextRequestSchema) and
+  // dispatches to runRepoContext. No LLM call, no API key required.
+  // Read-only, root-confined, no diff content in the response.
+  server.registerTool('coco_repo_context', {
+    title: 'Repository context',
+    description: [
+      'Return a bounded, structured snapshot of the repository state: branch/upstream/divergence,',
+      'working-tree status (staged, unstaged, untracked, conflicted) with rename-aware numstat,',
+      'recent commit history, in-progress operation (merge/rebase/cherry-pick) with conflict file list,',
+      'and repository capabilities (forge, commitlint config, worktree, shallow).',
+      'Section selection via `include` — defaults to ["branch","status"].',
+      'Every list is capped and reports totalCount + truncated.',
+      'No diff/patch content is ever included. No LLM call, no API key required.',
+      'Read-only; never writes repository files, creates commits, or calls a forge.',
+    ].join(' '),
+    inputSchema: RepoContextRequestSchema,
+    outputSchema: outputSchemaFor('repo-context'),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  }, async (rawInput, extra) => {
+    const repoContextOperation = 'repo-context' as const
+    try {
+      const input = RepoContextRequestSchema.parse(rawInput)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot: resolvedRepoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const result = await runRepoContext(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = createAgentFailureEnvelope(repoContextOperation, toAgentOperationError(error))
       return {
         isError: true,
         content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],

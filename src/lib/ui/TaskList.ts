@@ -11,6 +11,8 @@ import { getProviderOverview } from '../../git/providerData'
 import { getForgeActions } from '../../git/forgeActions'
 import { confirmPrompt } from './inquirerPrompts'
 import { bannerWithHeader, DIVIDER, hotKey, severityColor, statusColor } from './helpers'
+import { confineRepoPath } from '../utils/pathWithinRoot'
+import { resolveGitRepoRoot } from '../utils/resolveGitRepoRoot'
 
 const execFileAsync = promisify(execFile)
 
@@ -24,11 +26,13 @@ export class TaskList {
   private rl: readline.Interface
   private config?: AutoFixConfig
   private git?: SimpleGit
+  private repoRoot: string
 
-  constructor(items: ReviewFeedbackItem[], config?: AutoFixConfig, git?: SimpleGit) {
+  constructor(items: ReviewFeedbackItem[], config?: AutoFixConfig, git?: SimpleGit, repoRoot?: string) {
     this.items = items.map((item) => ({ ...item, status: 'pending' }))
     this.config = config
     this.git = git
+    this.repoRoot = repoRoot ?? resolveGitRepoRoot(process.cwd())
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -74,13 +78,26 @@ export class TaskList {
 
   private async openFile() {
     const item = this.items[this.currentIndex]
+
+    const confinement = confineRepoPath(item.filePath, this.repoRoot)
+    if (!confinement.ok) {
+      const reasonMsg =
+        confinement.reason === 'absolute'
+          ? 'absolute paths are not allowed'
+          : confinement.reason === 'traversal'
+            ? 'path traversal ("..") is not allowed'
+            : 'path resolves outside the repository root'
+      console.log(chalk.red(`Cannot open "${item.filePath}": ${reasonMsg}.`))
+      return
+    }
+
     const editorEnv = process.env.EDITOR || 'code'
     // $EDITOR commonly includes flags (`code -w`, `vim -f`). Tokenize on
     // whitespace so the leading word is the executable and the rest are
     // args — execFile takes the executable and args separately, no shell.
     const editorParts = editorEnv.trim().split(/\s+/).filter(Boolean)
     const editor = editorParts[0] || 'code'
-    const editorArgs = [...editorParts.slice(1), item.filePath]
+    const editorArgs = [...editorParts.slice(1), confinement.absPath]
     try {
       await execFileAsync(editor, editorArgs)
     } catch (err) {
@@ -109,7 +126,7 @@ export class TaskList {
     await new Promise((r) => setTimeout(r, 50))
 
     try {
-      await runAutoFix(item, this.config)
+      await runAutoFix(item, this.config, this.repoRoot)
       this.markAsComplete()
       console.log(chalk.green('\n✅ Auto-fix completed successfully.'))
       await new Promise((r) => setTimeout(r, 1200))

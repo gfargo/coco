@@ -12,6 +12,7 @@ const mockGetStagedDiff = jest.fn()
 const mockGetBranchContext = jest.fn()
 const mockGetRecentLog = jest.fn()
 const mockRunCondenseDiff = jest.fn()
+const mockRunRepoContext = jest.fn()
 
 type HandlerExtra = {
   signal: AbortSignal
@@ -121,6 +122,7 @@ jest.mock('../operations/agent', () => {
     getBranchContext: (...args: unknown[]) => mockGetBranchContext(...args),
     getRecentLog: (...args: unknown[]) => mockGetRecentLog(...args),
     runCondenseDiff: (...args: unknown[]) => mockRunCondenseDiff(...args),
+    runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
   }
 })
 
@@ -167,6 +169,15 @@ describe('createCocoMcpServer', () => {
     mockGetBranchContext.mockResolvedValue('Branch: main')
     mockGetRecentLog.mockResolvedValue('abc1234 initial commit')
     mockRunCondenseDiff.mockResolvedValue(condenseDiffSuccess)
+    mockRunRepoContext.mockResolvedValue({
+      version: 1 as const,
+      ok: true as const,
+      operation: 'repo-context' as const,
+      status: 'completed' as const,
+      data: { branch: { current: 'main', detached: false } },
+      warnings: [],
+      meta: { kind: 'repository' as const, digest: 'sha256:test', verification: 'repository-derived' as const },
+    })
   })
 
   function createServer() {
@@ -199,7 +210,7 @@ describe('createCocoMcpServer', () => {
     }
   }
 
-  it('registers five read-only generation tools including coco_condense_diff', () => {
+  it('registers six read-only generation tools including coco_condense_diff and coco_repo_context', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -208,9 +219,10 @@ describe('createCocoMcpServer', () => {
       'coco_changelog',
       'coco_recap',
       'coco_condense_diff',
+      'coco_repo_context',
     ])
     // The four LLM-generation tools share the AgentTaskInputSchema and have
-    // idempotentHint:false; condense-diff has its own schema and idempotentHint:true.
+    // idempotentHint:false; condense-diff and repo-context have their own schemas and idempotentHint:true.
     const generationTools = ['coco_commit_draft', 'coco_review', 'coco_changelog', 'coco_recap']
     for (const name of generationTools) {
       const registration = tool(name)
@@ -249,6 +261,24 @@ describe('createCocoMcpServer', () => {
     const condenseOutputJson = z.toJSONSchema(condenseTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
     expect(condenseOutputJson.type).toBe('object')
     expect(condenseOutputJson.oneOf).toHaveLength(2)
+
+    // coco_repo_context uses its own request schema.
+    const repoContextTool = tool('coco_repo_context')
+    expect(repoContextTool.config.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    })
+    const repoContextInputJson = z.toJSONSchema(repoContextTool.config.inputSchema, {
+      io: 'input',
+      target: 'draft-07',
+    })
+    expect(repoContextInputJson).toMatchObject({ type: 'object', additionalProperties: false })
+    expect(repoContextInputJson).not.toEqual(createAgentInputJsonSchema())
+    const repoContextOutputJson = z.toJSONSchema(repoContextTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
+    expect(repoContextOutputJson.type).toBe('object')
+    expect(repoContextOutputJson.oneOf).toHaveLength(2)
   })
 
   it('documents repository binding and metadata-only analytics in server instructions', () => {
@@ -658,5 +688,58 @@ describe('createCocoMcpServer', () => {
     }, makeExtra())
 
     expect(withToken).toEqual(withoutToken)
+  })
+
+  it('routes coco_repo_context to runRepoContext and returns a structured result', async () => {
+    createServer()
+    const controller = new AbortController()
+
+    const result = await tool('coco_repo_context').handler(
+      {},
+      makeExtra({ signal: controller.signal }),
+    )
+
+    expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith(undefined, '/repo', controller.signal)
+    expect(mockRunRepoContext).toHaveBeenCalled()
+    expect(result).toMatchObject({
+      structuredContent: expect.objectContaining({
+        ok: true,
+        operation: 'repo-context',
+      }),
+    })
+  })
+
+  it('returns a structured error when coco_repo_context fails', async () => {
+    createServer()
+    mockRunRepoContext.mockRejectedValueOnce(new Error('git unavailable'))
+
+    const result = await tool('coco_repo_context').handler({}, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'repo-context',
+        error: { code: 'OPERATION_FAILED', message: 'git unavailable' },
+      },
+    })
+  })
+
+  it('returns validation failures for invalid coco_repo_context input', async () => {
+    createServer()
+
+    const result = await tool('coco_repo_context').handler(
+      { historyLimit: 0 },  // min is 1 — should fail validation
+      makeExtra(),
+    )
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'repo-context',
+        error: { code: 'INVALID_INPUT' },
+      },
+    })
   })
 })

@@ -12,8 +12,11 @@ import {
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
     createCondenseDiffInputJsonSchema,
+    createRepoContextInputJsonSchema,
     MAX_AGENT_CONTEXT_BYTES,
-    MAX_CONDENSE_BUDGET_TOKENS
+    MAX_CONDENSE_BUDGET_TOKENS,
+    RepoContextDataSchema,
+    RepoContextRequestSchema,
 } from './schemas'
 
 const meta = {
@@ -264,6 +267,66 @@ describe('CondenseDiffRequestSchema', () => {
     })
     expect(jsonSchema.oneOf?.[1]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'condense-diff' } },
+    })
+  })
+})
+
+describe('RepoContextRequestSchema', () => {
+  it('applies safe defaults (version, historyLimit, no include)', () => {
+    const result = RepoContextRequestSchema.parse({})
+    expect(result).toEqual({
+      version: AGENT_PROTOCOL_VERSION,
+      historyLimit: 20,
+    })
+    // include is absent from defaults — it is optional
+    expect(result).not.toHaveProperty('include')
+  })
+
+  it('accepts an explicit include array with all valid sections', () => {
+    const result = RepoContextRequestSchema.parse({
+      include: ['branch', 'status', 'history', 'conflicts', 'capabilities'],
+    })
+    expect(result.include).toEqual(['branch', 'status', 'history', 'conflicts', 'capabilities'])
+  })
+
+  it('rejects invalid section names', () => {
+    expect(RepoContextRequestSchema.safeParse({ include: ['invalid-section'] }).success).toBe(false)
+  })
+
+  it('enforces historyLimit min=1 and max=50', () => {
+    expect(RepoContextRequestSchema.safeParse({ historyLimit: 1 }).success).toBe(true)
+    expect(RepoContextRequestSchema.safeParse({ historyLimit: 50 }).success).toBe(true)
+    expect(RepoContextRequestSchema.safeParse({ historyLimit: 0 }).success).toBe(false)
+    expect(RepoContextRequestSchema.safeParse({ historyLimit: 51 }).success).toBe(false)
+  })
+
+  it('rejects unknown fields (strict)', () => {
+    expect(RepoContextRequestSchema.safeParse({ unexpected: true }).success).toBe(false)
+  })
+
+  it('publishes a caller-facing JSON Schema with optional fields', () => {
+    const json = createRepoContextInputJsonSchema() as unknown as {
+      type: string
+      properties: Record<string, unknown>
+    }
+    expect(json.type).toBe('object')
+    expect(json.properties).toHaveProperty('include')
+    expect(json.properties).toHaveProperty('historyLimit')
+    expect(json.properties).toHaveProperty('repo')
+  })
+
+  it('produces a repo-context output envelope with oneOf metadata in MCP schema', () => {
+    const jsonSchema = z.toJSONSchema(
+      createAgentMcpOutputSchema('repo-context', RepoContextDataSchema)
+    ) as { type?: string; oneOf?: Array<Record<string, unknown>> }
+
+    expect(jsonSchema.type).toBe('object')
+    expect(jsonSchema.oneOf).toHaveLength(2)
+    expect(jsonSchema.oneOf?.[0]).toMatchObject({
+      properties: { ok: { const: true }, operation: { const: 'repo-context' } },
+    })
+    expect(jsonSchema.oneOf?.[1]).toMatchObject({
+      properties: { ok: { const: false }, operation: { const: 'repo-context' } },
     })
   })
 })

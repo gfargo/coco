@@ -38,6 +38,12 @@ import {
     getConventionsContext,
     ResolvedChangeContext,
     resolveChangeSource,
+    readRepoBranchContext,
+    readRepoStatusContext,
+    readRepoHistoryContext,
+    readRepoConflictsContext,
+    readRepoCapabilitiesContext,
+    digestOf,
 } from './context'
 import { AgentOperationError } from './errors'
 import { splitUnifiedDiff } from './splitUnifiedDiff'
@@ -54,6 +60,9 @@ import {
     CondenseDiffRequest,
     RecapData,
     ReviewData,
+    RepoContextData,
+    RepoContextRequest,
+    RepoContextSection,
 } from './schemas'
 
 type SupportedTask = 'review' | 'changelog' | 'recap'
@@ -449,6 +458,72 @@ export async function runAgentOperation(
         'condense-diff must be dispatched via runCondenseDiff, not runAgentOperation.',
         false,
       )
+    case 'repo-context':
+      // repo-context uses its own request schema (RepoContextRequest) and is
+      // dispatched via runRepoContext, not through this shared entry point.
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'repo-context must be dispatched via runRepoContext, not runAgentOperation.',
+        false,
+      )
+  }
+}
+
+const DEFAULT_REPO_CONTEXT_SECTIONS: RepoContextSection[] = ['branch', 'status']
+
+/**
+ * Read a bounded, section-selectable structured snapshot of repository state.
+ * No LLM call, no API key required. All git commands run through the hardened
+ * runAgentGit path (--no-optional-locks, diff.external=, core.fsmonitor=false).
+ * No diff/patch content is ever included — paths and statistics only.
+ */
+export async function runRepoContext(
+  input: RepoContextRequest,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<RepoContextData>> {
+  const sections = new Set<RepoContextSection>(input.include ?? DEFAULT_REPO_CONTEXT_SECTIONS)
+
+  const [branchResult, statusResult, historyResult, conflictsResult, capabilitiesResult] = await Promise.all([
+    sections.has('branch') ? readRepoBranchContext(context) : Promise.resolve(undefined),
+    sections.has('status') ? readRepoStatusContext(context) : Promise.resolve(undefined),
+    sections.has('history') ? readRepoHistoryContext(context, input.historyLimit) : Promise.resolve(undefined),
+    sections.has('conflicts') ? readRepoConflictsContext(context) : Promise.resolve(undefined),
+    sections.has('capabilities') ? readRepoCapabilitiesContext(context) : Promise.resolve(undefined),
+  ])
+
+  const data: RepoContextData = {
+    ...(branchResult !== undefined ? { branch: branchResult } : {}),
+    ...(statusResult !== undefined ? { status: statusResult } : {}),
+    ...(historyResult !== undefined ? { history: historyResult } : {}),
+    ...(conflictsResult !== undefined ? { conflicts: conflictsResult } : {}),
+    ...(capabilitiesResult !== undefined ? { capabilities: capabilitiesResult } : {}),
+  }
+
+  // Build synthetic SourceMetadata so the envelope stays uniform.
+  // We use the snapshot serialization as the digest payload.
+  const snapshot = JSON.stringify(data)
+  let repositoryHead: string | undefined
+  try {
+    repositoryHead = (await context.git.revparse(['HEAD'])).trim()
+  } catch {
+    // No commits yet — leave undefined
+  }
+
+  const meta = {
+    kind: 'repository' as const,
+    digest: digestOf(snapshot),
+    ...(repositoryHead ? { repositoryHead } : {}),
+    verification: 'repository-derived' as const,
+  }
+
+  return {
+    version: AGENT_PROTOCOL_VERSION,
+    ok: true,
+    operation: 'repo-context',
+    status: 'completed',
+    data,
+    warnings: [],
+    meta,
   }
 }
 
