@@ -15,6 +15,8 @@ import {
     AgentOperationContext,
     AgentOperationError,
     AgentTaskInputSchema,
+    BlameDataSchema,
+    BlameRequestSchema,
     ChangelogDataSchema,
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
@@ -29,6 +31,10 @@ import {
     getRepoStatus,
     getStagedDiff,
     isPathWithinRoot,
+    LintDataSchema,
+    LintRequestSchema,
+    MAX_BLAME_EXPLAIN_COMMITS,
+    MAX_BLAME_EXPLAIN_LINES,
     RecapDataSchema,
     RepoContextDataSchema,
     RepoContextRequestSchema,
@@ -37,7 +43,9 @@ import {
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
+    runBlame,
     runCondenseDiff,
+    runLint,
     runRepoContext,
     toAgentOperationError,
 } from '../operations/agent'
@@ -483,6 +491,105 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       }
     } catch (error) {
       const failure = createAgentFailureEnvelope(repoContextOperation, toAgentOperationError(error))
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+        structuredContent: failure,
+      }
+    }
+  })
+
+  // coco_blame uses its own input schema (BlameRequestSchema) and dispatches
+  // to runBlame. No LLM call, no API key required unless `explain: true`.
+  // Read-only, root-confined, never reads repository-defined prompt overrides.
+  server.registerTool('coco_blame', {
+    title: 'Blame file',
+    description: [
+      'Attribute each line of a repo-relative file to its introducing commit (`git blame`).',
+      'Restrict to a subset of lines with `lines` ("10:50", "10:", or "10" — 1-based, inclusive).',
+      'Set `explain: true` to resolve each blamed commit and ask an LLM why that range was introduced — the response',
+      'then omits raw `lines` and returns `explanations` instead, one entry per introducing commit.',
+      `Capped at ${MAX_BLAME_EXPLAIN_LINES} lines and ${MAX_BLAME_EXPLAIN_COMMITS} distinct commits per \`explain\` call;`,
+      'narrow `lines` for larger files or ranges. Uncommitted/staged lines have no introducing commit and are never explained.',
+      'MCP tools never read repository-defined prompt overrides — the built-in explanation prompt is always used.',
+      'Read-only; never writes repository files, creates commits, or calls a forge.',
+    ].join(' '),
+    inputSchema: BlameRequestSchema,
+    outputSchema: createAgentMcpOutputSchema('blame', BlameDataSchema),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  }, async (rawInput, extra) => {
+    const operation = 'blame' as const
+    try {
+      const input = BlameRequestSchema.parse(rawInput)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot: resolvedRepoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const result = await runBlame(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+        structuredContent: failure,
+      }
+    }
+  })
+
+  // coco_lint uses its own input schema (LintRequestSchema) and dispatches
+  // to runLint. No LLM call, no API key required. Read-only, root-confined;
+  // --fix is intentionally not exposed (rewriting commit history is not
+  // read-only).
+  server.registerTool('coco_lint', {
+    title: 'Lint commit messages',
+    description: [
+      "Validate the subject/body of each commit in a range against coco's built-in Conventional Commits rules.",
+      'Range defaults to `<defaultBranch>..HEAD`; override with `since` (`<since>..HEAD`) or an explicit `range`',
+      '(mutually exclusive). Merge commits are reported with status `skipped`.',
+      'Repository-defined commitlint configuration (commitlint.config.js etc.) is never loaded by this tool, even when',
+      "present in the repository — MCP tools do not execute repository-defined configuration. Results may differ from",
+      '`coco lint` on the command line when the repository customizes its commitlint rules.',
+      '`--fix` is not exposed here: rewriting commit history is not read-only.',
+      'Read-only; never rewrites history, creates commits, or calls a forge.',
+    ].join(' '),
+    inputSchema: LintRequestSchema,
+    outputSchema: createAgentMcpOutputSchema('lint', LintDataSchema),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  }, async (rawInput, extra) => {
+    const operation = 'lint' as const
+    try {
+      const input = LintRequestSchema.parse(rawInput)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot: resolvedRepoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const result = await runLint(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
       return {
         isError: true,
         content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],

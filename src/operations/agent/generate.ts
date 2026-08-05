@@ -15,6 +15,24 @@ import {
     ReviewFeedbackItemArraySchema,
 } from '../../commands/review/config'
 import { REVIEW_PROMPT } from '../../commands/review/prompt'
+import { getBlame } from '../../git/blameData'
+import { getCommitDetail, GitCommitDetail } from '../../git/logData'
+import {
+    BlameExplainResponseSchema,
+    filterBlameLines,
+    formatCommitContext,
+    formatLineRanges,
+    groupLinesByHash,
+    parseLineRange,
+} from '../../commands/blame/render'
+import { BLAME_EXPLAIN_PROMPT } from '../../commands/blame/prompt'
+import { validateConventionalCommitMessage } from '../../lib/utils/commitlintValidator'
+import {
+    LINT_LOG_FORMAT,
+    LintLogCommit,
+    parseLintLogOutput,
+    resolveLintRange,
+} from '../../commands/lint/rangeReader'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { LLMModel } from '../../lib/langchain/types'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
@@ -53,11 +71,19 @@ import {
     AgentSuccessEnvelope,
     AgentTaskInput,
     AGENT_PROTOCOL_VERSION,
+    BlameData,
+    BlameExplanationEntry,
+    BlameRequest,
     ChangelogData,
     CommitDraftData,
     CondenseDiffData,
     CondenseDiffFileResult,
     CondenseDiffRequest,
+    LintCommitResult,
+    LintData,
+    LintRequest,
+    MAX_BLAME_EXPLAIN_COMMITS,
+    MAX_BLAME_EXPLAIN_LINES,
     RecapData,
     ReviewData,
     RepoContextData,
@@ -466,6 +492,22 @@ export async function runAgentOperation(
         'repo-context must be dispatched via runRepoContext, not runAgentOperation.',
         false,
       )
+    case 'blame':
+      // blame uses its own request schema (BlameRequest) and is dispatched
+      // via runBlame, not through this shared entry point.
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'blame must be dispatched via runBlame, not runAgentOperation.',
+        false,
+      )
+    case 'lint':
+      // lint uses its own request schema (LintRequest) and is dispatched
+      // via runLint, not through this shared entry point.
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'lint must be dispatched via runLint, not runAgentOperation.',
+        false,
+      )
   }
 }
 
@@ -712,4 +754,300 @@ export async function runCondenseDiff(
     warnings,
     meta: resolved.meta,
   }
+}
+
+// ─── blame operation ───────────────────────────────────────────────────────
+
+// `git blame`'s all-zero sha for uncommitted/staged lines — there is no
+// commit to fetch or explain, so these are always excluded from --explain.
+const BLAME_UNCOMMITTED_SHA = '0'.repeat(40)
+
+function blameEnvelope(data: BlameData, warnings: string[]): AgentSuccessEnvelope<BlameData> {
+  return {
+    version: AGENT_PROTOCOL_VERSION,
+    ok: true,
+    operation: 'blame',
+    status: 'completed',
+    data,
+    warnings,
+    meta: {
+      kind: 'repository',
+      digest: digestOf(JSON.stringify(data)),
+      verification: 'repository-derived',
+    },
+  }
+}
+
+/**
+ * Attribute each line of a repo-relative file to its introducing commit.
+ * With `explain: true`, additionally resolves the introducing commits and
+ * asks an LLM why each range was written, batched into a single call and
+ * capped by `MAX_BLAME_EXPLAIN_LINES` / `MAX_BLAME_EXPLAIN_COMMITS`.
+ * MCP tools never read repository-defined prompt overrides — the built-in
+ * `BLAME_EXPLAIN_PROMPT` is always used.
+ */
+export async function runBlame(
+  input: BlameRequest,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<BlameData>> {
+  if (!context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'blame requires a git repository. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
+
+  const range = parseLineRange(input.lines)
+  if (input.lines && !range) {
+    throw new AgentOperationError(
+      'INVALID_INPUT',
+      `Invalid \`lines\` value "${input.lines}". Expected "a:b", "a:", or "a".`,
+    )
+  }
+
+  const result = await getBlame(context.git, input.file)
+  if (!result.ok) {
+    throw new AgentOperationError('BLAME_FAILED', result.message)
+  }
+
+  const lines = filterBlameLines(result.lines, range)
+
+  if (lines.length === 0) {
+    const message = `No blame lines found for "${input.file}"${range ? ' in the requested range' : ''}.`
+    return blameEnvelope({ path: result.path, lines: [] }, [message])
+  }
+
+  if (!input.explain) {
+    return blameEnvelope({
+      path: result.path,
+      lines: lines.map((line) => ({
+        lineNumber: line.lineNumber,
+        hash: line.hash,
+        shortHash: line.shortHash,
+        author: line.author,
+        content: line.content,
+      })),
+    }, [])
+  }
+
+  // --explain: resolve the introducing commits and ask the LLM why each
+  // range was written. Only this branch touches config/LLM plumbing, so a
+  // plain (non-explain) blame call never requires an API key.
+  const config = loadConfig<Record<string, unknown>, Record<string, unknown>>({}, { cwd: context.repoRoot })
+  const key = getApiKeyForModel(config)
+  const { provider } = getModelAndProviderFromConfig(config)
+  if (config.service.authentication.type !== 'None' && !key) {
+    throw new AgentOperationError('AUTHENTICATION_REQUIRED', 'No API key configured for the blame-explain service.')
+  }
+
+  if (lines.length > MAX_BLAME_EXPLAIN_LINES) {
+    throw new AgentOperationError(
+      'EXPLAIN_RANGE_TOO_LARGE',
+      `\`explain\` covers ${lines.length} lines, which exceeds the ${MAX_BLAME_EXPLAIN_LINES}-line cap. Narrow the \`lines\` range and try again.`,
+    )
+  }
+
+  const groups = groupLinesByHash(lines).filter((group) => group.hash !== BLAME_UNCOMMITTED_SHA)
+
+  if (groups.length === 0) {
+    return blameEnvelope(
+      { path: result.path, explanations: [] },
+      ['All lines in range are uncommitted — nothing to explain.'],
+    )
+  }
+
+  const truncated = groups.length > MAX_BLAME_EXPLAIN_COMMITS
+  const explainedGroups = truncated ? groups.slice(0, MAX_BLAME_EXPLAIN_COMMITS) : groups
+
+  const service = resolveDynamicService(config, 'blameExplain')
+  const model = service.model
+  const tokenizer = await getTokenCounterForProvider(provider, String(model))
+  const llm = await getLlm(provider, model as LLMModel, { ...config, service })
+
+  const details = await Promise.all(
+    explainedGroups.map((group) => getCommitDetail(context.git!, group.hash))
+  )
+  const detailByHash = new Map<string, GitCommitDetail>(
+    explainedGroups.map((group, index) => [group.hash, details[index]])
+  )
+
+  const commitsContext = explainedGroups
+    .map((group) =>
+      formatCommitContext({
+        hash: group.hash,
+        lineNumbers: group.lineNumbers,
+        detail: detailByHash.get(group.hash)!,
+      })
+    )
+    .join('\n\n---\n\n')
+
+  const formatInstructions =
+    "Respond with a valid JSON array of objects, each containing 'hash' (the full commit sha exactly as given above) and 'explanation' (1-3 sentences), one entry per commit listed."
+
+  const prompt = getPrompt({
+    template: BLAME_EXPLAIN_PROMPT.template as string,
+    variables: BLAME_EXPLAIN_PROMPT.inputVariables,
+    fallback: BLAME_EXPLAIN_PROMPT,
+  })
+
+  const variables = {
+    file: result.path,
+    format_instructions: formatInstructions,
+    commits: commitsContext,
+    language_context: getLanguageContext(undefined, { taskDescription: 'explanation' }),
+  }
+
+  const budgetedPrompt = await enforcePromptBudget({
+    prompt,
+    variables,
+    tokenizer,
+    maxTokens: config.service.tokenLimit || 2048,
+    summaryKey: 'commits',
+  })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const parser: any = createSchemaParser(BlameExplainResponseSchema)
+
+  let response: z.infer<typeof BlameExplainResponseSchema>
+  try {
+    response = await executeChain<z.infer<typeof BlameExplainResponseSchema>>({
+      llm,
+      prompt,
+      variables: budgetedPrompt.variables,
+      parser,
+      logger: context.logger,
+      tokenizer,
+      signal: context.signal,
+      metadata: {
+        task: 'blameExplain',
+        command: 'agent-blame',
+        provider,
+        model: String(model),
+        surface: context.surface,
+      },
+    })
+  } catch (error) {
+    throw new AgentOperationError(
+      'GENERATION_FAILED',
+      `Failed to generate blame explanations: ${error instanceof Error ? error.message : String(error)}`,
+      true,
+    )
+  }
+
+  const explanationByHash = new Map(response.map((entry) => [entry.hash, entry.explanation]))
+
+  const explanations: BlameExplanationEntry[] = explainedGroups.map((group) => ({
+    hash: group.hash,
+    author: group.author,
+    lines: formatLineRanges(group.lineNumbers),
+    subject: detailByHash.get(group.hash)!.message,
+    explanation: explanationByHash.get(group.hash) || 'No explanation returned by the model.',
+  }))
+
+  const warnings = truncated
+    ? [`${groups.length} distinct commits touch this range; only the first ${MAX_BLAME_EXPLAIN_COMMITS} were explained.`]
+    : []
+
+  return blameEnvelope(
+    { path: result.path, explanations, ...(truncated ? { truncated: true } : {}) },
+    warnings,
+  )
+}
+
+// ─── lint operation ────────────────────────────────────────────────────────
+
+async function loadLintRangeCommits(context: AgentOperationContext, range: string): Promise<LintLogCommit[]> {
+  const output = await context.git!.raw(['log', '--reverse', '--date=short', `--pretty=format:${LINT_LOG_FORMAT}`, range])
+  return parseLintLogOutput(output)
+}
+
+function lintEnvelope(data: LintData): AgentSuccessEnvelope<LintData> {
+  return {
+    version: AGENT_PROTOCOL_VERSION,
+    ok: true,
+    operation: 'lint',
+    status: 'completed',
+    data,
+    warnings: [],
+    meta: {
+      kind: 'repository',
+      digest: digestOf(JSON.stringify(data)),
+      verification: 'repository-derived',
+    },
+  }
+}
+
+/**
+ * Validate the subject/body of each commit in a range against coco's
+ * built-in Conventional Commits rules. Unlike `coco lint` on the command
+ * line, this never loads repository-defined commitlint configuration
+ * (commitlint.config.js etc.) — MCP tools do not execute repository-defined
+ * configuration, so results may differ from the CLI when a repository
+ * customizes its rules. `--fix` is not exposed: rewriting commit history is
+ * not read-only.
+ */
+export async function runLint(
+  input: LintRequest,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<LintData>> {
+  if (!context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'lint requires a git repository. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
+  if (input.since && input.range) {
+    throw new AgentOperationError(
+      'INVALID_INPUT',
+      '`since` and `range` are mutually exclusive — pass one or the other.',
+    )
+  }
+
+  const config = loadConfig<Record<string, unknown>, Record<string, unknown>>({}, { cwd: context.repoRoot })
+  const range = resolveLintRange(input, config.defaultBranch || 'main')
+
+  let commits: LintLogCommit[]
+  try {
+    commits = await loadLintRangeCommits(context, range)
+  } catch (error) {
+    throw new AgentOperationError(
+      'INVALID_REVISION',
+      `Failed to read commit range '${range}': ${(error as Error).message.split('\n')[0]}`,
+    )
+  }
+
+  const emptySummary = { passing: 0, failing: 0, warning: 0, skipped: 0 }
+  if (commits.length === 0) {
+    return lintEnvelope({ results: [], summary: emptySummary })
+  }
+
+  const results: LintCommitResult[] = []
+  for (const commit of commits) {
+    if (commit.parents.length > 1) {
+      results.push({ sha: commit.sha, shortSha: commit.shortSha, subject: commit.subject, status: 'skipped', errors: [], warnings: [] })
+      continue
+    }
+
+    const fullMessage = commit.body ? `${commit.subject}\n\n${commit.body}` : commit.subject
+    const validation = await validateConventionalCommitMessage(fullMessage)
+    const status: LintCommitResult['status'] =
+      validation.errors.length > 0 ? 'fail' : validation.warnings.length > 0 ? 'warn' : 'pass'
+    results.push({
+      sha: commit.sha,
+      shortSha: commit.shortSha,
+      subject: commit.subject,
+      status,
+      errors: validation.errors,
+      warnings: validation.warnings,
+    })
+  }
+
+  const summary = {
+    passing: results.filter((c) => c.status === 'pass').length,
+    failing: results.filter((c) => c.status === 'fail' || (input.severity === 'warning' && c.status === 'warn')).length,
+    warning: results.filter((c) => c.status === 'warn').length,
+    skipped: results.filter((c) => c.status === 'skipped').length,
+  }
+
+  return lintEnvelope({ results, summary })
 }

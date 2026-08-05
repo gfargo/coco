@@ -22,6 +22,7 @@ import { BlameArgv, BlameOptions } from './config'
 import { BLAME_EXPLAIN_PROMPT } from './prompt'
 import {
   BlameExplainEntry,
+  BlameExplainResponseSchema,
   filterBlameLines,
   formatBlameJson,
   formatBlameTable,
@@ -29,25 +30,14 @@ import {
   formatExplanations,
   formatLineRanges,
   groupLinesByHash,
+  MAX_EXPLAIN_COMMITS,
+  MAX_EXPLAIN_LINES,
   parseLineRange,
 } from './render'
 
 // `git blame`'s all-zero sha for uncommitted/staged lines — there is no
 // commit to fetch or explain, so these are always excluded from --explain.
 const UNCOMMITTED_SHA = '0'.repeat(40)
-
-// Cost guardrails (#OSS-1604): naive --explain would issue one LLM call per
-// blamed sha. We batch into a single call, but still cap the input so a
-// huge file (or an un-narrowed --lines) can't balloon the prompt/cost.
-const MAX_EXPLAIN_LINES = 400
-const MAX_EXPLAIN_COMMITS = 25
-
-const BlameExplainResponseSchema = z.array(
-  z.object({
-    hash: z.string(),
-    explanation: z.string(),
-  })
-)
 
 export const handler: CommandHandler<BlameArgv> = async (argv, logger) => {
   const git = applyRepoFlag(argv)
