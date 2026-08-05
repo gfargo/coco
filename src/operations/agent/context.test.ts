@@ -6,6 +6,7 @@ import * as path from 'node:path'
 import simpleGit from 'simple-git'
 
 import {
+    buildResolvedRepoConfig,
     createAgentOperationContext,
     digestOf,
     getBranchContext,
@@ -424,6 +425,30 @@ describe('agent repository context', () => {
     const log = await getRecentLog(context, 100)
 
     expect(log.trim().split('\n')).toHaveLength(20)
+  })
+
+  it('projects the resolved config to an allowlist and omits credentials', () => {
+    // The default (config-less) provider is 'openai' — OPENAI_API_KEY is the
+    // env var that actually populates service.authentication in that case.
+    const previousKey = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = 'sk-test-secret'
+    try {
+      const resolved = buildResolvedRepoConfig(repoRoot)
+
+      expect(resolved.service.provider).toBe('openai')
+      expect(resolved.service.model).toBeDefined()
+      expect(resolved.defaultBranch).toBeDefined()
+      expect(resolved.ignoredFiles).toEqual(expect.any(Array))
+      expect(resolved.ignoredExtensions).toEqual(expect.any(Array))
+
+      const serialized = JSON.stringify(resolved)
+      expect(serialized).not.toContain('sk-test-secret')
+      expect(serialized).not.toContain('authentication')
+      expect(serialized).not.toContain('apiKey')
+    } finally {
+      if (previousKey === undefined) delete process.env.OPENAI_API_KEY
+      else process.env.OPENAI_API_KEY = previousKey
+    }
   })
 })
 

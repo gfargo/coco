@@ -11,6 +11,7 @@ const mockGetRepoStatus = jest.fn()
 const mockGetStagedDiff = jest.fn()
 const mockGetBranchContext = jest.fn()
 const mockGetRecentLog = jest.fn()
+const mockGetRepoConfig = jest.fn()
 const mockRunCondenseDiff = jest.fn()
 const mockRunRepoContext = jest.fn()
 
@@ -121,6 +122,7 @@ jest.mock('../operations/agent', () => {
     getStagedDiff: (...args: unknown[]) => mockGetStagedDiff(...args),
     getBranchContext: (...args: unknown[]) => mockGetBranchContext(...args),
     getRecentLog: (...args: unknown[]) => mockGetRecentLog(...args),
+    getRepoConfig: (...args: unknown[]) => mockGetRepoConfig(...args),
     runCondenseDiff: (...args: unknown[]) => mockRunCondenseDiff(...args),
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
   }
@@ -168,6 +170,13 @@ describe('createCocoMcpServer', () => {
     mockGetStagedDiff.mockResolvedValue('')
     mockGetBranchContext.mockResolvedValue('Branch: main')
     mockGetRecentLog.mockResolvedValue('abc1234 initial commit')
+    mockGetRepoConfig.mockResolvedValue(JSON.stringify({
+      defaultBranch: 'main',
+      service: { provider: 'anthropic', model: 'claude-sonnet-4-6', tokenLimit: 4096 },
+      telemetry: { usage: false },
+      ignoredFiles: ['*.lock'],
+      ignoredExtensions: ['.map'],
+    }))
     mockRunCondenseDiff.mockResolvedValue(condenseDiffSuccess)
     mockRunRepoContext.mockResolvedValue({
       version: 1 as const,
@@ -446,7 +455,7 @@ describe('createCocoMcpServer', () => {
     })
   })
 
-  it('registers four read-only repository resources with static URIs', () => {
+  it('registers five read-only repository resources with static URIs', () => {
     createServer()
 
     expect([...resourceRegistrations.keys()]).toEqual([
@@ -454,14 +463,19 @@ describe('createCocoMcpServer', () => {
       'coco_repo_diff_staged',
       'coco_repo_branch_context',
       'coco_repo_log_recent',
+      'coco_repo_config',
     ])
     expect(resourceRegistrations.get('coco_repo_status')?.uri).toBe('coco://repo/status')
     expect(resourceRegistrations.get('coco_repo_diff_staged')?.uri).toBe('coco://repo/diff/staged')
     expect(resourceRegistrations.get('coco_repo_branch_context')?.uri).toBe('coco://repo/branch-context')
     expect(resourceRegistrations.get('coco_repo_log_recent')?.uri).toBe('coco://repo/log/recent')
+    expect(resourceRegistrations.get('coco_repo_config')?.uri).toBe('coco://repo/config')
     for (const registration of resourceRegistrations.values()) {
-      expect(registration.config.mimeType).toBe('text/plain')
       expect(registration.config.description).toEqual(expect.stringContaining('Read-only'))
+    }
+    expect(resourceRegistrations.get('coco_repo_config')?.config.mimeType).toBe('application/json')
+    for (const name of ['coco_repo_status', 'coco_repo_diff_staged', 'coco_repo_branch_context', 'coco_repo_log_recent']) {
+      expect(resourceRegistrations.get(name)?.config.mimeType).toBe('text/plain')
     }
   })
 
@@ -520,6 +534,36 @@ describe('createCocoMcpServer', () => {
         text: expect.stringContaining('OPERATION_FAILED'),
       }],
     })
+  })
+
+  it('reads the resolved repo config as JSON with a digest and no credentials', async () => {
+    createServer()
+
+    const result = await resource('coco_repo_config').readCallback(
+      new URL('coco://repo/config'),
+      { signal: new AbortController().signal },
+    )
+
+    expect(mockGetRepoConfig).toHaveBeenCalled()
+    expect(result).toMatchObject({
+      contents: [{
+        uri: 'coco://repo/config',
+        mimeType: 'application/json',
+        _meta: { digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+      }],
+    })
+    const parsed = JSON.parse((result.contents as Array<{ text: string }>)[0].text)
+    expect(parsed).toMatchObject({
+      defaultBranch: 'main',
+      service: { provider: 'anthropic', model: 'claude-sonnet-4-6', tokenLimit: 4096 },
+      telemetry: { usage: false },
+      ignoredFiles: ['*.lock'],
+      ignoredExtensions: ['.map'],
+    })
+    const serialized = JSON.stringify(parsed)
+    expect(serialized).not.toContain('apiKey')
+    expect(serialized).not.toContain('authentication')
+    expect(serialized).not.toContain('secretAccessKey')
   })
 
   it('registers coco prompt templates for commit, review, changelog, and recap', () => {
