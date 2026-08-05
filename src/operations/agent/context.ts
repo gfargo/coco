@@ -609,13 +609,19 @@ export async function getRepoTree(
   context: AgentOperationContext,
   { maxDepth = MAX_TREE_DEPTH, maxEntries = MAX_TREE_ENTRIES }: { maxDepth?: number, maxEntries?: number } = {},
 ): Promise<string> {
-  let raw: string
   try {
-    raw = await runAgentGit(context, ['ls-tree', '-r', '--name-only', '-z', 'HEAD'])
+    await runAgentGit(context, ['rev-parse', '--verify', '--quiet', 'HEAD'])
   } catch (error) {
     if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
-    return ''
+    // `rev-parse --verify --quiet HEAD` exits 1 specifically when HEAD is unborn
+    // (fresh `git init`, no commits yet) -- there is nothing to list. Any other
+    // failure (missing git binary, corrupted repo) is a real error and propagates.
+    const exitCode = (error as ExecFileException)?.code
+    if (exitCode === 1) return ''
+    throw error
   }
+
+  const raw = await runAgentGit(context, ['ls-tree', '-r', '--name-only', '-z', 'HEAD'])
   const files = raw.split('\0').filter(Boolean)
 
   const entries = new Set<string>()

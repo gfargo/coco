@@ -466,6 +466,34 @@ describe('agent repository context', () => {
     expect(lines).toHaveLength(6)
     expect(lines[5]).toMatch(/more entries omitted; limit 5/)
   })
+
+  it('returns an empty tree for a freshly-initialized repo with an unborn HEAD', async () => {
+    const freshRoot = path.join(tempRoot, 'fresh')
+    fs.mkdirSync(freshRoot, { recursive: true })
+    const git = simpleGit(freshRoot)
+    await git.init()
+    await git.addConfig('user.name', 'Agent Test')
+    await git.addConfig('user.email', 'agent@example.test')
+    fs.writeFileSync(path.join(freshRoot, 'untracked.txt'), 'content\n')
+    const context = await createAgentOperationContext({ repoRoot: fs.realpathSync(freshRoot) })
+
+    const tree = await getRepoTree(context)
+
+    expect(tree).toBe('')
+  })
+
+  it('propagates a genuine git failure instead of swallowing it as an empty tree', async () => {
+    // Force `ls-tree` to fail on a resolvable HEAD by deleting the commit's root
+    // tree object -- rev-parse --verify --quiet HEAD still succeeds (the commit
+    // object is intact), so this isolates a real ls-tree error from unborn HEAD.
+    const git = simpleGit(repoRoot)
+    const treeSha = (await git.raw(['log', '--format=%T', '-1'])).trim()
+    const objectPath = path.join(repoRoot, '.git', 'objects', treeSha.slice(0, 2), treeSha.slice(2))
+    fs.rmSync(objectPath)
+    const context = await createAgentOperationContext({ repoRoot })
+
+    await expect(getRepoTree(context)).rejects.toThrow(/not a tree object/)
+  })
 })
 
 describe('requiresRepository', () => {
