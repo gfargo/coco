@@ -11,6 +11,7 @@ const mockGetRepoStatus = jest.fn()
 const mockGetStagedDiff = jest.fn()
 const mockGetBranchContext = jest.fn()
 const mockGetRecentLog = jest.fn()
+const mockGetRepoTree = jest.fn()
 const mockRunCondenseDiff = jest.fn()
 const mockRunRepoContext = jest.fn()
 
@@ -121,6 +122,7 @@ jest.mock('../operations/agent', () => {
     getStagedDiff: (...args: unknown[]) => mockGetStagedDiff(...args),
     getBranchContext: (...args: unknown[]) => mockGetBranchContext(...args),
     getRecentLog: (...args: unknown[]) => mockGetRecentLog(...args),
+    getRepoTree: (...args: unknown[]) => mockGetRepoTree(...args),
     runCondenseDiff: (...args: unknown[]) => mockRunCondenseDiff(...args),
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
   }
@@ -168,6 +170,7 @@ describe('createCocoMcpServer', () => {
     mockGetStagedDiff.mockResolvedValue('')
     mockGetBranchContext.mockResolvedValue('Branch: main')
     mockGetRecentLog.mockResolvedValue('abc1234 initial commit')
+    mockGetRepoTree.mockResolvedValue('src/\nsrc/commands/\nsrc/index.ts')
     mockRunCondenseDiff.mockResolvedValue(condenseDiffSuccess)
     mockRunRepoContext.mockResolvedValue({
       version: 1 as const,
@@ -446,7 +449,7 @@ describe('createCocoMcpServer', () => {
     })
   })
 
-  it('registers four read-only repository resources with static URIs', () => {
+  it('registers five read-only repository resources with static URIs', () => {
     createServer()
 
     expect([...resourceRegistrations.keys()]).toEqual([
@@ -454,11 +457,13 @@ describe('createCocoMcpServer', () => {
       'coco_repo_diff_staged',
       'coco_repo_branch_context',
       'coco_repo_log_recent',
+      'coco_repo_tree',
     ])
     expect(resourceRegistrations.get('coco_repo_status')?.uri).toBe('coco://repo/status')
     expect(resourceRegistrations.get('coco_repo_diff_staged')?.uri).toBe('coco://repo/diff/staged')
     expect(resourceRegistrations.get('coco_repo_branch_context')?.uri).toBe('coco://repo/branch-context')
     expect(resourceRegistrations.get('coco_repo_log_recent')?.uri).toBe('coco://repo/log/recent')
+    expect(resourceRegistrations.get('coco_repo_tree')?.uri).toBe('coco://repo/tree')
     for (const registration of resourceRegistrations.values()) {
       expect(registration.config.mimeType).toBe('text/plain')
       expect(registration.config.description).toEqual(expect.stringContaining('Read-only'))
@@ -486,6 +491,26 @@ describe('createCocoMcpServer', () => {
         uri: 'coco://repo/status',
         mimeType: 'text/plain',
         text: '## main',
+        _meta: { digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+      }],
+    })
+  })
+
+  it('reads the repository tree resource', async () => {
+    createServer()
+    const controller = new AbortController()
+
+    const result = await resource('coco_repo_tree').readCallback(
+      new URL('coco://repo/tree'),
+      { signal: controller.signal },
+    )
+
+    expect(mockGetRepoTree).toHaveBeenCalled()
+    expect(result).toMatchObject({
+      contents: [{
+        uri: 'coco://repo/tree',
+        mimeType: 'text/plain',
+        text: 'src/\nsrc/commands/\nsrc/index.ts',
         _meta: { digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
       }],
     })

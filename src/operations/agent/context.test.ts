@@ -12,6 +12,7 @@ import {
     getConventionsContext,
     getRecentLog,
     getRepoStatus,
+    getRepoTree,
     getStagedDiff,
     isPathWithinRoot,
     requiresRepository,
@@ -424,6 +425,46 @@ describe('agent repository context', () => {
     const log = await getRecentLog(context, 100)
 
     expect(log.trim().split('\n')).toHaveLength(20)
+  })
+
+  it('lists tracked files as a depth-limited tree', async () => {
+    const git = simpleGit(repoRoot)
+    fs.mkdirSync(path.join(repoRoot, 'src', 'commands', 'watch'), { recursive: true })
+    fs.writeFileSync(path.join(repoRoot, 'src', 'index.ts'), 'export {}\n')
+    fs.writeFileSync(path.join(repoRoot, 'src', 'commands', 'handler.ts'), 'export {}\n')
+    fs.writeFileSync(path.join(repoRoot, 'src', 'commands', 'watch', 'config.ts'), 'export {}\n')
+    await git.add(['src/index.ts', 'src/commands/handler.ts', 'src/commands/watch/config.ts'])
+    await git.commit('add src files')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const tree = await getRepoTree(context, { maxDepth: 3, maxEntries: 500 })
+    const lines = tree.split('\n')
+
+    expect(lines).toContain('src/')
+    expect(lines).toContain('src/commands/')
+    expect(lines).toContain('src/index.ts')
+    expect(lines).toContain('src/commands/handler.ts')
+    expect(lines).toContain('src/commands/watch/')
+    expect(lines).not.toContain('src/commands/watch/config.ts')
+  })
+
+  it('caps the tree at the configured entry limit', async () => {
+    const git = simpleGit(repoRoot)
+    const files: string[] = []
+    for (let index = 0; index < 10; index += 1) {
+      const relative = `file-${index}.txt`
+      fs.writeFileSync(path.join(repoRoot, relative), `content ${index}\n`)
+      files.push(relative)
+    }
+    await git.add(files)
+    await git.commit('add many files')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const tree = await getRepoTree(context, { maxDepth: 3, maxEntries: 5 })
+    const lines = tree.split('\n')
+
+    expect(lines).toHaveLength(6)
+    expect(lines[5]).toMatch(/more entries omitted; limit 5/)
   })
 })
 

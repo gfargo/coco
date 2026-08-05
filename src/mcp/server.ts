@@ -27,6 +27,7 @@ import {
     getBranchContext,
     getRecentLog,
     getRepoStatus,
+    getRepoTree,
     getStagedDiff,
     isPathWithinRoot,
     RecapDataSchema,
@@ -345,7 +346,7 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       : 'This server resolves the target repository from the workspace roots declared by the MCP client, or from the `repo` field in each tool input.',
     'All tools generate structured drafts or analysis only.',
     'No tool creates commits, writes repository files, posts comments, or mutates a forge.',
-    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log) so a client can browse without spending a tool call.',
+    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, tracked-file tree) so a client can browse without spending a tool call.',
     'Prompts expose coco\'s built-in commit, review, changelog, and recap templates for reuse by any MCP client.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
     'Repository-defined prompts and executable commitlint configuration are never enabled by MCP tools.',
@@ -526,6 +527,15 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     'Recent commit history (`git log --oneline`, bounded to 20 entries). Read-only.',
     repoRoot,
     (context) => getRecentLog(context),
+  )
+  registerRepoResource(
+    server,
+    'coco_repo_tree',
+    'coco://repo/tree',
+    'Repository tree',
+    'Depth-limited (≤3 levels), entry-capped tracked-file listing (`git ls-tree`). Read-only.',
+    repoRoot,
+    (context) => getRepoTree(context),
   )
 
   registerCocoPrompt(
