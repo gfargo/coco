@@ -557,7 +557,8 @@ export async function runCommitApply(
     )
   }
 
-  const message = input.body?.trim() ? `${input.title}\n\n${input.body}` : input.title
+  const trimmedBody = input.body?.trim()
+  const message = trimmedBody ? `${input.title}\n\n${trimmedBody}` : input.title
 
   try {
     await createCommit(message, context.git, undefined, { noVerify: input.noVerify })
