@@ -26,6 +26,7 @@ import {
     digestOf,
     getBranchContext,
     getRecentLog,
+    getRepoConfig,
     getRepoStatus,
     getStagedDiff,
     isPathWithinRoot,
@@ -258,11 +259,12 @@ function registerRepoResource(
   description: string,
   boundRoot: string | undefined,
   loader: (context: AgentOperationContext) => Promise<string>,
+  mimeType: string = 'text/plain',
 ): void {
   server.registerResource(name, uri, {
     title,
     description,
-    mimeType: 'text/plain',
+    mimeType,
   }, async (resourceUri, extra) => {
     try {
       const repoRoot = await resolveEffectiveRepoRoot(server, undefined, boundRoot, extra.signal)
@@ -272,11 +274,12 @@ function registerRepoResource(
         signal: extra.signal,
         surface: 'mcp',
       })
-      const text = (await loader(context)).trim() || 'No content available.'
+      const raw = await loader(context)
+      const text = mimeType === 'application/json' ? raw.trim() : raw.trim() || 'No content available.'
       return {
         contents: [{
           uri: resourceUri.href,
-          mimeType: 'text/plain',
+          mimeType,
           text,
           _meta: { digest: digestOf(text) },
         }],
@@ -345,7 +348,7 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       : 'This server resolves the target repository from the workspace roots declared by the MCP client, or from the `repo` field in each tool input.',
     'All tools generate structured drafts or analysis only.',
     'No tool creates commits, writes repository files, posts comments, or mutates a forge.',
-    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log) so a client can browse without spending a tool call.',
+    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, resolved config) so a client can browse without spending a tool call.',
     'Prompts expose coco\'s built-in commit, review, changelog, and recap templates for reuse by any MCP client.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
     'Repository-defined prompts and executable commitlint configuration are never enabled by MCP tools.',
@@ -526,6 +529,16 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     'Recent commit history (`git log --oneline`, bounded to 20 entries). Read-only.',
     repoRoot,
     (context) => getRecentLog(context),
+  )
+  registerRepoResource(
+    server,
+    'coco_repo_config',
+    'coco://repo/config',
+    'Repository configuration',
+    'Resolved (merged) coco configuration — provider, model, token limits, ignore patterns, telemetry state. Credentials omitted. Read-only.',
+    repoRoot,
+    getRepoConfig,
+    'application/json',
   )
 
   registerCocoPrompt(
