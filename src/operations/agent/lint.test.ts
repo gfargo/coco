@@ -57,6 +57,10 @@ describe('runLint', () => {
     await expect(runLint(input, makeContext(makeGit('')))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
   })
 
+  it('rejects a `range` value that starts with an option prefix at the schema level', () => {
+    expect(() => LintRequestSchema.parse({ range: '--output=/tmp/pwned' })).toThrow()
+  })
+
   it('throws INVALID_REVISION when the commit range cannot be read', async () => {
     const input = LintRequestSchema.parse({})
     await expect(runLint(input, makeContext(makeGit('', { failLog: true })))).rejects.toMatchObject({

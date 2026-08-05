@@ -582,7 +582,7 @@ export const LintRequestSchema = z.object({
   since: gitRevisionSchema.optional().describe(
     'Lint commits in `<since>..HEAD` instead of comparing against the default branch. Mutually exclusive with `range`.',
   ),
-  range: z.string().min(1).optional().describe(
+  range: gitRevisionSchema.optional().describe(
     'Lint an explicit commit range (e.g. "abc123..def456"). Mutually exclusive with `since`.',
   ),
   severity: z.enum(['error', 'warning']).default('error').describe(
