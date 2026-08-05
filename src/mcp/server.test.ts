@@ -18,6 +18,7 @@ const mockGetRecentLog = jest.fn()
 const mockGetRepoConfig = jest.fn()
 const mockRunCondenseDiff = jest.fn()
 const mockRunRepoContext = jest.fn()
+const mockRunCommitApply = jest.fn()
 
 type HandlerExtra = {
   signal: AbortSignal
@@ -129,6 +130,7 @@ jest.mock('../operations/agent', () => {
     getRepoConfig: (...args: unknown[]) => mockGetRepoConfig(...args),
     runCondenseDiff: (...args: unknown[]) => mockRunCondenseDiff(...args),
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
+    runCommitApply: (...args: unknown[]) => mockRunCommitApply(...args),
   }
 })
 
@@ -191,10 +193,15 @@ describe('createCocoMcpServer', () => {
       warnings: [],
       meta: { kind: 'repository' as const, digest: 'sha256:test', verification: 'repository-derived' as const },
     })
+    mockRunCommitApply.mockResolvedValue({
+      sha: 'abc123def456',
+      shortSha: 'abc123d',
+      message: 'feat: add thing',
+    })
   })
 
-  function createServer() {
-    return createCocoMcpServer('/repo') as unknown as McpServer
+  function createServer(allowWrite = false) {
+    return createCocoMcpServer('/repo', allowWrite) as unknown as McpServer
   }
 
   function tool(name: string) {
@@ -852,6 +859,78 @@ describe('createCocoMcpServer', () => {
         operation: 'repo-context',
         error: { code: 'INVALID_INPUT' },
       },
+    })
+  })
+
+  describe('coco_commit_apply (write mode)', () => {
+    it('is not registered when the server is started without --allow-write', () => {
+      createServer(false)
+
+      expect(registrations.has('coco_commit_apply')).toBe(false)
+    })
+
+    it('is registered with write-capable annotations when --allow-write is passed', () => {
+      createServer(true)
+
+      expect(registrations.has('coco_commit_apply')).toBe(true)
+      const registration = tool('coco_commit_apply')
+      expect(registration.config.annotations).toEqual({
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      })
+    })
+
+    it('creates a commit and returns sha/shortSha/message', async () => {
+      createServer(true)
+
+      const result = await tool('coco_commit_apply').handler(
+        { title: 'feat: add thing' },
+        makeExtra(),
+      )
+
+      expect(mockRunCommitApply).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'feat: add thing', noVerify: false }),
+        expect.anything(),
+      )
+      expect(result).toMatchObject({
+        structuredContent: { sha: 'abc123def456', shortSha: 'abc123d', message: 'feat: add thing' },
+      })
+    })
+
+    it('propagates noVerify to runCommitApply', async () => {
+      createServer(true)
+
+      await tool('coco_commit_apply').handler(
+        { title: 'feat: add thing', noVerify: true },
+        makeExtra(),
+      )
+
+      expect(mockRunCommitApply).toHaveBeenCalledWith(
+        expect.objectContaining({ noVerify: true }),
+        expect.anything(),
+      )
+    })
+
+    it('returns a structured error envelope when the index is empty', async () => {
+      const { AgentOperationError } = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
+      mockRunCommitApply.mockRejectedValueOnce(
+        new AgentOperationError('EMPTY_INDEX', 'Nothing staged to commit.'),
+      )
+      createServer(true)
+
+      const result = await tool('coco_commit_apply').handler(
+        { title: 'feat: add thing' },
+        makeExtra(),
+      )
+
+      expect(result).toMatchObject({
+        isError: true,
+        structuredContent: {
+          error: { code: 'EMPTY_INDEX', message: 'Nothing staged to commit.' },
+        },
+      })
     })
   })
 })

@@ -94,7 +94,7 @@ coco agent commit-draft --input request.json --repo /work/project
 coco mcp --repo /work/project
 ```
 
-Both transports share typed `commit-draft`, `review`, `changelog`, and `recap` operations. They accept safe repository scopes or caller-supplied patches/summaries and return explicit success/failure envelopes. MCP tools never create commits, write repository files, post comments, or mutate a forge. When local usage stats are already enabled, calls add metadata-only `agent-cli`/`mcp` records to the user-cache ledger; prompts, diffs, and code are never recorded.
+Both transports share typed `commit-draft`, `review`, `changelog`, and `recap` operations. They accept safe repository scopes or caller-supplied patches/summaries and return explicit success/failure envelopes. By default MCP tools never create commits, write repository files, post comments, or mutate a forge. Starting the server with `coco mcp --allow-write` additionally registers `coco_commit_apply`, an opt-in tool that commits the currently staged index (it never stages files itself and never pushes). When local usage stats are already enabled, calls add metadata-only `agent-cli`/`mcp` records to the user-cache ledger; prompts, diffs, and code are never recorded.
 
 See **[Agent CLI and MCP](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP)** for client setup, every parameter and schema, safety boundaries, examples, analytics, and troubleshooting.
 

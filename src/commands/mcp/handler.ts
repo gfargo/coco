@@ -16,5 +16,5 @@ export async function handler(argv: McpArgv): Promise<void> {
   }
   // When --repo is omitted, the server starts in deferred-binding mode:
   // the repository is resolved per-call from client roots or tool input.
-  await startCocoMcpServer(repoRoot)
+  await startCocoMcpServer(repoRoot, { allowWrite: argv.allowWrite ?? false })
 }
