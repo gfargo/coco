@@ -611,6 +611,8 @@ export async function runCondenseDiff(
     throw new AgentOperationError('NO_CHANGES', 'No file diffs were found in the resolved change source.')
   }
 
+  report(context, 'Resolved diff', 0.3)
+
   const languages = input.languages
 
   // Phase 1: apply per-file condensation strategy.
@@ -618,7 +620,8 @@ export async function runCondenseDiff(
   const condensedDiffs: Array<{ fileDiff: FileDiff; condensed: string; applied: CondenseDiffFileResult['applied'] }> = []
 
   let totalInputTokens = 0
-  for (const fd of fileDiffs) {
+  for (let i = 0; i < fileDiffs.length; i++) {
+    const fd = fileDiffs[i]
     totalInputTokens += fd.tokenCount
     const { condensed, applied, langId } = await condenseFileDiff(fd, languages)
     const outputTokens = tokenizer(condensed)
@@ -630,7 +633,10 @@ export async function runCondenseDiff(
       outputTokens,
     })
     condensedDiffs.push({ fileDiff: { ...fd, diff: condensed, tokenCount: outputTokens }, condensed, applied })
+    report(context, `Condensing ${fd.file}`, 0.3 + 0.6 * ((i + 1) / fileDiffs.length))
   }
+
+  report(context, 'Enforcing token budget', 0.9)
 
   const budgetTokens = input.budget.tokens
 
@@ -702,6 +708,8 @@ export async function runCondenseDiff(
     },
     files: fileResults,
   }
+
+  report(context, 'Completed', 1)
 
   return {
     version: AGENT_PROTOCOL_VERSION,
