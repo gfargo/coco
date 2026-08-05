@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url'
+import type { QualifiedConfig } from '@commitlint/types'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -12,10 +13,13 @@ import { RECAP_PROMPT } from '../commands/recap/prompt'
 import { REVIEW_PROMPT } from '../commands/review/prompt'
 import { BUILD_VERSION } from '../lib/buildInfo'
 import { getPrompt } from '../lib/langchain/utils/getPrompt'
+import { getLanguageContext } from '../lib/langchain/utils/languageContext'
+import { formatCommitlintRulesForPrompt } from '../lib/utils/commitlintValidator'
 import {
     AgentOperation,
     AgentOperationContext,
     AgentOperationError,
+    asUntrustedChangeContext,
     ChangelogDataSchema,
     CommitApplyDataSchema,
     CommitApplyRequestSchema,
@@ -373,16 +377,22 @@ function registerRepoResource(
   })
 }
 
+/**
+ * Render a coco prompt template to text. The exported `PromptTemplate`
+ * instances (`COMMIT_PROMPT`, `REVIEW_PROMPT`, etc.) are built with LangChain's
+ * default f-string format, under which `{{var}}` is an escaped literal — so
+ * `.format()` on those instances directly does not substitute anything.
+ * Rendering must go through `getPrompt` with `templateFormat: 'mustache'`,
+ * exactly as coco's own generation path does.
+ */
 async function renderPromptTemplate(
   template: PromptTemplate,
-  args: Record<string, string | undefined>,
+  variables: Record<string, string>,
 ): Promise<string> {
   const values: Record<string, string> = {}
   for (const variable of template.inputVariables) {
-    values[variable] = args[variable] ?? ''
+    values[variable] = variables[variable] ?? ''
   }
-  // The coco prompt templates use `{{var}}` (mustache) placeholders; PromptTemplate.format
-  // on the module-level instances defaults to f-string and would leave them unrendered.
   const mustacheTemplate = getPrompt({
     template: template.template as string,
     variables: template.inputVariables,
@@ -391,21 +401,158 @@ async function renderPromptTemplate(
   return mustacheTemplate.format(values)
 }
 
-function registerCocoPrompt(
-  server: McpServer,
+/**
+ * Populate `commitlint_rules_context` from a caller-supplied JSON string
+ * (the `QualifiedConfig['rules']` shape, e.g. read from the caller's own
+ * commitlint config) via the same formatter coco's own commit generation
+ * uses. This never reads repository-defined commitlint config — the client
+ * must pass its own rules; malformed JSON degrades to no rules block rather
+ * than failing prompt rendering.
+ */
+function buildCommitlintRulesContext(rulesJson: string | undefined): string {
+  if (!rulesJson) return ''
+  try {
+    const rules = JSON.parse(rulesJson) as QualifiedConfig['rules']
+    return formatCommitlintRulesForPrompt({ rules })
+  } catch {
+    return ''
+  }
+}
+
+function branchNameContextFor(branchName: string | undefined): string {
+  return branchName ? `Current git branch name: ${branchName}` : ''
+}
+
+type CocoPromptSpec = {
+  name: string
+  title: string
+  description: string
+  template: PromptTemplate
+  argsSchema: Record<string, z.ZodType>
+  buildVariables: (args: Record<string, string | undefined>) => Record<string, string>
+}
+
+const COMMIT_FORMAT_INSTRUCTIONS = 'Return ONLY a valid JSON object with string fields "title" (imperative, <=50 characters) and "body" (a longer detailed summary, ~300 characters). No markdown, no code fences, no extra text.'
+const CONVENTIONAL_COMMIT_FORMAT_INSTRUCTIONS = 'Return ONLY a valid JSON object with string fields "title" (Conventional Commits format `type(scope): description`, <=50 characters) and "body" (<=280 characters). No markdown, no code fences, no extra text.'
+const REVIEW_FORMAT_INSTRUCTIONS = 'Return a JSON array of findings with title, summary, severity (1-10), category, and filePath.'
+const CHANGELOG_FORMAT_INSTRUCTIONS = 'Return a JSON object with string fields title and content.'
+const RECAP_FORMAT_INSTRUCTIONS = 'Return a JSON object with string fields title and summary.'
+
+/**
+ * Curated, typed argument specs for coco's built-in prompt templates. Every
+ * template variable NOT exposed here is filled from a fixed built-in default
+ * (never from repository config) so the rendered prompt is fully runnable —
+ * `conventions_context` and `commit_history` in particular always render
+ * empty, preserving the invariant that a repository-defined `prompt` (or any
+ * other repo-sourced instruction text) is never served over MCP.
+ */
+function commitPromptArgsSchema(): Record<string, z.ZodType> {
+  return {
+    summary: z.string().describe('Diff summary or description of the change to generate a commit message for. Wrapped in untrusted-content framing before rendering.'),
+    commitlint_rules: z.string().optional().describe('JSON-encoded commitlint rules object (the `QualifiedConfig["rules"]` shape, e.g. `{"header-max-length":[2,"always",72]}`) used to populate the Commitlint Rules block. Omit for no rules constraint.'),
+    branch_name: z.string().optional().describe('Current branch name, included as context if provided.'),
+  }
+}
+
+function buildCommitPromptSpec(
   name: string,
   title: string,
   description: string,
   template: PromptTemplate,
-): void {
-  const argsSchema = Object.fromEntries(
-    template.inputVariables.map((variable) => [
-      variable,
-      z.string().optional().describe(`Value for the \`${variable}\` template variable. Defaults to empty.`),
-    ]),
-  )
-  server.registerPrompt(name, { title, description, argsSchema }, async (args) => {
-    const text = await renderPromptTemplate(template, args as Record<string, string | undefined>)
+  formatInstructions: string,
+): CocoPromptSpec {
+  return {
+    name,
+    title,
+    description,
+    template,
+    argsSchema: commitPromptArgsSchema(),
+    buildVariables: (args) => ({
+      summary: asUntrustedChangeContext(args.summary ?? ''),
+      format_instructions: formatInstructions,
+      additional_context: '',
+      commit_history: '',
+      branch_name_context: branchNameContextFor(args.branch_name),
+      commitlint_rules_context: buildCommitlintRulesContext(args.commitlint_rules),
+      language_context: '',
+      conventions_context: '',
+    }),
+  }
+}
+
+function buildReviewPromptSpec(): CocoPromptSpec {
+  return {
+    name: 'coco_review_prompt',
+    title: 'Review prompt',
+    description: "coco's built-in code review prompt template. Args: changes (required), language (optional).",
+    template: REVIEW_PROMPT,
+    argsSchema: {
+      changes: z.string().describe('The diff or change content to review. Wrapped in untrusted-content framing before rendering.'),
+      language: z.string().optional().describe('Write review feedback in this language, e.g. "Spanish". Defaults to English.'),
+    },
+    buildVariables: (args) => ({
+      changes: asUntrustedChangeContext(args.changes ?? ''),
+      format_instructions: REVIEW_FORMAT_INSTRUCTIONS,
+      language_context: getLanguageContext(args.language, { taskDescription: 'code review feedback' }),
+      conventions_context: '',
+      additional_context: '',
+    }),
+  }
+}
+
+function buildChangelogPromptSpec(): CocoPromptSpec {
+  return {
+    name: 'coco_changelog_prompt',
+    title: 'Changelog prompt',
+    description: "coco's built-in changelog generation prompt template. Args: summary (required), additional_context (optional), author (optional).",
+    template: CHANGELOG_PROMPT,
+    argsSchema: {
+      summary: z.string().describe('Summary of commits/diffs to generate a changelog from. Wrapped in untrusted-content framing before rendering.'),
+      additional_context: z.string().optional().describe('Extra guidance to include in the prompt.'),
+      author: z.string().optional().describe('If set, instructs the model to include author attribution when present in the supplied summary.'),
+    },
+    buildVariables: (args) => ({
+      summary: asUntrustedChangeContext(args.summary ?? ''),
+      format_instructions: CHANGELOG_FORMAT_INSTRUCTIONS,
+      additional_context: args.additional_context ? `## Additional Context\n${args.additional_context}` : '',
+      author_instructions: args.author
+        ? 'Include author attribution when it is present in the supplied context.'
+        : 'Do not invent author attribution; include commit references only when present.',
+      language_context: '',
+      conventions_context: '',
+    }),
+  }
+}
+
+function buildRecapPromptSpec(): CocoPromptSpec {
+  return {
+    name: 'coco_recap_prompt',
+    title: 'Recap prompt',
+    description: "coco's built-in recap generation prompt template. Args: changes (required), timeframe (optional).",
+    template: RECAP_PROMPT,
+    argsSchema: {
+      changes: z.string().describe('The diff or change content to summarize. Wrapped in untrusted-content framing before rendering.'),
+      timeframe: z.string().optional().describe('Human-readable timeframe the changes span, e.g. "the last 7 days".'),
+    },
+    buildVariables: (args) => ({
+      changes: asUntrustedChangeContext(args.changes ?? ''),
+      timeframe: args.timeframe || 'provided change context',
+      format_instructions: RECAP_FORMAT_INSTRUCTIONS,
+      language_context: '',
+      conventions_context: '',
+      additional_context: '',
+    }),
+  }
+}
+
+function registerCocoPrompt(server: McpServer, spec: CocoPromptSpec): void {
+  server.registerPrompt(spec.name, {
+    title: spec.title,
+    description: spec.description,
+    argsSchema: spec.argsSchema,
+  }, async (args) => {
+    const variables = spec.buildVariables(args as Record<string, string | undefined>)
+    const text = await renderPromptTemplate(spec.template, variables)
     return {
       messages: [{
         role: 'user' as const,
@@ -425,7 +572,7 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
       ? 'This server was started with --allow-write: coco_commit_apply is also registered. It creates a git commit from whatever is currently staged — it never runs `git add` and never pushes.'
       : 'coco_commit_apply is NOT registered on this server; start it with `coco mcp --allow-write` to opt into that write-capable tool.',
     'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, resolved config) so a client can browse without spending a tool call.',
-    'Prompts expose coco\'s built-in commit, review, changelog, and recap templates for reuse by any MCP client.',
+    'Prompts expose coco\'s built-in commit, review, changelog, and recap templates, fully rendered from curated arguments, for the client to run on its own model. Caller-supplied change content is wrapped in untrusted-content framing before rendering; repository-defined config is never used to source prompt text.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
     'Repository-defined prompts and executable commitlint configuration are never enabled by MCP tools.',
     'Prefer a supplied summary source when the calling agent already understands the change.',
@@ -615,41 +762,23 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     'application/json',
   )
 
-  registerCocoPrompt(
-    server,
+  registerCocoPrompt(server, buildCommitPromptSpec(
     'coco_commit_prompt',
     'Commit message prompt',
-    "coco's built-in commit-message generation prompt template.",
+    "coco's built-in commit-message generation prompt template. Args: summary (required), commitlint_rules (optional), branch_name (optional).",
     COMMIT_PROMPT,
-  )
-  registerCocoPrompt(
-    server,
+    COMMIT_FORMAT_INSTRUCTIONS,
+  ))
+  registerCocoPrompt(server, buildCommitPromptSpec(
     'coco_conventional_commit_prompt',
     'Conventional commit prompt',
-    "coco's built-in Conventional Commits generation prompt template.",
+    "coco's built-in Conventional Commits generation prompt template. Args: summary (required), commitlint_rules (optional), branch_name (optional).",
     CONVENTIONAL_COMMIT_PROMPT,
-  )
-  registerCocoPrompt(
-    server,
-    'coco_review_prompt',
-    'Review prompt',
-    "coco's built-in code review prompt template.",
-    REVIEW_PROMPT,
-  )
-  registerCocoPrompt(
-    server,
-    'coco_changelog_prompt',
-    'Changelog prompt',
-    "coco's built-in changelog generation prompt template.",
-    CHANGELOG_PROMPT,
-  )
-  registerCocoPrompt(
-    server,
-    'coco_recap_prompt',
-    'Recap prompt',
-    "coco's built-in recap generation prompt template.",
-    RECAP_PROMPT,
-  )
+    CONVENTIONAL_COMMIT_FORMAT_INSTRUCTIONS,
+  ))
+  registerCocoPrompt(server, buildReviewPromptSpec())
+  registerCocoPrompt(server, buildChangelogPromptSpec())
+  registerCocoPrompt(server, buildRecapPromptSpec())
 
   return server
 }
