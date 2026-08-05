@@ -45,13 +45,14 @@ jest.mock('../../lib/utils/tokenizer', () => ({
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-function makeContext(): AgentOperationContext {
+function makeContext(overrides?: Partial<AgentOperationContext>): AgentOperationContext {
   return {
     repoRoot: '/repo',
     git: {} as never,
     logger: { setConfig: jest.fn(), verbose: jest.fn(), log: jest.fn(), startSpinner: jest.fn(), stopSpinner: jest.fn(), startTimer: jest.fn(), stopTimer: jest.fn() } as never,
     surface: 'agent-cli',
     signal: undefined,
+    ...overrides,
   }
 }
 
@@ -308,6 +309,27 @@ describe('runCondenseDiff', () => {
     const serializedTokens = Math.ceil(result.data.condensed.length / 4)
     expect(serializedTokens).toBeLessThanOrEqual(budget)
     expect(result.data.metrics.filesOmitted).toBeGreaterThan(0)
+  })
+
+  it('reports increasing progress fractions ending at 1, at least once per file', async () => {
+    const patch = [TS_FILE_DIFF, PY_FILE_DIFF].join('\n')
+    mockDetectStructuralLanguageId.mockReturnValue(undefined)
+    mockSummarizeTrivialDiff.mockReturnValue(undefined)
+
+    const onProgress = jest.fn()
+    await runCondenseDiff(makeRequest(patch, 99999), makeContext({ onProgress }))
+
+    expect(onProgress).toHaveBeenCalled()
+    const fractions = onProgress.mock.calls.map(([update]) => update.fraction)
+    expect(fractions.filter((f) => f !== undefined).length).toBeGreaterThanOrEqual(4) // resolved + 2 files + budget + completed
+    for (let i = 1; i < fractions.length; i++) {
+      expect(fractions[i]).toBeGreaterThanOrEqual(fractions[i - 1])
+    }
+    for (const f of fractions) {
+      expect(f).toBeGreaterThanOrEqual(0)
+      expect(f).toBeLessThanOrEqual(1)
+    }
+    expect(fractions.at(-1)).toBe(1)
   })
 
   describe('with a `repository` scope source', () => {

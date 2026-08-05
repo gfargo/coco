@@ -615,6 +615,35 @@ describe('createCocoMcpServer', () => {
     })
   })
 
+  it('wires a progress reporter into coco_condense_diff when a progressToken is present', async () => {
+    createServer()
+    let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
+    mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
+      capturedOnProgress = input.onProgress
+      return { signal: undefined } as never
+    })
+    const sendNotification = jest.fn(async () => undefined)
+
+    await tool('coco_condense_diff').handler({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+    }, makeExtra({ _meta: { progressToken: 'token-4' }, sendNotification }))
+
+    expect(capturedOnProgress).toBeInstanceOf(Function)
+    capturedOnProgress!({ message: 'Resolved diff', fraction: 0.3 })
+    capturedOnProgress!({ message: 'Condensing a.ts', fraction: 0.6 })
+    capturedOnProgress!({ message: 'Completed', fraction: 1 })
+
+    expect(sendNotification).toHaveBeenNthCalledWith(1, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-4', progress: 0.3, total: 1, message: 'Resolved diff' },
+    })
+    expect(sendNotification).toHaveBeenNthCalledWith(3, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-4', progress: 1, total: 1, message: 'Completed' },
+    })
+  })
+
   it('returns validation failures for invalid condense-diff input', async () => {
     createServer()
 
@@ -655,7 +684,7 @@ describe('createCocoMcpServer', () => {
     expect(mockRunCondenseDiff).not.toHaveBeenCalled()
   })
 
-  it('builds a progress reporter and forwards notifications/progress with a monotonic counter when a progressToken is present', async () => {
+  it('builds a progress reporter and forwards notifications/progress with fraction-derived progress/total when a progressToken is present', async () => {
     createServer()
     let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
     mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
@@ -669,16 +698,39 @@ describe('createCocoMcpServer', () => {
     }, makeExtra({ _meta: { progressToken: 'token-1' }, sendNotification }))
 
     expect(capturedOnProgress).toBeInstanceOf(Function)
-    capturedOnProgress!({ message: 'Resolved changes' })
-    capturedOnProgress!({ message: 'Generating review…' })
+    capturedOnProgress!({ message: 'Resolved changes', fraction: 0.2 })
+    capturedOnProgress!({ message: 'Generating review…', fraction: 0.4 })
 
     expect(sendNotification).toHaveBeenNthCalledWith(1, {
       method: 'notifications/progress',
-      params: { progressToken: 'token-1', progress: 1, message: 'Resolved changes' },
+      params: { progressToken: 'token-1', progress: 0.2, total: 1, message: 'Resolved changes' },
     })
     expect(sendNotification).toHaveBeenNthCalledWith(2, {
       method: 'notifications/progress',
-      params: { progressToken: 'token-1', progress: 2, message: 'Generating review…' },
+      params: { progressToken: 'token-1', progress: 0.4, total: 1, message: 'Generating review…' },
+    })
+  })
+
+  it('keeps progress non-decreasing when a later tick carries no fraction', async () => {
+    createServer()
+    let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
+    mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
+      capturedOnProgress = input.onProgress
+      return { signal: undefined } as never
+    })
+    const sendNotification = jest.fn(async () => undefined)
+
+    await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra({ _meta: { progressToken: 'token-1' }, sendNotification }))
+
+    expect(capturedOnProgress).toBeInstanceOf(Function)
+    capturedOnProgress!({ message: 'Generating review…', fraction: 0.4 })
+    capturedOnProgress!({ message: 'Generating review…' })
+
+    expect(sendNotification).toHaveBeenNthCalledWith(2, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-1', progress: 0.4, total: 1, message: 'Generating review…' },
     })
   })
 

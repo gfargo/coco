@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
+import type { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { CHANGELOG_PROMPT } from '../commands/changelog/prompt'
@@ -140,6 +142,39 @@ async function resolveEffectiveRepoRoot(
   )
 }
 
+/**
+ * Build a transport-agnostic progress reporter that forwards coco's internal
+ * `fraction` (0.0-1.0) as the MCP-spec `progress`/`total` pair so clients can
+ * render a determinate progress bar. Returns `undefined` when the client did
+ * not supply a `progressToken` (progress notifications are opt-in per spec).
+ */
+function makeMcpProgressReporter(
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+): ((update: { message?: string; fraction?: number }) => void) | undefined {
+  const progressToken = extra._meta?.progressToken
+  if (progressToken === undefined) return undefined
+  let lastProgress = 0
+  return (update: { message?: string; fraction?: number }) => {
+    if (typeof update.fraction === 'number' && Number.isFinite(update.fraction)) {
+      // Clamp to [0,1] and keep non-decreasing so the bar only moves forward,
+      // even if a later tick carries no fraction (e.g. streaming liveness ticks).
+      lastProgress = Math.min(1, Math.max(lastProgress, update.fraction))
+    }
+    void extra.sendNotification({
+      method: 'notifications/progress',
+      params: {
+        progressToken,
+        progress: lastProgress,
+        total: 1,
+        message: update.message,
+      },
+    }).catch(() => {
+      // Fire-and-forget: a client that closed its notification
+      // channel mid-call must never fail the underlying operation.
+    })
+  }
+}
+
 function registerGenerationTool(
   server: McpServer,
   operation: AgentOperation,
@@ -211,23 +246,7 @@ function registerGenerationTool(
         }
       }
 
-      const progressToken = extra._meta?.progressToken
-      let progressCounter = 0
-      const onProgress = progressToken === undefined
-        ? undefined
-        : (update: { message?: string; fraction?: number }) => {
-          void extra.sendNotification({
-            method: 'notifications/progress',
-            params: {
-              progressToken,
-              progress: ++progressCounter,
-              message: update.message,
-            },
-          }).catch(() => {
-            // Fire-and-forget: a client that closed its notification
-            // channel mid-call must never fail the underlying operation.
-          })
-        }
+      const onProgress = makeMcpProgressReporter(extra)
       const context = await createAgentOperationContext({
         repoRoot,
         requireRepository,
@@ -425,10 +444,12 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       // to match the single-repo confinement pattern of the other tools.
       const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
       await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const onProgress = makeMcpProgressReporter(extra)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
         surface: 'mcp',
+        onProgress,
       })
       const result = await runCondenseDiff(input, context)
       return {
