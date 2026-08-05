@@ -117,6 +117,26 @@ describe('CodexAdapter', () => {
     )
   })
 
+  it('overrides ambient OPENAI_API_KEY when forceApiKey is provided', async () => {
+    const previousApiKey = process.env.OPENAI_API_KEY
+    process.env.OPENAI_API_KEY = 'ambient-openai-key'
+    mockSpawn.mockReturnValue(makeChild(0))
+
+    try {
+      await adapter.run('fix the bug', undefined, undefined, 'explicit-force-key')
+    } finally {
+      process.env.OPENAI_API_KEY = previousApiKey
+    }
+
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'codex',
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.objectContaining({ OPENAI_API_KEY: 'explicit-force-key' }),
+      })
+    )
+  })
+
   it('preserves inherited OPENAI_API_KEY when api key is undefined', async () => {
     const previousApiKey = process.env.OPENAI_API_KEY
     process.env.OPENAI_API_KEY = 'inherited-key'

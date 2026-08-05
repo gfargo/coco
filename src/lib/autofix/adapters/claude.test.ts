@@ -116,6 +116,26 @@ describe('ClaudeAdapter', () => {
     )
   })
 
+  it('overrides ambient ANTHROPIC_API_KEY when forceApiKey is provided', async () => {
+    const previousApiKey = process.env.ANTHROPIC_API_KEY
+    process.env.ANTHROPIC_API_KEY = 'ambient-anthropic-key'
+    mockSpawn.mockReturnValue(makeChild(0))
+
+    try {
+      await adapter.run('fix the bug', undefined, undefined, 'explicit-force-key')
+    } finally {
+      process.env.ANTHROPIC_API_KEY = previousApiKey
+    }
+
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'claude',
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.objectContaining({ ANTHROPIC_API_KEY: 'explicit-force-key' }),
+      })
+    )
+  })
+
   it('preserves inherited ANTHROPIC_API_KEY when apiKey is undefined', async () => {
     const previousApiKey = process.env.ANTHROPIC_API_KEY
     process.env.ANTHROPIC_API_KEY = 'inherited-key'

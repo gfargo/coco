@@ -116,6 +116,26 @@ describe('GeminiAdapter', () => {
     )
   })
 
+  it('overrides ambient GEMINI_API_KEY when forceApiKey is provided', async () => {
+    const previousApiKey = process.env.GEMINI_API_KEY
+    process.env.GEMINI_API_KEY = 'ambient-google-key'
+    mockSpawn.mockReturnValue(makeChild(0))
+
+    try {
+      await adapter.run('fix the bug', undefined, undefined, 'explicit-force-key')
+    } finally {
+      process.env.GEMINI_API_KEY = previousApiKey
+    }
+
+    expect(mockSpawn).toHaveBeenCalledWith(
+      'gemini',
+      expect.any(Array),
+      expect.objectContaining({
+        env: expect.objectContaining({ GEMINI_API_KEY: 'explicit-force-key' }),
+      })
+    )
+  })
+
   it('preserves inherited GEMINI_API_KEY when apiKey is undefined', async () => {
     const previousApiKey = process.env.GEMINI_API_KEY
     process.env.GEMINI_API_KEY = 'inherited-key'

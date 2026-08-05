@@ -11,7 +11,22 @@ export interface BaseAdapter {
   readonly vendor: AutoFixVendor
   /** The environment-variable name this adapter reads its API key from. */
   readonly envVar: string
-  run(prompt: string, options?: Record<string, string>, apiKey?: string): Promise<void>
+  /**
+   * @param prompt         The prompt to pass to the auto-fix CLI.
+   * @param options        Extra CLI flags forwarded to the tool.
+   * @param apiKey         A provider-derived key — only injected when the
+   *                       ambient env var is unset (never overwrites a working
+   *                       ambient credential).
+   * @param forceApiKey    An explicit per-tool key supplied by the user.  When
+   *                       present it is injected unconditionally, overriding any
+   *                       ambient value.
+   */
+  run(
+    prompt: string,
+    options?: Record<string, string>,
+    apiKey?: string,
+    forceApiKey?: string
+  ): Promise<void>
 }
 
 export type AutoFixConfig = {

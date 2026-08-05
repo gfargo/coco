@@ -5,7 +5,12 @@ export class CodexAdapter implements BaseAdapter {
   readonly vendor: AutoFixVendor = 'openai'
   readonly envVar = 'OPENAI_API_KEY'
 
-  async run(prompt: string, options?: Record<string, string>, apiKey?: string): Promise<void> {
+  async run(
+    prompt: string,
+    options?: Record<string, string>,
+    apiKey?: string,
+    forceApiKey?: string
+  ): Promise<void> {
     const args: string[] = ['exec']
 
     if (options) {
@@ -22,11 +27,15 @@ export class CodexAdapter implements BaseAdapter {
 
     args.push('--full-auto', prompt)
 
-    // Preserve the caller's environment.  Only set the API key when an
-    // explicit non-empty key is provided AND the ambient variable is not
-    // already populated — never clobber a valid working credential.
+    // Build the child environment:
+    //   - forceApiKey (explicit per-tool credential) always wins, even if an
+    //     ambient variable is already set — the user explicitly chose this key.
+    //   - apiKey (derived from coco's provider) is only injected when the
+    //     ambient variable is absent — never clobber a working credential.
     const env = { ...process.env }
-    if (apiKey && !env[this.envVar]) {
+    if (forceApiKey) {
+      env[this.envVar] = forceApiKey
+    } else if (apiKey && !env[this.envVar]) {
       env[this.envVar] = apiKey
     }
 

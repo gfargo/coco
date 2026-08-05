@@ -85,7 +85,7 @@ describe('runAutoFix', () => {
     await runAutoFix(item, config)
 
     expect(buildPrompt).toHaveBeenCalledWith(item)
-    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
+    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
   })
 
   it('forwards autoFixToolOptions to the adapter', async () => {
@@ -94,7 +94,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(codexRun).toHaveBeenCalledWith('mocked prompt', options, undefined)
+    expect(codexRun).toHaveBeenCalledWith('mocked prompt', options, undefined, undefined)
   })
 
   // ── Vendor-match: matching provider passes the key through ─────────────────
@@ -108,7 +108,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, 'sk-openai-key')
+    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, 'sk-openai-key', undefined)
   })
 
   it('anthropic + claude — passes apiKey to adapter (vendor match)', async () => {
@@ -120,7 +120,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(claudeRun).toHaveBeenCalledWith('mocked prompt', undefined, 'sk-ant-key')
+    expect(claudeRun).toHaveBeenCalledWith('mocked prompt', undefined, 'sk-ant-key', undefined)
   })
 
   it('gemini + gemini — passes apiKey to adapter (vendor match)', async () => {
@@ -132,7 +132,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, 'AIza-google-key')
+    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, 'AIza-google-key', undefined)
   })
 
   // ── Vendor-mismatch: mismatched provider must NOT forward the key ──────────
@@ -149,7 +149,7 @@ describe('runAutoFix', () => {
     await runAutoFix(item, config)
 
     // The key passed to run must be undefined — the OpenAI key must not reach gemini
-    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
+    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
     expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('openai'))
     expect(consoleWarnSpy).toHaveBeenCalledWith(expect.stringContaining('gemini'))
 
@@ -167,7 +167,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(claudeRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
+    expect(claudeRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
 
     consoleWarnSpy.mockRestore()
   })
@@ -183,7 +183,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
+    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
 
     consoleWarnSpy.mockRestore()
   })
@@ -199,7 +199,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
+    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
 
     consoleWarnSpy.mockRestore()
   })
@@ -215,7 +215,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
+    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
 
     consoleWarnSpy.mockRestore()
   })
@@ -235,7 +235,14 @@ describe('runAutoFix', () => {
 
       await runAutoFix(item, config)
 
-      expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined)
+      // Key must not be forwarded
+      expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
+
+      // The unrecognized-provider warning branch must have fired with its
+      // distinct "does not have a direct vendor mapping" message
+      expect(consoleWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('does not have a direct vendor mapping')
+      )
 
       consoleWarnSpy.mockRestore()
     }
@@ -244,6 +251,8 @@ describe('runAutoFix', () => {
   // ── Explicit per-tool key wins regardless of provider ─────────────────────
 
   it('autoFixToolApiKey is used even when provider mismatches vendor', async () => {
+    const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+
     const config: AutoFixConfig = {
       autoFixTool: 'gemini',
       provider: 'openai',
@@ -253,7 +262,28 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, 'AIza-explicit-google-key')
+    // Explicit key must arrive as the forceApiKey (4th) arg, not the apiKey (3rd) arg
+    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, 'AIza-explicit-google-key')
+    // No warning is emitted when an explicit key is supplied — the user knows what they're doing
+    expect(consoleWarnSpy).not.toHaveBeenCalled()
+
+    consoleWarnSpy.mockRestore()
+  })
+
+  it('autoFixToolApiKey is used even when ambient GEMINI_API_KEY is already set', async () => {
+    // This is the key regression: the old guard `if (apiKey && !env[this.envVar])`
+    // would silently drop the explicit key when an ambient var was present.
+    const config: AutoFixConfig = {
+      autoFixTool: 'gemini',
+      provider: 'openai',
+      apiKey: 'sk-openai-key',
+      autoFixToolApiKey: 'AIza-explicit-google-key',
+    }
+
+    await runAutoFix(item, config)
+
+    // forceApiKey must be set so the adapter injects it regardless of ambient env
+    expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, 'AIza-explicit-google-key')
   })
 
   it('autoFixToolApiKey takes precedence over apiKey even on a vendor match', async () => {
@@ -266,7 +296,7 @@ describe('runAutoFix', () => {
 
     await runAutoFix(item, config)
 
-    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, 'sk-explicit-tool-key')
+    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, 'sk-explicit-tool-key')
   })
 
   // ── Mismatch warning is emitted ────────────────────────────────────────────
@@ -334,8 +364,10 @@ describe('runAutoFix', () => {
         const runMock =
           tool === 'codex' ? codexRun : tool === 'claude' ? claudeRun : geminiRun
         const callArgs = runMock.mock.calls[0]
-        // Third arg is the apiKey forwarded to the adapter
+        // Third arg is the provider-derived apiKey; fourth is the explicit forceApiKey.
+        // Both must be undefined — no key from provider X must reach vendor Y's adapter.
         expect(callArgs[2]).toBeUndefined()
+        expect(callArgs[3]).toBeUndefined()
 
         consoleWarnSpy.mockRestore()
       }

@@ -39,16 +39,21 @@ export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig
   // Determine which key (if any) to pass to the adapter.
   //
   // Priority:
-  //   1. config.autoFixToolApiKey — an explicit per-tool credential always wins.
+  //   1. config.autoFixToolApiKey — an explicit per-tool credential.  It is
+  //      passed as `forceApiKey` so the adapter injects it unconditionally,
+  //      even when an ambient env var is already populated.  The user
+  //      explicitly chose this key; it must not be silently ignored.
   //   2. config.apiKey — coco's provider key, but ONLY when coco's provider
   //      maps to the same vendor as the adapter.  A key for provider X must
-  //      never be written into vendor Y's environment variable.
+  //      never be written into vendor Y's environment variable.  Passed as the
+  //      normal `apiKey` so the adapter still respects an ambient credential.
   //   3. undefined — let the adapter fall through to the ambient environment,
   //      which is the correct behaviour when no explicit key is needed.
   let keyToInject: string | undefined
+  let forceKeyToInject: string | undefined
 
   if (config.autoFixToolApiKey) {
-    keyToInject = config.autoFixToolApiKey
+    forceKeyToInject = config.autoFixToolApiKey
   } else if (config.apiKey && config.provider) {
     const resolvedVendor = PROVIDER_TO_VENDOR[config.provider]
     if (resolvedVendor === adapter.vendor) {
@@ -74,5 +79,5 @@ export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig
   }
 
   const prompt = await buildPrompt(item)
-  await adapter.run(prompt, config.autoFixToolOptions, keyToInject)
+  await adapter.run(prompt, config.autoFixToolOptions, keyToInject, forceKeyToInject)
 }
