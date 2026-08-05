@@ -1,7 +1,11 @@
 import { z } from 'zod'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { createAgentInputJsonSchema } from '../operations/agent/schemas'
+import {
+  createAgentInputJsonSchema,
+  createMcpAgentInputJsonSchema,
+  createMcpCondenseDiffInputJsonSchema,
+} from '../operations/agent/schemas'
 import { createCocoMcpServer } from './server'
 
 const mockResolveAgentRepoRoot = jest.fn()
@@ -246,8 +250,18 @@ describe('createCocoMcpServer', () => {
         target: 'draft-07',
       })
       const outputJson = z.toJSONSchema(registration.config.outputSchema) as { type?: string; oneOf?: unknown[] }
-      expect(inputJson).toEqual(createAgentInputJsonSchema())
+      expect(inputJson).toEqual(createMcpAgentInputJsonSchema())
+      expect(inputJson).not.toEqual(createAgentInputJsonSchema())
       expect(inputJson).toMatchObject({ type: 'object', additionalProperties: false })
+      const optionsProperties = (inputJson as {
+        properties?: { options?: { properties?: Record<string, unknown> } }
+      }).properties?.options?.properties
+      expect(optionsProperties).toBeDefined()
+      expect(optionsProperties).not.toHaveProperty('trustRepositoryConfig')
+      const cliOptionsProperties = (createAgentInputJsonSchema() as {
+        properties?: { options?: { properties?: Record<string, unknown> } }
+      }).properties?.options?.properties
+      expect(cliOptionsProperties).toHaveProperty('trustRepositoryConfig')
       expect(outputJson.type).toBe('object')
       expect(outputJson.oneOf).toHaveLength(2)
     }
@@ -266,7 +280,9 @@ describe('createCocoMcpServer', () => {
     })
     expect(condenseInputJson).toMatchObject({ type: 'object', additionalProperties: false })
     // Must NOT be the same as the generation tool input schema.
-    expect(condenseInputJson).not.toEqual(createAgentInputJsonSchema())
+    expect(condenseInputJson).not.toEqual(createMcpAgentInputJsonSchema())
+    expect(condenseInputJson).toEqual(createMcpCondenseDiffInputJsonSchema())
+    expect(condenseInputJson).not.toHaveProperty('properties.trustRepositoryConfig')
     const condenseOutputJson = z.toJSONSchema(condenseTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
     expect(condenseOutputJson.type).toBe('object')
     expect(condenseOutputJson.oneOf).toHaveLength(2)
@@ -400,7 +416,7 @@ describe('createCocoMcpServer', () => {
     expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
   })
 
-  it('rejects the unsafe repository-config option with a structured error', async () => {
+  it('rejects a stray trustRepositoryConfig option with a structured INVALID_INPUT error (UNSAFE_OPTION is unreachable via MCP)', async () => {
     createServer()
 
     const result = await tool('coco_review').handler({
@@ -414,7 +430,7 @@ describe('createCocoMcpServer', () => {
         version: 1,
         ok: false,
         operation: 'review',
-        error: { code: 'UNSAFE_OPTION', retryable: false },
+        error: { code: 'INVALID_INPUT', retryable: false },
       },
     })
     expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
@@ -662,7 +678,7 @@ describe('createCocoMcpServer', () => {
     })
   })
 
-  it('rejects trustRepositoryConfig:true on coco_condense_diff with UNSAFE_OPTION', async () => {
+  it('rejects a stray trustRepositoryConfig on coco_condense_diff with INVALID_INPUT (UNSAFE_OPTION is unreachable via MCP)', async () => {
     createServer()
 
     const result = await tool('coco_condense_diff').handler({
@@ -677,7 +693,7 @@ describe('createCocoMcpServer', () => {
         version: 1,
         ok: false,
         operation: 'condense-diff',
-        error: { code: 'UNSAFE_OPTION', retryable: false },
+        error: { code: 'INVALID_INPUT', retryable: false },
       },
     })
     expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()

@@ -12,9 +12,13 @@ import {
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
     createCondenseDiffInputJsonSchema,
+    createMcpAgentInputJsonSchema,
+    createMcpCondenseDiffInputJsonSchema,
     createRepoContextInputJsonSchema,
     MAX_AGENT_CONTEXT_BYTES,
     MAX_CONDENSE_BUDGET_TOKENS,
+    McpCondenseDiffRequestSchema,
+    McpTaskInputSchema,
     RepoContextDataSchema,
     RepoContextRequestSchema,
 } from './schemas'
@@ -143,6 +147,70 @@ describe('AgentTaskInputSchema', () => {
       expect(optionProps[field]?.description?.length ?? 0).toBeGreaterThan(0)
       expect(optionProps[field]?.description).toContain('Honored by:')
     }
+  })
+})
+
+describe('McpTaskInputSchema', () => {
+  it('applies the same safe defaults as AgentTaskInputSchema, minus trustRepositoryConfig', () => {
+    expect(McpTaskInputSchema.parse({})).toEqual({
+      version: AGENT_PROTOCOL_VERSION,
+      source: { kind: 'repository', scope: { type: 'staged' } },
+      options: {
+        conventional: false,
+        includeBranchName: false,
+        previousCommitCount: 0,
+        author: false,
+      },
+    })
+  })
+
+  it('rejects a stray trustRepositoryConfig field (strict schema)', () => {
+    expect(McpTaskInputSchema.safeParse({ options: { trustRepositoryConfig: true } }).success).toBe(false)
+    expect(McpTaskInputSchema.safeParse({ options: { trustRepositoryConfig: false } }).success).toBe(false)
+  })
+
+  it('omits trustRepositoryConfig from the published JSON schema while the CLI schema keeps it', () => {
+    const mcpJsonSchema = createMcpAgentInputJsonSchema() as unknown as {
+      properties: { options: { properties: Record<string, unknown> } }
+    }
+    const cliJsonSchema = createAgentInputJsonSchema() as unknown as {
+      properties: { options: { properties: Record<string, unknown> } }
+    }
+
+    expect(mcpJsonSchema.properties.options.properties).not.toHaveProperty('trustRepositoryConfig')
+    expect(cliJsonSchema.properties.options.properties).toHaveProperty('trustRepositoryConfig')
+    expect(mcpJsonSchema).not.toEqual(cliJsonSchema)
+  })
+})
+
+describe('McpCondenseDiffRequestSchema', () => {
+  it('rejects a stray trustRepositoryConfig field (strict schema)', () => {
+    expect(McpCondenseDiffRequestSchema.safeParse({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+      trustRepositoryConfig: false,
+    }).success).toBe(false)
+  })
+
+  it('omits trustRepositoryConfig from the published JSON schema while the CLI schema keeps it', () => {
+    const mcpJsonSchema = createMcpCondenseDiffInputJsonSchema() as unknown as {
+      properties: Record<string, unknown>
+    }
+    const cliJsonSchema = createCondenseDiffInputJsonSchema() as unknown as {
+      properties: Record<string, unknown>
+    }
+
+    expect(mcpJsonSchema.properties).not.toHaveProperty('trustRepositoryConfig')
+    expect(cliJsonSchema.properties).toHaveProperty('trustRepositoryConfig')
+    expect(mcpJsonSchema).not.toEqual(cliJsonSchema)
+  })
+
+  it('accepts a valid request without trustRepositoryConfig', () => {
+    const result = McpCondenseDiffRequestSchema.safeParse({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+    })
+    expect(result.success).toBe(true)
   })
 })
 

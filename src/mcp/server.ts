@@ -16,11 +16,9 @@ import {
     AgentOperation,
     AgentOperationContext,
     AgentOperationError,
-    AgentTaskInputSchema,
     ChangelogDataSchema,
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
-    CondenseDiffRequestSchema,
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
@@ -32,6 +30,8 @@ import {
     getRepoStatus,
     getStagedDiff,
     isPathWithinRoot,
+    McpCondenseDiffRequestSchema,
+    McpTaskInputSchema,
     RecapDataSchema,
     RepoContextDataSchema,
     RepoContextRequestSchema,
@@ -185,7 +185,7 @@ function registerGenerationTool(
   server.registerTool(`coco_${operation.replace('-', '_')}`, {
     title,
     description,
-    inputSchema: AgentTaskInputSchema,
+    inputSchema: McpTaskInputSchema,
     outputSchema: outputSchemaFor(operation),
     annotations: {
       readOnlyHint: true,
@@ -195,13 +195,7 @@ function registerGenerationTool(
     },
   }, async (rawInput, extra) => {
     try {
-      const input = AgentTaskInputSchema.parse(rawInput)
-      if (input.options.trustRepositoryConfig) {
-        throw new AgentOperationError(
-          'UNSAFE_OPTION',
-          'MCP tools do not execute repository-defined prompts or commitlint configuration. Use the one-shot agent CLI only for explicitly trusted repositories.',
-        )
-      }
+      const input = McpTaskInputSchema.parse(rawInput)
 
       const needsRepo = requiresRepository(operation, input.source)
       let repoRoot: string
@@ -254,7 +248,10 @@ function registerGenerationTool(
         surface: 'mcp',
         onProgress,
       })
-      const result = await runAgentOperation(operation, input, context)
+      const result = await runAgentOperation(operation, {
+        ...input,
+        options: { ...input.options, trustRepositoryConfig: false },
+      }, context)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
@@ -422,7 +419,7 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       'Files omitted to meet the budget are reported in metrics.filesOmitted.',
       'The result is a LOSSY reduction; findings based on it may miss details from omitted or simplified content.',
     ].join(' '),
-    inputSchema: CondenseDiffRequestSchema,
+    inputSchema: McpCondenseDiffRequestSchema,
     outputSchema: outputSchemaFor('condense-diff'),
     annotations: {
       readOnlyHint: true,
@@ -433,13 +430,7 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
   }, async (rawInput, extra) => {
     const operation = 'condense-diff' as const
     try {
-      const input = CondenseDiffRequestSchema.parse(rawInput)
-      if (input.trustRepositoryConfig) {
-        throw new AgentOperationError(
-          'UNSAFE_OPTION',
-          'MCP tools do not execute repository-defined prompts or commitlint configuration. Use the one-shot agent CLI only for explicitly trusted repositories.',
-        )
-      }
+      const input = McpCondenseDiffRequestSchema.parse(rawInput)
       // repoRoot here shadows the outer parameter, using it as the "boundRoot"
       // to match the single-repo confinement pattern of the other tools.
       const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
@@ -451,7 +442,7 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
         surface: 'mcp',
         onProgress,
       })
-      const result = await runCondenseDiff(input, context)
+      const result = await runCondenseDiff({ ...input, trustRepositoryConfig: false }, context)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
