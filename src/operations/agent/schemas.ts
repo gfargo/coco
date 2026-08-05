@@ -499,3 +499,34 @@ export type RepoContextConflicts = z.infer<typeof RepoContextConflictsSchema>
 export type RepoContextCapabilities = z.infer<typeof RepoContextCapabilitiesSchema>
 export type RepoContextFileEntry = z.infer<typeof RepoContextFileEntrySchema>
 export type RepoContextSection = z.infer<typeof RepoContextSectionSchema>
+
+// ─── commit-apply operation ───────────────────────────────────────────────────
+
+/**
+ * Request schema for the MCP tool `coco_commit_apply`. Only registered when
+ * the server is started with `--allow-write`. Deliberately flat (not
+ * wrapped in the versioned `AgentSuccessEnvelope`/`AgentTaskInput` shape used
+ * by the generation tools) since this operation has no `source`/`options`
+ * bag — it commits whatever is already staged.
+ */
+export const CommitApplyRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  title: z.string().min(1).describe('Commit subject line.'),
+  body: z.string().optional().describe('Commit body, appended after a blank line.'),
+  noVerify: z.boolean().default(false).describe('Skip pre-commit and commit-msg hooks (passes --no-verify to git commit).'),
+}).strict()
+
+export const CommitApplyDataSchema = z.object({
+  sha: z.string(),
+  shortSha: z.string(),
+  message: z.string(),
+}).strict()
+
+/** Publish the caller-facing commit-apply request schema. */
+export function createCommitApplyInputJsonSchema() {
+  return z.toJSONSchema(CommitApplyRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export type CommitApplyRequest = z.infer<typeof CommitApplyRequestSchema>
+export type CommitApplyData = z.infer<typeof CommitApplyDataSchema>

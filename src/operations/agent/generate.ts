@@ -16,6 +16,7 @@ import {
 } from '../../commands/review/config'
 import { REVIEW_PROMPT } from '../../commands/review/prompt'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
+import { createCommit, PreCommitHookError } from '../../lib/simple-git/createCommit'
 import { LLMModel } from '../../lib/langchain/types'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../../lib/langchain/utils'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
@@ -54,6 +55,8 @@ import {
     AgentTaskInput,
     AGENT_PROTOCOL_VERSION,
     ChangelogData,
+    CommitApplyData,
+    CommitApplyRequest,
     CommitDraftData,
     CondenseDiffData,
     CondenseDiffFileResult,
@@ -525,6 +528,51 @@ export async function runRepoContext(
     warnings: [],
     meta,
   }
+}
+
+/**
+ * Create a commit from whatever is currently staged. Only registered behind
+ * `coco mcp --allow-write`. Deliberately does NOT run `git add` — it commits
+ * the index as-is and refuses when nothing is staged, so a caller cannot
+ * accidentally sweep unrelated worktree changes into the commit.
+ */
+export async function runCommitApply(
+  input: CommitApplyRequest,
+  context: AgentOperationContext,
+): Promise<CommitApplyData> {
+  if (!context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'commit-apply requires a git repository. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
+
+  const staged = (await context.git.raw(['diff', '--cached', '--name-only', '-z']))
+    .split('\0')
+    .filter(Boolean)
+  if (staged.length === 0) {
+    throw new AgentOperationError(
+      'EMPTY_INDEX',
+      'Nothing staged to commit. Stage changes first; coco_commit_apply does not run `git add`.',
+    )
+  }
+
+  const message = input.body?.trim() ? `${input.title}\n\n${input.body}` : input.title
+
+  try {
+    await createCommit(message, context.git, undefined, { noVerify: input.noVerify })
+  } catch (error) {
+    if (error instanceof PreCommitHookError) {
+      throw new AgentOperationError('HOOK_FAILED', error.hookOutput, false)
+    }
+    throw error
+  }
+
+  const sha = (await context.git.revparse(['HEAD'])).trim()
+  const shortSha = (await context.git.revparse(['--short', 'HEAD'])).trim()
+  const fullMessage = (await context.git.raw(['log', '-1', '--format=%B'])).trim()
+
+  return { sha, shortSha, message: fullMessage }
 }
 
 /**

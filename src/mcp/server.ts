@@ -16,6 +16,8 @@ import {
     AgentOperationError,
     AgentTaskInputSchema,
     ChangelogDataSchema,
+    CommitApplyDataSchema,
+    CommitApplyRequestSchema,
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
     CondenseDiffRequestSchema,
@@ -37,6 +39,7 @@ import {
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
+    runCommitApply,
     runCondenseDiff,
     runRepoContext,
     toAgentOperationError,
@@ -250,6 +253,61 @@ function registerGenerationTool(
   })
 }
 
+/**
+ * Registers `coco_commit_apply` — the only write-capable tool coco's MCP
+ * server exposes, and only when the server was started with `--allow-write`.
+ * It commits whatever is currently staged; it never runs `git add` and never
+ * pushes. This uses a bespoke flat request/response shape (not the versioned
+ * `AgentSuccessEnvelope` the generation tools share) since commit-apply has
+ * no `source`/`options` bag and isn't part of `AgentOperation`.
+ */
+function registerCommitApplyTool(server: McpServer, boundRoot: string | undefined): void {
+  server.registerTool('coco_commit_apply', {
+    title: 'Create commit from staged changes',
+    description: [
+      'Create a git commit from whatever is currently staged in the index.',
+      'Does NOT stage files (no `git add`) and does NOT push.',
+      'Refuses with EMPTY_INDEX when nothing is staged.',
+      'Only available when the server was started with `coco mcp --allow-write`.',
+    ].join(' '),
+    inputSchema: CommitApplyRequestSchema,
+    outputSchema: CommitApplyDataSchema,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: false,
+    },
+  }, async (rawInput, extra) => {
+    try {
+      const input = CommitApplyRequestSchema.parse(rawInput)
+      const repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+      await assertClientAllowsRoot(server, repoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot,
+        requireRepository: true,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const result = await runCommitApply(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = toAgentOperationError(error)
+      const errorPayload = {
+        error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+      }
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(errorPayload, null, 2) }],
+        structuredContent: errorPayload,
+      }
+    }
+  })
+}
+
 function registerRepoResource(
   server: McpServer,
   name: string,
@@ -338,13 +396,15 @@ function registerCocoPrompt(
   })
 }
 
-export function createCocoMcpServer(repoRoot?: string): McpServer {
+export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpServer {
   const instructions = [
     repoRoot
       ? `This server is bound to the git repository at ${repoRoot}.`
       : 'This server resolves the target repository from the workspace roots declared by the MCP client, or from the `repo` field in each tool input.',
-    'All tools generate structured drafts or analysis only.',
-    'No tool creates commits, writes repository files, posts comments, or mutates a forge.',
+    'All generation and read tools produce structured drafts or analysis only; they never create commits, write repository files, post comments, or mutate a forge.',
+    allowWrite
+      ? 'This server was started with --allow-write: coco_commit_apply is also registered. It creates a git commit from whatever is currently staged — it never runs `git add` and never pushes.'
+      : 'coco_commit_apply is NOT registered on this server; start it with `coco mcp --allow-write` to opt into that write-capable tool.',
     'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log) so a client can browse without spending a tool call.',
     'Prompts expose coco\'s built-in commit, review, changelog, and recap templates for reuse by any MCP client.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
@@ -491,6 +551,8 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     }
   })
 
+  if (allowWrite) registerCommitApplyTool(server, repoRoot)
+
   registerRepoResource(
     server,
     'coco_repo_status',
@@ -567,12 +629,14 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
   return server
 }
 
-export async function startCocoMcpServer(repoRoot?: string): Promise<void> {
-  const server = createCocoMcpServer(repoRoot)
+export async function startCocoMcpServer(repoRoot?: string, opts?: { allowWrite?: boolean }): Promise<void> {
+  const allowWrite = opts?.allowWrite ?? false
+  const server = createCocoMcpServer(repoRoot, allowWrite)
   await server.connect(new StdioServerTransport())
+  const writeSuffix = allowWrite ? ', write mode enabled (coco_commit_apply registered)' : ''
   if (repoRoot) {
-    process.stderr.write(`coco MCP server ${BUILD_VERSION} bound to ${repoRoot}\n`)
+    process.stderr.write(`coco MCP server ${BUILD_VERSION} bound to ${repoRoot}${writeSuffix}\n`)
   } else {
-    process.stderr.write(`coco MCP server ${BUILD_VERSION} started (repo resolved from client roots)\n`)
+    process.stderr.write(`coco MCP server ${BUILD_VERSION} started (repo resolved from client roots)${writeSuffix}\n`)
   }
 }

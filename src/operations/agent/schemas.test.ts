@@ -6,11 +6,14 @@ import {
     AGENT_PROTOCOL_VERSION,
     ChangelogDataSchema,
     ChangeSourceSchema,
+    CommitApplyDataSchema,
+    CommitApplyRequestSchema,
     CondenseDiffDataSchema,
     CondenseDiffRequestSchema,
     createAgentInputJsonSchema,
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
+    createCommitApplyInputJsonSchema,
     createCondenseDiffInputJsonSchema,
     createRepoContextInputJsonSchema,
     MAX_AGENT_CONTEXT_BYTES,
@@ -328,5 +331,48 @@ describe('RepoContextRequestSchema', () => {
     expect(jsonSchema.oneOf?.[1]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'repo-context' } },
     })
+  })
+})
+
+describe('CommitApplyRequestSchema', () => {
+  it('requires a non-empty title', () => {
+    expect(CommitApplyRequestSchema.safeParse({}).success).toBe(false)
+    expect(CommitApplyRequestSchema.safeParse({ title: '' }).success).toBe(false)
+    expect(CommitApplyRequestSchema.safeParse({ title: 'feat: add thing' }).success).toBe(true)
+  })
+
+  it('defaults noVerify to false and accepts an optional body', () => {
+    const parsed = CommitApplyRequestSchema.parse({ title: 'feat: add thing' })
+    expect(parsed.noVerify).toBe(false)
+    expect(parsed.body).toBeUndefined()
+
+    const withBody = CommitApplyRequestSchema.parse({ title: 'feat: add thing', body: 'Details.', noVerify: true })
+    expect(withBody.body).toBe('Details.')
+    expect(withBody.noVerify).toBe(true)
+  })
+
+  it('rejects unknown fields (strict)', () => {
+    expect(CommitApplyRequestSchema.safeParse({ title: 'x', unexpected: true }).success).toBe(false)
+  })
+
+  it('publishes a caller-facing JSON Schema', () => {
+    const json = createCommitApplyInputJsonSchema() as unknown as {
+      type: string
+      properties: Record<string, unknown>
+    }
+    expect(json.type).toBe('object')
+    expect(json.properties).toHaveProperty('title')
+    expect(json.properties).toHaveProperty('body')
+    expect(json.properties).toHaveProperty('noVerify')
+    expect(json.properties).toHaveProperty('repo')
+  })
+
+  it('CommitApplyDataSchema validates the flat sha/shortSha/message shape', () => {
+    expect(CommitApplyDataSchema.safeParse({
+      sha: 'abc123def456',
+      shortSha: 'abc123d',
+      message: 'feat: add thing',
+    }).success).toBe(true)
+    expect(CommitApplyDataSchema.safeParse({ sha: 'abc' }).success).toBe(false)
   })
 })
