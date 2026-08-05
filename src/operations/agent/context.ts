@@ -5,11 +5,18 @@ import * as path from 'node:path'
 import { promisify } from 'node:util'
 import { SimpleGit } from 'simple-git'
 
+import { loadConfig } from '../../lib/config/utils/loadConfig'
+import type { Config } from '../../lib/config/types'
 import type { LlmUsageSurface } from '../../lib/langchain/utils/observability'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { Logger } from '../../lib/utils/logger'
+import { isPathWithinRoot } from '../../lib/utils/pathWithinRoot'
 import { AgentOperationError } from './errors'
-import { ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
+import { AgentOperation, ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
+
+// Re-export so existing importers (mcp/server.ts, context.test.ts) continue to
+// resolve from this module without changes.
+export { isPathWithinRoot } from '../../lib/utils/pathWithinRoot'
 
 /**
  * Transport-agnostic progress callback. Operations report coarse stage
@@ -21,7 +28,7 @@ export type AgentProgressReporter = (update: { message?: string; fraction?: numb
 
 export type AgentOperationContext = {
   repoRoot: string
-  git: SimpleGit
+  git: SimpleGit | undefined
   logger: Logger
   surface: LlmUsageSurface
   signal?: AbortSignal
@@ -36,6 +43,7 @@ type CleanFilterProbeResult =
 export type ResolvedChangeContext = {
   text: string
   meta: SourceMetadata
+  warnings: string[]
 }
 
 const execFileAsync = promisify(execFile)
@@ -88,45 +96,8 @@ export function digestOf(text: string): string {
   return `sha256:${createHash('sha256').update(text).digest('hex')}`
 }
 
-export function isPathWithinRoot(candidate: string, root: string): boolean {
-  let resolvedCandidate: string
-  let resolvedRoot: string
-  try {
-    resolvedCandidate = realpathSync(candidate)
-    resolvedRoot = realpathSync(root)
-  } catch {
-    return false
-  }
-
-  const relative = path.relative(resolvedRoot, resolvedCandidate)
-  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) {
-    return true
-  }
-
-  // Windows can spell the same directory with either a long path or an 8.3
-  // alias. If the lexical check disagrees, compare filesystem identities while
-  // walking the already-realpathed candidate's ancestors. This preserves the
-  // symlink boundary while accepting equivalent Windows path spellings.
-  if (process.platform !== 'win32') return false
-
-  try {
-    const rootStats = statSync(resolvedRoot)
-    if (rootStats.ino === 0) return false
-
-    let current = resolvedCandidate
-    while (true) {
-      const currentStats = statSync(current)
-      if (currentStats.dev === rootStats.dev && currentStats.ino === rootStats.ino) {
-        return true
-      }
-      const parent = path.dirname(current)
-      if (parent === current) return false
-      current = parent
-    }
-  } catch {
-    return false
-  }
-}
+// isPathWithinRoot is now defined in lib/utils/pathWithinRoot and re-exported
+// at the top of this file so all existing importers continue to work.
 
 const CONVENTION_FILE_ALLOWLIST = ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md']
 const STEERING_DIRECTORY = path.join('.kiro', 'steering')
@@ -284,6 +255,15 @@ export function resolveAgentDirectoryRoot(directory: string): string {
   return resolved
 }
 
+/**
+ * Extracts the path (or other detail) from an INVALID_REPOSITORY error message
+ * so callers can fold it into a more specific message without repeating the
+ * "not a git repository" phrasing twice.
+ */
+export function describeRepoResolutionFailure(error: AgentOperationError): string {
+  return error.message.replace(/^(?:Not a git repository|Repository path is not a directory): /, '')
+}
+
 export async function resolveAgentRepoRoot(
   repo?: string,
   allowedRoot?: string,
@@ -318,14 +298,34 @@ export async function resolveAgentRepoRoot(
   return repoRoot
 }
 
+/**
+ * Returns true when the operation/source combination requires a git repository
+ * to be present. commit-draft always requires one (reads history/branch context
+ * even for supplied sources). kind: 'repository' requires one by definition.
+ * All other supplied-source operations (review, changelog, recap with
+ * patch/summary/files) do not.
+ */
+export function requiresRepository(operation: AgentOperation, source: ChangeSource): boolean {
+  return operation === 'commit-draft' || source.kind === 'repository'
+}
+
 export async function createAgentOperationContext(input: {
   repoRoot: string
+  requireRepository?: boolean
   signal?: AbortSignal
   surface?: LlmUsageSurface
   onProgress?: AgentProgressReporter
 }): Promise<AgentOperationContext> {
-  const repoRoot = await resolveAgentRepoRoot(input.repoRoot, undefined, input.signal)
-  const git = getRepo(repoRoot)
+  const needsRepo = input.requireRepository !== false
+  let repoRoot: string
+  let git: SimpleGit | undefined
+  if (needsRepo) {
+    repoRoot = await resolveAgentRepoRoot(input.repoRoot, undefined, input.signal)
+    git = getRepo(repoRoot)
+  } else {
+    repoRoot = resolveAgentDirectoryRoot(input.repoRoot)
+    git = undefined
+  }
   return {
     repoRoot,
     git,
@@ -494,15 +494,37 @@ export async function resolveChangeSource(
     throw new AgentOperationError('CANCELLED', 'Operation was cancelled.', false)
   }
 
+  // kind: 'repository' always requires a real git context.
+  if (source.kind === 'repository' && !context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'A git repository is required to use a repository-derived change source. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
+
   const providedHead = source.kind === 'patch'
     ? source.headRevision
     : source.kind === 'files' || source.kind === 'summary'
     ? source.provenance?.headRevision
     : undefined
   const shouldReadRepositoryHead = source.kind === 'repository' || Boolean(providedHead)
-  const repositoryHead = shouldReadRepositoryHead
-    ? await runAgentGit(context, ['rev-parse', 'HEAD']).then((value) => value.trim()).catch(() => undefined)
-    : undefined
+
+  const warnings: string[] = []
+  let repositoryHead: string | undefined
+  if (shouldReadRepositoryHead) {
+    if (context.git) {
+      repositoryHead = await runAgentGit(context, ['rev-parse', 'HEAD'])
+        .then((value) => value.trim())
+        .catch(() => undefined)
+    } else if (providedHead) {
+      // Caller supplied a headRevision but there is no repository available to
+      // verify it against. Degrade gracefully to provided-unverified and warn.
+      warnings.push(
+        'Head verification skipped: no git repository was available to verify the supplied headRevision.',
+      )
+    }
+  }
+
   const text = source.kind === 'repository'
     ? await repositoryText(source, context, options.trustRepositoryConfig === true)
     : providedText(source)
@@ -519,6 +541,7 @@ export async function resolveChangeSource(
 
   return {
     text,
+    warnings,
     meta: {
       kind: source.kind,
       digest: digestOf(text),
@@ -578,4 +601,576 @@ export async function getBranchContext(context: AgentOperationContext): Promise<
 export function getRecentLog(context: AgentOperationContext, count = MAX_RECENT_LOG_COUNT): Promise<string> {
   const bounded = Math.max(1, Math.min(count, MAX_RECENT_LOG_COUNT))
   return runAgentGit(context, ['log', '--oneline', '-n', String(bounded)])
+}
+
+export type ResolvedRepoConfig = {
+  defaultBranch: string
+  language?: string
+  conventionalCommits?: boolean
+  service: {
+    provider: string
+    model: string
+    tokenLimit?: number
+    temperature?: number
+    maxConcurrent?: number
+    reasoningEffort?: string
+    dynamicModels?: Record<string, string>
+    dynamicModelPreference?: string
+    baseURL?: string
+    endpoint?: string
+  }
+  telemetry?: Config['telemetry']
+  ignoredFiles: string[]
+  ignoredExtensions: string[]
+}
+
+/**
+ * Project the merged config down to an allowlist of non-secret fields —
+ * credentials (`service.authentication`, Bedrock access keys, etc.) are
+ * omitted by construction rather than masked, so nothing new added to
+ * `LLMService` ever leaks here by default.
+ */
+export function buildResolvedRepoConfig(repoRoot: string): ResolvedRepoConfig {
+  const config = loadConfig({}, { cwd: repoRoot }) as Config
+  const service = config.service as unknown as Record<string, unknown>
+
+  return {
+    defaultBranch: config.defaultBranch,
+    ...(config.language !== undefined ? { language: config.language } : {}),
+    ...(config.conventionalCommits !== undefined ? { conventionalCommits: config.conventionalCommits } : {}),
+    service: {
+      provider: config.service.provider,
+      model: config.service.model,
+      ...(typeof service.tokenLimit === 'number' ? { tokenLimit: service.tokenLimit } : {}),
+      ...(typeof service.temperature === 'number' ? { temperature: service.temperature } : {}),
+      ...(typeof service.maxConcurrent === 'number' ? { maxConcurrent: service.maxConcurrent } : {}),
+      ...(typeof service.reasoningEffort === 'string' ? { reasoningEffort: service.reasoningEffort } : {}),
+      ...(service.dynamicModels !== undefined
+        ? { dynamicModels: service.dynamicModels as Record<string, string> }
+        : {}),
+      ...(typeof service.dynamicModelPreference === 'string'
+        ? { dynamicModelPreference: service.dynamicModelPreference }
+        : {}),
+      ...(typeof service.baseURL === 'string' ? { baseURL: service.baseURL } : {}),
+      ...(typeof service.endpoint === 'string' ? { endpoint: service.endpoint } : {}),
+    },
+    ...(config.telemetry !== undefined ? { telemetry: config.telemetry } : {}),
+    ignoredFiles: config.ignoredFiles ?? [],
+    ignoredExtensions: config.ignoredExtensions ?? [],
+  }
+}
+
+export function getRepoConfig(context: AgentOperationContext): Promise<string> {
+  return Promise.resolve(JSON.stringify(buildResolvedRepoConfig(context.repoRoot), null, 2))
+}
+
+// ─── Hardened repo-context readers ───────────────────────────────────────────
+// These functions run all git commands through runAgentGit (which enforces
+// --no-optional-locks, -c diff.external=, -c core.fsmonitor=false) and
+// delegate parsing to the pure functions in src/git/.
+
+import { parsePorcelainStatus } from '../../git/statusData'
+import { parseConflictedFiles } from '../../git/operationData'
+import { parseDivergence } from '../../git/branchData'
+import {
+  COMMITLINT_CONFIG_FILES,
+} from '../../lib/config/commitlint'
+import {
+  existsSync,
+  readFileSync as fsReadFileSync,
+  statSync as fsStatSync,
+} from 'node:fs'
+import { join as pathJoin, resolve as pathResolve } from 'node:path'
+
+import type {
+  RepoContextBranch,
+  RepoContextCapabilities,
+  RepoContextConflicts,
+  RepoContextFileEntry,
+  RepoContextHistory,
+  RepoContextHistoryEntry,
+  RepoContextStatus,
+} from './schemas'
+
+/** Default caps for section lists */
+const STATUS_CAP = 200
+const HISTORY_CAP = 50
+const CONFLICT_FILES_CAP = 50
+
+/**
+ * Parse NUL-separated numstat output into a map of path → { additions, deletions }.
+ * Format: `<additions>\t<deletions>\t<path>\0` (or `<adds>\t<dels>\t\0<dest>\0<src>\0` for renames).
+ */
+function parseNumstat(output: string): Map<string, { additions: number; deletions: number }> {
+  const result = new Map<string, { additions: number; deletions: number }>()
+  const tokens = output.split('\0').filter(Boolean)
+
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]
+    // Rename entry: `<adds>\t<dels>\t` followed by empty string, then dest, then src
+    if (token.match(/^\d+\t\d+\t$/) || token.match(/^-\t-\t$/)) {
+      // rename: next two tokens are dest path and src path
+      const dest = tokens[i + 1]
+      // skip the source path
+      i += 2
+      const [adds, dels] = token.split('\t')
+      if (dest) {
+        result.set(dest, {
+          additions: adds === '-' ? 0 : parseInt(adds, 10),
+          deletions: dels === '-' ? 0 : parseInt(dels, 10),
+        })
+      }
+    } else {
+      // Normal entry: `<adds>\t<dels>\t<path>`
+      const tabIdx = token.indexOf('\t')
+      const tabIdx2 = token.indexOf('\t', tabIdx + 1)
+      if (tabIdx === -1 || tabIdx2 === -1) continue
+      const adds = token.slice(0, tabIdx)
+      const dels = token.slice(tabIdx + 1, tabIdx2)
+      const filePath = token.slice(tabIdx2 + 1)
+      if (filePath) {
+        result.set(filePath, {
+          additions: adds === '-' ? 0 : parseInt(adds, 10),
+          deletions: dels === '-' ? 0 : parseInt(dels, 10),
+        })
+      }
+    }
+  }
+
+  return result
+}
+
+/**
+ * Read branch context via hardened git and return the structured branch section.
+ * Degrades gracefully on detached HEAD, no upstream, missing origin/HEAD, etc.
+ */
+export async function readRepoBranchContext(context: AgentOperationContext): Promise<RepoContextBranch> {
+  // Get current branch / detect detached
+  let current: string
+  let detached: boolean
+
+  try {
+    const abbrev = (await runAgentGit(context, ['rev-parse', '--abbrev-ref', 'HEAD'])).trim()
+    if (abbrev === 'HEAD') {
+      // Detached — use short SHA for display
+      const sha = (await runAgentGit(context, ['rev-parse', '--short', 'HEAD'])).trim()
+      current = sha || 'HEAD'
+      detached = true
+    } else {
+      current = abbrev
+      detached = false
+    }
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    // Empty repo / no commits
+    return { current: 'HEAD', detached: true }
+  }
+
+  // Upstream
+  let upstream: string | undefined
+  let ahead: number | undefined
+  let behind: number | undefined
+
+  if (!detached) {
+    try {
+      upstream = (await runAgentGit(
+        context,
+        ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}'],
+      )).trim()
+    } catch (error) {
+      if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+      upstream = undefined
+    }
+
+    if (upstream) {
+      try {
+        const counts = (await runAgentGit(
+          context,
+          ['rev-list', '--left-right', '--count', `${upstream}...HEAD`],
+        )).trim()
+        const divergence = parseDivergence(counts)
+        ahead = divergence.ahead
+        behind = divergence.behind
+      } catch (error) {
+        if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+        // Divergence unavailable — leave undefined
+      }
+    }
+  }
+
+  // Default branch (pure local refs, no network)
+  let defaultBranch: string | undefined
+  try {
+    const ref = (await runAgentGit(context, ['symbolic-ref', 'refs/remotes/origin/HEAD'])).trim()
+    const match = ref.match(/^refs\/remotes\/origin\/(.+)$/)
+    if (match) defaultBranch = match[1]
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    // origin/HEAD not set — try conventional names
+    for (const candidate of ['main', 'master', 'develop', 'trunk']) {
+      try {
+        await runAgentGit(context, ['rev-parse', '--verify', '--quiet', `refs/heads/${candidate}`])
+        defaultBranch = candidate
+        break
+      } catch (err) {
+        if (err instanceof AgentOperationError && err.code === 'CANCELLED') throw err
+      }
+    }
+  }
+
+  return {
+    current,
+    upstream,
+    ahead,
+    behind,
+    detached,
+    ...(defaultBranch !== undefined ? { defaultBranch } : {}),
+  }
+}
+
+/**
+ * Read working-tree status via hardened git and return the structured status section.
+ * Files are capped at STATUS_CAP per category; numstat provides add/del counts.
+ */
+export async function readRepoStatusContext(context: AgentOperationContext): Promise<RepoContextStatus> {
+  const [statusOutput, stagedNumstatOutput, unstagedNumstatOutput] = await Promise.all([
+    runAgentGit(context, ['status', '--porcelain=v1', '-z']).catch((err) => {
+      if (err instanceof AgentOperationError && err.code === 'CANCELLED') throw err
+      return ''
+    }),
+    runAgentGit(context, ['diff', '--cached', '--numstat', '-z', '--']).catch((err) => {
+      if (err instanceof AgentOperationError && err.code === 'CANCELLED') throw err
+      return ''
+    }),
+    runAgentGit(context, ['diff', '--numstat', '-z', '--']).catch((err) => {
+      if (err instanceof AgentOperationError && err.code === 'CANCELLED') throw err
+      return ''
+    }),
+  ])
+
+  const files = parsePorcelainStatus(statusOutput)
+  const conflictedFiles = parseConflictedFiles(statusOutput)
+  const conflictedPaths = new Set(conflictedFiles.map((f) => f.path))
+
+  const stagedNumstat = parseNumstat(stagedNumstatOutput)
+  const unstagedNumstat = parseNumstat(unstagedNumstatOutput)
+
+  const staged: RepoContextFileEntry[] = []
+  const unstaged: RepoContextFileEntry[] = []
+  const untracked: RepoContextFileEntry[] = []
+  const conflicted: RepoContextFileEntry[] = []
+
+  for (const file of files) {
+    if (conflictedPaths.has(file.path)) {
+      if (conflicted.length < STATUS_CAP) {
+        conflicted.push({
+          path: file.path,
+          indexStatus: file.indexStatus,
+          worktreeStatus: file.worktreeStatus,
+        })
+      }
+      continue
+    }
+
+    if (file.state === 'staged') {
+      if (staged.length < STATUS_CAP) {
+        const ns = stagedNumstat.get(file.path)
+        staged.push({
+          path: file.path,
+          indexStatus: file.indexStatus,
+          worktreeStatus: file.worktreeStatus,
+          ...(ns !== undefined ? { additions: ns.additions, deletions: ns.deletions } : {}),
+        })
+      }
+    } else if (file.state === 'unstaged') {
+      if (unstaged.length < STATUS_CAP) {
+        const ns = unstagedNumstat.get(file.path)
+        unstaged.push({
+          path: file.path,
+          indexStatus: file.indexStatus,
+          worktreeStatus: file.worktreeStatus,
+          ...(ns !== undefined ? { additions: ns.additions, deletions: ns.deletions } : {}),
+        })
+      }
+    } else if (file.state === 'untracked') {
+      if (untracked.length < STATUS_CAP) {
+        untracked.push({
+          path: file.path,
+          indexStatus: file.indexStatus,
+          worktreeStatus: file.worktreeStatus,
+        })
+      }
+    }
+  }
+
+  const totalStaged = files.filter((f) => f.state === 'staged' && !conflictedPaths.has(f.path)).length
+  const totalUnstaged = files.filter((f) => f.state === 'unstaged' && !conflictedPaths.has(f.path)).length
+  const totalUntracked = files.filter((f) => f.state === 'untracked' && !conflictedPaths.has(f.path)).length
+  const totalConflicted = conflictedFiles.length
+  const totalCount = files.length
+  const truncated = (
+    totalStaged > STATUS_CAP ||
+    totalUnstaged > STATUS_CAP ||
+    totalUntracked > STATUS_CAP ||
+    totalConflicted > STATUS_CAP
+  )
+
+  return {
+    staged,
+    unstaged,
+    untracked,
+    conflicted,
+    counts: {
+      staged: totalStaged,
+      unstaged: totalUnstaged,
+      untracked: totalUntracked,
+      conflicted: totalConflicted,
+    },
+    truncated,
+    totalCount,
+  }
+}
+
+/** Parse the history pretty-format output with %x1f field separator. */
+function parseHistoryEntries(output: string): RepoContextHistoryEntry[] {
+  const FIELD_SEP = '\x1f'
+  const entries: RepoContextHistoryEntry[] = []
+
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    const parts = trimmed.split(FIELD_SEP)
+    if (parts.length < 5) continue
+    const [sha, subject, author, relativeDate, refsStr] = parts
+    const refs = refsStr ? refsStr.split(', ').filter(Boolean) : []
+    entries.push({
+      sha: sha || '',
+      subject: subject || '',
+      author: author || '',
+      relativeDate: relativeDate || '',
+      refs,
+    })
+  }
+
+  return entries
+}
+
+/**
+ * Read recent commit history via hardened git and return the structured history section.
+ * The `limit` parameter is capped at HISTORY_CAP.
+ */
+export async function readRepoHistoryContext(
+  context: AgentOperationContext,
+  limit = MAX_RECENT_LOG_COUNT,
+): Promise<RepoContextHistory> {
+  const bounded = Math.max(1, Math.min(limit, HISTORY_CAP))
+
+  let output: string
+  try {
+    // Use -n (bounded + 1) to detect if there are more commits than requested.
+    // Format: sha %x1f subject %x1f author name %x1f relative date %x1f refs
+    output = await runAgentGit(context, [
+      'log',
+      '--no-color',
+      `--pretty=format:%H${'\x1f'}%s${'\x1f'}%an${'\x1f'}%ar${'\x1f'}%D`,
+      '-n', String(bounded + 1),
+    ])
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    // Empty repo / no commits — return empty history
+    return { entries: [], totalCount: 0, truncated: false }
+  }
+
+  const all = parseHistoryEntries(output)
+  const truncated = all.length > bounded
+  const entries = truncated ? all.slice(0, bounded) : all
+
+  // totalCount is a lower bound — we only fetched bounded+1 rows
+  const totalCount = truncated ? bounded : entries.length
+
+  return { entries, totalCount, truncated }
+}
+
+/**
+ * Read conflict state via hardened git and return the structured conflicts section.
+ */
+export async function readRepoConflictsContext(context: AgentOperationContext): Promise<RepoContextConflicts> {
+  const statusOutput = await runAgentGit(context, ['status', '--porcelain=v1', '-z']).catch((err) => {
+    if (err instanceof AgentOperationError && err.code === 'CANCELLED') throw err
+    return ''
+  })
+
+  const conflictedFiles = parseConflictedFiles(statusOutput)
+  const totalCount = conflictedFiles.length
+  const files: RepoContextFileEntry[] = conflictedFiles.slice(0, CONFLICT_FILES_CAP).map((f) => ({
+    path: f.path,
+    indexStatus: f.indexStatus,
+    worktreeStatus: f.worktreeStatus,
+  }))
+
+  // Detect in-progress operation by checking .git state files
+  let operation: RepoContextConflicts['operation'] = 'none'
+  const operationPaths: Array<{ op: Exclude<RepoContextConflicts['operation'], 'none'>; gitPath: string }> = [
+    { op: 'merge', gitPath: 'MERGE_HEAD' },
+    { op: 'rebase', gitPath: 'rebase-merge' },
+    { op: 'rebase', gitPath: 'rebase-apply' },
+    { op: 'cherry-pick', gitPath: 'CHERRY_PICK_HEAD' },
+    { op: 'revert', gitPath: 'REVERT_HEAD' },
+  ]
+
+  for (const entry of operationPaths) {
+    try {
+      const resolved = (await runAgentGit(context, ['rev-parse', '--git-path', entry.gitPath])).trim()
+      if (resolved) {
+        // --git-path may return an absolute path in linked worktrees; path.resolve
+        // handles both relative (joins against repoRoot) and absolute (returns as-is)
+        const absPath = pathResolve(context.repoRoot, resolved)
+        if (existsSync(absPath)) {
+          operation = entry.op
+          break
+        }
+      }
+    } catch (error) {
+      if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    }
+  }
+
+  // Count conflict regions in conflicted files (bounded, 1 MiB per file)
+  const MAX_REGION_FILE_SIZE = 1024 * 1024
+  const CONFLICT_OURS = /^<{7}( |$)/
+  let regionCount = 0
+  let regionsTruncated = false
+  const REGION_COUNT_CAP = 200
+
+  try {
+    const gitRoot = (await runAgentGit(context, ['rev-parse', '--show-toplevel'])).trim()
+    for (const file of conflictedFiles) {
+      if (regionsTruncated) break
+      const filePath = pathJoin(gitRoot, file.path)
+      try {
+        const sz = fsStatSync(filePath).size
+        if (sz > MAX_REGION_FILE_SIZE) continue
+        const content = fsReadFileSync(filePath, 'utf8')
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim()
+          // Count only the opening marker so each conflict region increments once.
+          // Counting all three markers (<<<<<<, =======, >>>>>>>) would triple-count
+          // every region and make REGION_COUNT_CAP cap at ~66 real conflicts, not 200.
+          if (CONFLICT_OURS.test(trimmed)) {
+            regionCount++
+          }
+          if (regionCount >= REGION_COUNT_CAP) {
+            regionsTruncated = true
+            break
+          }
+        }
+      } catch {
+        // File unreadable — skip
+      }
+    }
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+  }
+
+  return {
+    inProgress: operation !== 'none',
+    operation,
+    files,
+    regionCounts: { totalCount: regionCount, truncated: regionsTruncated },
+    totalCount,
+    truncated: totalCount > CONFLICT_FILES_CAP,
+  }
+}
+
+/**
+ * Detect commitlint config in the repo root (no cwd dependency).
+ */
+function hasCommitlintConfigAtRoot(root: string): boolean {
+  for (const file of COMMITLINT_CONFIG_FILES) {
+    if (existsSync(pathJoin(root, file))) return true
+  }
+  const pkgPath = pathJoin(root, 'package.json')
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(fsReadFileSync(pkgPath, 'utf8'))
+      if (pkg.commitlint) return true
+    } catch {
+      // ignore parse errors
+    }
+  }
+  return false
+}
+
+/**
+ * Read repository capabilities via hardened git.
+ */
+export async function readRepoCapabilitiesContext(context: AgentOperationContext): Promise<RepoContextCapabilities> {
+  // Forge detection: resolve default remote, parse host, detect provider
+  let forge: string | undefined
+  try {
+    // Attempt to get the remote URL for 'origin'
+    const remoteUrl = (await runAgentGit(context, ['remote', 'get-url', 'origin'])).trim()
+    if (remoteUrl) {
+      // Inline host extraction to avoid importing from git/ (would be git/ → operations/ — acceptable layering)
+      // but we inline to stay safe with no circular deps.
+      let host: string | undefined
+      // Try SSH scp-style: git@host:...
+      const scpMatch = remoteUrl.match(/^git@([^:]+):/)
+      if (scpMatch) {
+        host = scpMatch[1]
+      } else {
+        // Try URL form
+        try {
+          const url = new URL(remoteUrl)
+          host = url.hostname
+        } catch {
+          // ignore
+        }
+      }
+      if (host) {
+        const h = host.toLowerCase()
+        if (h === 'github.com' || h.includes('github')) forge = 'github'
+        else if (h === 'gitlab.com' || h.includes('gitlab')) forge = 'gitlab'
+        else if (h === 'bitbucket.org' || h.includes('bitbucket')) forge = 'bitbucket'
+        else if (h === 'codeberg.org' || h.includes('gitea') || h.includes('forgejo')) forge = 'gitea'
+        else forge = 'unsupported'
+      }
+    }
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    // No origin remote — forge unknown
+  }
+
+  // Shallow clone detection
+  let isShallow = false
+  try {
+    const result = (await runAgentGit(context, ['rev-parse', '--is-shallow-repository'])).trim()
+    isShallow = result === 'true'
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    // Older git may not support --is-shallow-repository; leave false
+  }
+
+  // Worktree detection: compare --git-dir and --git-common-dir
+  let isWorktree = false
+  try {
+    const [gitDir, gitCommonDir] = await Promise.all([
+      runAgentGit(context, ['rev-parse', '--git-dir']).then((v) => v.trim()),
+      runAgentGit(context, ['rev-parse', '--git-common-dir']).then((v) => v.trim()),
+    ])
+    // In a linked worktree, --git-dir returns a path inside .git/worktrees/
+    // while --git-common-dir returns the main repo's .git directory.
+    isWorktree = gitDir !== gitCommonDir && !gitDir.endsWith('/.git') && gitDir !== '.git'
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+  }
+
+  const hasCommitlintCfg = hasCommitlintConfigAtRoot(context.repoRoot)
+
+  return {
+    ...(forge !== undefined ? { forge } : {}),
+    hasCommitlintConfig: hasCommitlintCfg,
+    isWorktree,
+    isShallow,
+  }
 }

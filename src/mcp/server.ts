@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
+import type { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { CHANGELOG_PROMPT } from '../commands/changelog/prompt'
@@ -22,18 +24,24 @@ import {
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
+    describeRepoResolutionFailure,
     digestOf,
     getBranchContext,
     getRecentLog,
+    getRepoConfig,
     getRepoStatus,
     getStagedDiff,
     isPathWithinRoot,
     RecapDataSchema,
+    RepoContextDataSchema,
+    RepoContextRequestSchema,
+    requiresRepository,
     resolveAgentDirectoryRoot,
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
     runCondenseDiff,
+    runRepoContext,
     toAgentOperationError,
 } from '../operations/agent'
 
@@ -49,6 +57,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, RecapDataSchema)
     case 'condense-diff':
       return createAgentMcpOutputSchema(operation, CondenseDiffDataSchema)
+    case 'repo-context':
+      return createAgentMcpOutputSchema(operation, RepoContextDataSchema)
   }
 }
 
@@ -132,6 +142,39 @@ async function resolveEffectiveRepoRoot(
   )
 }
 
+/**
+ * Build a transport-agnostic progress reporter that forwards coco's internal
+ * `fraction` (0.0-1.0) as the MCP-spec `progress`/`total` pair so clients can
+ * render a determinate progress bar. Returns `undefined` when the client did
+ * not supply a `progressToken` (progress notifications are opt-in per spec).
+ */
+function makeMcpProgressReporter(
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+): ((update: { message?: string; fraction?: number }) => void) | undefined {
+  const progressToken = extra._meta?.progressToken
+  if (progressToken === undefined) return undefined
+  let lastProgress = 0
+  return (update: { message?: string; fraction?: number }) => {
+    if (typeof update.fraction === 'number' && Number.isFinite(update.fraction)) {
+      // Clamp to [0,1] and keep non-decreasing so the bar only moves forward,
+      // even if a later tick carries no fraction (e.g. streaming liveness ticks).
+      lastProgress = Math.min(1, Math.max(lastProgress, update.fraction))
+    }
+    void extra.sendNotification({
+      method: 'notifications/progress',
+      params: {
+        progressToken,
+        progress: lastProgress,
+        total: 1,
+        message: update.message,
+      },
+    }).catch(() => {
+      // Fire-and-forget: a client that closed its notification
+      // channel mid-call must never fail the underlying operation.
+    })
+  }
+}
+
 function registerGenerationTool(
   server: McpServer,
   operation: AgentOperation,
@@ -159,27 +202,54 @@ function registerGenerationTool(
           'MCP tools do not execute repository-defined prompts or commitlint configuration. Use the one-shot agent CLI only for explicitly trusted repositories.',
         )
       }
-      const repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
-      await assertClientAllowsRoot(server, repoRoot)
-      const progressToken = extra._meta?.progressToken
-      let progressCounter = 0
-      const onProgress = progressToken === undefined
-        ? undefined
-        : (update: { message?: string; fraction?: number }) => {
-          void extra.sendNotification({
-            method: 'notifications/progress',
-            params: {
-              progressToken,
-              progress: ++progressCounter,
-              message: update.message,
-            },
-          }).catch(() => {
-            // Fire-and-forget: a client that closed its notification
-            // channel mid-call must never fail the underlying operation.
-          })
+
+      const needsRepo = requiresRepository(operation, input.source)
+      let repoRoot: string
+      let requireRepository: boolean
+
+      if (needsRepo) {
+        // Repository-derived sources and commit-draft require a real repository.
+        try {
+          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+        } catch (error) {
+          if (error instanceof AgentOperationError && error.code === 'INVALID_REPOSITORY' && operation === 'commit-draft') {
+            throw new AgentOperationError(
+              'INVALID_REPOSITORY',
+              `commit-draft requires a git repository: it reads branch context and recent commit history even when a prepared summary is supplied (${describeRepoResolutionFailure(error)}).`,
+              false,
+            )
+          }
+          throw error
         }
+        await assertClientAllowsRoot(server, repoRoot)
+        requireRepository = true
+      } else {
+        // Supplied-source operations: try repo resolution for head verification,
+        // but skip it gracefully when no repository is available or declared.
+        try {
+          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+          await assertClientAllowsRoot(server, repoRoot)
+          requireRepository = true
+        } catch (error) {
+          if (error instanceof AgentOperationError) {
+            // Re-throw confinement/cancellation errors — these are real policy
+            // violations, not "no repo" conditions.
+            if (error.code === 'REPOSITORY_OUTSIDE_ROOT' || error.code === 'REPOSITORY_MISMATCH' || error.code === 'CANCELLED') throw error
+            // INVALID_REPOSITORY is expected when the client has no git roots
+            // and no repo field was supplied. Fall back to cwd for config only.
+          } else {
+            throw error
+          }
+          // Use process.cwd() for config discovery only — never bound as a repo.
+          repoRoot = resolveAgentDirectoryRoot(process.cwd())
+          requireRepository = false
+        }
+      }
+
+      const onProgress = makeMcpProgressReporter(extra)
       const context = await createAgentOperationContext({
         repoRoot,
+        requireRepository,
         signal: extra.signal,
         surface: 'mcp',
         onProgress,
@@ -208,11 +278,12 @@ function registerRepoResource(
   description: string,
   boundRoot: string | undefined,
   loader: (context: AgentOperationContext) => Promise<string>,
+  mimeType: string = 'text/plain',
 ): void {
   server.registerResource(name, uri, {
     title,
     description,
-    mimeType: 'text/plain',
+    mimeType,
   }, async (resourceUri, extra) => {
     try {
       const repoRoot = await resolveEffectiveRepoRoot(server, undefined, boundRoot, extra.signal)
@@ -222,11 +293,12 @@ function registerRepoResource(
         signal: extra.signal,
         surface: 'mcp',
       })
-      const text = (await loader(context)).trim() || 'No content available.'
+      const raw = await loader(context)
+      const text = mimeType === 'application/json' ? raw.trim() : raw.trim() || 'No content available.'
       return {
         contents: [{
           uri: resourceUri.href,
-          mimeType: 'text/plain',
+          mimeType,
           text,
           _meta: { digest: digestOf(text) },
         }],
@@ -295,7 +367,7 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       : 'This server resolves the target repository from the workspace roots declared by the MCP client, or from the `repo` field in each tool input.',
     'All tools generate structured drafts or analysis only.',
     'No tool creates commits, writes repository files, posts comments, or mutates a forge.',
-    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log) so a client can browse without spending a tool call.',
+    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, resolved config) so a client can browse without spending a tool call.',
     'Prompts expose coco\'s built-in commit, review, changelog, and recap templates for reuse by any MCP client.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
     'Repository-defined prompts and executable commitlint configuration are never enabled by MCP tools.',
@@ -372,10 +444,12 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       // to match the single-repo confinement pattern of the other tools.
       const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
       await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const onProgress = makeMcpProgressReporter(extra)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
         surface: 'mcp',
+        onProgress,
       })
       const result = await runCondenseDiff(input, context)
       return {
@@ -384,6 +458,55 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
       }
     } catch (error) {
       const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+        structuredContent: failure,
+      }
+    }
+  })
+
+  // coco_repo_context uses its own input schema (RepoContextRequestSchema) and
+  // dispatches to runRepoContext. No LLM call, no API key required.
+  // Read-only, root-confined, no diff content in the response.
+  server.registerTool('coco_repo_context', {
+    title: 'Repository context',
+    description: [
+      'Return a bounded, structured snapshot of the repository state: branch/upstream/divergence,',
+      'working-tree status (staged, unstaged, untracked, conflicted) with rename-aware numstat,',
+      'recent commit history, in-progress operation (merge/rebase/cherry-pick) with conflict file list,',
+      'and repository capabilities (forge, commitlint config, worktree, shallow).',
+      'Section selection via `include` — defaults to ["branch","status"].',
+      'Every list is capped and reports totalCount + truncated.',
+      'No diff/patch content is ever included. No LLM call, no API key required.',
+      'Read-only; never writes repository files, creates commits, or calls a forge.',
+    ].join(' '),
+    inputSchema: RepoContextRequestSchema,
+    outputSchema: outputSchemaFor('repo-context'),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  }, async (rawInput, extra) => {
+    const repoContextOperation = 'repo-context' as const
+    try {
+      const input = RepoContextRequestSchema.parse(rawInput)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot: resolvedRepoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const result = await runRepoContext(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = createAgentFailureEnvelope(repoContextOperation, toAgentOperationError(error))
       return {
         isError: true,
         content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
@@ -427,6 +550,16 @@ export function createCocoMcpServer(repoRoot?: string): McpServer {
     'Recent commit history (`git log --oneline`, bounded to 20 entries). Read-only.',
     repoRoot,
     (context) => getRecentLog(context),
+  )
+  registerRepoResource(
+    server,
+    'coco_repo_config',
+    'coco://repo/config',
+    'Repository configuration',
+    'Resolved (merged) coco configuration — provider, model, token limits, ignore patterns, telemetry state. Credentials omitted. Read-only.',
+    repoRoot,
+    getRepoConfig,
+    'application/json',
   )
 
   registerCocoPrompt(

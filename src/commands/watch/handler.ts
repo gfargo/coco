@@ -173,7 +173,7 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
   }
 
   const runner = createThrottledRunner(intervalMs, runOnce)
-  const gitDir = (await context.git.revparse(['--absolute-git-dir'])).trim()
+  const gitDir = (await context.git!.revparse(['--absolute-git-dir'])).trim()
   const watcher = createRepoChangeWatcher({
     repoRoot,
     gitDir,

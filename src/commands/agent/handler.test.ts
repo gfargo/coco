@@ -16,9 +16,13 @@ jest.mock('../utils/usageTelemetry', () => ({
 jest.mock('../../operations/agent', () => {
   const schemas = jest.requireActual('../../operations/agent/schemas') as typeof import('../../operations/agent/schemas')
   const errors = jest.requireActual('../../operations/agent/errors') as typeof import('../../operations/agent/errors')
+  const context = jest.requireActual('../../operations/agent/context') as typeof import('../../operations/agent/context')
   return {
     ...schemas,
     ...errors,
+    requiresRepository: context.requiresRepository,
+    resolveAgentDirectoryRoot: context.resolveAgentDirectoryRoot,
+    describeRepoResolutionFailure: context.describeRepoResolutionFailure,
     createAgentOperationContext: (...args: unknown[]) => mockCreateAgentOperationContext(...args),
     resolveAgentRepoRoot: (...args: unknown[]) => mockResolveAgentRepoRoot(...args),
     runAgentOperation: (...args: unknown[]) => mockRunAgentOperation(...args),
@@ -140,6 +144,7 @@ describe('agent command handler', () => {
     expect(mockArmNonInteractiveUsageTelemetry).toHaveBeenCalledWith(expect.objectContaining({ operation: 'review' }), '/repo')
     expect(mockCreateAgentOperationContext).toHaveBeenCalledWith({
       repoRoot: '/repo',
+      requireRepository: true,
       signal: expect.any(AbortSignal),
       surface: 'agent-cli',
     })
@@ -150,6 +155,49 @@ describe('agent command handler', () => {
     )
     expect(JSON.parse(stdout)).toEqual(success)
     expect(process.listenerCount('SIGINT')).toBe(listenersBefore)
+  })
+
+  it('dispatches review with a supplied patch source even when resolveAgentRepoRoot rejects INVALID_REPOSITORY', async () => {
+    const { AgentOperationError } = jest.requireActual('../../operations/agent/errors') as typeof import('../../operations/agent/errors')
+    mockResolveAgentRepoRoot.mockRejectedValueOnce(
+      new AgentOperationError('INVALID_REPOSITORY', 'Not a git repository: /tmp/notgit'),
+    )
+    const input = writeRequest({
+      source: { kind: 'patch', patch: 'diff --git a/x.ts b/x.ts\n+const a = 2\n' },
+    })
+
+    await handler(argv({ operation: 'review', input }))
+
+    expect(mockCreateAgentOperationContext).toHaveBeenCalledWith(
+      expect.objectContaining({ requireRepository: false }),
+    )
+    expect(mockRunAgentOperation).toHaveBeenCalled()
+    expect(JSON.parse(stdout)).toMatchObject({ ok: true, operation: 'review' })
+    expect(process.exitCode).toBeUndefined()
+  })
+
+  it('emits a structured INVALID_REPOSITORY failure for commit-draft when no git repo is available', async () => {
+    const { AgentOperationError } = jest.requireActual('../../operations/agent/errors') as typeof import('../../operations/agent/errors')
+    mockResolveAgentRepoRoot.mockRejectedValueOnce(
+      new AgentOperationError('INVALID_REPOSITORY', 'Not a git repository: /tmp/notgit'),
+    )
+    const input = writeRequest({
+      source: { kind: 'patch', patch: 'diff --git a/x.ts b/x.ts\n+const a = 2\n' },
+    })
+
+    await handler(argv({ operation: 'commit-draft', input }))
+
+    expect(JSON.parse(stdout)).toMatchObject({
+      ok: false,
+      operation: 'commit-draft',
+      error: {
+        code: 'INVALID_REPOSITORY',
+        message: expect.stringContaining('commit-draft requires a git repository'),
+        retryable: false,
+      },
+    })
+    expect(process.exitCode).toBe(1)
+    expect(mockRunAgentOperation).not.toHaveBeenCalled()
   })
 
   it('normalizes generation failures into a structured envelope', async () => {

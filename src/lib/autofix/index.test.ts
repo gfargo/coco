@@ -68,7 +68,7 @@ describe('runAutoFix', () => {
   it('is a no-op when autoFixTool is unset', async () => {
     const config: AutoFixConfig = {}
 
-    await expect(runAutoFix(item, config)).resolves.toBeUndefined()
+    await expect(runAutoFix(item, config, '/fake/repo')).resolves.toBeUndefined()
     expect(buildPrompt).not.toHaveBeenCalled()
     expect(codexRun).not.toHaveBeenCalled()
   })
@@ -76,15 +76,15 @@ describe('runAutoFix', () => {
   it('throws on unrecognized autoFixTool', async () => {
     const config: AutoFixConfig = { autoFixTool: 'unknown-tool' }
 
-    await expect(runAutoFix(item, config)).rejects.toThrow('Unknown autoFixTool: "unknown-tool"')
+    await expect(runAutoFix(item, config, '/fake/repo')).rejects.toThrow('Unknown autoFixTool: "unknown-tool"')
   })
 
   it('calls run without options when autoFixToolOptions is unset', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
-    expect(buildPrompt).toHaveBeenCalledWith(item)
+    expect(buildPrompt).toHaveBeenCalledWith(item, '/fake/repo')
     expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
   })
 
@@ -92,7 +92,7 @@ describe('runAutoFix', () => {
     const options = { model: 'o4-mini' }
     const config: AutoFixConfig = { autoFixTool: 'codex', autoFixToolOptions: options }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(codexRun).toHaveBeenCalledWith('mocked prompt', options, undefined, undefined)
   })
@@ -106,7 +106,7 @@ describe('runAutoFix', () => {
       apiKey: 'sk-openai-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, 'sk-openai-key', undefined)
   })
@@ -118,7 +118,7 @@ describe('runAutoFix', () => {
       apiKey: 'sk-ant-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(claudeRun).toHaveBeenCalledWith('mocked prompt', undefined, 'sk-ant-key', undefined)
   })
@@ -130,7 +130,7 @@ describe('runAutoFix', () => {
       apiKey: 'AIza-google-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, 'AIza-google-key', undefined)
   })
@@ -146,7 +146,7 @@ describe('runAutoFix', () => {
       apiKey: 'sk-openai-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     // The key passed to run must be undefined — the OpenAI key must not reach gemini
     expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
@@ -165,7 +165,7 @@ describe('runAutoFix', () => {
       apiKey: 'sk-openai-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(claudeRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
 
@@ -181,7 +181,7 @@ describe('runAutoFix', () => {
       apiKey: 'sk-ant-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
 
@@ -197,7 +197,7 @@ describe('runAutoFix', () => {
       apiKey: 'sk-ant-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
 
@@ -213,7 +213,7 @@ describe('runAutoFix', () => {
       apiKey: 'AIza-google-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
 
@@ -233,7 +233,7 @@ describe('runAutoFix', () => {
         apiKey: 'some-other-vendor-key',
       }
 
-      await runAutoFix(item, config)
+      await runAutoFix(item, config, '/fake/repo')
 
       // Key must not be forwarded
       expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
@@ -260,7 +260,7 @@ describe('runAutoFix', () => {
       autoFixToolApiKey: 'AIza-explicit-google-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     // Explicit key must arrive as the forceApiKey (4th) arg, not the apiKey (3rd) arg
     expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, 'AIza-explicit-google-key')
@@ -280,7 +280,7 @@ describe('runAutoFix', () => {
       autoFixToolApiKey: 'AIza-explicit-google-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     // forceApiKey must be set so the adapter injects it regardless of ambient env
     expect(geminiRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, 'AIza-explicit-google-key')
@@ -294,7 +294,7 @@ describe('runAutoFix', () => {
       autoFixToolApiKey: 'sk-explicit-tool-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, 'sk-explicit-tool-key')
   })
@@ -310,7 +310,7 @@ describe('runAutoFix', () => {
       apiKey: 'sk-openai-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(consoleWarnSpy).toHaveBeenCalled()
 
@@ -326,7 +326,7 @@ describe('runAutoFix', () => {
       apiKey: 'sk-openai-key',
     }
 
-    await runAutoFix(item, config)
+    await runAutoFix(item, config, '/fake/repo')
 
     expect(consoleWarnSpy).not.toHaveBeenCalled()
 
@@ -359,7 +359,7 @@ describe('runAutoFix', () => {
         const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
 
         const config: AutoFixConfig = { autoFixTool: tool, provider, apiKey: key }
-        await runAutoFix(item, config)
+        await runAutoFix(item, config, '/fake/repo')
 
         const runMock =
           tool === 'codex' ? codexRun : tool === 'claude' ? claudeRun : geminiRun

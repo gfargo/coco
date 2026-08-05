@@ -71,6 +71,7 @@ describe('agent generate progress reporting', () => {
     jest.clearAllMocks()
     mockResolveChangeSource.mockResolvedValue({
       text: 'diff content',
+      warnings: [],
       meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
     })
     mockLoadConfig.mockReturnValue({
@@ -370,6 +371,7 @@ describe('generateAgentCommitDraft — retryable flag (OSS-1326 / #1854)', () =>
 
     mockResolveChangeSource.mockResolvedValue({
       text: 'some diff context',
+      warnings: [],
       meta: {
         kind: 'repository',
         digest: 'abc123',

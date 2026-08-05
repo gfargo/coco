@@ -38,6 +38,12 @@ import {
     getConventionsContext,
     ResolvedChangeContext,
     resolveChangeSource,
+    readRepoBranchContext,
+    readRepoStatusContext,
+    readRepoHistoryContext,
+    readRepoConflictsContext,
+    readRepoCapabilitiesContext,
+    digestOf,
 } from './context'
 import { AgentOperationError } from './errors'
 import { splitUnifiedDiff } from './splitUnifiedDiff'
@@ -54,6 +60,9 @@ import {
     CondenseDiffRequest,
     RecapData,
     ReviewData,
+    RepoContextData,
+    RepoContextRequest,
+    RepoContextSection,
 } from './schemas'
 
 type SupportedTask = 'review' | 'changelog' | 'recap'
@@ -247,6 +256,12 @@ export async function generateAgentCommitDraft(
   context: AgentOperationContext,
   preResolved?: ResolvedChangeContext,
 ): Promise<AgentSuccessEnvelope<CommitDraftData>> {
+  if (!context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'commit-draft requires a git repository: it reads branch context and recent commit history even when a prepared summary is supplied. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
   const resolved = preResolved ?? await resolveChangeSource(input.source, context, {
     trustRepositoryConfig: input.options.trustRepositoryConfig,
   })
@@ -312,7 +327,7 @@ export async function generateAgentCommitDraft(
   return envelope('commit-draft', {
     ...result.message,
     validationErrors: result.validationErrors,
-  }, result.warnings, resolved.meta, conventions.provenance)
+  }, [...resolved.warnings, ...result.warnings], resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentReview(
@@ -349,7 +364,7 @@ export async function generateAgentReview(
   })
   findings.sort((a, b) => b.severity - a.severity)
   report(context, 'Completed', 1)
-  return envelope('review', { findings }, [], resolved.meta, conventions.provenance)
+  return envelope('review', { findings }, resolved.warnings, resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentChangelog(
@@ -384,7 +399,7 @@ export async function generateAgentChangelog(
     },
   })
   report(context, 'Completed', 1)
-  return envelope('changelog', result, [], resolved.meta, conventions.provenance)
+  return envelope('changelog', result, resolved.warnings, resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentRecap(
@@ -417,7 +432,7 @@ export async function generateAgentRecap(
     },
   })
   report(context, 'Completed', 1)
-  return envelope('recap', result, [], resolved.meta, conventions.provenance)
+  return envelope('recap', result, resolved.warnings, resolved.meta, conventions.provenance)
 }
 
 export async function runAgentOperation(
@@ -443,6 +458,72 @@ export async function runAgentOperation(
         'condense-diff must be dispatched via runCondenseDiff, not runAgentOperation.',
         false,
       )
+    case 'repo-context':
+      // repo-context uses its own request schema (RepoContextRequest) and is
+      // dispatched via runRepoContext, not through this shared entry point.
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'repo-context must be dispatched via runRepoContext, not runAgentOperation.',
+        false,
+      )
+  }
+}
+
+const DEFAULT_REPO_CONTEXT_SECTIONS: RepoContextSection[] = ['branch', 'status']
+
+/**
+ * Read a bounded, section-selectable structured snapshot of repository state.
+ * No LLM call, no API key required. All git commands run through the hardened
+ * runAgentGit path (--no-optional-locks, diff.external=, core.fsmonitor=false).
+ * No diff/patch content is ever included — paths and statistics only.
+ */
+export async function runRepoContext(
+  input: RepoContextRequest,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<RepoContextData>> {
+  const sections = new Set<RepoContextSection>(input.include ?? DEFAULT_REPO_CONTEXT_SECTIONS)
+
+  const [branchResult, statusResult, historyResult, conflictsResult, capabilitiesResult] = await Promise.all([
+    sections.has('branch') ? readRepoBranchContext(context) : Promise.resolve(undefined),
+    sections.has('status') ? readRepoStatusContext(context) : Promise.resolve(undefined),
+    sections.has('history') ? readRepoHistoryContext(context, input.historyLimit) : Promise.resolve(undefined),
+    sections.has('conflicts') ? readRepoConflictsContext(context) : Promise.resolve(undefined),
+    sections.has('capabilities') ? readRepoCapabilitiesContext(context) : Promise.resolve(undefined),
+  ])
+
+  const data: RepoContextData = {
+    ...(branchResult !== undefined ? { branch: branchResult } : {}),
+    ...(statusResult !== undefined ? { status: statusResult } : {}),
+    ...(historyResult !== undefined ? { history: historyResult } : {}),
+    ...(conflictsResult !== undefined ? { conflicts: conflictsResult } : {}),
+    ...(capabilitiesResult !== undefined ? { capabilities: capabilitiesResult } : {}),
+  }
+
+  // Build synthetic SourceMetadata so the envelope stays uniform.
+  // We use the snapshot serialization as the digest payload.
+  const snapshot = JSON.stringify(data)
+  let repositoryHead: string | undefined
+  try {
+    repositoryHead = (await context.git!.revparse(['HEAD'])).trim()
+  } catch {
+    // No commits yet — leave undefined
+  }
+
+  const meta = {
+    kind: 'repository' as const,
+    digest: digestOf(snapshot),
+    ...(repositoryHead ? { repositoryHead } : {}),
+    verification: 'repository-derived' as const,
+  }
+
+  return {
+    version: AGENT_PROTOCOL_VERSION,
+    ok: true,
+    operation: 'repo-context',
+    status: 'completed',
+    data,
+    warnings: [],
+    meta,
   }
 }
 
@@ -530,6 +611,8 @@ export async function runCondenseDiff(
     throw new AgentOperationError('NO_CHANGES', 'No file diffs were found in the resolved change source.')
   }
 
+  report(context, 'Resolved diff', 0.3)
+
   const languages = input.languages
 
   // Phase 1: apply per-file condensation strategy.
@@ -537,7 +620,8 @@ export async function runCondenseDiff(
   const condensedDiffs: Array<{ fileDiff: FileDiff; condensed: string; applied: CondenseDiffFileResult['applied'] }> = []
 
   let totalInputTokens = 0
-  for (const fd of fileDiffs) {
+  for (let i = 0; i < fileDiffs.length; i++) {
+    const fd = fileDiffs[i]
     totalInputTokens += fd.tokenCount
     const { condensed, applied, langId } = await condenseFileDiff(fd, languages)
     const outputTokens = tokenizer(condensed)
@@ -549,7 +633,10 @@ export async function runCondenseDiff(
       outputTokens,
     })
     condensedDiffs.push({ fileDiff: { ...fd, diff: condensed, tokenCount: outputTokens }, condensed, applied })
+    report(context, `Condensing ${fd.file}`, 0.3 + 0.6 * ((i + 1) / fileDiffs.length))
   }
+
+  report(context, 'Enforcing token budget', 0.9)
 
   const budgetTokens = input.budget.tokens
 
@@ -621,6 +708,8 @@ export async function runCondenseDiff(
     },
     files: fileResults,
   }
+
+  report(context, 'Completed', 1)
 
   return {
     version: AGENT_PROTOCOL_VERSION,

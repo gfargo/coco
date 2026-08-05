@@ -26,7 +26,7 @@ const PROVIDER_TO_VENDOR: Partial<Record<string, AutoFixVendor>> = {
   gemini: 'google',
 }
 
-export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig): Promise<void> {
+export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig, repoRoot: string): Promise<void> {
   if (!config.autoFixTool) {
     return
   }
@@ -78,6 +78,6 @@ export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig
     }
   }
 
-  const prompt = await buildPrompt(item)
+  const prompt = await buildPrompt(item, repoRoot)
   await adapter.run(prompt, config.autoFixToolOptions, keyToInject, forceKeyToInject)
 }

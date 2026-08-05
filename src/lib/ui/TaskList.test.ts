@@ -159,7 +159,7 @@ describe('TaskList — keyboard shortcuts', () => {
 
     expect(mockExecFile).toHaveBeenCalledWith(
       'code',
-      ['src/open-me.ts'],
+      [expect.stringContaining('src/open-me.ts')],
       expect.any(Function)
     )
 
@@ -179,7 +179,7 @@ describe('TaskList — keyboard shortcuts', () => {
 
     expect(mockExecFile).toHaveBeenCalledWith(
       'code',
-      ['-w', 'src/open-me.ts'],
+      ['-w', expect.stringContaining('src/open-me.ts')],
       expect.any(Function)
     )
 
@@ -203,6 +203,23 @@ describe('TaskList — keyboard shortcuts', () => {
       (arg) => typeof arg === 'string' && arg.includes('Failed to open src/open-me.ts')
     )
     expect(hasErrorMsg).toBe(true)
+  })
+
+  it('rejects a path that escapes the repo root and does not spawn an editor', async () => {
+    const tl = new TaskList([makeItem({ filePath: '../secret.txt' })])
+    const startPromise = tl.start()
+
+    await press('o')
+    await press('q')
+    await startPromise.catch(() => undefined)
+
+    expect(mockExecFile).not.toHaveBeenCalled()
+
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    const hasRejectionMsg = logCalls.some(
+      (arg) => typeof arg === 'string' && arg.includes('Cannot open') && arg.includes('../secret.txt')
+    )
+    expect(hasRejectionMsg).toBe(true)
   })
 
   it.each([
@@ -236,7 +253,8 @@ describe('TaskList — keyboard shortcuts', () => {
 
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 2' }),
-      config
+      config,
+      expect.any(String)
     )
   })
 
@@ -255,7 +273,8 @@ describe('TaskList — keyboard shortcuts', () => {
 
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 1' }),
-      config
+      config,
+      expect.any(String)
     )
   })
 
@@ -334,7 +353,8 @@ describe('TaskList — autoFix() on successful runAutoFix', () => {
 
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Fix me' }),
-      config
+      config,
+      expect.any(String)
     )
   })
 
@@ -353,7 +373,8 @@ describe('TaskList — autoFix() on successful runAutoFix', () => {
     expect(mockRunAutoFix).toHaveBeenCalledTimes(1)
     expect(mockRunAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 1' }),
-      config
+      config,
+      expect.any(String)
     )
   })
 })
@@ -391,8 +412,8 @@ describe('TaskList — autoFix() when runAutoFix throws', () => {
     await startPromise.catch(() => undefined)
 
     expect(mockRunAutoFix).toHaveBeenCalledTimes(2)
-    expect(mockRunAutoFix).toHaveBeenNthCalledWith(1, expect.objectContaining({ title: 'Item 1' }), config)
-    expect(mockRunAutoFix).toHaveBeenNthCalledWith(2, expect.objectContaining({ title: 'Item 1' }), config)
+    expect(mockRunAutoFix).toHaveBeenNthCalledWith(1, expect.objectContaining({ title: 'Item 1' }), config, expect.any(String))
+    expect(mockRunAutoFix).toHaveBeenNthCalledWith(2, expect.objectContaining({ title: 'Item 1' }), config, expect.any(String))
   })
 })
 

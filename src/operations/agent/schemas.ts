@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -374,3 +374,128 @@ export type AgentSuccessEnvelope<T> = {
 }
 
 export type AgentFailureEnvelope = z.infer<typeof AgentFailureEnvelopeSchema>
+
+// ─── repo-context operation ───────────────────────────────────────────────────
+
+/**
+ * Sections that can be included in a repo-context snapshot.
+ * Callers opt in per section; omitted sections cost no git work.
+ */
+export const RepoContextSectionSchema = z.enum(['branch', 'status', 'history', 'conflicts', 'capabilities'])
+
+/**
+ * Request schema for `coco agent repo-context` and the MCP tool
+ * `coco_repo_context`. A read-only, section-selectable structured snapshot
+ * of repository state — no diff content, no LLM call, no API key required.
+ * Every list in the response is bounded and reports totalCount + truncated.
+ */
+export const RepoContextRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  /**
+   * Sections to include. Defaults to ['branch', 'status'] — the cheap,
+   * most-used reads. Include 'history', 'conflicts', and 'capabilities'
+   * only when needed to avoid paying for unused git work.
+   */
+  include: z.array(RepoContextSectionSchema).optional(),
+  /**
+   * Maximum number of history entries to return. Capped at 50.
+   * Default: 20.
+   */
+  historyLimit: z.number().int().min(1).max(50).default(20),
+}).strict()
+
+/** Publish the caller-facing request shape, before defaults are applied. */
+export function createRepoContextInputJsonSchema() {
+  return z.toJSONSchema(RepoContextRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+// ─── Per-section sub-schemas ──────────────────────────────────────────────────
+
+export const RepoContextFileEntrySchema = z.object({
+  path: z.string(),
+  /** X (index/staging area) status character from git status --porcelain */
+  indexStatus: z.string(),
+  /** Y (worktree) status character from git status --porcelain */
+  worktreeStatus: z.string(),
+  /** Number of lines added (rename-aware numstat). undefined if unavailable. */
+  additions: z.number().int().optional(),
+  /** Number of lines deleted (rename-aware numstat). undefined if unavailable. */
+  deletions: z.number().int().optional(),
+}).strict()
+
+export const RepoContextStatusSchema = z.object({
+  staged: z.array(RepoContextFileEntrySchema),
+  unstaged: z.array(RepoContextFileEntrySchema),
+  untracked: z.array(RepoContextFileEntrySchema),
+  conflicted: z.array(RepoContextFileEntrySchema),
+  counts: z.object({
+    staged: z.number().int(),
+    unstaged: z.number().int(),
+    untracked: z.number().int(),
+    conflicted: z.number().int(),
+  }).strict(),
+  truncated: z.boolean(),
+  totalCount: z.number().int(),
+}).strict()
+
+export const RepoContextBranchSchema = z.object({
+  current: z.string(),
+  upstream: z.string().optional(),
+  ahead: z.number().int().optional(),
+  behind: z.number().int().optional(),
+  detached: z.boolean(),
+  defaultBranch: z.string().optional(),
+}).strict()
+
+export const RepoContextHistoryEntrySchema = z.object({
+  sha: z.string(),
+  subject: z.string(),
+  author: z.string(),
+  relativeDate: z.string(),
+  refs: z.array(z.string()),
+}).strict()
+
+export const RepoContextHistorySchema = z.object({
+  entries: z.array(RepoContextHistoryEntrySchema),
+  totalCount: z.number().int(),
+  truncated: z.boolean(),
+}).strict()
+
+export const RepoContextConflictsSchema = z.object({
+  inProgress: z.boolean(),
+  operation: z.enum(['none', 'merge', 'rebase', 'cherry-pick', 'revert']),
+  files: z.array(RepoContextFileEntrySchema),
+  regionCounts: z.object({
+    totalCount: z.number().int(),
+    truncated: z.boolean(),
+  }).strict(),
+  totalCount: z.number().int(),
+  truncated: z.boolean(),
+}).strict()
+
+export const RepoContextCapabilitiesSchema = z.object({
+  forge: z.string().optional(),
+  hasCommitlintConfig: z.boolean(),
+  isWorktree: z.boolean(),
+  isShallow: z.boolean(),
+}).strict()
+
+export const RepoContextDataSchema = z.object({
+  branch: RepoContextBranchSchema.optional(),
+  status: RepoContextStatusSchema.optional(),
+  history: RepoContextHistorySchema.optional(),
+  conflicts: RepoContextConflictsSchema.optional(),
+  capabilities: RepoContextCapabilitiesSchema.optional(),
+}).strict()
+
+export type RepoContextRequest = z.infer<typeof RepoContextRequestSchema>
+export type RepoContextData = z.infer<typeof RepoContextDataSchema>
+export type RepoContextBranch = z.infer<typeof RepoContextBranchSchema>
+export type RepoContextStatus = z.infer<typeof RepoContextStatusSchema>
+export type RepoContextHistoryEntry = z.infer<typeof RepoContextHistoryEntrySchema>
+export type RepoContextHistory = z.infer<typeof RepoContextHistorySchema>
+export type RepoContextConflicts = z.infer<typeof RepoContextConflictsSchema>
+export type RepoContextCapabilities = z.infer<typeof RepoContextCapabilitiesSchema>
+export type RepoContextFileEntry = z.infer<typeof RepoContextFileEntrySchema>
+export type RepoContextSection = z.infer<typeof RepoContextSectionSchema>
