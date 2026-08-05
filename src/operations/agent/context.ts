@@ -222,8 +222,9 @@ export type ConventionsContext = {
  * Builds the `conventions_context` prompt variable (#1956). Repository
  * convention files are repository-controlled text entering the prompt, so
  * this only reads them when the caller has explicitly trusted repository
- * configuration -- MCP tools reject `trustRepositoryConfig`, so they never
- * reach this path. `provenance` is null (and `text` is `''`) when untrusted
+ * configuration -- MCP tools omit `trustRepositoryConfig` from their input
+ * schema, so the value is always falsy there and this path is never
+ * reached. `provenance` is null (and `text` is `''`) when untrusted
  * or nothing was found, mirroring how `language_context` and
  * `branch_name_context` degrade to an empty string.
  */
