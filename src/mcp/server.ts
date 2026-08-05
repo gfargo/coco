@@ -2,6 +2,8 @@ import { fileURLToPath } from 'node:url'
 import { PromptTemplate } from '@langchain/core/prompts'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js'
+import type { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 
 import { CHANGELOG_PROMPT } from '../commands/changelog/prompt'
@@ -14,13 +16,11 @@ import {
     AgentOperation,
     AgentOperationContext,
     AgentOperationError,
-    AgentTaskInputSchema,
     ChangelogDataSchema,
     CommitApplyDataSchema,
     CommitApplyRequestSchema,
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
-    CondenseDiffRequestSchema,
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
@@ -28,9 +28,12 @@ import {
     digestOf,
     getBranchContext,
     getRecentLog,
+    getRepoConfig,
     getRepoStatus,
     getStagedDiff,
     isPathWithinRoot,
+    McpCondenseDiffRequestSchema,
+    McpTaskInputSchema,
     RecapDataSchema,
     RepoContextDataSchema,
     RepoContextRequestSchema,
@@ -142,6 +145,39 @@ async function resolveEffectiveRepoRoot(
   )
 }
 
+/**
+ * Build a transport-agnostic progress reporter that forwards coco's internal
+ * `fraction` (0.0-1.0) as the MCP-spec `progress`/`total` pair so clients can
+ * render a determinate progress bar. Returns `undefined` when the client did
+ * not supply a `progressToken` (progress notifications are opt-in per spec).
+ */
+function makeMcpProgressReporter(
+  extra: RequestHandlerExtra<ServerRequest, ServerNotification>,
+): ((update: { message?: string; fraction?: number }) => void) | undefined {
+  const progressToken = extra._meta?.progressToken
+  if (progressToken === undefined) return undefined
+  let lastProgress = 0
+  return (update: { message?: string; fraction?: number }) => {
+    if (typeof update.fraction === 'number' && Number.isFinite(update.fraction)) {
+      // Clamp to [0,1] and keep non-decreasing so the bar only moves forward,
+      // even if a later tick carries no fraction (e.g. streaming liveness ticks).
+      lastProgress = Math.min(1, Math.max(lastProgress, update.fraction))
+    }
+    void extra.sendNotification({
+      method: 'notifications/progress',
+      params: {
+        progressToken,
+        progress: lastProgress,
+        total: 1,
+        message: update.message,
+      },
+    }).catch(() => {
+      // Fire-and-forget: a client that closed its notification
+      // channel mid-call must never fail the underlying operation.
+    })
+  }
+}
+
 function registerGenerationTool(
   server: McpServer,
   operation: AgentOperation,
@@ -152,7 +188,7 @@ function registerGenerationTool(
   server.registerTool(`coco_${operation.replace('-', '_')}`, {
     title,
     description,
-    inputSchema: AgentTaskInputSchema,
+    inputSchema: McpTaskInputSchema,
     outputSchema: outputSchemaFor(operation),
     annotations: {
       readOnlyHint: true,
@@ -162,13 +198,7 @@ function registerGenerationTool(
     },
   }, async (rawInput, extra) => {
     try {
-      const input = AgentTaskInputSchema.parse(rawInput)
-      if (input.options.trustRepositoryConfig) {
-        throw new AgentOperationError(
-          'UNSAFE_OPTION',
-          'MCP tools do not execute repository-defined prompts or commitlint configuration. Use the one-shot agent CLI only for explicitly trusted repositories.',
-        )
-      }
+      const input = McpTaskInputSchema.parse(rawInput)
 
       const needsRepo = requiresRepository(operation, input.source)
       let repoRoot: string
@@ -213,23 +243,7 @@ function registerGenerationTool(
         }
       }
 
-      const progressToken = extra._meta?.progressToken
-      let progressCounter = 0
-      const onProgress = progressToken === undefined
-        ? undefined
-        : (update: { message?: string; fraction?: number }) => {
-          void extra.sendNotification({
-            method: 'notifications/progress',
-            params: {
-              progressToken,
-              progress: ++progressCounter,
-              message: update.message,
-            },
-          }).catch(() => {
-            // Fire-and-forget: a client that closed its notification
-            // channel mid-call must never fail the underlying operation.
-          })
-        }
+      const onProgress = makeMcpProgressReporter(extra)
       const context = await createAgentOperationContext({
         repoRoot,
         requireRepository,
@@ -237,7 +251,10 @@ function registerGenerationTool(
         surface: 'mcp',
         onProgress,
       })
-      const result = await runAgentOperation(operation, input, context)
+      const result = await runAgentOperation(operation, {
+        ...input,
+        options: { ...input.options, trustRepositoryConfig: false },
+      }, context)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
@@ -316,11 +333,12 @@ function registerRepoResource(
   description: string,
   boundRoot: string | undefined,
   loader: (context: AgentOperationContext) => Promise<string>,
+  mimeType: string = 'text/plain',
 ): void {
   server.registerResource(name, uri, {
     title,
     description,
-    mimeType: 'text/plain',
+    mimeType,
   }, async (resourceUri, extra) => {
     try {
       const repoRoot = await resolveEffectiveRepoRoot(server, undefined, boundRoot, extra.signal)
@@ -330,11 +348,12 @@ function registerRepoResource(
         signal: extra.signal,
         surface: 'mcp',
       })
-      const text = (await loader(context)).trim() || 'No content available.'
+      const raw = await loader(context)
+      const text = mimeType === 'application/json' ? raw.trim() : raw.trim() || 'No content available.'
       return {
         contents: [{
           uri: resourceUri.href,
-          mimeType: 'text/plain',
+          mimeType,
           text,
           _meta: { digest: digestOf(text) },
         }],
@@ -405,7 +424,7 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     allowWrite
       ? 'This server was started with --allow-write: coco_commit_apply is also registered. It creates a git commit from whatever is currently staged — it never runs `git add` and never pushes.'
       : 'coco_commit_apply is NOT registered on this server; start it with `coco mcp --allow-write` to opt into that write-capable tool.',
-    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log) so a client can browse without spending a tool call.',
+    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, resolved config) so a client can browse without spending a tool call.',
     'Prompts expose coco\'s built-in commit, review, changelog, and recap templates for reuse by any MCP client.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
     'Repository-defined prompts and executable commitlint configuration are never enabled by MCP tools.',
@@ -460,7 +479,7 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
       'Files omitted to meet the budget are reported in metrics.filesOmitted.',
       'The result is a LOSSY reduction; findings based on it may miss details from omitted or simplified content.',
     ].join(' '),
-    inputSchema: CondenseDiffRequestSchema,
+    inputSchema: McpCondenseDiffRequestSchema,
     outputSchema: outputSchemaFor('condense-diff'),
     annotations: {
       readOnlyHint: true,
@@ -471,23 +490,19 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
   }, async (rawInput, extra) => {
     const operation = 'condense-diff' as const
     try {
-      const input = CondenseDiffRequestSchema.parse(rawInput)
-      if (input.trustRepositoryConfig) {
-        throw new AgentOperationError(
-          'UNSAFE_OPTION',
-          'MCP tools do not execute repository-defined prompts or commitlint configuration. Use the one-shot agent CLI only for explicitly trusted repositories.',
-        )
-      }
+      const input = McpCondenseDiffRequestSchema.parse(rawInput)
       // repoRoot here shadows the outer parameter, using it as the "boundRoot"
       // to match the single-repo confinement pattern of the other tools.
       const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
       await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const onProgress = makeMcpProgressReporter(extra)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
         surface: 'mcp',
+        onProgress,
       })
-      const result = await runCondenseDiff(input, context)
+      const result = await runCondenseDiff({ ...input, trustRepositoryConfig: false }, context)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
@@ -588,6 +603,16 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     'Recent commit history (`git log --oneline`, bounded to 20 entries). Read-only.',
     repoRoot,
     (context) => getRecentLog(context),
+  )
+  registerRepoResource(
+    server,
+    'coco_repo_config',
+    'coco://repo/config',
+    'Repository configuration',
+    'Resolved (merged) coco configuration — provider, model, token limits, ignore patterns, telemetry state. Credentials omitted. Read-only.',
+    repoRoot,
+    getRepoConfig,
+    'application/json',
   )
 
   registerCocoPrompt(
