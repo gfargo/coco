@@ -235,6 +235,123 @@ describe('renderHistoryPanel', () => {
     })
   })
 
+  // Line-aware viewport budgeting (#1163, follow-up to #1421): the old
+  // `stackedDivisor` estimate assumed a fixed average lines-per-item ratio,
+  // which under-fills the panel whenever the actual mix skews toward
+  // one-line rows. These regressions measure the ACTUAL rendered line
+  // count against the panel's line budget (`bodyRows - chromeRows`).
+  describe('stacked-mode line-aware viewport budgeting', () => {
+    // Builds a connected linear chain (each commit's parent is the next)
+    // so the whole chain lays out as one trunk lane, same convention as
+    // `baseRows` above.
+    const makeChain = (count: number, refsAt: (index: number) => string[]): GitLogRow[] =>
+      Array.from({ length: count }, (_, i) =>
+        makeCommit({
+          shortHash: `c${i}`.padEnd(7, '0'),
+          hash: `hash${i}`,
+          parents: i + 1 < count ? [`hash${i + 1}`] : [],
+          date: '2026-05-26',
+          message: `feat: commit number ${i}`,
+          refs: refsAt(i),
+        })
+      )
+
+    // A "-stack" Box renders 1 Text child when the row collapsed to a
+    // single line (#1421) or 2 Text children (subject + metadata) when
+    // it didn't; a bucket-header Text is always exactly 1 line.
+    const countStackedLines = (node: unknown): number => {
+      if (Array.isArray(node)) {
+        return node.reduce((sum: number, child) => sum + countStackedLines(child), 0)
+      }
+      if (!node || typeof node !== 'object' || !('props' in node)) return 0
+      const key = (node as { key?: unknown }).key
+      if (typeof key === 'string' && key.startsWith('bucket-')) return 1
+      if (typeof key === 'string' && key.endsWith('-stack')) {
+        const children = (node as { props: { children?: unknown } }).props.children
+        return Array.isArray(children) ? children.length : 1
+      }
+      return countStackedLines((node as { props: { children?: unknown } }).props.children)
+    }
+
+    const countStackedCommitRows = (node: unknown): number => {
+      if (Array.isArray(node)) {
+        return node.reduce((sum: number, child) => sum + countStackedCommitRows(child), 0)
+      }
+      if (!node || typeof node !== 'object' || !('props' in node)) return 0
+      const key = (node as { key?: unknown }).key
+      if (typeof key === 'string' && key.endsWith('-stack')) return 1
+      return countStackedCommitRows((node as { props: { children?: unknown } }).props.children)
+    }
+
+    it('fills a mostly one-line window instead of under-filling per the old /1.4 estimate', () => {
+      // 30 ref-less commits, all in the same date bucket ("Today") — the
+      // #1421 collapse rule makes every commit a single line, which is
+      // exactly the case the old fixed divisor under-filled.
+      const rows = makeChain(30, () => [])
+      const bodyRows = 24 // supported floor (80x24)
+      const tree = render(makeState(createLogInkState(rows)), {
+        rowMode: 'stacked',
+        width: 80,
+        bodyRows,
+        dateBucketingEnabled: true,
+      })
+
+      // chromeRows here is 4 (no pending row, no upstream banner, no
+      // fetch-args indicator) — see renderHistoryPanel's chromeRows calc.
+      const lineBudget = bodyRows - 4
+      const lines = countStackedLines(tree)
+      const commitRows = countStackedCommitRows(tree)
+
+      // Never overflows the panel...
+      expect(lines).toBeLessThanOrEqual(lineBudget)
+      // ...and fills it, rather than leaving it under-filled the way the
+      // old `Math.floor((bodyRows - chromeRows) / 1.4)` item-count estimate
+      // did (which would have requested only ~14 items here, well short of
+      // the ~19 one-line commits that actually fit in a 20-line budget).
+      expect(lines).toBe(lineBudget)
+      expect(commitRows).toBeGreaterThan(14)
+    })
+
+    it('fills a mixed one-/two-line window without overflowing', () => {
+      // Alternate ref-less commits (collapse to 1 line under bucketing)
+      // with tagged commits (tags are never chipped away, so they retain
+      // their metadata line and cost 2 lines).
+      const rows = makeChain(30, (i) => (i % 2 === 0 ? ['v1.0'] : []))
+      const bodyRows = 24
+      const selectedIndex = rows.length - 1
+      const tree = render(
+        makeState({ ...createLogInkState(rows), selectedIndex }),
+        {
+          rowMode: 'stacked',
+          width: 90,
+          bodyRows,
+          dateBucketingEnabled: true,
+        }
+      )
+
+      const lineBudget = bodyRows - 4
+      const lines = countStackedLines(tree)
+      expect(lines).toBeLessThanOrEqual(lineBudget)
+      expect(lines).toBeGreaterThan(0)
+
+      // The selected commit (end of list, mixed heights) must still be
+      // rendered — cursor-centered scrolling / selection visibility
+      // (`getVisibleLogInkHistory`'s slide loop) must survive the
+      // variable-count windowing.
+      const collectStrings = (node: unknown, out: string[]): string[] => {
+        if (typeof node === 'string') {
+          out.push(node)
+        } else if (Array.isArray(node)) {
+          node.forEach((child) => collectStrings(child, out))
+        } else if (node && typeof node === 'object' && 'props' in node) {
+          collectStrings((node as { props: { children?: unknown } }).props.children, out)
+        }
+        return out
+      }
+      expect(collectStrings(tree, []).join(' ')).toContain(`commit number ${selectedIndex}`)
+    })
+  })
+
   it('swaps the commit list for a loader while a remote op is in flight', () => {
     // Collect every string rendered anywhere in the tree.
     const collectText = (node: unknown, out: string[]): string[] => {
