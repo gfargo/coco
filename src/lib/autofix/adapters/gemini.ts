@@ -1,8 +1,16 @@
 import { spawn } from 'child_process'
-import { BaseAdapter } from '../types'
+import { BaseAdapter, AutoFixVendor } from '../types'
 
 export class GeminiAdapter implements BaseAdapter {
-  async run(prompt: string, options?: Record<string, string>, apiKey?: string): Promise<void> {
+  readonly vendor: AutoFixVendor = 'google'
+  readonly envVar = 'GEMINI_API_KEY'
+
+  async run(
+    prompt: string,
+    options?: Record<string, string>,
+    apiKey?: string,
+    forceApiKey?: string
+  ): Promise<void> {
     const args: string[] = []
 
     if (options) {
@@ -13,10 +21,17 @@ export class GeminiAdapter implements BaseAdapter {
 
     args.push(prompt)
 
-    // Preserve the caller's environment by default and only override the API key
-    // when an explicit non-empty key is provided through auto-fix config.
+    // Build the child environment:
+    //   - forceApiKey (explicit per-tool credential) always wins, even if an
+    //     ambient variable is already set — the user explicitly chose this key.
+    //   - apiKey (derived from coco's provider) is only injected when the
+    //     ambient variable is absent — never clobber a working credential.
     const env = { ...process.env }
-    if (apiKey) env['GEMINI_API_KEY'] = apiKey
+    if (forceApiKey) {
+      env[this.envVar] = forceApiKey
+    } else if (apiKey && !env[this.envVar]) {
+      env[this.envVar] = apiKey
+    }
 
     return new Promise((resolve, reject) => {
       const child = spawn('gemini', args, { stdio: 'inherit', env })

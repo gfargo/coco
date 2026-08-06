@@ -376,7 +376,7 @@ Explain that “read Git data” is not automatically equivalent to “execute n
 - Worktree inspection can trigger clean filters while turning content into a diff.
 - Default agent/MCP behavior rejects it with `UNSAFE_SOURCE`.
 - One-shot CLI can opt in with `trustRepositoryConfig: true` for an explicitly trusted repository.
-- MCP always returns `UNSAFE_OPTION` for that flag.
+- MCP's input schema omits `trustRepositoryConfig` entirely, so the flag isn't offered there; a stray field fails input validation before it ever reaches the `UNSAFE_OPTION` check.
 - Safer alternative: caller supplies a patch or summary it already obtained under its own policy.
 
 #### Treat repository text as untrusted prompt data

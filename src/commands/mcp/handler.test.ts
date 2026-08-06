@@ -31,7 +31,7 @@ describe('mcp command handler', () => {
 
     expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith('/requested/repo')
     expect(mockArmNonInteractiveUsageTelemetry).toHaveBeenCalledWith(argv, '/bound/repo')
-    expect(mockStartCocoMcpServer).toHaveBeenCalledWith('/bound/repo')
+    expect(mockStartCocoMcpServer).toHaveBeenCalledWith('/bound/repo', { allowWrite: false })
     expect(process.cwd()).toBe(cwdBefore)
   })
 
@@ -59,6 +59,12 @@ describe('mcp command handler', () => {
 
     expect(mockResolveAgentRepoRoot).not.toHaveBeenCalled()
     expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
-    expect(mockStartCocoMcpServer).toHaveBeenCalledWith(undefined)
+    expect(mockStartCocoMcpServer).toHaveBeenCalledWith(undefined, { allowWrite: false })
+  })
+
+  it('passes allowWrite through to the server when --allow-write is set', async () => {
+    await handler({ $0: 'coco', _: ['mcp'], allowWrite: true } as never)
+
+    expect(mockStartCocoMcpServer).toHaveBeenCalledWith(undefined, { allowWrite: true })
   })
 })

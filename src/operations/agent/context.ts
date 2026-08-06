@@ -5,6 +5,8 @@ import * as path from 'node:path'
 import { promisify } from 'node:util'
 import { SimpleGit } from 'simple-git'
 
+import { loadConfig } from '../../lib/config/utils/loadConfig'
+import type { Config } from '../../lib/config/types'
 import type { LlmUsageSurface } from '../../lib/langchain/utils/observability'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { Logger } from '../../lib/utils/logger'
@@ -222,8 +224,9 @@ export type ConventionsContext = {
  * Builds the `conventions_context` prompt variable (#1956). Repository
  * convention files are repository-controlled text entering the prompt, so
  * this only reads them when the caller has explicitly trusted repository
- * configuration -- MCP tools reject `trustRepositoryConfig`, so they never
- * reach this path. `provenance` is null (and `text` is `''`) when untrusted
+ * configuration -- MCP tools omit `trustRepositoryConfig` from their input
+ * schema, so the value is always falsy there and this path is never
+ * reached. `provenance` is null (and `text` is `''`) when untrusted
  * or nothing was found, mirroring how `language_context` and
  * `branch_name_context` degrade to an empty string.
  */
@@ -640,6 +643,67 @@ export async function getRepoTree(
     shown.push(`… (${sorted.length - maxEntries} more entries omitted; limit ${maxEntries})`)
   }
   return shown.join('\n')
+}
+
+export type ResolvedRepoConfig = {
+  defaultBranch: string
+  language?: string
+  conventionalCommits?: boolean
+  service: {
+    provider: string
+    model: string
+    tokenLimit?: number
+    temperature?: number
+    maxConcurrent?: number
+    reasoningEffort?: string
+    dynamicModels?: Record<string, string>
+    dynamicModelPreference?: string
+    baseURL?: string
+    endpoint?: string
+  }
+  telemetry?: Config['telemetry']
+  ignoredFiles: string[]
+  ignoredExtensions: string[]
+}
+
+/**
+ * Project the merged config down to an allowlist of non-secret fields —
+ * credentials (`service.authentication`, Bedrock access keys, etc.) are
+ * omitted by construction rather than masked, so nothing new added to
+ * `LLMService` ever leaks here by default.
+ */
+export function buildResolvedRepoConfig(repoRoot: string): ResolvedRepoConfig {
+  const config = loadConfig({}, { cwd: repoRoot }) as Config
+  const service = config.service as unknown as Record<string, unknown>
+
+  return {
+    defaultBranch: config.defaultBranch,
+    ...(config.language !== undefined ? { language: config.language } : {}),
+    ...(config.conventionalCommits !== undefined ? { conventionalCommits: config.conventionalCommits } : {}),
+    service: {
+      provider: config.service.provider,
+      model: config.service.model,
+      ...(typeof service.tokenLimit === 'number' ? { tokenLimit: service.tokenLimit } : {}),
+      ...(typeof service.temperature === 'number' ? { temperature: service.temperature } : {}),
+      ...(typeof service.maxConcurrent === 'number' ? { maxConcurrent: service.maxConcurrent } : {}),
+      ...(typeof service.reasoningEffort === 'string' ? { reasoningEffort: service.reasoningEffort } : {}),
+      ...(service.dynamicModels !== undefined
+        ? { dynamicModels: service.dynamicModels as Record<string, string> }
+        : {}),
+      ...(typeof service.dynamicModelPreference === 'string'
+        ? { dynamicModelPreference: service.dynamicModelPreference }
+        : {}),
+      ...(typeof service.baseURL === 'string' ? { baseURL: service.baseURL } : {}),
+      ...(typeof service.endpoint === 'string' ? { endpoint: service.endpoint } : {}),
+    },
+    ...(config.telemetry !== undefined ? { telemetry: config.telemetry } : {}),
+    ignoredFiles: config.ignoredFiles ?? [],
+    ignoredExtensions: config.ignoredExtensions ?? [],
+  }
+}
+
+export function getRepoConfig(context: AgentOperationContext): Promise<string> {
+  return Promise.resolve(JSON.stringify(buildResolvedRepoConfig(context.repoRoot), null, 2))
 }
 
 // ─── Hardened repo-context readers ───────────────────────────────────────────

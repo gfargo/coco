@@ -405,7 +405,19 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     logger.log(chalk.dim('\nNon-interactive session detected — re-run with --json for machine-readable output.'))
   } else {
     const repoRoot = resolveGitRepoRoot(process.cwd())
-    const reviewer = new TaskList(findings, { ...config, apiKey: key ?? undefined }, git, repoRoot)
+    const reviewer = new TaskList(
+      findings,
+      {
+        ...config,
+        apiKey: key ?? undefined,
+        // Thread coco's resolved provider so that runAutoFix can guard
+        // cross-vendor key injection.  autoFixToolApiKey passes through from
+        // config if the user has set an explicit per-tool credential.
+        provider,
+      },
+      git,
+      repoRoot
+    )
     logLlmTelemetrySummary(logger, 'review')
     await reviewer.start()
   }
