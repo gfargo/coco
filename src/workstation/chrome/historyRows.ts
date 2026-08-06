@@ -277,43 +277,69 @@ function toFullGraphItems(
   const selectedExpandedIndex = expanded.findIndex(
     (entry) => entry.kind === 'commit' && isSelectedCommit(commits[entry.index], selected)
   )
-  const start = clampWindowStart(
+
+  const toItems = (entries: ExpandedRow[]): LogInkHistoryItem[] =>
+    entries.map((entry) => {
+      if (entry.kind === 'bucket-header') {
+        return bucketHeaderItem(entry.label)
+      }
+      const row = layout.rows[entry.index]
+      if (entry.kind === 'transition') {
+        return {
+          type: 'graph',
+          graph: renderRowGraphAscii(row, 'transition'),
+          laneSegments: renderTransitionRowSegments(row),
+          spacer: true,
+        }
+      }
+      const commit = commits[entry.index]
+      return {
+        type: 'commit',
+        commit,
+        graph: renderRowGraphAscii(row, 'commit'),
+        laneSegments: renderCommitRowSegments(row, commitGlyphFor(commit)),
+        selected: isSelectedCommit(commit, selected),
+      }
+    })
+
+  // Sticky header — prepend the active bucket label when the slice
+  // starts partway into a bucket; costs one row from the budget.
+  const build = (windowStart: number): LogInkHistoryItem[] => {
+    const stickyLabel = bucketingNow ? findStickyBucketLabel(expanded, windowStart) : undefined
+    const sliceCount = stickyLabel ? visibleCount - 1 : visibleCount
+    const sliced = expanded.slice(windowStart, windowStart + sliceCount)
+    const finalEntries: ExpandedRow[] = stickyLabel
+      ? [{ kind: 'bucket-header', label: stickyLabel }, ...sliced]
+      : sliced
+    return toItems(finalEntries)
+  }
+
+  let start = clampWindowStart(
     selectedExpandedIndex >= 0 ? selectedExpandedIndex : 0,
     expanded.length,
     visibleCount
   )
+  let items = build(start)
 
-  // Sticky header — prepend the active bucket label when the slice
-  // starts partway into a bucket; costs one row from the budget.
-  const stickyLabel = bucketingNow ? findStickyBucketLabel(expanded, start) : undefined
-  const sliceCount = stickyLabel ? visibleCount - 1 : visibleCount
-  const sliced = expanded.slice(start, start + sliceCount)
-  const finalEntries: ExpandedRow[] = stickyLabel
-    ? [{ kind: 'bucket-header', label: stickyLabel }, ...sliced]
-    : sliced
-
-  return finalEntries.map((entry) => {
-    if (entry.kind === 'bucket-header') {
-      return bucketHeaderItem(entry.label)
-    }
-    const row = layout.rows[entry.index]
-    if (entry.kind === 'transition') {
-      return {
-        type: 'graph',
-        graph: renderRowGraphAscii(row, 'transition'),
-        laneSegments: renderTransitionRowSegments(row),
-        spacer: true,
-      }
-    }
-    const commit = commits[entry.index]
-    return {
-      type: 'commit',
-      commit,
-      graph: renderRowGraphAscii(row, 'commit'),
-      laneSegments: renderCommitRowSegments(row, commitGlyphFor(commit)),
-      selected: isSelectedCommit(commit, selected),
-    }
-  })
+  // The sticky header is budgeted AFTER `start` was computed headerless,
+  // so when the window is pinned at the end of the list (cursor near the
+  // tail) the header eats a slot without the window sliding to
+  // compensate — silently trimming the LAST entry, which may be the
+  // selected commit, off the render (mirrors the equivalent fix in
+  // `toCompactItems` above). Slide the window forward until the
+  // selection is inside the emitted items; bounded by the header count.
+  const selectionRendered = (rendered: LogInkHistoryItem[]): boolean =>
+    rendered.some((item) => item.type === 'commit' && item.selected)
+  while (
+    selectedExpandedIndex >= 0 &&
+    !selectionRendered(items) &&
+    start < selectedExpandedIndex &&
+    start < expanded.length - 1
+  ) {
+    start += 1
+    items = build(start)
+  }
+  return items
 }
 
 export type GetVisibleLogInkHistoryOptions = {
