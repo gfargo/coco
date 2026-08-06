@@ -128,6 +128,7 @@ export function useConflictResolutionActions(
           regionIndex: proposal.regionIndex,
           resolution: proposal.resolution,
           rationale: proposal.rationale,
+          confidence: proposal.confidence,
           region: regionByIndex.get(proposal.regionIndex)!,
         })),
       })

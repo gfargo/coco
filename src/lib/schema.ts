@@ -865,6 +865,9 @@ export const schema = {
         },
         "blameExplain": {
           "$ref": "#/definitions/LLMModel"
+        },
+        "conflictResolve": {
+          "$ref": "#/definitions/LLMModel"
         }
       },
       "additionalProperties": false
