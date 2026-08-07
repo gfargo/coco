@@ -215,6 +215,20 @@ describe('addBitbucketPullRequestReviewer (OSS-1639)', () => {
     expect(result.ok).toBe(false)
     expect(result.message).toContain('not found')
   }))
+
+  it('surfaces the resolved error when the pull request fetch throws, without issuing a PUT', withCredentials(async () => {
+    const calls: RunnerCall[] = []
+    const runner = async (endpoint: string, opts?: { method?: string; body?: string }) => {
+      calls.push({ endpoint, method: opts?.method, body: opts?.body })
+      if (endpoint === 'user') return '{}'
+      if (endpoint === 'users/alice') return JSON.stringify({ account_id: 'aid-alice' })
+      throw new Error('pull request 5 not found')
+    }
+    const result = await addBitbucketPullRequestReviewer('ws/repo', 5, 'alice', runner)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.message).toContain('pull request 5 not found')
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false)
+  }))
 })
 
 describe('reopenBitbucketPullRequestByNumber (#1933)', () => {

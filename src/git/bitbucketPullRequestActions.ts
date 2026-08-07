@@ -271,10 +271,8 @@ export function addBitbucketPullRequestReviewer(
       return { ok: false, message: `Bitbucket user '${username}' not found.` }
     }
 
-    // Fetch the current title/description/reviewers. Bitbucket's PUT is a
-    // full-resource update where `title` is required, so it must be echoed
-    // back alongside `reviewers` to avoid a 400 or clobbering the PR (see
-    // markBitbucketPullRequestReadyByNumber for the same pattern).
+    // Fetch the current title/description/reviewers to echo back (see the
+    // function doc block above).
     let title: string | undefined
     let description: string | undefined
     let currentReviewers: Array<{ account_id: string }> = []
@@ -284,8 +282,9 @@ export function addBitbucketPullRequestReviewer(
       title = pr?.title
       description = pr?.description
       currentReviewers = (pr?.reviewers ?? []).filter((r) => r.account_id).map((r) => ({ account_id: r.account_id as string }))
-    } catch {
-      // Fall through to the title === undefined check below.
+    } catch (error) {
+      const { message, details } = await resolveBitbucketActionError(error, runner)
+      return { ok: false, message, ...(details && details.length ? { details } : {}) }
     }
 
     if (title === undefined) {
