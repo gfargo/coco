@@ -6,6 +6,8 @@ import {
     LogInkWorkflowActionKind,
     getLogInkWorkflowActions,
 } from './inkWorkflows'
+import { en } from '../../lib/i18n/en'
+import { t } from '../../lib/i18n/t'
 
 export type LogInkCommandId =
   | 'clearSearch'
@@ -163,225 +165,225 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
   {
     id: 'moveUp',
     keys: ['up', 'k'],
-    label: 'move up',
-    description: 'Move the current selection up.',
+    label: t(en, 'keymap.binding.moveUp.label'),
+    description: t(en, 'keymap.binding.moveUp.desc'),
     contexts: ['normal', 'commits', 'sidebar'],
   },
   {
     id: 'moveDown',
     keys: ['down', 'j'],
-    label: 'move down',
-    description: 'Move the current selection down.',
+    label: t(en, 'keymap.binding.moveDown.label'),
+    description: t(en, 'keymap.binding.moveDown.desc'),
     contexts: ['normal', 'commits', 'sidebar'],
   },
   {
     id: 'pageUp',
     keys: ['page up'],
-    label: 'page up',
-    description: 'Move a page up in the commit list.',
+    label: t(en, 'keymap.binding.pageUp.label'),
+    description: t(en, 'keymap.binding.pageUp.desc'),
     contexts: ['commits'],
   },
   {
     id: 'pageDown',
     keys: ['page down'],
-    label: 'page down',
-    description: 'Move a page down in the commit list.',
+    label: t(en, 'keymap.binding.pageDown.label'),
+    description: t(en, 'keymap.binding.pageDown.desc'),
     contexts: ['commits'],
   },
   {
     id: 'moveToTop',
     keys: ['gg'],
-    label: 'top',
-    description: 'Jump to the first visible commit.',
+    label: t(en, 'keymap.binding.moveToTop.label'),
+    description: t(en, 'keymap.binding.moveToTop.desc'),
     contexts: ['commits'],
   },
   {
     id: 'moveToBottom',
     keys: ['G'],
-    label: 'bottom',
-    description: 'Jump to the last visible commit.',
+    label: t(en, 'keymap.binding.moveToBottom.label'),
+    description: t(en, 'keymap.binding.moveToBottom.desc'),
     contexts: ['commits'],
   },
   {
     id: 'nextMatch',
     keys: ['n'],
-    label: 'next match',
-    description: 'Move to the next visible search result.',
+    label: t(en, 'keymap.binding.nextMatch.label'),
+    description: t(en, 'keymap.binding.nextMatch.desc'),
     contexts: ['commits'],
   },
   {
     id: 'previousMatch',
     keys: ['N'],
-    label: 'previous match',
-    description: 'Move to the previous visible search result.',
+    label: t(en, 'keymap.binding.previousMatch.label'),
+    description: t(en, 'keymap.binding.previousMatch.desc'),
     contexts: ['commits'],
   },
   {
     id: 'previousSidebarTab',
     keys: ['['],
-    label: 'previous tab',
-    description: 'Move to the previous repository sidebar tab (outside diff view).',
+    label: t(en, 'keymap.binding.previousSidebarTab.label'),
+    description: t(en, 'keymap.binding.previousSidebarTab.desc'),
     contexts: ['sidebar'],
   },
   {
     id: 'nextSidebarTab',
     keys: [']'],
-    label: 'next tab',
-    description: 'Move to the next repository sidebar tab (outside diff view).',
+    label: t(en, 'keymap.binding.nextSidebarTab.label'),
+    description: t(en, 'keymap.binding.nextSidebarTab.desc'),
     contexts: ['sidebar'],
   },
   {
     id: 'previousHunk',
     keys: ['['],
-    label: 'previous hunk',
-    description: 'Jump to the previous diff hunk in the current diff view.',
+    label: t(en, 'keymap.binding.previousHunk.label'),
+    description: t(en, 'keymap.binding.previousHunk.desc'),
     contexts: ['commits'],
   },
   {
     id: 'nextHunk',
     keys: [']'],
-    label: 'next hunk',
-    description: 'Jump to the next diff hunk in the current diff view.',
+    label: t(en, 'keymap.binding.nextHunk.label'),
+    description: t(en, 'keymap.binding.nextHunk.desc'),
     contexts: ['commits'],
   },
   {
     id: 'focusNext',
     keys: ['tab'],
-    label: 'focus',
-    description: 'Move focus to the next panel.',
+    label: t(en, 'keymap.binding.focusNext.label'),
+    description: t(en, 'keymap.binding.focusNext.desc'),
     contexts: ['normal'],
   },
   {
     id: 'focusPrevious',
     keys: ['shift+tab'],
-    label: 'focus back',
-    description: 'Move focus to the previous panel.',
+    label: t(en, 'keymap.binding.focusPrevious.label'),
+    description: t(en, 'keymap.binding.focusPrevious.desc'),
     contexts: ['normal'],
   },
   {
     id: 'search',
     keys: ['/'],
-    label: 'search',
-    description: 'Filter commits by hash, author, ref, or message.',
+    label: t(en, 'keymap.binding.search.label'),
+    description: t(en, 'keymap.binding.search.desc'),
     contexts: ['normal'],
   },
   {
     id: 'clearSearch',
     keys: ['ctrl+u'],
-    label: 'clear',
-    description: 'Clear the active search filter.',
+    label: t(en, 'keymap.binding.clearSearch.label'),
+    description: t(en, 'keymap.binding.clearSearch.desc'),
     contexts: ['search'],
   },
   {
     id: 'toggleGraph',
     keys: ['\\'],
-    label: 'graph',
-    description: 'Toggle compact and full graph display.',
+    label: t(en, 'keymap.binding.toggleGraph.label'),
+    description: t(en, 'keymap.binding.toggleGraph.desc'),
     contexts: ['normal', 'commits'],
   },
   {
     id: 'toggleDiffViewMode',
     keys: ['d'],
-    label: 'split/unified',
-    description: 'Toggle the diff view between unified and side-by-side split rendering. Falls back to unified on narrow terminals.',
+    label: t(en, 'keymap.binding.toggleDiffViewMode.label'),
+    description: t(en, 'keymap.binding.toggleDiffViewMode.desc'),
     contexts: ['commits'],
   },
   {
     id: 'navigateHome',
     keys: ['gh'],
-    label: 'home',
-    description: 'Jump to the history root view (clears the navigation stack).',
+    label: t(en, 'keymap.binding.navigateHome.label'),
+    description: t(en, 'keymap.binding.navigateHome.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateStatus',
     keys: ['gs'],
-    label: 'status',
-    description: 'Push the working-tree status view onto the navigation stack.',
+    label: t(en, 'keymap.binding.navigateStatus.label'),
+    description: t(en, 'keymap.binding.navigateStatus.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateDiff',
     keys: ['gd'],
-    label: 'diff',
-    description: 'Push the diff view for the selected commit or file.',
+    label: t(en, 'keymap.binding.navigateDiff.label'),
+    description: t(en, 'keymap.binding.navigateDiff.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateCompose',
     keys: ['gc'],
-    label: 'compose',
-    description: 'Push the commit-compose view (draft + staged-files summary).',
+    label: t(en, 'keymap.binding.navigateCompose.label'),
+    description: t(en, 'keymap.binding.navigateCompose.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateBranches',
     keys: ['gb'],
-    label: 'branches',
-    description: 'Push the branches view (local branches with divergence info).',
+    label: t(en, 'keymap.binding.navigateBranches.label'),
+    description: t(en, 'keymap.binding.navigateBranches.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateTags',
     keys: ['gt'],
-    label: 'tags',
-    description: 'Push the tags view.',
+    label: t(en, 'keymap.binding.navigateTags.label'),
+    description: t(en, 'keymap.binding.navigateTags.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateStash',
     keys: ['gz'],
-    label: 'stash',
-    description: 'Push the stash view (gz; gs is reserved for status).',
+    label: t(en, 'keymap.binding.navigateStash.label'),
+    description: t(en, 'keymap.binding.navigateStash.desc'),
     contexts: ['normal'],
   },
   {
     id: 'createStash',
     keys: ['gZ'],
-    label: 'stash changes',
-    description: 'Stash all changes (tracked + untracked) with an optional message — works from any view, including status/diff/compose. Empty message creates a quick WIP stash.',
+    label: t(en, 'keymap.binding.createStash.label'),
+    description: t(en, 'keymap.binding.createStash.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateWorktrees',
     keys: ['gw'],
-    label: 'worktrees',
-    description: 'Push the linked worktrees view.',
+    label: t(en, 'keymap.binding.navigateWorktrees.label'),
+    description: t(en, 'keymap.binding.navigateWorktrees.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigatePullRequest',
     keys: ['gp'],
-    label: 'pull request',
-    description: 'Push the dedicated pull-request action panel for the current branch.',
+    label: t(en, 'keymap.binding.navigatePullRequest.label'),
+    description: t(en, 'keymap.binding.navigatePullRequest.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigatePullRequestTriage',
     keys: ['gP'],
-    label: 'PR triage',
-    description: 'Push the multi-PR triage list view (#882). Capital P disambiguates from `gp` which targets the single-PR panel for the current branch.',
+    label: t(en, 'keymap.binding.navigatePullRequestTriage.label'),
+    description: t(en, 'keymap.binding.navigatePullRequestTriage.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateIssues',
     keys: ['gi'],
-    label: 'issues',
-    description: 'Push the issue triage list view (#882).',
+    label: t(en, 'keymap.binding.navigateIssues.label'),
+    description: t(en, 'keymap.binding.navigateIssues.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateConflicts',
     keys: ['gx'],
-    label: 'conflicts',
-    description: 'Push the conflict resolution helper view (available during merge/rebase/cherry-pick/revert).',
+    label: t(en, 'keymap.binding.navigateConflicts.label'),
+    description: t(en, 'keymap.binding.navigateConflicts.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateReflog',
     keys: ['gr'],
-    label: 'reflog',
-    description: 'Push the reflog browser view — chronological recovery log.',
+    label: t(en, 'keymap.binding.navigateReflog.label'),
+    description: t(en, 'keymap.binding.navigateReflog.desc'),
     contexts: ['normal'],
   },
   {
@@ -392,185 +394,185 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     // per-view single-letter binding.
     id: 'workflowUndoLastAction',
     keys: ['gu'],
-    label: 'undo',
-    description: 'Undo the most recent invertible destructive action from this session (branch delete, stash drop, reset, or tag delete).',
+    label: t(en, 'keymap.binding.workflowUndoLastAction.label'),
+    description: t(en, 'keymap.binding.workflowUndoLastAction.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateBisect',
     keys: ['gB'],
-    label: 'bisect',
-    description: 'Push the bisect workflow view (#784). Capital B disambiguates from gb (branches). Available whenever a bisect is in progress; surfaces the current candidate and the good / bad / skip / reset action keys.',
+    label: t(en, 'keymap.binding.navigateBisect.label'),
+    description: t(en, 'keymap.binding.navigateBisect.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateSubmodules',
     keys: ['gM'],
-    label: 'submodules',
-    description: 'Push the submodules view (#932). Lists every registered submodule with status / pinned commit / tracking branch / remote. Capital M disambiguates from the single-letter `m` (mark compare base).',
+    label: t(en, 'keymap.binding.navigateSubmodules.label'),
+    description: t(en, 'keymap.binding.navigateSubmodules.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateRemotes',
     keys: ['gn'],
-    label: 'remotes',
-    description: 'Push the remotes view (#0.71). Lists every configured remote with its fetch / push URLs and offers add / remove / set-url / prune actions. `n` for network/remotes; gr is already reflog.',
+    label: t(en, 'keymap.binding.navigateRemotes.label'),
+    description: t(en, 'keymap.binding.navigateRemotes.desc'),
     contexts: ['normal'],
   },
   {
     id: 'navigateBlame',
     keys: ['b'],
-    label: 'blame',
-    description: 'Open the on-demand `git blame` drill-down for the cursored file (#0.71). Available on a file row in the status view (and on the worktree diff). Blame is loaded lazily and cached per path; j/k scrolls, esc returns. `b` is free in these contexts — elsewhere it pages / marks bad.',
+    label: t(en, 'keymap.binding.navigateBlame.label'),
+    description: t(en, 'keymap.binding.navigateBlame.desc'),
     contexts: ['status', 'diff'],
   },
   {
     id: 'navigateFileHistory',
     keys: ['L'],
-    label: 'file history',
-    description: 'Open the file-history drill-down (`git log --follow`) for the cursored file. Tracks renames; j/k scrolls, Enter opens the diff, Esc returns.',
+    label: t(en, 'keymap.binding.navigateFileHistory.label'),
+    description: t(en, 'keymap.binding.navigateFileHistory.desc'),
     contexts: ['status', 'diff', 'blame'],
   },
   {
     id: 'markForCompare',
     keys: ['m'],
-    label: 'mark compare',
-    description: 'Mark the cursored ref (branch / tag / commit) as the base for a compare-two-refs diff (#779). Press again on the same ref to clear; with a base set, Enter on another ref opens the compare diff.',
+    label: t(en, 'keymap.binding.markForCompare.label'),
+    description: t(en, 'keymap.binding.markForCompare.desc'),
     contexts: ['commits'],
   },
   {
     id: 'navigateBack',
     keys: ['<', 'esc'],
-    label: 'back',
-    description: 'Pop the navigation stack and return to the previous view.',
+    label: t(en, 'keymap.binding.navigateBack.label'),
+    description: t(en, 'keymap.binding.navigateBack.desc'),
     contexts: ['normal'],
   },
   {
     id: 'openSelected',
     keys: ['enter'],
-    label: 'open',
-    description: 'Open the diff for the selected commit (history) or file (status).',
+    label: t(en, 'keymap.binding.openSelected.label'),
+    description: t(en, 'keymap.binding.openSelected.desc'),
     contexts: ['commits'],
   },
   {
     id: 'refresh',
     keys: ['r'],
-    label: 'refresh',
-    description: 'Refresh repository context and selected commit details.',
+    label: t(en, 'keymap.binding.refresh.label'),
+    description: t(en, 'keymap.binding.refresh.desc'),
     contexts: ['normal'],
   },
   {
     id: 'revertSelection',
     keys: ['z'],
-    label: 'revert',
+    label: t(en, 'keymap.binding.revertSelection.label'),
     // #1361 — outside a revertable file/hunk target, `z` falls through
     // to the global undo (reflog-powered inverse of the last operation).
-    description: 'Ask to revert the selected file or hunk, or undo the last operation.',
+    description: t(en, 'keymap.binding.revertSelection.desc'),
     contexts: ['commits'],
   },
   {
     id: 'editCommit',
     keys: ['e'],
-    label: 'edit commit',
-    description: 'Edit the manual commit summary or body inline.',
+    label: t(en, 'keymap.binding.editCommit.label'),
+    description: t(en, 'keymap.binding.editCommit.desc'),
     contexts: ['commits'],
   },
   {
     id: 'editCommitExternal',
     keys: ['E'],
-    label: 'edit in $EDITOR',
-    description: 'Open the current commit draft in $EDITOR (or $VISUAL) for full editing, write-back on save.',
+    label: t(en, 'keymap.binding.editCommitExternal.label'),
+    description: t(en, 'keymap.binding.editCommitExternal.desc'),
     contexts: ['commits'],
   },
   {
     id: 'commitSplit',
     keys: ['S'],
-    label: 'split commit',
-    description: 'Generate a plan to split staged changes into multiple coherent commits; review and apply from an overlay.',
+    label: t(en, 'keymap.binding.commitSplit.label'),
+    description: t(en, 'keymap.binding.commitSplit.desc'),
     contexts: ['commits'],
   },
   {
     id: 'commit',
     keys: ['c'],
-    label: 'commit',
-    description: 'Create a commit from staged changes with the current draft.',
+    label: t(en, 'keymap.binding.commit.label'),
+    description: t(en, 'keymap.binding.commit.desc'),
     contexts: ['status', 'diff', 'compose'],
   },
   {
     id: 'cycleSort',
     keys: ['s'],
-    label: 'sort',
-    description: 'Cycle the sort mode in branches (name/recent/ahead) or tags (recent/name).',
+    label: t(en, 'keymap.binding.cycleSort.label'),
+    description: t(en, 'keymap.binding.cycleSort.desc'),
     contexts: ['commits'],
   },
   {
     id: 'yankClipboard',
     keys: ['y', 'Y'],
-    label: 'yank',
-    description: 'Copy the cursored identifier (commit hash, branch shortName, stash ref, file path, or tag name) to the clipboard. Y yanks the short hash on history and commit-diff views.',
+    label: t(en, 'keymap.binding.yankClipboard.label'),
+    description: t(en, 'keymap.binding.yankClipboard.desc'),
     contexts: ['commits'],
   },
   {
     id: 'help',
     keys: ['?'],
-    label: 'help',
-    description: 'Open or close the help panel.',
+    label: t(en, 'keymap.binding.help.label'),
+    description: t(en, 'keymap.binding.help.desc'),
     contexts: ['normal'],
   },
   {
     id: 'commandPalette',
     keys: [':'],
-    label: 'commands',
-    description: 'Open the command palette for less common actions.',
+    label: t(en, 'keymap.binding.commandPalette.label'),
+    description: t(en, 'keymap.binding.commandPalette.desc'),
     contexts: ['normal'],
   },
   {
     id: 'workflowDeleteBranch',
     keys: ['D'],
-    label: 'delete branch',
-    description: 'Delete the selected branch after confirmation.',
+    label: t(en, 'keymap.binding.workflowDeleteBranch.label'),
+    description: t(en, 'keymap.binding.workflowDeleteBranch.desc'),
     contexts: ['normal', 'sidebar', 'detail'],
   },
   {
     id: 'workflowDeleteTag',
     keys: ['T'],
-    label: 'delete tag',
-    description: 'Delete the selected tag after confirmation.',
+    label: t(en, 'keymap.binding.workflowDeleteTag.label'),
+    description: t(en, 'keymap.binding.workflowDeleteTag.desc'),
     contexts: ['normal', 'sidebar', 'detail'],
   },
   {
     id: 'workflowDropStash',
     keys: ['X'],
-    label: 'drop stash',
-    description: 'Drop the selected stash after confirmation.',
+    label: t(en, 'keymap.binding.workflowDropStash.label'),
+    description: t(en, 'keymap.binding.workflowDropStash.desc'),
     contexts: ['normal', 'sidebar', 'detail'],
   },
   {
     id: 'workflowRemoveWorktree',
     keys: ['W'],
-    label: 'remove worktree',
-    description: 'Remove the selected linked worktree after confirmation.',
+    label: t(en, 'keymap.binding.workflowRemoveWorktree.label'),
+    description: t(en, 'keymap.binding.workflowRemoveWorktree.desc'),
     contexts: ['normal', 'sidebar', 'detail'],
   },
   {
     id: 'workflowAbortOperation',
     keys: ['A'],
-    label: 'abort operation',
-    description: 'Abort the in-progress Git operation after confirmation.',
+    label: t(en, 'keymap.binding.workflowAbortOperation.label'),
+    description: t(en, 'keymap.binding.workflowAbortOperation.desc'),
     contexts: ['normal', 'sidebar', 'detail'],
   },
   {
     id: 'workflowAiCommitSummary',
     keys: ['I'],
-    label: 'AI commit summary',
-    description: 'Summarize the selected commit with AI (token/cost awareness).',
+    label: t(en, 'keymap.binding.workflowAiCommitSummary.label'),
+    description: t(en, 'keymap.binding.workflowAiCommitSummary.desc'),
     contexts: ['normal', 'sidebar', 'detail'],
   },
   {
     id: 'workflowAiConflictHelp',
     keys: ['M'],
-    label: 'AI conflict help',
-    description: 'Explain conflicted files and suggest resolution steps with AI.',
+    label: t(en, 'keymap.binding.workflowAiConflictHelp.label'),
+    description: t(en, 'keymap.binding.workflowAiConflictHelp.desc'),
     contexts: ['normal', 'sidebar', 'detail'],
   },
   // ── History-view-only mutating bindings ───────────────────────────
@@ -582,36 +584,36 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
   {
     id: 'viewCherryPick',
     keys: ['c'],
-    label: 'cherry-pick',
-    description: 'Cherry-pick the cursored commit onto the current branch.',
+    label: t(en, 'keymap.binding.viewCherryPick.label'),
+    description: t(en, 'keymap.binding.viewCherryPick.desc'),
     contexts: ['history'],
   },
   {
     id: 'viewRevert',
     keys: ['R'],
-    label: 'revert commit',
-    description: 'Revert the cursored commit (adds an inverse commit on HEAD).',
+    label: t(en, 'keymap.binding.viewRevert.label'),
+    description: t(en, 'keymap.binding.viewRevert.desc'),
     contexts: ['history'],
   },
   {
     id: 'viewReset',
     keys: ['Z'],
-    label: 'reset to commit',
-    description: 'Move the branch tip to the cursored commit (prompts for soft/mixed/hard).',
+    label: t(en, 'keymap.binding.viewReset.label'),
+    description: t(en, 'keymap.binding.viewReset.desc'),
     contexts: ['history'],
   },
   {
     id: 'viewFixup',
     keys: ['f'],
-    label: 'fixup into commit',
-    description: 'Commit the staged changes as a fixup! of the cursored commit; offers an immediate autosquash.',
+    label: t(en, 'keymap.binding.viewFixup.label'),
+    description: t(en, 'keymap.binding.viewFixup.desc'),
     contexts: ['history'],
   },
   {
     id: 'viewInteractiveRebase',
     keys: ['i'],
-    label: 'interactive rebase',
-    description: 'Start an interactive rebase from the cursored commit.',
+    label: t(en, 'keymap.binding.viewInteractiveRebase.label'),
+    description: t(en, 'keymap.binding.viewInteractiveRebase.desc'),
     contexts: ['history'],
   },
   {
@@ -623,78 +625,78 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     // y-confirm gate with a warning naming both branches.
     id: 'viewRebaseOnto',
     keys: ['r'],
-    label: 'rebase onto',
-    description: 'Rebase the current branch onto the cursored branch / ref (non-interactive) after confirmation.',
+    label: t(en, 'keymap.binding.viewRebaseOnto.label'),
+    description: t(en, 'keymap.binding.viewRebaseOnto.desc'),
     contexts: ['branches'],
   },
   {
     id: 'viewCreateBranchHere',
     keys: ['B'],
-    label: 'create branch here',
-    description: 'Create a branch at the cursored commit (does not switch).',
+    label: t(en, 'keymap.binding.viewCreateBranchHere.label'),
+    description: t(en, 'keymap.binding.viewCreateBranchHere.desc'),
     contexts: ['history'],
   },
   {
     id: 'viewCreateTagHere',
     keys: ['gT'],
-    label: 'create tag here',
-    description: 'Create a lightweight tag at the cursored commit.',
+    label: t(en, 'keymap.binding.viewCreateTagHere.label'),
+    description: t(en, 'keymap.binding.viewCreateTagHere.desc'),
     contexts: ['history'],
   },
   {
     id: 'viewKeys',
     keys: ['g?'],
-    label: 'keys',
-    description: 'Show the single-key actions available in the current view (which-key strip).',
+    label: t(en, 'keymap.binding.viewKeys.label'),
+    description: t(en, 'keymap.binding.viewKeys.desc'),
     contexts: ['normal'],
   },
   {
     id: 'themePicker',
     keys: ['gC'],
-    label: 'theme picker',
-    description: 'Browse, live-preview, and apply a color theme.',
+    label: t(en, 'keymap.binding.themePicker.label'),
+    description: t(en, 'keymap.binding.themePicker.desc'),
     contexts: ['normal'],
   },
   {
     id: 'openProjectConfig',
     keys: ['gk'],
-    label: 'project config',
-    description: 'Open this repo’s .coco.json in $EDITOR (creates a starter file if missing).',
+    label: t(en, 'keymap.binding.openProjectConfig.label'),
+    description: t(en, 'keymap.binding.openProjectConfig.desc'),
     contexts: ['normal'],
   },
   {
     id: 'openGlobalConfig',
     keys: ['gK'],
-    label: 'global config',
-    description: 'Open ~/.config/coco/config.json in $EDITOR (creates a starter file if missing).',
+    label: t(en, 'keymap.binding.openGlobalConfig.label'),
+    description: t(en, 'keymap.binding.openGlobalConfig.desc'),
     contexts: ['normal'],
   },
   {
     id: 'gitignoreFile',
     keys: ['i'],
-    label: 'gitignore',
-    description: 'Add the cursored file or folder to .gitignore (pick a pattern).',
+    label: t(en, 'keymap.binding.gitignoreFile.label'),
+    description: t(en, 'keymap.binding.gitignoreFile.desc'),
     contexts: ['status'],
   },
   {
     id: 'stageAll',
     keys: ['A'],
-    label: 'stage all',
-    description: 'Stage every change in the worktree (git add -A).',
+    label: t(en, 'keymap.binding.stageAll.label'),
+    description: t(en, 'keymap.binding.stageAll.desc'),
     contexts: ['status', 'compose'],
   },
   {
     id: 'stagePathspec',
     keys: ['+'],
-    label: 'stage paths',
-    description: 'Stage files matching a typed pathspec (. / src/ / *.ts / a list).',
+    label: t(en, 'keymap.binding.stagePathspec.label'),
+    description: t(en, 'keymap.binding.stagePathspec.desc'),
     contexts: ['status', 'compose'],
   },
   {
     id: 'viewChangelog',
     keys: ['L'],
-    label: 'changelog',
-    description: 'Generate a changelog from the current view context.',
+    label: t(en, 'keymap.binding.viewChangelog.label'),
+    description: t(en, 'keymap.binding.viewChangelog.desc'),
     contexts: ['history', 'branches'],
   },
   // ── #1447 registry backfill: per-view-context bindings ─────────────
@@ -706,220 +708,220 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
   {
     id: 'workflowApplyStash',
     keys: ['a'],
-    label: 'apply stash',
-    description: 'Apply the selected stash without removing it.',
+    label: t(en, 'keymap.binding.workflowApplyStash.label'),
+    description: t(en, 'keymap.binding.workflowApplyStash.desc'),
     contexts: ['stash'],
   },
   {
     id: 'workflowPopStash',
     keys: ['p'],
-    label: 'pop stash',
-    description: 'Apply the selected stash and remove it from the list.',
+    label: t(en, 'keymap.binding.workflowPopStash.label'),
+    description: t(en, 'keymap.binding.workflowPopStash.desc'),
     contexts: ['stash'],
   },
   {
     id: 'workflowApplyStashIndex',
     keys: ['A'],
-    label: 'apply (keep index)',
-    description: 'Apply the selected stash, reinstating the original index state.',
+    label: t(en, 'keymap.binding.workflowApplyStashIndex.label'),
+    description: t(en, 'keymap.binding.workflowApplyStashIndex.desc'),
     contexts: ['stash'],
   },
   {
     id: 'workflowRenameStash',
     keys: ['R'],
-    label: 'rename stash',
-    description: 'Change the message of the selected stash entry.',
+    label: t(en, 'keymap.binding.workflowRenameStash.label'),
+    description: t(en, 'keymap.binding.workflowRenameStash.desc'),
     contexts: ['stash'],
   },
   {
     id: 'workflowStashBranch',
     keys: ['b'],
-    label: 'branch from stash',
-    description: 'Create a branch from the selected stash and drop it.',
+    label: t(en, 'keymap.binding.workflowStashBranch.label'),
+    description: t(en, 'keymap.binding.workflowStashBranch.desc'),
     contexts: ['stash'],
   },
   {
     id: 'workflowUndoDropStash',
     keys: ['u'],
-    label: 'undo drop',
-    description: 'Recover the last dropped stash from this session.',
+    label: t(en, 'keymap.binding.workflowUndoDropStash.label'),
+    description: t(en, 'keymap.binding.workflowUndoDropStash.desc'),
     contexts: ['stash'],
   },
   // ── Tags view ──────────────────────────────────────────────────────
   {
     id: 'workflowPushTag',
     keys: ['P'],
-    label: 'push tag',
-    description: 'Push the selected tag to origin.',
+    label: t(en, 'keymap.binding.workflowPushTag.label'),
+    description: t(en, 'keymap.binding.workflowPushTag.desc'),
     contexts: ['tags'],
   },
   {
     id: 'workflowDeleteRemoteTag',
     keys: ['R'],
-    label: 'delete remote tag',
-    description: 'Delete the selected tag from the remote after confirmation.',
+    label: t(en, 'keymap.binding.workflowDeleteRemoteTag.label'),
+    description: t(en, 'keymap.binding.workflowDeleteRemoteTag.desc'),
     contexts: ['tags'],
   },
   // ── Conflicts view ─────────────────────────────────────────────────
   {
     id: 'workflowResolveOurs',
     keys: ['U'],
-    label: 'keep ours',
-    description: 'Resolve the selected conflict by keeping the current branch version.',
+    label: t(en, 'keymap.binding.workflowResolveOurs.label'),
+    description: t(en, 'keymap.binding.workflowResolveOurs.desc'),
     contexts: ['conflicts'],
   },
   {
     id: 'workflowResolveTheirs',
     keys: ['u'],
-    label: 'keep theirs',
-    description: 'Resolve the selected conflict by keeping the incoming version.',
+    label: t(en, 'keymap.binding.workflowResolveTheirs.label'),
+    description: t(en, 'keymap.binding.workflowResolveTheirs.desc'),
     contexts: ['conflicts'],
   },
   {
     id: 'workflowResolveStage',
     keys: ['s'],
-    label: 'mark resolved',
-    description: 'Mark the selected conflict as resolved by staging the file as-is.',
+    label: t(en, 'keymap.binding.workflowResolveStage.label'),
+    description: t(en, 'keymap.binding.workflowResolveStage.desc'),
     contexts: ['conflicts'],
   },
   {
     id: 'workflowContinueOperation',
     keys: ['C'],
-    label: 'continue',
-    description: 'Continue the in-progress git operation (rebase/merge/cherry-pick --continue).',
+    label: t(en, 'keymap.binding.workflowContinueOperation.label'),
+    description: t(en, 'keymap.binding.workflowContinueOperation.desc'),
     contexts: ['conflicts'],
   },
   // ── Bisect view ────────────────────────────────────────────────────
   {
     id: 'workflowBisectGood',
     keys: ['y'],
-    label: 'mark good',
-    description: 'Mark the current bisect candidate as good.',
+    label: t(en, 'keymap.binding.workflowBisectGood.label'),
+    description: t(en, 'keymap.binding.workflowBisectGood.desc'),
     contexts: ['bisect'],
   },
   {
     id: 'workflowBisectBad',
     keys: ['b'],
-    label: 'mark bad',
-    description: 'Mark the current bisect candidate as bad.',
+    label: t(en, 'keymap.binding.workflowBisectBad.label'),
+    description: t(en, 'keymap.binding.workflowBisectBad.desc'),
     contexts: ['bisect'],
   },
   {
     id: 'workflowBisectSkip',
     keys: ['s'],
-    label: 'skip / start',
-    description: 'Skip the current candidate (active bisect) or start a new bisect wizard (empty state).',
+    label: t(en, 'keymap.binding.workflowBisectSkip.label'),
+    description: t(en, 'keymap.binding.workflowBisectSkip.desc'),
     contexts: ['bisect'],
   },
   {
     id: 'workflowBisectReset',
     keys: ['x'],
-    label: 'reset bisect',
-    description: 'End the bisect session and restore HEAD after confirmation.',
+    label: t(en, 'keymap.binding.workflowBisectReset.label'),
+    description: t(en, 'keymap.binding.workflowBisectReset.desc'),
     contexts: ['bisect'],
   },
   {
     id: 'workflowBisectRun',
     keys: ['R'],
-    label: 'bisect run',
-    description: 'Drive the bisect via `git bisect run sh -c <command>`.',
+    label: t(en, 'keymap.binding.workflowBisectRun.label'),
+    description: t(en, 'keymap.binding.workflowBisectRun.desc'),
     contexts: ['bisect'],
   },
   // ── Reflog view ────────────────────────────────────────────────────
   {
     id: 'workflowCheckoutReflog',
     keys: ['c'],
-    label: 'checkout entry',
-    description: 'Check out the commit at the cursored reflog entry (detaches HEAD).',
+    label: t(en, 'keymap.binding.workflowCheckoutReflog.label'),
+    description: t(en, 'keymap.binding.workflowCheckoutReflog.desc'),
     contexts: ['reflog'],
   },
   // ── Remotes view ───────────────────────────────────────────────────
   {
     id: 'workflowRemoteAdd',
     keys: ['a'],
-    label: 'add remote',
-    description: 'Add a new remote (prompts for name and URL).',
+    label: t(en, 'keymap.binding.workflowRemoteAdd.label'),
+    description: t(en, 'keymap.binding.workflowRemoteAdd.desc'),
     contexts: ['remotes'],
   },
   {
     id: 'workflowRemoteSetUrl',
     keys: ['e'],
-    label: 'set URL',
-    description: 'Repoint the cursored remote at a new URL.',
+    label: t(en, 'keymap.binding.workflowRemoteSetUrl.label'),
+    description: t(en, 'keymap.binding.workflowRemoteSetUrl.desc'),
     contexts: ['remotes'],
   },
   {
     id: 'workflowRemoteRemove',
     keys: ['x'],
-    label: 'remove remote',
-    description: 'Remove the cursored remote after confirmation.',
+    label: t(en, 'keymap.binding.workflowRemoteRemove.label'),
+    description: t(en, 'keymap.binding.workflowRemoteRemove.desc'),
     contexts: ['remotes'],
   },
   {
     id: 'workflowRemotePrune',
     keys: ['p'],
-    label: 'prune remote',
-    description: 'Prune stale remote-tracking refs for the cursored remote.',
+    label: t(en, 'keymap.binding.workflowRemotePrune.label'),
+    description: t(en, 'keymap.binding.workflowRemotePrune.desc'),
     contexts: ['remotes'],
   },
   // ── Submodules view ────────────────────────────────────────────────
   {
     id: 'workflowSubmoduleInit',
     keys: ['i'],
-    label: 'init',
-    description: 'Register the cursored submodule in .git/config.',
+    label: t(en, 'keymap.binding.workflowSubmoduleInit.label'),
+    description: t(en, 'keymap.binding.workflowSubmoduleInit.desc'),
     contexts: ['submodules'],
   },
   {
     id: 'workflowSubmoduleUpdate',
     keys: ['u'],
-    label: 'update',
-    description: 'Fetch and check out the cursored submodule at the pinned commit.',
+    label: t(en, 'keymap.binding.workflowSubmoduleUpdate.label'),
+    description: t(en, 'keymap.binding.workflowSubmoduleUpdate.desc'),
     contexts: ['submodules'],
   },
   {
     id: 'workflowSubmoduleSync',
     keys: ['s'],
-    label: 'sync URL',
-    description: 'Re-sync the cursored submodule remote URL from .gitmodules.',
+    label: t(en, 'keymap.binding.workflowSubmoduleSync.label'),
+    description: t(en, 'keymap.binding.workflowSubmoduleSync.desc'),
     contexts: ['submodules'],
   },
   // ── Pull-request triage view ───────────────────────────────────────
   {
     id: 'workflowTriagePrCheckout',
     keys: ['C'],
-    label: 'checkout PR',
-    description: 'Fetch the cursored PR branch and switch onto it.',
+    label: t(en, 'keymap.binding.workflowTriagePrCheckout.label'),
+    description: t(en, 'keymap.binding.workflowTriagePrCheckout.desc'),
     contexts: ['pull-request-triage'],
   },
   {
     id: 'workflowTriagePrOpen',
     keys: ['O'],
-    label: 'open in browser',
-    description: 'Open the cursored pull request in the default browser.',
+    label: t(en, 'keymap.binding.workflowTriagePrOpen.label'),
+    description: t(en, 'keymap.binding.workflowTriagePrOpen.desc'),
     contexts: ['pull-request-triage'],
   },
   // ── Issues triage view ─────────────────────────────────────────────
   {
     id: 'workflowTriageIssueOpen',
     keys: ['O'],
-    label: 'open in browser',
-    description: 'Open the cursored issue in the default browser.',
+    label: t(en, 'keymap.binding.workflowTriageIssueOpen.label'),
+    description: t(en, 'keymap.binding.workflowTriageIssueOpen.desc'),
     contexts: ['issues'],
   },
   // ── Worktrees view ─────────────────────────────────────────────────
   {
     id: 'workflowRemoveWorktreeAndBranch',
     keys: ['D'],
-    label: 'remove + delete branch',
-    description: 'Remove the selected worktree and delete its tracking branch after confirmation.',
+    label: t(en, 'keymap.binding.workflowRemoveWorktreeAndBranch.label'),
+    description: t(en, 'keymap.binding.workflowRemoveWorktreeAndBranch.desc'),
     contexts: ['worktrees'],
   },
   {
     id: 'quit',
     keys: ['q', 'ctrl+c'],
-    label: 'quit',
-    description: 'Quit the interactive log.',
+    label: t(en, 'keymap.binding.quit.label'),
+    description: t(en, 'keymap.binding.quit.desc'),
     contexts: ['normal', 'search'],
   },
 ]
@@ -1073,7 +1075,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'navigateBack',
 ]
 
-const NORMAL_GLOBAL_HINTS = ['g jump', '< back', '? help', ': cmds', 'q quit']
+const NORMAL_GLOBAL_HINTS = [t(en, 'keymap.footer.gJump'), t(en, 'keymap.footer.back'), t(en, 'keymap.footer.help'), t(en, 'keymap.footer.cmds'), t(en, 'keymap.footer.qQuit')]
 
 /**
  * Narrow single-pane footer budget (#1135). On terminals below the
@@ -1086,7 +1088,7 @@ const NORMAL_GLOBAL_HINTS = ['g jump', '< back', '? help', ': cmds', 'q quit']
  *   - keep only the first view hint (the most actionable for the view)
  *   - shrink the global cluster to the two recovery essentials
  */
-const SINGLE_PANE_GLOBAL_HINTS = ['? help', 'q quit']
+const SINGLE_PANE_GLOBAL_HINTS = [t(en, 'keymap.footer.help'), t(en, 'keymap.footer.qQuit')]
 const SINGLE_PANE_VIEW_HINT_LIMIT = 1
 
 /**
@@ -1209,13 +1211,13 @@ const CATEGORY_ORDER: LogInkBindingCategory[] = [
 ]
 
 const CATEGORY_TITLES: Record<LogInkBindingCategory, string> = {
-  essentials: 'Essentials',
-  navigation: 'Navigate',
-  movement: 'Move',
-  view: 'View & search',
-  edit: 'Edit & compose',
-  'history-actions': 'History actions',
-  mutate: 'Workflows (confirm)',
+  essentials: t(en, 'keymap.category.essentials'),
+  navigation: t(en, 'keymap.category.navigation'),
+  movement: t(en, 'keymap.category.movement'),
+  view: t(en, 'keymap.category.view'),
+  edit: t(en, 'keymap.category.edit'),
+  'history-actions': t(en, 'keymap.category.history-actions'),
+  mutate: t(en, 'keymap.category.mutate'),
 }
 
 function categorizeBinding(
@@ -1355,7 +1357,7 @@ function singlePaneSwitcherHint(focus: LogInkFocus): string {
   const active: LogInkVisiblePane =
     focus === 'sidebar' ? 'sidebar' : focus === 'detail' ? 'inspector' : 'main'
   const label = (pane: LogInkVisiblePane) => (pane === active ? `[${pane}]` : pane)
-  return `tab: ${label('sidebar')} ${label('main')} ${label('inspector')}`
+  return `${t(en, 'keymap.footer.paneSwitcherPrefix')} ${label('sidebar')} ${label('main')} ${label('inspector')}`
 }
 
 export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
@@ -1367,7 +1369,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   // SINGLE_PANE_GLOBAL_HINTS).
   if (options.peeking) {
     return {
-      contextual: ['v/esc → main', ...hints.contextual.slice(0, SINGLE_PANE_VIEW_HINT_LIMIT)],
+      contextual: [t(en, 'keymap.footer.vEscMain'), ...hints.contextual.slice(0, SINGLE_PANE_VIEW_HINT_LIMIT)],
       global: SINGLE_PANE_GLOBAL_HINTS,
     }
   }
@@ -1390,7 +1392,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     const lead =
       options.focus === 'sidebar' || onWorktreeDiff
         ? [singlePaneSwitcherHint(options.focus)]
-        : [singlePaneSwitcherHint(options.focus), 'v peek']
+        : [singlePaneSwitcherHint(options.focus), t(en, 'keymap.footer.peek')]
     return {
       contextual: [...lead, ...hints.contextual.slice(0, SINGLE_PANE_VIEW_HINT_LIMIT)],
       global: SINGLE_PANE_GLOBAL_HINTS,
@@ -1404,7 +1406,7 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   // be a footer lie. Hidden entirely at depth 0 rather than always
   // shown-but-inert — an undo hint that does nothing is noise.
   if (options.undoStackSize && options.undoStackSize > 0 && hints.global === NORMAL_GLOBAL_HINTS) {
-    return { ...hints, global: [...NORMAL_GLOBAL_HINTS, `gu undo (${options.undoStackSize})`] }
+    return { ...hints, global: [...NORMAL_GLOBAL_HINTS, t(en, 'keymap.footer.undo', { count: options.undoStackSize })] }
   }
   return hints
 }
@@ -1415,26 +1417,26 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     if (continuations.length > 0) {
       return {
         contextual: [
-          `${options.pendingKey} …`,
+          t(en, 'keymap.footer.chordPending', { key: options.pendingKey }),
           ...continuations.map((entry) => `${entry.key} ${entry.label}`),
         ],
-        global: ['esc cancel'],
+        global: [t(en, 'keymap.footer.escCancel')],
       }
     }
   }
 
   if (options.filterMode) {
     return {
-      contextual: ['enter apply', 'esc cancel', 'ctrl+u clear'],
-      global: ['q quit'],
+      contextual: [t(en, 'keymap.footer.enterApply'), t(en, 'keymap.footer.escCancel'), t(en, 'keymap.footer.ctrlUClear')],
+      global: [t(en, 'keymap.footer.qQuit')],
     }
   }
 
   if (options.showHelp) {
     if (options.helpFilterMode) {
       return {
-        contextual: ['enter keep', 'esc clear', 'type to filter'],
-        global: ['q quit'],
+        contextual: [t(en, 'keymap.footer.enterKeep'), t(en, 'keymap.footer.escClear'), t(en, 'keymap.footer.typeToFilter')],
+        global: [t(en, 'keymap.footer.qQuit')],
       }
     }
     // Every key here is live inside the help handler — the old set
@@ -1442,15 +1444,15 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     // swallowed both ("a footer that lies about a key is a bug",
     // #1355). `/` is now true: it opens the overlay's type-to-filter.
     return {
-      contextual: ['? close', '/ filter', 'j/k scroll'],
-      global: ['q quit'],
+      contextual: [t(en, 'keymap.footer.close'), t(en, 'keymap.footer.filter'), t(en, 'keymap.footer.jKScroll')],
+      global: [t(en, 'keymap.footer.qQuit')],
     }
   }
 
   if (options.showCommandPalette) {
     return {
-      contextual: [': close', 'D/T/X confirm', 'I/M AI'],
-      global: ['? help', 'q quit'],
+      contextual: [t(en, 'keymap.footer.close2'), t(en, 'keymap.footer.dTXConfirm'), t(en, 'keymap.footer.iMAi')],
+      global: [t(en, 'keymap.footer.help'), t(en, 'keymap.footer.qQuit')],
     }
   }
 
@@ -1461,20 +1463,20 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
   if (options.splitPlanStatus === 'ready') {
     return {
       contextual: [
-        '↑/↓ scroll',
-        'pg up/dn',
-        'g/G top/bot',
-        'y apply',
-        'r regen',
-        'esc cancel',
+        t(en, 'keymap.footer.scroll'),
+        t(en, 'keymap.footer.pgUpDn'),
+        t(en, 'keymap.footer.gGTopBot'),
+        t(en, 'keymap.footer.yApply'),
+        t(en, 'keymap.footer.rRegen'),
+        t(en, 'keymap.footer.escCancel'),
       ],
-      global: ['q quit'],
+      global: [t(en, 'keymap.footer.qQuit')],
     }
   }
   if (options.splitPlanStatus === 'loading') {
     return {
-      contextual: ['generating plan…', 'esc cancel'],
-      global: ['q quit'],
+      contextual: [t(en, 'keymap.footer.generatingPlan'), t(en, 'keymap.footer.escCancel')],
+      global: [t(en, 'keymap.footer.qQuit')],
     }
   }
   if (options.splitPlanStatus === 'applying') {
@@ -1483,7 +1485,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     // abandoning a half-applied split, so advertising it would be a
     // footer lie.
     return {
-      contextual: ['applying split…'],
+      contextual: [t(en, 'keymap.footer.applyingSplit')],
       global: [],
     }
   }
@@ -1507,40 +1509,40 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
       // matching the workflow descriptions.
       return {
         contextual: [
-          '↑/↓ branches', '←/→ tab', 'enter checkout',
-          'F fetch', 'U pull', 'P push',
-          'D delete', 'R rename', 'u upstream',
+          t(en, 'keymap.footer.branches'), t(en, 'keymap.footer.tab'), t(en, 'keymap.footer.enterCheckout'),
+          t(en, 'keymap.footer.fFetch'), t(en, 'keymap.footer.uPull'), t(en, 'keymap.footer.pPush'),
+          t(en, 'keymap.footer.dDelete'), t(en, 'keymap.footer.rRename'), t(en, 'keymap.footer.uUpstream'),
         ],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
     if (itemsPresent && options.sidebarTab === 'stashes') {
       return {
-        contextual: ['↑/↓ stashes', '←/→ tab', 'enter diff', 'a apply', 'p pop', 'X drop'],
+        contextual: [t(en, 'keymap.footer.stashes'), t(en, 'keymap.footer.tab'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.aApply'), t(en, 'keymap.footer.pPop'), t(en, 'keymap.footer.xDrop')],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
     if (itemsPresent && options.sidebarTab === 'tags') {
       return {
-        contextual: ['↑/↓ tags', '←/→ tab', '+ new', 'P push', 'T delete'],
+        contextual: [t(en, 'keymap.footer.tags'), t(en, 'keymap.footer.tab'), t(en, 'keymap.footer.new'), t(en, 'keymap.footer.pPush'), t(en, 'keymap.footer.tDelete')],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
     if (itemsPresent && options.sidebarTab === 'worktrees') {
       return {
-        contextual: ['↑/↓ worktrees', '←/→ tab', 'W remove'],
+        contextual: [t(en, 'keymap.footer.worktrees'), t(en, 'keymap.footer.tab'), t(en, 'keymap.footer.wRemove')],
         global: NORMAL_GLOBAL_HINTS,
       }
     }
     return {
-      contextual: ['←/→ tab', '1-5 jump', 'enter open', 'tab focus'],
+      contextual: [t(en, 'keymap.footer.tab'), t(en, 'keymap.footer.15Jump'), t(en, 'keymap.footer.enterOpen'), t(en, 'keymap.footer.tabFocus')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
 
   if (options.focus === 'detail') {
     return {
-      contextual: ['↑/↓ files', 'pgup/pgdn diff', 'tab focus'],
+      contextual: [t(en, 'keymap.footer.files'), t(en, 'keymap.footer.pgupPgdnDiff'), t(en, 'keymap.footer.tabFocus')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1552,7 +1554,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
 function statusHints(): LogInkFooterHints {
   return {
-    contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'e/c compose'],
+    contextual: [t(en, 'keymap.footer.files'), t(en, 'keymap.footer.enterHunks'), t(en, 'keymap.footer.spaceStage'), t(en, 'keymap.footer.aStageAll'), t(en, 'keymap.footer.zRevert'), t(en, 'keymap.footer.eCCompose')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1562,10 +1564,10 @@ function diffHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   // than the current one so the hint reads as a verb. The split-mode
   // hint is only shown for the read-only diff sources (commit/stash);
   // the worktree diff stays unified-only for now.
-  const splitToggleHint = options.diffViewMode === 'split' ? 'd unified' : 'd split'
+  const splitToggleHint = options.diffViewMode === 'split' ? t(en, 'keymap.footer.dUnified') : t(en, 'keymap.footer.dSplit')
   if (options.diffSource === 'stash') {
     return {
-      contextual: ['j/k lines', '[/] file', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'esc back'],
+      contextual: [t(en, 'keymap.footer.jKLines'), t(en, 'keymap.footer.file'), t(en, 'keymap.footer.cCherryPick'), t(en, 'keymap.footer.hApplyHunk'), splitToggleHint, t(en, 'keymap.footer.escBack')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1577,7 +1579,7 @@ function diffHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
     // footer labels match the actual handlers (commit diff has no
     // per-file `[/]` jump; that's the stash diff).
     return {
-      contextual: ['j/k lines', '[/] hunk', 'c cherry-pick', 'H apply hunk', splitToggleHint, 'esc back'],
+      contextual: [t(en, 'keymap.footer.jKLines'), t(en, 'keymap.footer.hunk'), t(en, 'keymap.footer.cCherryPick'), t(en, 'keymap.footer.hApplyHunk'), splitToggleHint, t(en, 'keymap.footer.escBack')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1586,7 +1588,7 @@ function diffHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
     // cherry-pick or hunk apply (those don't make sense across
     // arbitrary refs). Just scroll + back out.
     return {
-      contextual: ['j/k lines', splitToggleHint, 'esc back'],
+      contextual: [t(en, 'keymap.footer.jKLines'), splitToggleHint, t(en, 'keymap.footer.escBack')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1597,7 +1599,7 @@ function diffHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
     // `C` checks the PR's branch out locally — the "review this
     // properly" follow-up to reading the patch.
     return {
-      contextual: ['j/k lines', '[/] file', 'C checkout', splitToggleHint, 'esc back'],
+      contextual: [t(en, 'keymap.footer.jKLines'), t(en, 'keymap.footer.file'), t(en, 'keymap.footer.cCheckout'), splitToggleHint, t(en, 'keymap.footer.escBack')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1606,14 +1608,14 @@ function diffHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   // unstages the hunk under the viewport, a stages the whole file, z
   // discards the current hunk.
   return {
-    contextual: ['j/k lines', '[/] hunk', 'v select', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
+    contextual: [t(en, 'keymap.footer.jKLines'), t(en, 'keymap.footer.hunk'), t(en, 'keymap.footer.vSelect'), t(en, 'keymap.footer.spaceStage'), t(en, 'keymap.footer.aStageFile'), t(en, 'keymap.footer.zDiscard'), t(en, 'keymap.footer.oEdit'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
 
 function composeHints(): LogInkFooterHints {
   return {
-    contextual: ['e edit', 'c commit', 'a amend', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
+    contextual: [t(en, 'keymap.footer.eEdit'), t(en, 'keymap.footer.cCommit'), t(en, 'keymap.footer.aAmend'), t(en, 'keymap.footer.aStageAll'), t(en, 'keymap.footer.stage'), t(en, 'keymap.footer.sSplit'), t(en, 'keymap.footer.iAiDraft'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1621,14 +1623,14 @@ function composeHints(): LogInkFooterHints {
 function branchesHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   if (options.compareBaseSet) {
     return {
-      contextual: ['↑/↓ branches', 'enter compare', 'm clear', 'esc back'],
+      contextual: [t(en, 'keymap.footer.branches'), t(en, 'keymap.footer.enterCompare'), t(en, 'keymap.footer.mClear'), t(en, 'keymap.footer.escBack')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
   return {
     // `x/v mark` covers both multi-select primitives (#1361): x
     // toggles a mark, v anchors a range; D then deletes the batch.
-    contextual: ['↑/↓ branches', 'enter checkout', '+ new', 'x/v mark', 'D delete', 'r rebase', 'm compare', 's sort', 'y yank'],
+    contextual: [t(en, 'keymap.footer.branches'), t(en, 'keymap.footer.enterCheckout'), t(en, 'keymap.footer.new'), t(en, 'keymap.footer.xVMark'), t(en, 'keymap.footer.dDelete'), t(en, 'keymap.footer.rRebase'), t(en, 'keymap.footer.mCompare'), t(en, 'keymap.footer.sSort'), t(en, 'keymap.footer.yYank')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1636,12 +1638,12 @@ function branchesHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints 
 function tagsHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   if (options.compareBaseSet) {
     return {
-      contextual: ['↑/↓ tags', 'enter compare', 'm clear', 'esc back'],
+      contextual: [t(en, 'keymap.footer.tags'), t(en, 'keymap.footer.enterCompare'), t(en, 'keymap.footer.mClear'), t(en, 'keymap.footer.escBack')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
   return {
-    contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 'm compare', 's sort', 'y yank'],
+    contextual: [t(en, 'keymap.footer.tags'), t(en, 'keymap.footer.new'), t(en, 'keymap.footer.pPush'), t(en, 'keymap.footer.tDelete'), t(en, 'keymap.footer.mCompare'), t(en, 'keymap.footer.sSort'), t(en, 'keymap.footer.yYank')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1650,14 +1652,14 @@ function stashHints(): LogInkFooterHints {
   return {
     // #1361 — x/v mark covers both multi-select primitives, same as
     // the branches view.
-    contextual: ['↑/↓ stashes', 'enter diff', 'a/A apply', 'p pop', 'R rename', 'b branch', 'x/v mark', 'X drop · u undo'],
+    contextual: [t(en, 'keymap.footer.stashes'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.aAApply'), t(en, 'keymap.footer.pPop'), t(en, 'keymap.footer.rRename'), t(en, 'keymap.footer.bBranch'), t(en, 'keymap.footer.xVMark'), t(en, 'keymap.footer.xDropUUndo')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
 
 function worktreesHints(): LogInkFooterHints {
   return {
-    contextual: ['↑/↓ worktrees', 'W remove', 'esc back'],
+    contextual: [t(en, 'keymap.footer.worktrees'), t(en, 'keymap.footer.wRemove'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1671,28 +1673,28 @@ function pullRequestHints(): LogInkFooterHints {
   // #1933 adds d (mark ready) / X (reopen), both confirm-gated like
   // a/approve.
   return {
-    contextual: ['m merge', 'x close', 'a approve', 'd ready', 'X reopen', 'R changes', 'c comment', 'K rerun checks', 'M auto-merge', 'O open', 'esc back'],
+    contextual: [t(en, 'keymap.footer.mMerge'), t(en, 'keymap.footer.xClose'), t(en, 'keymap.footer.aApprove'), t(en, 'keymap.footer.dReady'), t(en, 'keymap.footer.xReopen'), t(en, 'keymap.footer.rChanges'), t(en, 'keymap.footer.cComment'), t(en, 'keymap.footer.kRerunChecks'), t(en, 'keymap.footer.mAutoMerge'), t(en, 'keymap.footer.oOpen'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
 
 function rebaseHints(): LogInkFooterHints {
   return {
-    contextual: ['↑/↓ move', 'J/K reorder', 'p/s/f/d/e retag', 'r reword', 'enter run', 'esc back'],
+    contextual: [t(en, 'keymap.footer.move'), t(en, 'keymap.footer.jKReorder'), t(en, 'keymap.footer.pSFDERetag'), t(en, 'keymap.footer.rReword'), t(en, 'keymap.footer.enterRun'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
 
 function conflictsHints(): LogInkFooterHints {
   return {
-    contextual: ['↑/↓ files', 'enter diff', 's stage', 'u incoming', 'U yours', 'o edit', 'C continue*', 'esc back'],
+    contextual: [t(en, 'keymap.footer.files'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.sStage'), t(en, 'keymap.footer.uIncoming'), t(en, 'keymap.footer.uYours'), t(en, 'keymap.footer.oEdit'), t(en, 'keymap.footer.cContinue'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
 
 function reflogHints(): LogInkFooterHints {
   return {
-    contextual: ['↑/↓ entries', 'enter inspect', 'c checkout', 'B branch', 'Z reset', 'esc back'],
+    contextual: [t(en, 'keymap.footer.entries'), t(en, 'keymap.footer.enterInspect'), t(en, 'keymap.footer.cCheckout2'), t(en, 'keymap.footer.bBranch2'), t(en, 'keymap.footer.zReset'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1702,7 +1704,7 @@ function issuesHints(): LogInkFooterHints {
   // (gated through y-confirm) + filter cycling. AI summarize
   // (`I`) deferred to a follow-up.
   return {
-    contextual: ['↑/↓ issues', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'x close*', 'X reopen', 'esc back'],
+    contextual: [t(en, 'keymap.footer.issues'), t(en, 'keymap.footer.fFilter'), t(en, 'keymap.footer.oOpen'), t(en, 'keymap.footer.yYankUrl'), t(en, 'keymap.footer.cComment'), t(en, 'keymap.footer.lLabel'), t(en, 'keymap.footer.aAssign'), t(en, 'keymap.footer.xClose2'), t(en, 'keymap.footer.xReopen'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1714,14 +1716,14 @@ function pullRequestTriageHints(): LogInkFooterHints {
   // (re-run failed checks) and M (auto-merge). #1933 adds d (mark
   // ready) / X (reopen). AI summarize (`I`) deferred to a follow-up.
   return {
-    contextual: ['↑/↓ PRs', 'enter diff', 'C checkout', 'f filter', 'O open', 'y yank URL', 'c comment', 'L label', 'A assign', 'm merge*', 'x close*', 'a approve', 'd ready', 'X reopen', 'R changes*', 'K rerun checks', 'M auto-merge*', 'esc back'],
+    contextual: [t(en, 'keymap.footer.prs'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.cCheckout'), t(en, 'keymap.footer.fFilter'), t(en, 'keymap.footer.oOpen'), t(en, 'keymap.footer.yYankUrl'), t(en, 'keymap.footer.cComment'), t(en, 'keymap.footer.lLabel'), t(en, 'keymap.footer.aAssign'), t(en, 'keymap.footer.mMerge2'), t(en, 'keymap.footer.xClose2'), t(en, 'keymap.footer.aApprove'), t(en, 'keymap.footer.dReady'), t(en, 'keymap.footer.xReopen'), t(en, 'keymap.footer.rChanges2'), t(en, 'keymap.footer.kRerunChecks'), t(en, 'keymap.footer.mAutoMerge2'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
 
 function submodulesHints(): LogInkFooterHints {
   return {
-    contextual: ['↑/↓ entries', 'i init', 'u update', 's sync', 'y yank path', 'Y yank sha', '/ filter', 'esc back'],
+    contextual: [t(en, 'keymap.footer.entries'), t(en, 'keymap.footer.iInit'), t(en, 'keymap.footer.uUpdate'), t(en, 'keymap.footer.sSync'), t(en, 'keymap.footer.yYankPath'), t(en, 'keymap.footer.yYankSha'), t(en, 'keymap.footer.filter'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1731,7 +1733,7 @@ function remotesHints(): LogInkFooterHints {
   // (the prompt is the gate); remove / prune route through the
   // y-confirm path (`*` marks the destructive ones).
   return {
-    contextual: ['↑/↓ remotes', 'a add', 'e set-url', 'x remove*', 'p prune*', 'y yank url', '/ filter', 'esc back'],
+    contextual: [t(en, 'keymap.footer.remotes'), t(en, 'keymap.footer.aAdd'), t(en, 'keymap.footer.eSetUrl'), t(en, 'keymap.footer.xRemove'), t(en, 'keymap.footer.pPrune'), t(en, 'keymap.footer.yYankUrl2'), t(en, 'keymap.footer.filter'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1741,7 +1743,7 @@ function blameHints(): LogInkFooterHints {
   // windowed line list, esc pops back to the file list.
   // #COCO-14 — L drills from blame into the file-history log.
   return {
-    contextual: ['↑/↓ lines', 'gg/G top/bottom', 'L file log', 'esc back'],
+    contextual: [t(en, 'keymap.footer.lines'), t(en, 'keymap.footer.ggGTopBottom'), t(en, 'keymap.footer.lFileLog'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1750,14 +1752,14 @@ function fileHistoryHints(): LogInkFooterHints {
   // #COCO-14 — file-history drill-down. j/k scroll the commit list,
   // enter opens the diff for the cursored commit, esc returns.
   return {
-    contextual: ['↑/↓ commits', 'gg/G top/bottom', 'enter diff', 'esc back'],
+    contextual: [t(en, 'keymap.footer.commits'), t(en, 'keymap.footer.ggGTopBottom'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
 
 function changelogHints(): LogInkFooterHints {
   return {
-    contextual: ['j/k scroll', 'pg up/dn', 'y yank', 'E $EDITOR', 'c PR', 'r regen', '< back'],
+    contextual: [t(en, 'keymap.footer.jKScroll'), t(en, 'keymap.footer.pgUpDn'), t(en, 'keymap.footer.yYank'), t(en, 'keymap.footer.eEditor'), t(en, 'keymap.footer.cPr'), t(en, 'keymap.footer.rRegen'), t(en, 'keymap.footer.back')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1769,7 +1771,7 @@ function historyHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
     // Mutate / new chips are dropped so the footer doesn't compete
     // with the active workflow.
     return {
-      contextual: ['↑/↓ move', 'enter compare', 'm clear', 'esc back'],
+      contextual: [t(en, 'keymap.footer.move'), t(en, 'keymap.footer.enterCompare'), t(en, 'keymap.footer.mClear'), t(en, 'keymap.footer.escBack')],
       global: NORMAL_GLOBAL_HINTS,
     }
   }
@@ -1784,7 +1786,7 @@ function historyHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   // and the palette. `v range` (#1361) anchors a span for `c` to
   // cherry-pick as one command instead of the single cursored commit.
   return {
-    contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'v range', 'y/Y yank', '/ search'],
+    contextual: [t(en, 'keymap.footer.move'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.cRZIMutate'), t(en, 'keymap.footer.fFixup'), t(en, 'keymap.footer.bGtNew'), t(en, 'keymap.footer.mCompare'), t(en, 'keymap.footer.vRange'), t(en, 'keymap.footer.yYYank'), t(en, 'keymap.footer.search')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1863,12 +1865,12 @@ export function getLogInkHelpSections(
   // do HERE" — the global set is reference material, not the answer.
   return [
     {
-      title: `This view (${options.activeView})`,
+      title: t(en, 'keymap.section.thisView', { view: options.activeView }),
       bindings: viewBindings,
       subgroups: buildSubgroups(viewBindings, false),
     },
     {
-      title: 'Global',
+      title: t(en, 'keymap.section.global'),
       bindings: globals,
       subgroups: buildSubgroups(globals, true),
     },
