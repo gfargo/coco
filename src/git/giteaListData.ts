@@ -30,9 +30,13 @@ import {
  *
  * Gitea's REST API doesn't expose server-side filters for author/assignee/
  * search/label the way GitHub or GitLab do, so those filters are applied
- * client-side after fetching up to `want` raw items — the same best-effort
- * shape Bitbucket uses (a client-side filter can narrow the result below
- * `want`, since we don't re-fetch to backfill).
+ * client-side. When an author/assignee filter (including '@me') is present,
+ * the loader fetches an exhaustive window (up to `maxPages`) before filtering
+ * and only then slices back down to `want`, so a match past the first `want`
+ * raw items isn't silently dropped. Without an author/assignee filter — or
+ * for search/label alone — only the first `want` raw items are fetched and
+ * filtered, the same best-effort shape Bitbucket uses (a client-side filter
+ * can narrow the result below `want`, since we don't re-fetch to backfill).
  *
  * `/repos/{owner}/{repo}/issues` returns issues AND pull requests together
  * (Gitea models PRs as issues internally); entries carrying a non-null
@@ -41,6 +45,13 @@ import {
  */
 
 type RunnerFactory = (host: string) => GiteaRunner
+
+/**
+ * Fetch window used when an author/assignee filter (including '@me') is
+ * present, so `fetchAllPages` walks pages until a short page or the
+ * `maxPages` ceiling instead of stopping at the display limit.
+ */
+const EXHAUSTIVE_WANT = Number.MAX_SAFE_INTEGER
 
 function loginOf(value: unknown): string | undefined {
   if (!value || typeof value !== 'object') return undefined
@@ -162,12 +173,13 @@ export async function getGiteaPullRequestList(
     fetch: async (project) => {
       const runner = runnerFactory(project.host)
       const want = filter.limit ?? 30
+      const hasIdentityFilter = Boolean(filter.author || filter.assignee)
 
       const raw = await fetchAllPages<RawGiteaPR>(
         runner,
         `repos/${project.path}/pulls?state=${giteaPullRequestStateParam(filter.state)}`,
         'pull requests',
-        want
+        hasIdentityFilter ? EXHAUSTIVE_WANT : want
       )
 
       let pullRequests = raw.map(mapPullRequestItem)
@@ -206,6 +218,8 @@ export async function getGiteaPullRequestList(
           (pr) => assigneeFilter !== undefined && pr.assignees?.includes(assigneeFilter)
         )
       }
+
+      pullRequests = pullRequests.slice(0, want)
 
       return { pullRequests: pullRequests.map(sanitizePullRequestListItem) }
     },
@@ -260,12 +274,13 @@ export async function getGiteaIssueList(
     fetch: async (project) => {
       const runner = runnerFactory(project.host)
       const want = filter.limit ?? 30
+      const hasIdentityFilter = Boolean(filter.author || filter.assignee)
 
       const raw = await fetchAllPages<RawGiteaIssue>(
         runner,
         `repos/${project.path}/issues?state=${giteaIssueStateParam(filter.state)}`,
         'issues',
-        want
+        hasIdentityFilter ? EXHAUSTIVE_WANT : want
       )
 
       let issues = raw.filter((entry) => !isPullRequestEntry(entry)).map(mapIssueItem)
@@ -297,6 +312,8 @@ export async function getGiteaIssueList(
           (issue) => assigneeFilter !== undefined && issue.assignees?.includes(assigneeFilter)
         )
       }
+
+      issues = issues.slice(0, want)
 
       return { issues: issues.map(sanitizeIssueListItem) }
     },

@@ -174,10 +174,21 @@ export const builder = (yargs: Argv) => {
         apply?: boolean
         strictSplit?: boolean
         printMessage?: boolean
+        withPreviousCommits?: number
         _: Array<string | number>
       }
       const positionalSplit = a._.includes('split')
       const splitMode = Boolean(a.split || a.plan || positionalSplit)
+
+      // yargs coerces an unparseable --withPreviousCommits value to NaN, and
+      // `NaN > 0` is false — so a typo silently dropped the requested commit
+      // history instead of failing loudly (#1893). Reject up front instead.
+      if (
+        a.withPreviousCommits !== undefined &&
+        !(Number.isInteger(a.withPreviousCommits) && a.withPreviousCommits >= 0)
+      ) {
+        throw new Error('--withPreviousCommits (-p) must be a non-negative integer')
+      }
 
       // handler.ts:58 already rejects `--json` combined with `--split`,
       // `--plan`, or `--apply` — emitting a structured `emitJson({ error })`

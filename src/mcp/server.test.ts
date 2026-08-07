@@ -1,7 +1,11 @@
 import { z } from 'zod'
 
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
-import { createAgentInputJsonSchema } from '../operations/agent/schemas'
+import {
+  createAgentInputJsonSchema,
+  createMcpAgentInputJsonSchema,
+  createMcpCondenseDiffInputJsonSchema,
+} from '../operations/agent/schemas'
 import { createCocoMcpServer } from './server'
 
 const mockResolveAgentRepoRoot = jest.fn()
@@ -11,10 +15,13 @@ const mockGetRepoStatus = jest.fn()
 const mockGetStagedDiff = jest.fn()
 const mockGetBranchContext = jest.fn()
 const mockGetRecentLog = jest.fn()
+const mockGetRepoTree = jest.fn()
+const mockGetRepoConfig = jest.fn()
 const mockRunCondenseDiff = jest.fn()
 const mockRunRepoContext = jest.fn()
 const mockRunBlame = jest.fn()
 const mockRunLint = jest.fn()
+const mockRunCommitApply = jest.fn()
 
 type HandlerExtra = {
   signal: AbortSignal
@@ -108,9 +115,11 @@ jest.mock('../operations/agent', () => {
   const schemas = jest.requireActual('../operations/agent/schemas') as typeof import('../operations/agent/schemas')
   const errors = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
   const context = jest.requireActual('../operations/agent/context') as typeof import('../operations/agent/context')
+  const generate = jest.requireActual('../operations/agent/generate') as typeof import('../operations/agent/generate')
   return {
     ...schemas,
     ...errors,
+    asUntrustedChangeContext: generate.asUntrustedChangeContext,
     digestOf: context.digestOf,
     requiresRepository: context.requiresRepository,
     describeRepoResolutionFailure: context.describeRepoResolutionFailure,
@@ -123,10 +132,13 @@ jest.mock('../operations/agent', () => {
     getStagedDiff: (...args: unknown[]) => mockGetStagedDiff(...args),
     getBranchContext: (...args: unknown[]) => mockGetBranchContext(...args),
     getRecentLog: (...args: unknown[]) => mockGetRecentLog(...args),
+    getRepoTree: (...args: unknown[]) => mockGetRepoTree(...args),
+    getRepoConfig: (...args: unknown[]) => mockGetRepoConfig(...args),
     runCondenseDiff: (...args: unknown[]) => mockRunCondenseDiff(...args),
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
     runBlame: (...args: unknown[]) => mockRunBlame(...args),
     runLint: (...args: unknown[]) => mockRunLint(...args),
+    runCommitApply: (...args: unknown[]) => mockRunCommitApply(...args),
   }
 })
 
@@ -172,6 +184,14 @@ describe('createCocoMcpServer', () => {
     mockGetStagedDiff.mockResolvedValue('')
     mockGetBranchContext.mockResolvedValue('Branch: main')
     mockGetRecentLog.mockResolvedValue('abc1234 initial commit')
+    mockGetRepoTree.mockResolvedValue('src/\nsrc/commands/\nsrc/index.ts')
+    mockGetRepoConfig.mockResolvedValue(JSON.stringify({
+      defaultBranch: 'main',
+      service: { provider: 'anthropic', model: 'claude-sonnet-4-6', tokenLimit: 4096 },
+      telemetry: { usage: false },
+      ignoredFiles: ['*.lock'],
+      ignoredExtensions: ['.map'],
+    }))
     mockRunCondenseDiff.mockResolvedValue(condenseDiffSuccess)
     mockRunRepoContext.mockResolvedValue({
       version: 1 as const,
@@ -200,10 +220,15 @@ describe('createCocoMcpServer', () => {
       warnings: [],
       meta: { kind: 'repository' as const, digest: 'sha256:test', verification: 'repository-derived' as const },
     })
+    mockRunCommitApply.mockResolvedValue({
+      sha: 'abc123def456',
+      shortSha: 'abc123d',
+      message: 'feat: add thing',
+    })
   })
 
-  function createServer() {
-    return createCocoMcpServer('/repo') as unknown as McpServer
+  function createServer(allowWrite = false) {
+    return createCocoMcpServer('/repo', allowWrite) as unknown as McpServer
   }
 
   function tool(name: string) {
@@ -261,8 +286,18 @@ describe('createCocoMcpServer', () => {
         target: 'draft-07',
       })
       const outputJson = z.toJSONSchema(registration.config.outputSchema) as { type?: string; oneOf?: unknown[] }
-      expect(inputJson).toEqual(createAgentInputJsonSchema())
+      expect(inputJson).toEqual(createMcpAgentInputJsonSchema())
+      expect(inputJson).not.toEqual(createAgentInputJsonSchema())
       expect(inputJson).toMatchObject({ type: 'object', additionalProperties: false })
+      const optionsProperties = (inputJson as {
+        properties?: { options?: { properties?: Record<string, unknown> } }
+      }).properties?.options?.properties
+      expect(optionsProperties).toBeDefined()
+      expect(optionsProperties).not.toHaveProperty('trustRepositoryConfig')
+      const cliOptionsProperties = (createAgentInputJsonSchema() as {
+        properties?: { options?: { properties?: Record<string, unknown> } }
+      }).properties?.options?.properties
+      expect(cliOptionsProperties).toHaveProperty('trustRepositoryConfig')
       expect(outputJson.type).toBe('object')
       expect(outputJson.oneOf).toHaveLength(2)
     }
@@ -281,7 +316,9 @@ describe('createCocoMcpServer', () => {
     })
     expect(condenseInputJson).toMatchObject({ type: 'object', additionalProperties: false })
     // Must NOT be the same as the generation tool input schema.
-    expect(condenseInputJson).not.toEqual(createAgentInputJsonSchema())
+    expect(condenseInputJson).not.toEqual(createMcpAgentInputJsonSchema())
+    expect(condenseInputJson).toEqual(createMcpCondenseDiffInputJsonSchema())
+    expect(condenseInputJson).not.toHaveProperty('properties.trustRepositoryConfig')
     const condenseOutputJson = z.toJSONSchema(condenseTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
     expect(condenseOutputJson.type).toBe('object')
     expect(condenseOutputJson.oneOf).toHaveLength(2)
@@ -445,7 +482,7 @@ describe('createCocoMcpServer', () => {
     expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
   })
 
-  it('rejects the unsafe repository-config option with a structured error', async () => {
+  it('rejects a stray trustRepositoryConfig option with a structured INVALID_INPUT error (UNSAFE_OPTION is unreachable via MCP)', async () => {
     createServer()
 
     const result = await tool('coco_review').handler({
@@ -459,7 +496,7 @@ describe('createCocoMcpServer', () => {
         version: 1,
         ok: false,
         operation: 'review',
-        error: { code: 'UNSAFE_OPTION', retryable: false },
+        error: { code: 'INVALID_INPUT', retryable: false },
       },
     })
     expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
@@ -500,7 +537,7 @@ describe('createCocoMcpServer', () => {
     })
   })
 
-  it('registers four read-only repository resources with static URIs', () => {
+  it('registers six read-only repository resources with static URIs', () => {
     createServer()
 
     expect([...resourceRegistrations.keys()]).toEqual([
@@ -508,14 +545,21 @@ describe('createCocoMcpServer', () => {
       'coco_repo_diff_staged',
       'coco_repo_branch_context',
       'coco_repo_log_recent',
+      'coco_repo_tree',
+      'coco_repo_config',
     ])
     expect(resourceRegistrations.get('coco_repo_status')?.uri).toBe('coco://repo/status')
     expect(resourceRegistrations.get('coco_repo_diff_staged')?.uri).toBe('coco://repo/diff/staged')
     expect(resourceRegistrations.get('coco_repo_branch_context')?.uri).toBe('coco://repo/branch-context')
     expect(resourceRegistrations.get('coco_repo_log_recent')?.uri).toBe('coco://repo/log/recent')
+    expect(resourceRegistrations.get('coco_repo_tree')?.uri).toBe('coco://repo/tree')
+    expect(resourceRegistrations.get('coco_repo_config')?.uri).toBe('coco://repo/config')
     for (const registration of resourceRegistrations.values()) {
-      expect(registration.config.mimeType).toBe('text/plain')
       expect(registration.config.description).toEqual(expect.stringContaining('Read-only'))
+    }
+    expect(resourceRegistrations.get('coco_repo_config')?.config.mimeType).toBe('application/json')
+    for (const name of ['coco_repo_status', 'coco_repo_diff_staged', 'coco_repo_branch_context', 'coco_repo_log_recent']) {
+      expect(resourceRegistrations.get(name)?.config.mimeType).toBe('text/plain')
     }
   })
 
@@ -540,6 +584,26 @@ describe('createCocoMcpServer', () => {
         uri: 'coco://repo/status',
         mimeType: 'text/plain',
         text: '## main',
+        _meta: { digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+      }],
+    })
+  })
+
+  it('reads the repository tree resource', async () => {
+    createServer()
+    const controller = new AbortController()
+
+    const result = await resource('coco_repo_tree').readCallback(
+      new URL('coco://repo/tree'),
+      { signal: controller.signal },
+    )
+
+    expect(mockGetRepoTree).toHaveBeenCalled()
+    expect(result).toMatchObject({
+      contents: [{
+        uri: 'coco://repo/tree',
+        mimeType: 'text/plain',
+        text: 'src/\nsrc/commands/\nsrc/index.ts',
         _meta: { digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
       }],
     })
@@ -576,7 +640,37 @@ describe('createCocoMcpServer', () => {
     })
   })
 
-  it('registers coco prompt templates for commit, review, changelog, and recap', () => {
+  it('reads the resolved repo config as JSON with a digest and no credentials', async () => {
+    createServer()
+
+    const result = await resource('coco_repo_config').readCallback(
+      new URL('coco://repo/config'),
+      { signal: new AbortController().signal },
+    )
+
+    expect(mockGetRepoConfig).toHaveBeenCalled()
+    expect(result).toMatchObject({
+      contents: [{
+        uri: 'coco://repo/config',
+        mimeType: 'application/json',
+        _meta: { digest: expect.stringMatching(/^sha256:[a-f0-9]{64}$/) },
+      }],
+    })
+    const parsed = JSON.parse((result.contents as Array<{ text: string }>)[0].text)
+    expect(parsed).toMatchObject({
+      defaultBranch: 'main',
+      service: { provider: 'anthropic', model: 'claude-sonnet-4-6', tokenLimit: 4096 },
+      telemetry: { usage: false },
+      ignoredFiles: ['*.lock'],
+      ignoredExtensions: ['.map'],
+    })
+    const serialized = JSON.stringify(parsed)
+    expect(serialized).not.toContain('apiKey')
+    expect(serialized).not.toContain('authentication')
+    expect(serialized).not.toContain('secretAccessKey')
+  })
+
+  it('registers coco prompt templates for commit, review, changelog, and recap with curated arguments', () => {
     createServer()
 
     expect([...promptRegistrations.keys()]).toEqual([
@@ -586,14 +680,29 @@ describe('createCocoMcpServer', () => {
       'coco_changelog_prompt',
       'coco_recap_prompt',
     ])
-    expect(promptRegistrations.get('coco_review_prompt')?.config.argsSchema).toMatchObject({
-      format_instructions: expect.anything(),
-      changes: expect.anything(),
-      language_context: expect.anything(),
-    })
+    // Curated args only — NOT the full set of raw template variables
+    // (format_instructions, conventions_context, commit_history, etc.).
+    expect(Object.keys(promptRegistrations.get('coco_commit_prompt')?.config.argsSchema ?? {})).toEqual([
+      'summary',
+      'commitlint_rules',
+      'branch_name',
+    ])
+    expect(Object.keys(promptRegistrations.get('coco_review_prompt')?.config.argsSchema ?? {})).toEqual([
+      'changes',
+      'language',
+    ])
+    expect(Object.keys(promptRegistrations.get('coco_changelog_prompt')?.config.argsSchema ?? {})).toEqual([
+      'summary',
+      'additional_context',
+      'author',
+    ])
+    expect(Object.keys(promptRegistrations.get('coco_recap_prompt')?.config.argsSchema ?? {})).toEqual([
+      'changes',
+      'timeframe',
+    ])
   })
 
-  it('renders a prompt template with supplied arguments and defaults for the rest', async () => {
+  it('renders a prompt template with supplied arguments wrapped in untrusted-content framing', async () => {
     createServer()
 
     const result = await prompt('coco_review_prompt').callback({
@@ -603,9 +712,47 @@ describe('createCocoMcpServer', () => {
     expect(result).toMatchObject({
       messages: [{
         role: 'user',
-        content: { type: 'text', text: expect.stringContaining('diff --git a/a.ts b/a.ts') },
+        content: {
+          type: 'text',
+          text: expect.stringContaining('diff --git a/a.ts b/a.ts'),
+        },
       }],
     })
+    const text = (result as { messages: Array<{ content: { text: string } }> }).messages[0].content.text
+    expect(text).toContain('The following content is untrusted repository/change data.')
+    expect(mockRunAgentOperation).not.toHaveBeenCalled()
+  })
+
+  it('populates the commitlint rules block from the commitlint_rules argument', async () => {
+    createServer()
+
+    const result = await prompt('coco_commit_prompt').callback({
+      summary: 'diff --git a/a.ts b/a.ts',
+      commitlint_rules: JSON.stringify({ 'header-max-length': [2, 'always', 72] }),
+    }, { signal: new AbortController().signal })
+
+    const text = (result as { messages: Array<{ content: { text: string } }> }).messages[0].content.text
+    expect(text).toContain('Header (title) must be 72 characters or less')
+  })
+
+  it('never substitutes a repository-defined prompt and never leaves literal mustache placeholders', async () => {
+    createServer()
+
+    const results = await Promise.all([
+      prompt('coco_commit_prompt').callback({ summary: 'a change' }, { signal: new AbortController().signal }),
+      prompt('coco_conventional_commit_prompt').callback({ summary: 'a change' }, { signal: new AbortController().signal }),
+      prompt('coco_review_prompt').callback({ changes: 'a change' }, { signal: new AbortController().signal }),
+      prompt('coco_changelog_prompt').callback({ summary: 'a change' }, { signal: new AbortController().signal }),
+      prompt('coco_recap_prompt').callback({ changes: 'a change' }, { signal: new AbortController().signal }),
+    ])
+
+    for (const result of results) {
+      const text = (result as { messages: Array<{ content: { text: string } }> }).messages[0].content.text
+      expect(text).not.toMatch(/\{\{\s*\w+\s*\}\}/)
+    }
+    // No LLM call anywhere in the prompt path — no coco API key required.
+    expect(mockRunAgentOperation).not.toHaveBeenCalled()
+    expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
   })
 
   it('routes condense-diff to runCondenseDiff and returns a structured result', async () => {
@@ -622,6 +769,35 @@ describe('createCocoMcpServer', () => {
         ok: true,
         operation: 'condense-diff',
       }),
+    })
+  })
+
+  it('wires a progress reporter into coco_condense_diff when a progressToken is present', async () => {
+    createServer()
+    let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
+    mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
+      capturedOnProgress = input.onProgress
+      return { signal: undefined } as never
+    })
+    const sendNotification = jest.fn(async () => undefined)
+
+    await tool('coco_condense_diff').handler({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+    }, makeExtra({ _meta: { progressToken: 'token-4' }, sendNotification }))
+
+    expect(capturedOnProgress).toBeInstanceOf(Function)
+    capturedOnProgress!({ message: 'Resolved diff', fraction: 0.3 })
+    capturedOnProgress!({ message: 'Condensing a.ts', fraction: 0.6 })
+    capturedOnProgress!({ message: 'Completed', fraction: 1 })
+
+    expect(sendNotification).toHaveBeenNthCalledWith(1, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-4', progress: 0.3, total: 1, message: 'Resolved diff' },
+    })
+    expect(sendNotification).toHaveBeenNthCalledWith(3, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-4', progress: 1, total: 1, message: 'Completed' },
     })
   })
 
@@ -643,7 +819,7 @@ describe('createCocoMcpServer', () => {
     })
   })
 
-  it('rejects trustRepositoryConfig:true on coco_condense_diff with UNSAFE_OPTION', async () => {
+  it('rejects a stray trustRepositoryConfig on coco_condense_diff with INVALID_INPUT (UNSAFE_OPTION is unreachable via MCP)', async () => {
     createServer()
 
     const result = await tool('coco_condense_diff').handler({
@@ -658,14 +834,14 @@ describe('createCocoMcpServer', () => {
         version: 1,
         ok: false,
         operation: 'condense-diff',
-        error: { code: 'UNSAFE_OPTION', retryable: false },
+        error: { code: 'INVALID_INPUT', retryable: false },
       },
     })
     expect(mockCreateAgentOperationContext).not.toHaveBeenCalled()
     expect(mockRunCondenseDiff).not.toHaveBeenCalled()
   })
 
-  it('builds a progress reporter and forwards notifications/progress with a monotonic counter when a progressToken is present', async () => {
+  it('builds a progress reporter and forwards notifications/progress with fraction-derived progress/total when a progressToken is present', async () => {
     createServer()
     let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
     mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
@@ -679,16 +855,39 @@ describe('createCocoMcpServer', () => {
     }, makeExtra({ _meta: { progressToken: 'token-1' }, sendNotification }))
 
     expect(capturedOnProgress).toBeInstanceOf(Function)
-    capturedOnProgress!({ message: 'Resolved changes' })
-    capturedOnProgress!({ message: 'Generating review…' })
+    capturedOnProgress!({ message: 'Resolved changes', fraction: 0.2 })
+    capturedOnProgress!({ message: 'Generating review…', fraction: 0.4 })
 
     expect(sendNotification).toHaveBeenNthCalledWith(1, {
       method: 'notifications/progress',
-      params: { progressToken: 'token-1', progress: 1, message: 'Resolved changes' },
+      params: { progressToken: 'token-1', progress: 0.2, total: 1, message: 'Resolved changes' },
     })
     expect(sendNotification).toHaveBeenNthCalledWith(2, {
       method: 'notifications/progress',
-      params: { progressToken: 'token-1', progress: 2, message: 'Generating review…' },
+      params: { progressToken: 'token-1', progress: 0.4, total: 1, message: 'Generating review…' },
+    })
+  })
+
+  it('keeps progress non-decreasing when a later tick carries no fraction', async () => {
+    createServer()
+    let capturedOnProgress: ((update: { message?: string; fraction?: number }) => void) | undefined
+    mockCreateAgentOperationContext.mockImplementationOnce(async (input: { onProgress?: typeof capturedOnProgress }) => {
+      capturedOnProgress = input.onProgress
+      return { signal: undefined } as never
+    })
+    const sendNotification = jest.fn(async () => undefined)
+
+    await tool('coco_review').handler({
+      source: { kind: 'summary', summary: 'changed' },
+    }, makeExtra({ _meta: { progressToken: 'token-1' }, sendNotification }))
+
+    expect(capturedOnProgress).toBeInstanceOf(Function)
+    capturedOnProgress!({ message: 'Generating review…', fraction: 0.4 })
+    capturedOnProgress!({ message: 'Generating review…' })
+
+    expect(sendNotification).toHaveBeenNthCalledWith(2, {
+      method: 'notifications/progress',
+      params: { progressToken: 'token-1', progress: 0.4, total: 1, message: 'Generating review…' },
     })
   })
 
@@ -897,5 +1096,77 @@ describe('createCocoMcpServer', () => {
       },
     })
     expect(mockRunLint).not.toHaveBeenCalled()
+  })
+
+  describe('coco_commit_apply (write mode)', () => {
+    it('is not registered when the server is started without --allow-write', () => {
+      createServer(false)
+
+      expect(registrations.has('coco_commit_apply')).toBe(false)
+    })
+
+    it('is registered with write-capable annotations when --allow-write is passed', () => {
+      createServer(true)
+
+      expect(registrations.has('coco_commit_apply')).toBe(true)
+      const registration = tool('coco_commit_apply')
+      expect(registration.config.annotations).toEqual({
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      })
+    })
+
+    it('creates a commit and returns sha/shortSha/message', async () => {
+      createServer(true)
+
+      const result = await tool('coco_commit_apply').handler(
+        { title: 'feat: add thing' },
+        makeExtra(),
+      )
+
+      expect(mockRunCommitApply).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'feat: add thing', noVerify: false }),
+        expect.anything(),
+      )
+      expect(result).toMatchObject({
+        structuredContent: { sha: 'abc123def456', shortSha: 'abc123d', message: 'feat: add thing' },
+      })
+    })
+
+    it('propagates noVerify to runCommitApply', async () => {
+      createServer(true)
+
+      await tool('coco_commit_apply').handler(
+        { title: 'feat: add thing', noVerify: true },
+        makeExtra(),
+      )
+
+      expect(mockRunCommitApply).toHaveBeenCalledWith(
+        expect.objectContaining({ noVerify: true }),
+        expect.anything(),
+      )
+    })
+
+    it('returns a structured error envelope when the index is empty', async () => {
+      const { AgentOperationError } = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
+      mockRunCommitApply.mockRejectedValueOnce(
+        new AgentOperationError('EMPTY_INDEX', 'Nothing staged to commit.'),
+      )
+      createServer(true)
+
+      const result = await tool('coco_commit_apply').handler(
+        { title: 'feat: add thing' },
+        makeExtra(),
+      )
+
+      expect(result).toMatchObject({
+        isError: true,
+        structuredContent: {
+          error: { code: 'EMPTY_INDEX', message: 'Nothing staged to commit.' },
+        },
+      })
+    })
   })
 })

@@ -114,7 +114,7 @@ export const AgentOptionsSchema = z.object({
     'Human-readable window for the summary, e.g. "last week" or "yesterday". Honored by: recap. Ignored by other operations.',
   ),
   trustRepositoryConfig: z.boolean().default(false).describe(
-    'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety. Honored by: all operations (agent CLI only; MCP rejects this option).',
+    'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety. Honored by: all operations, agent CLI only -- not present in the MCP input schema.',
   ),
 }).strict()
 
@@ -134,6 +134,30 @@ export const AgentTaskInputSchema = z.object({
 /** Publish the caller-facing request shape, before defaults are applied. */
 export function createAgentInputJsonSchema() {
   return z.toJSONSchema(AgentTaskInputSchema, { io: 'input', target: 'draft-07' })
+}
+
+/**
+ * MCP-only variants that omit `trustRepositoryConfig`. MCP tools always
+ * reject that option, so it never belongs in the schema an MCP client sees —
+ * the agent CLI keeps the full schema above. See `AgentTaskInputSchema`.
+ */
+export const McpAgentOptionsSchema = AgentOptionsSchema.omit({ trustRepositoryConfig: true })
+
+export const McpTaskInputSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  source: ChangeSourceSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
+  options: McpAgentOptionsSchema.default({
+    conventional: false,
+    includeBranchName: false,
+    previousCommitCount: 0,
+    author: false,
+  }),
+}).strict()
+
+/** Publish the MCP-facing request shape, before defaults are applied. */
+export function createMcpAgentInputJsonSchema() {
+  return z.toJSONSchema(McpTaskInputSchema, { io: 'input', target: 'draft-07' })
 }
 
 export const ConventionsMetadataSchema = z.object({
@@ -347,6 +371,18 @@ export function createCondenseDiffInputJsonSchema() {
   return z.toJSONSchema(CondenseDiffRequestSchema, { io: 'input', target: 'draft-07' })
 }
 
+/**
+ * MCP-only variant that omits `trustRepositoryConfig`. See
+ * `McpTaskInputSchema` for why: MCP tools always reject the option, so it
+ * never belongs in the schema an MCP client sees.
+ */
+export const McpCondenseDiffRequestSchema = CondenseDiffRequestSchema.omit({ trustRepositoryConfig: true })
+
+/** Publish the MCP-facing condense-diff request shape. */
+export function createMcpCondenseDiffInputJsonSchema() {
+  return z.toJSONSchema(McpCondenseDiffRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
 export type CondenseDiffLanguage = z.infer<typeof CondenseDiffLanguageSchema>
 export type CondenseDiffRequest = z.infer<typeof CondenseDiffRequestSchema>
 export type CondenseDiffData = z.infer<typeof CondenseDiffDataSchema>
@@ -355,6 +391,8 @@ export type CondenseDiffFileResult = z.infer<typeof CondenseDiffFileResultSchema
 export type AgentOperation = z.infer<typeof AgentOperationSchema>
 export type AgentTaskInput = z.infer<typeof AgentTaskInputSchema>
 export type AgentOptions = z.infer<typeof AgentOptionsSchema>
+export type McpTaskInput = z.infer<typeof McpTaskInputSchema>
+export type McpAgentOptions = z.infer<typeof McpAgentOptionsSchema>
 export type ChangeSource = z.infer<typeof ChangeSourceSchema>
 export type SourceMetadata = z.infer<typeof SourceMetadataSchema>
 export type ConventionsMetadata = z.infer<typeof ConventionsMetadataSchema>
@@ -617,3 +655,34 @@ export const LintDataSchema = z.object({
 export type LintRequest = z.infer<typeof LintRequestSchema>
 export type LintData = z.infer<typeof LintDataSchema>
 export type LintCommitResult = z.infer<typeof LintCommitResultSchema>
+
+// ─── commit-apply operation ───────────────────────────────────────────────────
+
+/**
+ * Request schema for the MCP tool `coco_commit_apply`. Only registered when
+ * the server is started with `--allow-write`. Deliberately flat (not
+ * wrapped in the versioned `AgentSuccessEnvelope`/`AgentTaskInput` shape used
+ * by the generation tools) since this operation has no `source`/`options`
+ * bag — it commits whatever is already staged.
+ */
+export const CommitApplyRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  title: z.string().min(1).describe('Commit subject line.'),
+  body: z.string().optional().describe('Commit body, appended after a blank line.'),
+  noVerify: z.boolean().default(false).describe('Skip pre-commit and commit-msg hooks (passes --no-verify to git commit).'),
+}).strict()
+
+export const CommitApplyDataSchema = z.object({
+  sha: z.string(),
+  shortSha: z.string(),
+  message: z.string(),
+}).strict()
+
+/** Publish the caller-facing commit-apply request schema. */
+export function createCommitApplyInputJsonSchema() {
+  return z.toJSONSchema(CommitApplyRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export type CommitApplyRequest = z.infer<typeof CommitApplyRequestSchema>
+export type CommitApplyData = z.infer<typeof CommitApplyDataSchema>

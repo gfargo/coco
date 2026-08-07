@@ -101,5 +101,18 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(command))
+  return yargs
+    .options(options)
+    .check((argv) => {
+      // yargs coerces an unparseable --limit value to NaN, and
+      // `typeof NaN === 'number'` — so a typo produced a confusing
+      // `gh pr list --limit NaN` subprocess error instead of a clear
+      // CLI-level one (#1893). Reject up front instead.
+      const limit = (argv as { limit?: number }).limit
+      if (limit !== undefined && !(Number.isInteger(limit) && limit >= 1)) {
+        throw new Error('--limit must be a positive integer')
+      }
+      return true
+    })
+    .usage(getCommandUsageHeader(command))
 }

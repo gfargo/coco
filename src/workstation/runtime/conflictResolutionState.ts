@@ -15,6 +15,7 @@ export type LogInkConflictProposal = {
   regionIndex: number
   resolution: string
   rationale: string
+  confidence?: 'high' | 'medium' | 'low'
   status: 'pending' | 'accepted' | 'rejected'
   /**
    * Region snapshot at generation time — the display source for the

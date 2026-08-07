@@ -29,6 +29,9 @@ import { getLaneColor } from '../../chrome/graphLanes'
 import {
     formatInkRefLabels,
     getVisibleLogInkHistory,
+    type GetVisibleLogInkHistoryOptions,
+    type LogInkHistoryItem,
+    type VisibleLogInkHistory,
 } from '../../chrome/historyRows'
 import type { LogInkLayoutDensity } from '../../chrome/layout'
 import {
@@ -515,6 +518,57 @@ function renderStackedCommitHistoryRow(
 }
 
 /**
+ * Actual terminal-line cost of one rendered stacked-mode item, mirroring
+ * the collapse rule in `renderStackedCommitHistoryRow` (bucketed + no
+ * retained refs → 1 line, everything else on a commit → 2 lines; bucket
+ * headers and graph rows are always 1 line). Used to replace the old
+ * fixed-divisor estimate with a measurement of what will actually render.
+ */
+function stackedItemLineCost(
+  item: LogInkHistoryItem,
+  options: { fullGraph: boolean; bucketed: boolean; remoteNames?: string[] }
+): number {
+  if (item.type !== 'commit') return 1
+  const commit = item.commit
+  const chip = options.fullGraph ? getBranchTipChip(commit.refs, options.remoteNames) : undefined
+  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip, options.remoteNames))
+  return options.bucketed && !refs ? 1 : 2
+}
+
+/**
+ * Grows the stacked-mode history window item-by-item, measuring each
+ * candidate's actual rendered line cost via `stackedItemLineCost`, and
+ * keeps the largest candidate whose total line cost still fits
+ * `lineBudget`. This replaces the old average-height divisor, which
+ * either under-filled the panel (mostly one-line commits, #1163) or
+ * risked overflow (mostly two-line commits) because it assumed a fixed
+ * lines-per-item ratio instead of measuring the real mix.
+ *
+ * `getVisibleLogInkHistory` already centers the selection and handles
+ * sticky bucket headers, so growing the item count preserves cursor
+ * visibility for free — we're just picking how many items to ask it for.
+ * A floor of 2 items always renders (matching the old `Math.max(2, …)`
+ * floor) even if that overflows a pathologically small budget.
+ */
+function fillStackedWindow(
+  state: LogInkState,
+  lineBudget: number,
+  options: GetVisibleLogInkHistoryOptions,
+  cost: (item: LogInkHistoryItem) => number
+): VisibleLogInkHistory {
+  let best = getVisibleLogInkHistory(state, 2, options)
+  for (let n = 2; n <= lineBudget; n += 1) {
+    const candidate = getVisibleLogInkHistory(state, n, options)
+    const lines = candidate.items.reduce((sum, it) => sum + cost(it), 0)
+    if (lines > lineBudget) break
+    best = candidate
+    // Window can't grow further — we've reached the end of the list.
+    if (candidate.items.length < n) break
+  }
+  return best
+}
+
+/**
  * Render the synthetic "(+) new commit" affordance shown above the real
  * commit list when the worktree is dirty. Pressing up at `selectedIndex 0`
  * focuses this row; pressing Enter pushes the status view so the user can
@@ -694,21 +748,26 @@ export function renderHistoryPanel(
   const chromeRows = (showPendingRow ? 5 : 4)
     + (upstreamBanner ? 1 : 0)
     + (state.historyFetchArgs ? 1 : 0)
-  // Stacked rows normally take two terminal lines each, so the item
-  // budget is the line budget halved. But when bucketing is active,
-  // commits without refs collapse to a single line (#1421) — only
-  // branch-tip / tagged commits keep the metadata row. In practice
-  // ~80-90% of visible commits carry no refs, so the effective lines
-  // per item is much closer to 1 than 2. A divisor of 1.4 fills the
-  // panel densely while leaving headroom for the occasional 2-line
-  // row and the bucket headers (1 line each). Without bucketing the
-  // old /2 ratio applies (every row is two lines). Safe direction:
-  // under-fill never overflows.
-  const stackedDivisor = dateBucketingNow ? 1.4 : 2
-  const listRows = rowMode === 'stacked'
-    ? Math.max(2, Math.floor((bodyRows - chromeRows) / stackedDivisor))
-    : Math.max(3, bodyRows - chromeRows)
-  const visible = getVisibleLogInkHistory(state, listRows, { fullGraphSpacing, dateBucketingNow })
+  // Stacked rows (rail tier) cost a variable number of terminal lines
+  // per item — bucket headers and ref-less bucketed commits are one
+  // line, everything else on a commit is two (#1421). A fixed
+  // average-height divisor either under-fills the panel (mostly
+  // one-line commits) or risks overflow (mostly two-line commits), so
+  // we instead grow the window and measure the actual line cost of
+  // each candidate, keeping the largest one that still fits.
+  const lineBudget = Math.max(2, bodyRows - chromeRows)
+  const visible = rowMode === 'stacked'
+    ? fillStackedWindow(
+        state,
+        lineBudget,
+        { fullGraphSpacing, dateBucketingNow },
+        (item) => stackedItemLineCost(item, {
+          fullGraph: state.fullGraph,
+          bucketed: Boolean(dateBucketingNow),
+          remoteNames,
+        })
+      )
+    : getVisibleLogInkHistory(state, Math.max(3, bodyRows - chromeRows), { fullGraphSpacing, dateBucketingNow })
   const loadState = loadingMoreCommits
     ? 'Loading older commits…'
     : hasMoreCommits

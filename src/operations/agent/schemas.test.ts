@@ -6,15 +6,22 @@ import {
     AGENT_PROTOCOL_VERSION,
     ChangelogDataSchema,
     ChangeSourceSchema,
+    CommitApplyDataSchema,
+    CommitApplyRequestSchema,
     CondenseDiffDataSchema,
     CondenseDiffRequestSchema,
     createAgentInputJsonSchema,
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
+    createCommitApplyInputJsonSchema,
     createCondenseDiffInputJsonSchema,
+    createMcpAgentInputJsonSchema,
+    createMcpCondenseDiffInputJsonSchema,
     createRepoContextInputJsonSchema,
     MAX_AGENT_CONTEXT_BYTES,
     MAX_CONDENSE_BUDGET_TOKENS,
+    McpCondenseDiffRequestSchema,
+    McpTaskInputSchema,
     RepoContextDataSchema,
     RepoContextRequestSchema,
 } from './schemas'
@@ -143,6 +150,70 @@ describe('AgentTaskInputSchema', () => {
       expect(optionProps[field]?.description?.length ?? 0).toBeGreaterThan(0)
       expect(optionProps[field]?.description).toContain('Honored by:')
     }
+  })
+})
+
+describe('McpTaskInputSchema', () => {
+  it('applies the same safe defaults as AgentTaskInputSchema, minus trustRepositoryConfig', () => {
+    expect(McpTaskInputSchema.parse({})).toEqual({
+      version: AGENT_PROTOCOL_VERSION,
+      source: { kind: 'repository', scope: { type: 'staged' } },
+      options: {
+        conventional: false,
+        includeBranchName: false,
+        previousCommitCount: 0,
+        author: false,
+      },
+    })
+  })
+
+  it('rejects a stray trustRepositoryConfig field (strict schema)', () => {
+    expect(McpTaskInputSchema.safeParse({ options: { trustRepositoryConfig: true } }).success).toBe(false)
+    expect(McpTaskInputSchema.safeParse({ options: { trustRepositoryConfig: false } }).success).toBe(false)
+  })
+
+  it('omits trustRepositoryConfig from the published JSON schema while the CLI schema keeps it', () => {
+    const mcpJsonSchema = createMcpAgentInputJsonSchema() as unknown as {
+      properties: { options: { properties: Record<string, unknown> } }
+    }
+    const cliJsonSchema = createAgentInputJsonSchema() as unknown as {
+      properties: { options: { properties: Record<string, unknown> } }
+    }
+
+    expect(mcpJsonSchema.properties.options.properties).not.toHaveProperty('trustRepositoryConfig')
+    expect(cliJsonSchema.properties.options.properties).toHaveProperty('trustRepositoryConfig')
+    expect(mcpJsonSchema).not.toEqual(cliJsonSchema)
+  })
+})
+
+describe('McpCondenseDiffRequestSchema', () => {
+  it('rejects a stray trustRepositoryConfig field (strict schema)', () => {
+    expect(McpCondenseDiffRequestSchema.safeParse({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+      trustRepositoryConfig: false,
+    }).success).toBe(false)
+  })
+
+  it('omits trustRepositoryConfig from the published JSON schema while the CLI schema keeps it', () => {
+    const mcpJsonSchema = createMcpCondenseDiffInputJsonSchema() as unknown as {
+      properties: Record<string, unknown>
+    }
+    const cliJsonSchema = createCondenseDiffInputJsonSchema() as unknown as {
+      properties: Record<string, unknown>
+    }
+
+    expect(mcpJsonSchema.properties).not.toHaveProperty('trustRepositoryConfig')
+    expect(cliJsonSchema.properties).toHaveProperty('trustRepositoryConfig')
+    expect(mcpJsonSchema).not.toEqual(cliJsonSchema)
+  })
+
+  it('accepts a valid request without trustRepositoryConfig', () => {
+    const result = McpCondenseDiffRequestSchema.safeParse({
+      source: { kind: 'summary', summary: 'changed' },
+      budget: { tokens: 1000 },
+    })
+    expect(result.success).toBe(true)
   })
 })
 
@@ -328,5 +399,48 @@ describe('RepoContextRequestSchema', () => {
     expect(jsonSchema.oneOf?.[1]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'repo-context' } },
     })
+  })
+})
+
+describe('CommitApplyRequestSchema', () => {
+  it('requires a non-empty title', () => {
+    expect(CommitApplyRequestSchema.safeParse({}).success).toBe(false)
+    expect(CommitApplyRequestSchema.safeParse({ title: '' }).success).toBe(false)
+    expect(CommitApplyRequestSchema.safeParse({ title: 'feat: add thing' }).success).toBe(true)
+  })
+
+  it('defaults noVerify to false and accepts an optional body', () => {
+    const parsed = CommitApplyRequestSchema.parse({ title: 'feat: add thing' })
+    expect(parsed.noVerify).toBe(false)
+    expect(parsed.body).toBeUndefined()
+
+    const withBody = CommitApplyRequestSchema.parse({ title: 'feat: add thing', body: 'Details.', noVerify: true })
+    expect(withBody.body).toBe('Details.')
+    expect(withBody.noVerify).toBe(true)
+  })
+
+  it('rejects unknown fields (strict)', () => {
+    expect(CommitApplyRequestSchema.safeParse({ title: 'x', unexpected: true }).success).toBe(false)
+  })
+
+  it('publishes a caller-facing JSON Schema', () => {
+    const json = createCommitApplyInputJsonSchema() as unknown as {
+      type: string
+      properties: Record<string, unknown>
+    }
+    expect(json.type).toBe('object')
+    expect(json.properties).toHaveProperty('title')
+    expect(json.properties).toHaveProperty('body')
+    expect(json.properties).toHaveProperty('noVerify')
+    expect(json.properties).toHaveProperty('repo')
+  })
+
+  it('CommitApplyDataSchema validates the flat sha/shortSha/message shape', () => {
+    expect(CommitApplyDataSchema.safeParse({
+      sha: 'abc123def456',
+      shortSha: 'abc123d',
+      message: 'feat: add thing',
+    }).success).toBe(true)
+    expect(CommitApplyDataSchema.safeParse({ sha: 'abc' }).success).toBe(false)
   })
 })

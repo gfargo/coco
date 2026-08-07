@@ -21,6 +21,12 @@ function fakeGit(url = 'https://codeberg.org/owner/repo.git'): SimpleGit {
 
 type Responder = (endpoint: string) => string | Promise<string>
 
+/** Extract the 1-based `page` query param from a Gitea list endpoint URL. */
+function pageOf(endpoint: string): number {
+  const match = endpoint.match(/[?&]page=(\d+)/)
+  return match ? Number(match[1]) : 1
+}
+
 function makeFactory(respond: Responder, hostsSeen?: string[]) {
   return (host: string) => {
     hostsSeen?.push(host)
@@ -316,6 +322,71 @@ describe('getGiteaPullRequestList (#826)', () => {
     expect(overview.pullRequests).toHaveLength(1)
     expect(overview.pullRequests?.[0]?.number).toBe(1)
   })
+
+  it('does not drop a matching author beyond the first fetch window (OSS-1159)', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => makePR({ number: i + 1, user: { login: 'bob' } }))
+    const page2 = [makePR({ number: 51, user: { login: 'alice' } })]
+    const factory = makeFactory((endpoint) => {
+      if (endpoint === 'user') return '{}'
+      const page = pageOf(endpoint)
+      return JSON.stringify(page === 1 ? page1 : page === 2 ? page2 : [])
+    })
+    const overview = await getGiteaPullRequestList(fakeGit(), { author: 'alice' }, factory)
+    expect(overview.pullRequests).toHaveLength(1)
+    expect(overview.pullRequests?.[0]?.number).toBe(51)
+  })
+
+  it('does not drop a matching author=@me beyond the first fetch window (OSS-1159)', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => makePR({ number: i + 1, user: { login: 'bob' } }))
+    const page2 = [makePR({ number: 51, user: { login: 'alice' } })]
+    const factory = makeFactory((endpoint) => {
+      if (endpoint === 'user') return JSON.stringify({ login: 'alice' })
+      const page = pageOf(endpoint)
+      return JSON.stringify(page === 1 ? page1 : page === 2 ? page2 : [])
+    })
+    const overview = await getGiteaPullRequestList(fakeGit(), { author: '@me' }, factory)
+    expect(overview.pullRequests).toHaveLength(1)
+    expect(overview.pullRequests?.[0]?.number).toBe(51)
+  })
+
+  it('does not drop a matching assignee beyond the first fetch window (OSS-1159)', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => makePR({ number: i + 1, assignees: [{ login: 'bob' }] }))
+    const page2 = [makePR({ number: 51, assignees: [{ login: 'carol' }] })]
+    const factory = makeFactory((endpoint) => {
+      if (endpoint === 'user') return '{}'
+      const page = pageOf(endpoint)
+      return JSON.stringify(page === 1 ? page1 : page === 2 ? page2 : [])
+    })
+    const overview = await getGiteaPullRequestList(fakeGit(), { assignee: 'carol' }, factory)
+    expect(overview.pullRequests).toHaveLength(1)
+    expect(overview.pullRequests?.[0]?.number).toBe(51)
+  })
+
+  it('still caps the filtered result at `limit` once an exhaustive fetch is used (OSS-1159)', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => makePR({ number: i + 1, user: { login: 'alice' } }))
+    const page2 = Array.from({ length: 10 }, (_, i) => makePR({ number: 51 + i, user: { login: 'alice' } }))
+    const factory = makeFactory((endpoint) => {
+      if (endpoint === 'user') return '{}'
+      const page = pageOf(endpoint)
+      return JSON.stringify(page === 1 ? page1 : page === 2 ? page2 : [])
+    })
+    const overview = await getGiteaPullRequestList(fakeGit(), { author: 'alice', limit: 5 }, factory)
+    expect(overview.pullRequests).toHaveLength(5)
+  })
+
+  it('only fetches the display window when no author/assignee filter is set (OSS-1159)', async () => {
+    const pagesRequested: number[] = []
+    const page1 = Array.from({ length: 30 }, (_, i) => makePR({ number: i + 1 }))
+    const factory = makeFactory((endpoint) => {
+      if (endpoint === 'user') return '{}'
+      const page = pageOf(endpoint)
+      pagesRequested.push(page)
+      return JSON.stringify(page === 1 ? page1 : [])
+    })
+    const overview = await getGiteaPullRequestList(fakeGit(), {}, factory)
+    expect(overview.pullRequests).toHaveLength(30)
+    expect(Math.max(...pagesRequested)).toBe(1)
+  })
 })
 
 describe('getGiteaIssueList (#826)', () => {
@@ -342,6 +413,46 @@ describe('getGiteaIssueList (#826)', () => {
     const overview = await getGiteaIssueList(fakeGit(), {}, makeFactory(() => '{}'))
     expect(overview.authenticated).toBe(false)
     expect(overview.message).toContain('GITEA_TOKEN')
+  })
+
+  it('does not drop a matching author beyond the first fetch window (OSS-1159)', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => makeIssue({ number: i + 1, user: { login: 'bob' } }))
+    const page2 = [makeIssue({ number: 51, user: { login: 'alice' } })]
+    const factory = makeFactory((endpoint) => {
+      if (endpoint === 'user') return '{}'
+      const page = pageOf(endpoint)
+      return JSON.stringify(page === 1 ? page1 : page === 2 ? page2 : [])
+    })
+    const overview = await getGiteaIssueList(fakeGit(), { author: 'alice' }, factory)
+    expect(overview.issues).toHaveLength(1)
+    expect(overview.issues?.[0]?.number).toBe(51)
+  })
+
+  it('does not drop a matching assignee=@me beyond the first fetch window (OSS-1159)', async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => makeIssue({ number: i + 1, assignees: [{ login: 'bob' }] }))
+    const page2 = [makeIssue({ number: 51, assignees: [{ login: 'alice' }] })]
+    const factory = makeFactory((endpoint) => {
+      if (endpoint === 'user') return JSON.stringify({ login: 'alice' })
+      const page = pageOf(endpoint)
+      return JSON.stringify(page === 1 ? page1 : page === 2 ? page2 : [])
+    })
+    const overview = await getGiteaIssueList(fakeGit(), { assignee: '@me' }, factory)
+    expect(overview.issues).toHaveLength(1)
+    expect(overview.issues?.[0]?.number).toBe(51)
+  })
+
+  it('only fetches the display window when no author/assignee filter is set (OSS-1159)', async () => {
+    const pagesRequested: number[] = []
+    const page1 = Array.from({ length: 30 }, (_, i) => makeIssue({ number: i + 1 }))
+    const factory = makeFactory((endpoint) => {
+      if (endpoint === 'user') return '{}'
+      const page = pageOf(endpoint)
+      pagesRequested.push(page)
+      return JSON.stringify(page === 1 ? page1 : [])
+    })
+    const overview = await getGiteaIssueList(fakeGit(), {}, factory)
+    expect(overview.issues).toHaveLength(30)
+    expect(Math.max(...pagesRequested)).toBe(1)
   })
 })
 
