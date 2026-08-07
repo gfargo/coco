@@ -190,4 +190,37 @@ describe('apply/read against a real worktree file', () => {
       message: expect.stringContaining('outside worktree root'),
     })
   })
+
+  it.each([
+    ['ours marker', '<<<<<<< HEAD'],
+    ['base marker', '||||||| merged common ancestors'],
+    ['separator marker', '======='],
+    ['theirs marker', '>>>>>>> feature/x'],
+  ])('rejects a resolution embedding a %s and leaves the file unchanged', async (_label, markerLine) => {
+    const { regions } = parseConflictRegions(CONFLICT)
+    const before = readFileSync(join(dir, 'app.txt'), 'utf8')
+    const resolution = ['resolved A', markerLine, 'more text'].join('\n')
+
+    const result = await applyConflictResolution(git, 'app.txt', regions[0], resolution)
+
+    expect(result).toMatchObject({
+      ok: false,
+      message: 'Proposed resolution contains conflict markers — skipped.',
+    })
+    expect(readFileSync(join(dir, 'app.txt'), 'utf8')).toBe(before)
+  })
+
+  it('still applies a resolution containing benign near-marker content', async () => {
+    const { regions } = parseConflictRegions(CONFLICT)
+    // 8 '=' is a setext underline, not the 7-char separator marker; same
+    // per-line-regex vs substring distinction the parser itself relies on.
+    const resolution = ['resolved A', '========', '//====== divider comment'].join('\n')
+
+    const result = await applyConflictResolution(git, 'app.txt', regions[0], resolution)
+
+    expect(result).toMatchObject({ ok: true, remainingRegions: 1 })
+    const written = readFileSync(join(dir, 'app.txt'), 'utf8')
+    expect(written).toContain('========')
+    expect(written).toContain('//====== divider comment')
+  })
 })

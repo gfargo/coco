@@ -38,6 +38,8 @@ export type ConflictResolutionProposal = {
   resolution: string
   /** One-to-two sentence explanation of the choice. */
   rationale: string
+  /** Model's self-assessed confidence in this resolution. */
+  confidence: 'high' | 'medium' | 'low'
 }
 
 export type ConflictResolutionResult =
@@ -52,6 +54,9 @@ const ProposalsSchema = z.object({
         .string()
         .describe('The exact final text that replaces the whole conflict block'),
       rationale: z.string().describe('Brief explanation of how the sides were reconciled'),
+      confidence: z
+        .enum(['high', 'medium', 'low'])
+        .describe('Confidence in this resolution: high, medium, or low'),
     })
   ),
 })
@@ -64,6 +69,7 @@ Rules:
 - Return one proposal per region, numbered to match.
 - The resolution must contain NO conflict markers.
 - Do not invent code beyond what is needed to reconcile the two sides.
+- Rate \`confidence\`: high = the sides are trivially compatible; medium = a reasonable judgment call was required; low = the conflict is genuinely ambiguous and needs human review.
 
 {conflicts}
 
@@ -123,7 +129,7 @@ export async function runConflictResolutionWorkflow(input: {
   const config = loadConfig<CommitOptions, ConflictWorkflowArgv>(createConflictWorkflowArgv())
   const key = getApiKeyForModel(config)
   const { provider } = getModelAndProviderFromConfig(config)
-  const service = resolveDynamicService(config, 'commit')
+  const service = resolveDynamicService(config, 'conflictResolve')
 
   if (config.service.authentication.type !== 'None' && !key) {
     return {
@@ -173,6 +179,7 @@ export async function runConflictResolutionWorkflow(input: {
         regionIndex: region.index,
         resolution: proposal.resolution,
         rationale: proposal.rationale,
+        confidence: proposal.confidence,
       })
     }
     const proposals = [...byRegion.values()].sort((a, b) => a.regionIndex - b.regionIndex)

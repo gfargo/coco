@@ -10,6 +10,7 @@ import {
 } from '../utils'
 import { DynamicModelPreference, LLMProvider, LLMService } from '../types'
 import {
+  DYNAMIC_MODEL_TASKS,
   getDynamicModelDefaults,
   resolveDynamicModel,
   resolveDynamicService,
@@ -185,6 +186,26 @@ describe('dynamic model routing', () => {
       expect(resolveDynamicModel(config, 'commitSplit')).toBe(expected)
     }
   )
+
+  it('registers conflictResolve as a supported dynamic model task', () => {
+    expect(DYNAMIC_MODEL_TASKS).toContain('conflictResolve')
+  })
+
+  it.each([
+    'openai',
+    'anthropic',
+    'gemini',
+    'mistral',
+    'bedrock',
+    'ollama',
+  ] as const)('resolves %s conflictResolve to the review model for every preference', (provider) => {
+    ;(['cost', 'balanced', 'quality'] as const).forEach((preference) => {
+      const config = createDynamicConfig(provider, preference)
+      expect(resolveDynamicModel(config, 'conflictResolve')).toBe(
+        resolveDynamicModel(config, 'review')
+      )
+    })
+  })
 
   it('supports preference-specific defaults', () => {
     const config = {

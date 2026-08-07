@@ -193,6 +193,24 @@ export async function applyConflictResolution(
     }
     const target = matches[0]
 
+    // Guard against a proposal that still embeds conflict markers (the
+    // model ignored the "no markers" rule, or an edit reintroduced one) —
+    // checked per-line so a legitimate `========` divider inside the
+    // resolved content isn't mistaken for a marker. Must run before any
+    // write below.
+    const hasEmbeddedMarker = resolution
+      .split('\n')
+      .some(
+        (line) =>
+          CONFLICT_OURS_MARKER.test(line) ||
+          CONFLICT_BASE_MARKER.test(line) ||
+          CONFLICT_SEPARATOR_MARKER.test(line) ||
+          CONFLICT_THEIRS_MARKER.test(line)
+      )
+    if (hasEmbeddedMarker) {
+      return { ok: false, message: 'Proposed resolution contains conflict markers — skipped.' }
+    }
+
     // Normalize the replacement: drop ONE trailing newline (the region
     // block itself ends at a line boundary), keep interior blank lines.
     const replacement = resolution === ''
