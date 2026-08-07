@@ -1,3 +1,6 @@
+import { en } from '../../lib/i18n/en'
+import { t } from '../../lib/i18n/t'
+
 /**
  * Humanize raw AI-provider / LangChain error strings into a short,
  * actionable line for the compose surface.
@@ -11,28 +14,28 @@
  */
 export function humanizeAiError(raw: string | undefined): string {
   const message = (raw || '').trim()
-  if (!message) return 'AI request failed.'
+  if (!message) return t(en, 'ai.error.empty')
 
   const lower = message.toLowerCase()
 
   // Rate limit / quota — the 429 in the screenshot.
   if (/\b429\b/.test(message) || /rate.?limit|too many requests|exceeded your current quota|quota/i.test(lower)) {
-    return 'Rate limited by your AI provider (429) — too many requests or quota exceeded. Wait a moment, then press I to retry.'
+    return t(en, 'ai.error.rateLimit')
   }
 
   // Auth / API key problems.
   if (/\b401\b|\b403\b/.test(message) || /unauthor|forbidden|invalid api key|incorrect api key|no api key|authentication/i.test(lower)) {
-    return 'AI provider rejected the request — check your API key (run `coco init`, or press gK to edit the global config).'
+    return t(en, 'ai.error.auth')
   }
 
   // Context window overflow.
   if (/context length|maximum context|too many tokens|reduce the length|context_length_exceeded/i.test(lower)) {
-    return 'The staged diff is too large for the model’s context window — stage fewer changes (or split the commit) and retry with I.'
+    return t(en, 'ai.error.contextLength')
   }
 
   // Network / connectivity.
   if (/etimedout|econnreset|enotfound|econnrefused|network error|fetch failed|socket hang up|timeout/i.test(lower)) {
-    return 'Network error reaching the AI provider — check your connection, then press I to retry.'
+    return t(en, 'ai.error.network')
   }
 
   // Unknown: strip the noisy `executeChain: Chain execution failed:`
