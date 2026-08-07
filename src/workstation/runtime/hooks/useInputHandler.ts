@@ -133,6 +133,19 @@ export type UseInputHandlerDeps = {
   layout: LogInkLayout
   /** Mouse support on/off (`logTui.mouse`, OSS-1608). Off by default. */
   mouseEnabled?: boolean
+  /**
+   * Whether a modal/overlay is currently up (help, palette, theme picker,
+   * gitignore picker, input prompt, split-plan, or — critically — a
+   * `pendingChoice`/`pendingConfirmationId` dialog, OSS-1608). Mirrors
+   * `app.ts`'s `forcedPane` predicate. While true, mouse press/wheel events
+   * are still swallowed (so their raw bytes never fall through to the
+   * choice/confirmation key matcher below) but resolve to NO dispatched
+   * action — a stray click or wheel-scroll must never move `selectedIndex`
+   * behind an open confirmation, or it could silently retarget a
+   * destructive workflow (e.g. `reset-to-commit`/`revert-commit`) that
+   * reads the *current* selection at confirm time.
+   */
+  overlayActive?: boolean
 
   /** ink app `exit()` (quit the TUI). */
   exit: () => void
@@ -250,6 +263,7 @@ export function useInputHandler(
     windowSize,
     layout,
     mouseEnabled,
+    overlayActive,
     exit,
     refreshContext,
     refreshHistoryRows,
@@ -311,6 +325,13 @@ export function useInputHandler(
     if (mouseEnabled) {
       const mouseEvent = parseSgrMouse(inputValue)
       if (mouseEvent) {
+        // Modal gate (OSS-1608 review fix): the mouse bytes are always
+        // swallowed here (same as a keystroke would be, so they never leak
+        // into the choice/confirmation key matcher below), but
+        // `resolveMouseDispatch` itself resolves to no action while
+        // `overlayActive` is true — see its `MouseDispatchState.overlayActive`
+        // doc for why a click/wheel must never move `selectedIndex` behind
+        // an open confirmation.
         for (const mouseAction of resolveMouseDispatch(mouseEvent, layout, {
           focus: state.focus,
           diffSource: state.diffSource,
@@ -319,6 +340,7 @@ export function useInputHandler(
           stashDiffLineCount: stashDiffLines?.length,
           prDiffLineCount: prDiffLines?.length,
           filePreviewHunkCount: filePreview?.hunks.length,
+          overlayActive: Boolean(overlayActive),
         })) {
           dispatch(mouseAction)
         }

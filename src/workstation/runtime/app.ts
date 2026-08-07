@@ -1173,6 +1173,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     context,
     layout,
     mouseEnabled,
+    overlayActive: Boolean(forcedPane),
     dispatch,
     showOnboarding,
     dismissOnboarding,

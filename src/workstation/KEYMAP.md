@@ -89,6 +89,13 @@ notice) can land on the row just above or below the one you clicked. Pane
 focus and scroll are unaffected — only row-precision on a click is
 approximate.
 
+**Overlays swallow the mouse.** While any overlay is open (help, palette,
+theme picker, gitignore picker, input prompt, split-plan, or a y/n / choice
+confirmation), clicks and wheel-scroll are consumed but do nothing — they
+never change pane focus or the selected commit. This matters most for
+confirmation dialogs (e.g. before `reset --hard` or `revert`): a stray
+scroll can't retarget which commit the confirmation acts on.
+
 ---
 
 ## Modes (input gating)

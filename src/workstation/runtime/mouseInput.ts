@@ -111,6 +111,16 @@ export type MouseDispatchState = {
   stashDiffLineCount: number | undefined
   prDiffLineCount: number | undefined
   filePreviewHunkCount: number | undefined
+  /**
+   * Whether a modal/overlay (help, palette, theme picker, gitignore picker,
+   * input prompt, split-plan, or a `pendingChoice`/`pendingConfirmationId`
+   * dialog) is up — mirrors `app.ts`'s `forcedPane` predicate (OSS-1608
+   * review fix). A click or wheel-scroll behind an open confirmation must
+   * never move `selectedIndex`, since a destructive workflow (e.g.
+   * `reset-to-commit`/`revert-commit`) reads the *current* selection at
+   * confirm time.
+   */
+  overlayActive: boolean
 }
 
 /**
@@ -126,6 +136,10 @@ export function resolveMouseDispatch(
   state: MouseDispatchState,
 ): LogInkAction[] {
   if (mouseEvent.kind !== 'press') {
+    return []
+  }
+
+  if (state.overlayActive) {
     return []
   }
 

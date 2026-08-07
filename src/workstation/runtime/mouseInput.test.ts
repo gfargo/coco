@@ -10,6 +10,7 @@ const baseDispatchState: MouseDispatchState = {
   stashDiffLineCount: undefined,
   prDiffLineCount: undefined,
   filePreviewHunkCount: undefined,
+  overlayActive: false,
 }
 
 describe('parseSgrMouse', () => {
@@ -230,5 +231,49 @@ describe('resolveMouseDispatch', () => {
     const event = parseSgrMouse(`[<65;2;${y + 1}M`)!
     const actions = resolveMouseDispatch(event, layout, { ...baseDispatchState, focus: 'commits' })
     expect(actions).toEqual([{ type: 'setFocus', value: 'sidebar' }])
+  })
+
+  // OSS-1608 review fix: a mouse press/wheel behind an open overlay
+  // (help/palette/theme/gitignore/input-prompt/split-plan, or a
+  // pendingChoice/pendingConfirmationId dialog) must resolve to NO
+  // action — otherwise a stray click or wheel-scroll could silently
+  // retarget the selected commit a destructive confirmation is about to
+  // act on.
+  it('a left click on a commits row resolves to [] when an overlay is active', () => {
+    const layout = getLogInkLayout({ columns: 160, rows: 40 })
+    const x = layout.sidebarWidth + 3
+    const y = HEADER_ROWS + PANE_CHROME_ROWS + 4
+    const event = parseSgrMouse(`[<0;${x + 1};${y + 1}M`)!
+    const actions = resolveMouseDispatch(event, layout, {
+      ...baseDispatchState,
+      focus: 'sidebar',
+      overlayActive: true,
+    })
+    expect(actions).toEqual([])
+  })
+
+  it('wheel-down over the commits pane resolves to [] when an overlay is active', () => {
+    const layout = getLogInkLayout({ columns: 160, rows: 40 })
+    const x = layout.sidebarWidth + 3
+    const y = HEADER_ROWS + PANE_CHROME_ROWS
+    const event = parseSgrMouse(`[<65;${x + 1};${y + 1}M`)!
+    const actions = resolveMouseDispatch(event, layout, {
+      ...baseDispatchState,
+      focus: 'commits',
+      overlayActive: true,
+    })
+    expect(actions).toEqual([])
+  })
+
+  it('a pane-focus click resolves to [] when an overlay is active (not just the select/scroll actions)', () => {
+    const layout = getLogInkLayout({ columns: 160, rows: 40 })
+    const y = HEADER_ROWS + PANE_CHROME_ROWS
+    const event = parseSgrMouse(`[<0;2;${y + 1}M`)!
+    const actions = resolveMouseDispatch(event, layout, {
+      ...baseDispatchState,
+      focus: 'commits',
+      overlayActive: true,
+    })
+    expect(actions).toEqual([])
   })
 })
