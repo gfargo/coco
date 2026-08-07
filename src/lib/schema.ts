@@ -155,6 +155,11 @@ export const schema = {
               "type": "boolean",
               "description": "Syntax-highlight code in the diff view using tree-sitter. Built-in languages (TypeScript / TSX / JavaScript) highlight immediately; others lazy-download their grammar on first use — see `TREE_SITTER_MANIFEST` (src/lib/parsers/default/__tree_sitter__/manifest.ts) for the current supported-language list. On by default. Highlighting degrades gracefully — unsupported languages, non-ASCII lines, and parse failures fall back to the plain add/remove coloring — so the only reason to disable it is preference or a very low-color terminal. Set to `false` to opt out.",
               "default": true
+            },
+            "mouse": {
+              "type": "boolean",
+              "description": "Enable mouse support: click a pane to focus it, click a commit row to select it, and scroll the wheel to move the list cursor (or page the diff preview) under the focused pane. Off by default for one release — enabling SGR mouse reporting disables the terminal's native click-drag text selection unless the user holds Shift, which is surprising enough to gate behind opt-in.",
+              "default": false
             }
           },
           "additionalProperties": false,

@@ -50,6 +50,8 @@ import {
     LOG_INK_DEFAULT_COLUMNS,
     LAYOUT_SINGLE_PANE_BELOW,
 } from '../../chrome/layout'
+import type { LogInkLayout } from '../../chrome/layout'
+import { parseSgrMouse, resolveMouseDispatch } from '../mouseInput'
 import type { LogInkThemePreset } from '../../chrome/theme'
 import type { CocoConfigScope } from '../configFiles'
 import {
@@ -121,6 +123,29 @@ export type UseInputHandlerDeps = {
 
   /** Terminal dimensions (single-pane gate). */
   windowSize: { columns: number; rows: number }
+
+  /**
+   * This frame's computed layout (OSS-1608). Threaded in so a mouse click
+   * can be hit-tested against the exact pane rectangles the render path is
+   * about to paint, rather than re-deriving a second, potentially
+   * out-of-sync layout from `windowSize` here.
+   */
+  layout: LogInkLayout
+  /** Mouse support on/off (`logTui.mouse`, OSS-1608). Off by default. */
+  mouseEnabled?: boolean
+  /**
+   * Whether a modal/overlay is currently up (help, palette, theme picker,
+   * gitignore picker, input prompt, split-plan, or — critically — a
+   * `pendingChoice`/`pendingConfirmationId` dialog, OSS-1608). Mirrors
+   * `app.ts`'s `forcedPane` predicate. While true, mouse press/wheel events
+   * are still swallowed (so their raw bytes never fall through to the
+   * choice/confirmation key matcher below) but resolve to NO dispatched
+   * action — a stray click or wheel-scroll must never move `selectedIndex`
+   * behind an open confirmation, or it could silently retarget a
+   * destructive workflow (e.g. `reset-to-commit`/`revert-commit`) that
+   * reads the *current* selection at confirm time.
+   */
+  overlayActive?: boolean
 
   /** ink app `exit()` (quit the TUI). */
   exit: () => void
@@ -236,6 +261,9 @@ export function useInputHandler(
     activeRepoRoot,
     worktreeDirty,
     windowSize,
+    layout,
+    mouseEnabled,
+    overlayActive,
     exit,
     refreshContext,
     refreshHistoryRows,
@@ -282,6 +310,42 @@ export function useInputHandler(
     if (showOnboarding) {
       dismissOnboarding()
       return
+    }
+
+    // Mouse support (OSS-1608, `logTui.mouse`). Ink's own CSI parser
+    // already recognizes SGR mouse reports as generic escape sequences and
+    // delivers them through this SAME `useInput` channel (see
+    // `mouseInput.ts`'s header for why no separate raw-stdin listener is
+    // needed). `mouseEnabled` gates the parse attempt so a disabled flag
+    // is byte-identical to keyboard-only behavior — no mouse bytes are
+    // ever produced by the terminal in the first place, but this also
+    // means a plain keystroke never pays more than one failed regex test.
+    // The hit-test → focus/select/scroll resolution itself lives in the
+    // pure `resolveMouseDispatch` (unit-tested independently of `useInput`).
+    if (mouseEnabled) {
+      const mouseEvent = parseSgrMouse(inputValue)
+      if (mouseEvent) {
+        // Modal gate (OSS-1608 review fix): the mouse bytes are always
+        // swallowed here (same as a keystroke would be, so they never leak
+        // into the choice/confirmation key matcher below), but
+        // `resolveMouseDispatch` itself resolves to no action while
+        // `overlayActive` is true — see its `MouseDispatchState.overlayActive`
+        // doc for why a click/wheel must never move `selectedIndex` behind
+        // an open confirmation.
+        for (const mouseAction of resolveMouseDispatch(mouseEvent, layout, {
+          focus: state.focus,
+          diffSource: state.diffSource,
+          selectedIndex: state.selectedIndex,
+          filteredCommitCount: state.filteredCommits.length,
+          stashDiffLineCount: stashDiffLines?.length,
+          prDiffLineCount: prDiffLines?.length,
+          filePreviewHunkCount: filePreview?.hunks.length,
+          overlayActive: Boolean(overlayActive),
+        })) {
+          dispatch(mouseAction)
+        }
+        return
+      }
     }
 
     // P4.5: navigation in branches/tags/stash uses the FILTERED list

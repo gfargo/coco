@@ -60,6 +60,14 @@ type LogInkOptions = {
    * `true` (on by default); pass an explicit `false` to opt out.
    */
   syntaxHighlight?: boolean
+  /**
+   * Enable mouse support (OSS-1608): click a pane to focus it, click a
+   * commit row to select it, scroll the wheel to move the list cursor /
+   * page the diff preview. Forwarded from `logTui.mouse`. Off by default
+   * — when falsy, `installTerminalLifecycle` never writes a mouse escape
+   * sequence and the runtime's stdin handling is unchanged.
+   */
+  mouse?: boolean
   initialView?: LogInkView
   logArgv?: LogArgv
   /**
@@ -132,6 +140,8 @@ export async function startInkInteractiveLog(
     dateBucketingEnabled: options.dateBucketing !== false,
     // Undefined → on; explicit `false` opts out.
     syntaxHighlightEnabled: options.syntaxHighlight !== false,
+    // Off by default (unlike the flags above) — see `LogInkOptions.mouse`.
+    mouseEnabled: options.mouse === true,
     ink,
     initialView: options.initialView || 'history',
     logArgv: options.logArgv,
@@ -149,6 +159,7 @@ export async function startInkInteractiveLog(
     output,
     instance,
     onResume: () => resumeRef.current?.(),
+    mouse: options.mouse === true,
   })
 
   try {
