@@ -13,6 +13,7 @@ import {
     getConventionsContext,
     getRecentLog,
     getRepoStatus,
+    getRepoTree,
     getStagedDiff,
     isPathWithinRoot,
     requiresRepository,
@@ -425,6 +426,74 @@ describe('agent repository context', () => {
     const log = await getRecentLog(context, 100)
 
     expect(log.trim().split('\n')).toHaveLength(20)
+  })
+
+  it('lists tracked files as a depth-limited tree', async () => {
+    const git = simpleGit(repoRoot)
+    fs.mkdirSync(path.join(repoRoot, 'src', 'commands', 'watch'), { recursive: true })
+    fs.writeFileSync(path.join(repoRoot, 'src', 'index.ts'), 'export {}\n')
+    fs.writeFileSync(path.join(repoRoot, 'src', 'commands', 'handler.ts'), 'export {}\n')
+    fs.writeFileSync(path.join(repoRoot, 'src', 'commands', 'watch', 'config.ts'), 'export {}\n')
+    await git.add(['src/index.ts', 'src/commands/handler.ts', 'src/commands/watch/config.ts'])
+    await git.commit('add src files')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const tree = await getRepoTree(context, { maxDepth: 3, maxEntries: 500 })
+    const lines = tree.split('\n')
+
+    expect(lines).toContain('src/')
+    expect(lines).toContain('src/commands/')
+    expect(lines).toContain('src/index.ts')
+    expect(lines).toContain('src/commands/handler.ts')
+    expect(lines).toContain('src/commands/watch/')
+    expect(lines).not.toContain('src/commands/watch/config.ts')
+  })
+
+  it('caps the tree at the configured entry limit', async () => {
+    const git = simpleGit(repoRoot)
+    const files: string[] = []
+    for (let index = 0; index < 10; index += 1) {
+      const relative = `file-${index}.txt`
+      fs.writeFileSync(path.join(repoRoot, relative), `content ${index}\n`)
+      files.push(relative)
+    }
+    await git.add(files)
+    await git.commit('add many files')
+    const context = await createAgentOperationContext({ repoRoot })
+
+    const tree = await getRepoTree(context, { maxDepth: 3, maxEntries: 5 })
+    const lines = tree.split('\n')
+
+    expect(lines).toHaveLength(6)
+    expect(lines[5]).toMatch(/more entries omitted; limit 5/)
+  })
+
+  it('returns an empty tree for a freshly-initialized repo with an unborn HEAD', async () => {
+    const freshRoot = path.join(tempRoot, 'fresh')
+    fs.mkdirSync(freshRoot, { recursive: true })
+    const git = simpleGit(freshRoot)
+    await git.init()
+    await git.addConfig('user.name', 'Agent Test')
+    await git.addConfig('user.email', 'agent@example.test')
+    fs.writeFileSync(path.join(freshRoot, 'untracked.txt'), 'content\n')
+    const context = await createAgentOperationContext({ repoRoot: fs.realpathSync(freshRoot) })
+
+    const tree = await getRepoTree(context)
+
+    expect(tree).toBe('')
+  })
+
+  it('propagates a genuine git failure instead of swallowing it as an empty tree', async () => {
+    // Force `ls-tree` to fail on a resolvable HEAD by deleting the commit's root
+    // tree object -- rev-parse --verify --quiet HEAD still succeeds (the commit
+    // object is intact), so this isolates a real ls-tree error from unborn HEAD.
+    const git = simpleGit(repoRoot)
+    const treeSha = (await git.raw(['log', '--format=%T', '-1'])).trim()
+    const objectPath = path.join(repoRoot, '.git', 'objects', treeSha.slice(0, 2), treeSha.slice(2))
+    fs.rmSync(objectPath)
+    const context = await createAgentOperationContext({ repoRoot })
+
+    await expect(getRepoTree(context)).rejects.toThrow(/not a tree object/)
   })
 
   it('projects the resolved config to an allowlist and omits credentials', () => {

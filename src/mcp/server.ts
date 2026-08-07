@@ -34,6 +34,7 @@ import {
     getRecentLog,
     getRepoConfig,
     getRepoStatus,
+    getRepoTree,
     getStagedDiff,
     isPathWithinRoot,
     McpCondenseDiffRequestSchema,
@@ -571,7 +572,7 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     allowWrite
       ? 'This server was started with --allow-write: coco_commit_apply is also registered. It creates a git commit from whatever is currently staged — it never runs `git add` and never pushes.'
       : 'coco_commit_apply is NOT registered on this server; start it with `coco mcp --allow-write` to opt into that write-capable tool.',
-    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, resolved config) so a client can browse without spending a tool call.',
+    'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, tracked-file tree, resolved config) so a client can browse without spending a tool call.',
     'Prompts expose coco\'s built-in commit, review, changelog, and recap templates, fully rendered from curated arguments, for the client to run on its own model. Caller-supplied change content is wrapped in untrusted-content framing before rendering; repository-defined config is never used to source prompt text.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
     'Repository-defined prompts and executable commitlint configuration are never enabled by MCP tools.',
@@ -750,6 +751,15 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     'Recent commit history (`git log --oneline`, bounded to 20 entries). Read-only.',
     repoRoot,
     (context) => getRecentLog(context),
+  )
+  registerRepoResource(
+    server,
+    'coco_repo_tree',
+    'coco://repo/tree',
+    'Repository tree',
+    'Depth-limited (≤3 levels), entry-capped tracked-file listing (`git ls-tree`). Read-only.',
+    repoRoot,
+    (context) => getRepoTree(context),
   )
   registerRepoResource(
     server,

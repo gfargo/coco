@@ -557,6 +557,8 @@ export async function resolveChangeSource(
 }
 
 const MAX_RECENT_LOG_COUNT = 20
+const MAX_TREE_DEPTH = 3
+const MAX_TREE_ENTRIES = 500
 
 export function getRepoStatus(context: AgentOperationContext): Promise<string> {
   return runAgentGit(context, ['status', '--porcelain=v1', '-b'])
@@ -602,6 +604,45 @@ export async function getBranchContext(context: AgentOperationContext): Promise<
 export function getRecentLog(context: AgentOperationContext, count = MAX_RECENT_LOG_COUNT): Promise<string> {
   const bounded = Math.max(1, Math.min(count, MAX_RECENT_LOG_COUNT))
   return runAgentGit(context, ['log', '--oneline', '-n', String(bounded)])
+}
+
+// Depth- and entry-bounded listing of tracked files (from `git ls-tree`), so
+// large monorepos can't blow past MAX_AGENT_CONTEXT_BYTES / OOM the client.
+export async function getRepoTree(
+  context: AgentOperationContext,
+  { maxDepth = MAX_TREE_DEPTH, maxEntries = MAX_TREE_ENTRIES }: { maxDepth?: number, maxEntries?: number } = {},
+): Promise<string> {
+  try {
+    await runAgentGit(context, ['rev-parse', '--verify', '--quiet', 'HEAD'])
+  } catch (error) {
+    if (error instanceof AgentOperationError && error.code === 'CANCELLED') throw error
+    // `rev-parse --verify --quiet HEAD` exits 1 specifically when HEAD is unborn
+    // (fresh `git init`, no commits yet) -- there is nothing to list. Any other
+    // failure (missing git binary, corrupted repo) is a real error and propagates.
+    const exitCode = (error as ExecFileException)?.code
+    if (exitCode === 1) return ''
+    throw error
+  }
+
+  const raw = await runAgentGit(context, ['ls-tree', '-r', '--name-only', '-z', 'HEAD'])
+  const files = raw.split('\0').filter(Boolean)
+
+  const entries = new Set<string>()
+  for (const file of files) {
+    const parts = file.split('/')
+    for (let i = 1; i < parts.length && i <= maxDepth; i++) {
+      entries.add(`${parts.slice(0, i).join('/')}/`)
+    }
+    if (parts.length <= maxDepth) entries.add(file)
+  }
+
+  const sorted = [...entries].sort()
+  const truncated = sorted.length > maxEntries
+  const shown = sorted.slice(0, maxEntries)
+  if (truncated) {
+    shown.push(`… (${sorted.length - maxEntries} more entries omitted; limit ${maxEntries})`)
+  }
+  return shown.join('\n')
 }
 
 export type ResolvedRepoConfig = {
