@@ -22,6 +22,11 @@
  *     which is why `terminalLifecycle` enables `?1006h` alongside `?1000h`).
  */
 
+import { PANE_CHROME_ROWS, hitTestPane } from '../chrome/hitTest'
+import { clampListWindowStart } from '../chrome/layout'
+import type { LogInkLayout, LogInkVisiblePane } from '../chrome/layout'
+import type { LogInkAction, LogInkDiffSource, LogInkFocus } from './inkViewModel'
+
 export type MouseButton = 'left' | 'middle' | 'right' | 'wheel-up' | 'wheel-down' | 'other'
 export type MouseEventKind = 'press' | 'release'
 
@@ -88,4 +93,79 @@ export function parseSgrMouse(sequence: string): MouseInputEvent | null {
     alt: (cb & 8) !== 0,
     ctrl: (cb & 16) !== 0,
   }
+}
+
+/** Which `LogInkFocus` a click in each pane should set (OSS-1608). */
+const PANE_TO_FOCUS: Record<LogInkVisiblePane, LogInkFocus> = {
+  sidebar: 'sidebar',
+  main: 'commits',
+  inspector: 'detail',
+}
+
+/** State `resolveMouseDispatch` needs to turn a hit-tested press into actions. */
+export type MouseDispatchState = {
+  focus: LogInkFocus
+  diffSource: LogInkDiffSource | undefined
+  selectedIndex: number
+  filteredCommitCount: number
+  stashDiffLineCount: number | undefined
+  prDiffLineCount: number | undefined
+  filePreviewHunkCount: number | undefined
+}
+
+/**
+ * Resolves one press-kind `MouseInputEvent` against the live layout and
+ * view-model state into the `LogInkAction[]` it should dispatch — the same
+ * hit-test → focus/select/scroll logic `useInputHandler` runs inline, pulled
+ * out so it can be unit-tested without driving Ink's `useInput` hook. A
+ * release event or a coordinate outside every pane resolves to `[]`.
+ */
+export function resolveMouseDispatch(
+  mouseEvent: MouseInputEvent,
+  layout: LogInkLayout,
+  state: MouseDispatchState,
+): LogInkAction[] {
+  if (mouseEvent.kind !== 'press') {
+    return []
+  }
+
+  const hit = hitTestPane(layout, mouseEvent.x, mouseEvent.y)
+  if (!hit) {
+    return []
+  }
+
+  const actions: LogInkAction[] = []
+  const targetFocus = PANE_TO_FOCUS[hit.pane]
+  if (state.focus !== targetFocus) {
+    actions.push({ type: 'setFocus', value: targetFocus })
+  }
+
+  if (mouseEvent.button === 'wheel-up' || mouseEvent.button === 'wheel-down') {
+    const delta = mouseEvent.button === 'wheel-up' ? -1 : 1
+    if (targetFocus === 'commits') {
+      actions.push({ type: 'move', delta })
+    } else if (targetFocus === 'detail') {
+      const previewLineCount = state.diffSource === 'stash'
+        ? state.stashDiffLineCount
+        : state.diffSource === 'pr'
+          ? state.prDiffLineCount
+          : state.filePreviewHunkCount
+      if (previewLineCount) {
+        actions.push({ type: 'pageDetailPreview', delta, previewLineCount })
+      }
+    }
+  } else if (mouseEvent.button === 'left' && targetFocus === 'commits' && hit.paneRow >= 0) {
+    // Row math is best-effort (see `hitTest.ts`'s `PANE_CHROME_ROWS` doc
+    // comment) — surfaces with extra banner/status lines shift their real
+    // content down by a row or two that isn't accounted for here.
+    // `windowStart` mirrors the same clamped-window math the history
+    // surface itself uses to keep the cursor's row in view, so a click near
+    // the top/bottom of a scrolled list lands close to the right commit
+    // rather than always resolving near `selectedIndex`.
+    const contentRows = Math.max(1, layout.bodyRows - PANE_CHROME_ROWS)
+    const windowStart = clampListWindowStart(state.selectedIndex, state.filteredCommitCount, contentRows)
+    actions.push({ type: 'setSelectedIndex', value: windowStart + hit.paneRow })
+  }
+
+  return actions
 }

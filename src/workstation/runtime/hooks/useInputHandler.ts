@@ -49,11 +49,9 @@ import {
 import {
     LOG_INK_DEFAULT_COLUMNS,
     LAYOUT_SINGLE_PANE_BELOW,
-    clampListWindowStart,
 } from '../../chrome/layout'
-import type { LogInkLayout, LogInkVisiblePane } from '../../chrome/layout'
-import { PANE_CHROME_ROWS, hitTestPane } from '../../chrome/hitTest'
-import { parseSgrMouse } from '../mouseInput'
+import type { LogInkLayout } from '../../chrome/layout'
+import { parseSgrMouse, resolveMouseDispatch } from '../mouseInput'
 import type { LogInkThemePreset } from '../../chrome/theme'
 import type { CocoConfigScope } from '../configFiles'
 import {
@@ -63,7 +61,6 @@ import {
 import { WorktreeFileDiff } from '../../../git/worktreeDiffData'
 import {
     LogInkAction,
-    LogInkFocus,
     LogInkState,
     getSelectedInkCommit,
 } from '../inkViewModel'
@@ -209,13 +206,6 @@ export type UseInputHandlerDeps = {
   ) => LogInkAction
 }
 
-/** Which `LogInkFocus` a click in each pane should set (OSS-1608). */
-const PANE_TO_FOCUS: Record<LogInkVisiblePane, LogInkFocus> = {
-  sidebar: 'sidebar',
-  main: 'commits',
-  inspector: 'detail',
-}
-
 /**
  * Install the keyboard input handler. `useInput` is ink's hook value,
  * injected from `app.ts`; this hook calls it unconditionally with the
@@ -316,45 +306,21 @@ export function useInputHandler(
     // is byte-identical to keyboard-only behavior — no mouse bytes are
     // ever produced by the terminal in the first place, but this also
     // means a plain keystroke never pays more than one failed regex test.
+    // The hit-test → focus/select/scroll resolution itself lives in the
+    // pure `resolveMouseDispatch` (unit-tested independently of `useInput`).
     if (mouseEnabled) {
       const mouseEvent = parseSgrMouse(inputValue)
       if (mouseEvent) {
-        if (mouseEvent.kind === 'press') {
-          const hit = hitTestPane(layout, mouseEvent.x, mouseEvent.y)
-          if (hit) {
-            const targetFocus = PANE_TO_FOCUS[hit.pane]
-            if (state.focus !== targetFocus) {
-              dispatch({ type: 'setFocus', value: targetFocus })
-            }
-
-            if (mouseEvent.button === 'wheel-up' || mouseEvent.button === 'wheel-down') {
-              const delta = mouseEvent.button === 'wheel-up' ? -1 : 1
-              if (targetFocus === 'commits') {
-                dispatch({ type: 'move', delta })
-              } else if (targetFocus === 'detail') {
-                const previewLineCount = state.diffSource === 'stash'
-                  ? stashDiffLines?.length
-                  : state.diffSource === 'pr'
-                    ? prDiffLines?.length
-                    : filePreview?.hunks.length
-                if (previewLineCount) {
-                  dispatch({ type: 'pageDetailPreview', delta, previewLineCount })
-                }
-              }
-            } else if (mouseEvent.button === 'left' && targetFocus === 'commits' && hit.paneRow >= 0) {
-              // Row math is best-effort (see `hitTest.ts`'s `PANE_CHROME_ROWS`
-              // doc comment) — surfaces with extra banner/status lines shift
-              // their real content down by a row or two that isn't accounted
-              // for here. `windowStart` mirrors the same clamped-window
-              // math the history surface itself uses to keep the cursor's
-              // row in view, so a click near the top/bottom of a scrolled
-              // list lands close to the right commit rather than always
-              // resolving near `selectedIndex`.
-              const contentRows = Math.max(1, layout.bodyRows - PANE_CHROME_ROWS)
-              const windowStart = clampListWindowStart(state.selectedIndex, state.filteredCommits.length, contentRows)
-              dispatch({ type: 'setSelectedIndex', value: windowStart + hit.paneRow })
-            }
-          }
+        for (const mouseAction of resolveMouseDispatch(mouseEvent, layout, {
+          focus: state.focus,
+          diffSource: state.diffSource,
+          selectedIndex: state.selectedIndex,
+          filteredCommitCount: state.filteredCommits.length,
+          stashDiffLineCount: stashDiffLines?.length,
+          prDiffLineCount: prDiffLines?.length,
+          filePreviewHunkCount: filePreview?.hunks.length,
+        })) {
+          dispatch(mouseAction)
         }
         return
       }
