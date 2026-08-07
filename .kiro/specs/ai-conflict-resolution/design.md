@@ -13,6 +13,8 @@
 #[[file:src/workstation/surfaces/conflicts/index.ts]]
 #[[file:src/workstation/surfaces/conflicts/input.ts]]
 #[[file:src/index.ts]]
+#[[file:src/operations/agent/context.ts]]
+#[[file:src/mcp/server.ts]]
 
 ## Overview
 
@@ -25,13 +27,24 @@ dynamic-model task, confidence metadata, and per-region chunking for large files
 The architecture follows coco's established layering:
 
 ```
-src/commands/resolve/           ← NEW: yargs command (config + handler + prompt)
+src/commands/resolve/           ← NEW: yargs command (config + handler + prompt), apply-capable
+src/operations/agent/           ← NEW: agent/MCP conflict-proposal operation, generation-only
+     both consumers call ──▶ src/git/conflictAiActions.ts  (runConflictResolutionWorkflow)
+                                  no duplicated prompt/parsing logic — one generator, two callers
 src/git/conflictAiActions.ts    ← EXTEND: confidence field, explain workflow, chunking
-src/git/conflictRegionActions.ts  ← UNCHANGED: parsing + atomic apply
+src/git/conflictRegionActions.ts  ← UNCHANGED: parsing (readFileSync) + atomic apply
 src/git/operationData.ts        ← UNCHANGED: operation detection + file list
 src/git/operationActions.ts     ← UNCHANGED: ours/theirs/stage/continue/abort
 src/lib/langchain/utils/dynamicModels.ts  ← EXTEND: add 'conflictResolve' task
 ```
+
+`src/operations/agent/` is the same package that already implements coco's other agent/MCP
+operations (`commit-draft`, `review`, `changelog`, …) and is exposed over MCP by
+`src/mcp/server.ts`. This spec adds a conflict-proposal operation to that package: it calls
+`runConflictResolutionWorkflow` for proposals exactly like `src/commands/resolve/` does, so the
+prompt template, schema, and chunking logic in `conflictAiActions.ts` are never duplicated. The
+two consumers differ only in what they do with the result — `resolve` can apply it,
+`operations/agent/` never does (see "Second Consumer" below).
 
 ---
 
@@ -303,6 +316,72 @@ intent summaries in the conflicts surface (e.g. an `E` key that shows per-region
 in the proposal panel area before the user requests full resolution via `M`), but that's a
 separate design effort — the explain workflow function lives in `conflictAiActions.ts` and would
 be consumable from the TUI hook when ready.
+
+---
+
+## Second Consumer: Agent / MCP Operation
+
+`src/operations/agent/` will gain a conflict-proposal operation — a second, independent consumer
+of the shared conflict-resolution domain layer alongside the interactive `coco resolve` command.
+It is invoked either through coco's one-shot agent CLI or, over MCP, as a new `coco_*` tool
+registered by `src/mcp/server.ts` alongside the existing `commit-draft`/`review`/`changelog`
+tools. Both entry points route into the same `runConflictResolutionWorkflow`
+(`src/git/conflictAiActions.ts`) that `resolve` uses — no second prompt template, schema, or
+chunking implementation.
+
+### Generation-only invariant
+
+The agent operation returns proposed resolution text only; it has **no reachable code path** to
+`applyConflictResolution` (`src/git/conflictRegionActions.ts`), the sole function that writes
+resolved content back to disk (via `writeFileAtomic`). This mirrors the read-only posture coco's
+MCP server already enforces for every generation tool: each is registered with
+`readOnlyHint: true` (`src/mcp/server.ts`), and the server forces `trustRepositoryConfig: false`
+on every call regardless of what the client requests, so an agent client can never opt itself
+into repository-config trust it wasn't granted. The only write-capable MCP tool coco exposes is
+`coco_commit_apply` (`readOnlyHint: false`), gated behind `coco mcp --allow-write`, and it commits
+already-staged changes — it has nothing to do with conflict resolution and never touches conflict
+markers. The conflict-proposal operation follows the same shape: proposals go out, nothing comes
+back in as a file write.
+
+### Clean-filter probe does not apply to conflict reads
+
+`src/operations/agent/context.ts` gates worktree `git diff` reads behind `probeCleanFilters` —
+before diffing the worktree, it checks whether the repository defines a `clean` filter assigned
+to a tracked path, because that combination can make `git diff` execute repository-defined
+commands. That gate is scoped specifically to `repositoryText`'s `source.scope.type ===
+'worktree'` branch (`context.ts`), i.e. the `git diff` code path.
+
+Conflict resolution never takes that path. `getConflictFileRegions`
+(`src/git/conflictRegionActions.ts`) reads the conflicted file directly off the worktree with
+`readFileSync` and parses `<<<<<<<`/`|||||||`/`=======`/`>>>>>>>` markers out of the raw text —
+it never shells out to `git diff`. Because no `clean` filter can execute during a plain file read,
+the clean-filter probe gate does not apply to conflict reads, and the agent operation does not
+need to call `probeCleanFilters` before reading conflict content. (This was an open question
+during scoping — recorded here so it isn't re-litigated.) The diff3 base side, when present, is
+likewise read straight out of the in-file `|||||||` markers, not from a separate diff.
+
+### Staleness: per-file digest
+
+Because the agent operation's proposals are generated ahead of any apply and the underlying file
+can change on disk in between, the response carries a per-file digest computed with the existing
+`digestOf` helper (`src/operations/agent/context.ts`) — the same `sha256:`-prefixed hash already
+used elsewhere in the agent context layer to let a consumer detect staleness before acting on a
+response. Any consumer that later applies a proposal (currently only `coco resolve`, via
+`applyConflictResolution`) must treat a digest mismatch the same way `applyConflictResolution`
+already treats a region-content mismatch: refuse to apply and report the file as changed, rather
+than writing over content the proposal was never generated against.
+
+### File/region caps and `unresolved`
+
+The operation bounds how much of a conflicted tree it will process in one call, mirroring the
+bounding discipline already used elsewhere in `src/operations/agent/` (e.g. `CONFLICT_FILES_CAP`
+and the per-file `REGION_COUNT_CAP` in `context.ts`, and the "every list is bounded and reports
+`totalCount` + `truncated`" convention documented in `schemas.ts`). Files beyond the file cap, and
+regions beyond the per-file region cap, are not silently dropped: they are enumerated in an
+explicit `unresolved` list on the response so a caller can see exactly what was skipped and why.
+The same `unresolved` list carries regions skipped for other reasons — a region that alone exceeds
+the model's context budget, or a file that is binary or generated (and therefore not eligible for
+AI conflict resolution at all).
 
 ---
 

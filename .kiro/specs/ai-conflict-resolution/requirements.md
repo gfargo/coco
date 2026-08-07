@@ -196,3 +196,34 @@ tree, so I can trust it during stressful conflict situations.
    modifying any files.
 6. THE command SHALL validate that a proposed resolution contains no conflict markers before
    applying it.
+
+---
+
+### Requirement 9: Agent/MCP conflict-proposal consumer (generation-only)
+
+**User Story:** As an AI agent or MCP client, I want to request proposed resolutions for a
+repository's merge conflicts without any risk of the tool writing to my working tree, so I can
+review or relay proposals through my own workflow while staying in control of when (or whether)
+anything is applied.
+
+#### Acceptance Criteria
+
+1. WHEN the agent/MCP conflict-proposal operation is invoked, THE operation SHALL generate
+   proposals via the same `runConflictResolutionWorkflow` implementation
+   (`src/git/conflictAiActions.ts`) used by `coco resolve`, sharing its prompt template, schema,
+   and chunking logic rather than reimplementing them.
+2. EACH proposal SHALL include `confidence` and `rationale`, matching Requirement 5.
+3. THE operation SHALL have no reachable code path to `applyConflictResolution`
+   (`src/git/conflictRegionActions.ts`) or any other file-write function — it SHALL return
+   proposed text only and SHALL NOT modify the working tree under any input or configuration.
+4. THE response SHALL include a per-file digest (via the existing `digestOf` helper) so a
+   consumer can detect that the file changed on disk since the proposal was generated.
+5. THE operation SHALL bound the number of files and regions processed per call. Files and
+   regions beyond those caps, a region that alone exceeds the model's context budget, and
+   binary or generated files SHALL all be reported in an explicit `unresolved` list rather than
+   silently dropped.
+6. WHEN a conflict region includes a diff3-style base section (`|||||||`), THE operation SHALL
+   include the base side when generating and reporting proposals, consistent with
+   `ConflictRegion.base` support in `src/git/conflictRegionActions.ts`.
+7. WHEN a conflicted file is binary or generated, THE operation SHALL skip it and report it in
+   the `unresolved` list rather than attempting AI resolution.
