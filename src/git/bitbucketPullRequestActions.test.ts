@@ -10,6 +10,7 @@ import {
   enableBitbucketAutoMerge,
   markBitbucketPullRequestReadyByNumber,
   reopenBitbucketPullRequestByNumber,
+  addBitbucketPullRequestReviewer,
   mergeBitbucketPullRequest,
   closeBitbucketPullRequest,
   rerunFailedBitbucketChecks,
@@ -161,6 +162,58 @@ describe('markBitbucketPullRequestReadyByNumber (#1933)', () => {
     const result = await markBitbucketPullRequestReadyByNumber('ws/repo', 5, runner)
     expect(result).toEqual({ ok: true, message: 'Pull request #5 is not a draft' })
     expect(calls).toHaveLength(1)
+  }))
+})
+
+describe('addBitbucketPullRequestReviewer (OSS-1639)', () => {
+  it('PUTs the reviewer list alongside the echoed title and description', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({
+      'users/alice': JSON.stringify({ account_id: 'aid-alice' }),
+      'repositories/ws/repo/pullrequests/5': JSON.stringify({
+        title: 'Add feature',
+        description: 'Some details',
+        reviewers: [{ account_id: 'aid-existing' }],
+      }),
+    })
+    const result = await addBitbucketPullRequestReviewer('ws/repo', 5, 'alice', runner)
+    expect(result.ok).toBe(true)
+    const putCall = calls.find((c) => c.method === 'PUT')
+    expect(putCall?.endpoint).toBe('repositories/ws/repo/pullrequests/5')
+    const body = JSON.parse(putCall?.body ?? '{}')
+    expect(body.title).toBe('Add feature')
+    expect(body.description).toBe('Some details')
+    expect(body.reviewers).toEqual([{ account_id: 'aid-existing' }, { account_id: 'aid-alice' }])
+  }))
+
+  it('does not issue a PUT when the user is already a reviewer', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({
+      'users/alice': JSON.stringify({ account_id: 'aid-alice' }),
+      'repositories/ws/repo/pullrequests/5': JSON.stringify({
+        title: 'Add feature',
+        reviewers: [{ account_id: 'aid-alice' }],
+      }),
+    })
+    const result = await addBitbucketPullRequestReviewer('ws/repo', 5, 'alice', runner)
+    expect(result.ok).toBe(true)
+    expect(result.message).toContain('already a reviewer')
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false)
+  }))
+
+  it('fails without issuing a PUT when the pull request title cannot be fetched', withCredentials(async () => {
+    const { calls, runner } = capturingRunner({
+      'users/alice': JSON.stringify({ account_id: 'aid-alice' }),
+      'repositories/ws/repo/pullrequests/5': '',
+    })
+    const result = await addBitbucketPullRequestReviewer('ws/repo', 5, 'alice', runner)
+    expect(result.ok).toBe(false)
+    expect(calls.some((c) => c.method === 'PUT')).toBe(false)
+  }))
+
+  it('returns error when the Bitbucket user cannot be resolved', withCredentials(async () => {
+    const { runner } = capturingRunner({ 'users/ghost': '{}' })
+    const result = await addBitbucketPullRequestReviewer('ws/repo', 5, 'ghost', runner)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('not found')
   }))
 })
 
