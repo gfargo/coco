@@ -9,6 +9,8 @@ export interface AmendOptions extends BaseCommandOptions {
   noVerify?: boolean
   dryRun?: boolean
   apply?: boolean
+  /** Overrides the configured `language` for this invocation only. */
+  language?: string
 }
 
 export type AmendArgv = Arguments<AmendOptions>
@@ -50,6 +52,10 @@ export const options = {
     description:
       'Apply the regenerated message and amend the commit without confirmation (default in stdout mode is preview-only). Ignored when -i is also passed — the interactive prompt still confirms.',
     default: false,
+  },
+  language: {
+    type: 'string',
+    description: 'Write the amended commit message in this language, overriding the configured `language`.',
   },
   // `--json` is a global flag (see src/index.ts).
 } as Record<string, Options>
