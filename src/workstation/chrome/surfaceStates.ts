@@ -7,6 +7,9 @@
  * so a blank list never feels like a dead end.
  */
 
+import { en } from '../../lib/i18n/en'
+import { t } from '../../lib/i18n/t'
+
 export type LogInkSurfaceLoadingArgs = {
   /** Short noun for the resource: "branches", "tags", etc. */
   resource: string
@@ -17,7 +20,7 @@ export type LogInkSurfaceLoadingArgs = {
  * consistently across surfaces. ASCII-safe — never relies on color.
  */
 export function formatLogInkLoading({ resource }: LogInkSurfaceLoadingArgs): string {
-  return `Loading ${resource}…`
+  return t(en, 'surfaceStates.loading', { resource })
 }
 
 export type LogInkBranchesEmptyArgs = {
@@ -26,9 +29,9 @@ export type LogInkBranchesEmptyArgs = {
 
 export function formatLogInkBranchesEmpty({ filter }: LogInkBranchesEmptyArgs): string {
   if (filter.trim()) {
-    return `No branches match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.branches.filtered', { filter })
   }
-  return 'No local branches. Press gh to return to history, or use git from the shell to create one.'
+  return t(en, 'surfaceStates.branches.empty')
 }
 
 export type LogInkTagsEmptyArgs = {
@@ -37,9 +40,9 @@ export type LogInkTagsEmptyArgs = {
 
 export function formatLogInkTagsEmpty({ filter }: LogInkTagsEmptyArgs): string {
   if (filter.trim()) {
-    return `No tags match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.tags.filtered', { filter })
   }
-  return 'No tags found. Tags created via git tag <name> will appear here.'
+  return t(en, 'surfaceStates.tags.empty')
 }
 
 export type LogInkStashEmptyArgs = {
@@ -48,9 +51,9 @@ export type LogInkStashEmptyArgs = {
 
 export function formatLogInkStashEmpty({ filter }: LogInkStashEmptyArgs): string {
   if (filter.trim()) {
-    return `No stashes match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.stash.filtered', { filter })
   }
-  return 'No stashes. Save WIP from the status view (gs) or run git stash from the shell.'
+  return t(en, 'surfaceStates.stash.empty')
 }
 
 export type LogInkHistoryEmptyArgs = {
@@ -60,12 +63,12 @@ export type LogInkHistoryEmptyArgs = {
 
 export function formatLogInkHistoryEmpty(args: LogInkHistoryEmptyArgs): string {
   if (args.filter.trim()) {
-    return `No commits match the current filter. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.history.filtered')
   }
   if (args.totalCommits === 0) {
-    return 'No commits yet. Make your first commit to populate the history.'
+    return t(en, 'surfaceStates.history.emptyRepo')
   }
-  return 'No commits in view.'
+  return t(en, 'surfaceStates.history.emptyView')
 }
 
 export type LogInkStatusEmptyArgs = {
@@ -83,8 +86,8 @@ export function formatLogInkStatusEmpty({ hasChanges, sparse }: LogInkStatusEmpt
   if (hasChanges) {
     return undefined
   }
-  const sparseNote = sparse ? ' This is a sparse checkout — paths outside your cone are omitted on purpose.' : ''
-  return `Worktree clean. Press gh for history, gb for branches, gz for stash.${sparseNote}`
+  const sparseNote = sparse ? t(en, 'surfaceStates.status.sparseNote') : ''
+  return t(en, 'surfaceStates.status.clean', { sparseNote })
 }
 
 export type LogInkReflogEmptyArgs = {
@@ -93,9 +96,9 @@ export type LogInkReflogEmptyArgs = {
 
 export function formatLogInkReflogEmpty({ filter }: LogInkReflogEmptyArgs): string {
   if (filter.trim()) {
-    return `No reflog entries match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.reflog.filtered', { filter })
   }
-  return 'No reflog entries. Activity in this repo will appear here over time.'
+  return t(en, 'surfaceStates.reflog.empty')
 }
 
 export type LogInkComposeEmptyArgs = {
@@ -107,7 +110,7 @@ export function formatLogInkComposeEmpty({ hasStaged }: LogInkComposeEmptyArgs):
   if (hasStaged) {
     return undefined
   }
-  return 'No staged changes to commit. Press gs to stage files, then gc to come back here.'
+  return t(en, 'surfaceStates.compose.empty')
 }
 
 export type LogInkSubmodulesEmptyArgs = {
@@ -116,9 +119,9 @@ export type LogInkSubmodulesEmptyArgs = {
 
 export function formatLogInkSubmodulesEmpty({ filter }: LogInkSubmodulesEmptyArgs): string {
   if (filter.trim()) {
-    return `No submodules match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.submodules.filtered', { filter })
   }
-  return 'No submodules registered. Add one with `git submodule add <url> <path>` from the shell.'
+  return t(en, 'surfaceStates.submodules.empty')
 }
 
 export type LogInkRemotesEmptyArgs = {
@@ -127,9 +130,9 @@ export type LogInkRemotesEmptyArgs = {
 
 export function formatLogInkRemotesEmpty({ filter }: LogInkRemotesEmptyArgs): string {
   if (filter.trim()) {
-    return `No remotes match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.remotes.filtered', { filter })
   }
-  return 'No remotes configured. Press a to add one.'
+  return t(en, 'surfaceStates.remotes.empty')
 }
 
 export type LogInkWorktreesEmptyArgs = {
@@ -138,9 +141,9 @@ export type LogInkWorktreesEmptyArgs = {
 
 export function formatLogInkWorktreesEmpty({ filter }: LogInkWorktreesEmptyArgs): string {
   if (filter.trim()) {
-    return `No worktrees match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.worktrees.filtered', { filter })
   }
-  return 'No linked worktrees.'
+  return t(en, 'surfaceStates.worktrees.empty')
 }
 
 export type LogInkBlameEmptyArgs = {
@@ -158,9 +161,9 @@ export type LogInkBlameEmptyArgs = {
  */
 export function formatLogInkBlameEmpty({ path, failureMessage }: LogInkBlameEmptyArgs): string {
   if (failureMessage) {
-    return `Could not blame ${path ?? 'this file'}: ${failureMessage}. Press esc to go back.`
+    return t(en, 'surfaceStates.blame.failure', { path: path ?? 'this file', failureMessage })
   }
-  return `No blame data for ${path ?? 'this file'} (empty or untracked). Press esc to go back.`
+  return t(en, 'surfaceStates.blame.empty', { path: path ?? 'this file' })
 }
 
 /**
@@ -171,7 +174,7 @@ export function formatLogInkBlameEmpty({ path, failureMessage }: LogInkBlameEmpt
  * claim the commit has no note anywhere — only that none is loaded here.
  */
 export function formatLogInkNotesEmpty(): string {
-  return 'No note on this commit. Press enter to add one.'
+  return t(en, 'surfaceStates.notes.empty')
 }
 
 export type LogInkIssuesEmptyArgs = {
@@ -180,9 +183,9 @@ export type LogInkIssuesEmptyArgs = {
 
 export function formatLogInkIssuesEmpty({ filter }: LogInkIssuesEmptyArgs): string {
   if (filter.trim()) {
-    return `No issues match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.issues.filtered', { filter })
   }
-  return 'No issues match the current filter (default: open issues).'
+  return t(en, 'surfaceStates.issues.empty')
 }
 
 export type LogInkPullRequestTriageEmptyArgs = {
@@ -199,9 +202,9 @@ export function formatLogInkPullRequestTriageEmpty({
   noun = 'pull requests',
 }: LogInkPullRequestTriageEmptyArgs): string {
   if (filter.trim()) {
-    return `No ${noun} match filter '${filter}'. Press ctrl+u to clear.`
+    return t(en, 'surfaceStates.prTriage.filtered', { noun, filter })
   }
-  return `No ${noun} match the current filter (default: open).`
+  return t(en, 'surfaceStates.prTriage.empty', { noun })
 }
 
 export type LogInkForgeUnavailableArgs = {
@@ -233,8 +236,8 @@ export function formatLogInkForgeUnauthenticated({
   forge = 'GitHub',
   authHint,
 }: LogInkForgeUnavailableArgs): string {
-  if (authHint) return `${resource} require ${forge} auth. ${authHint}`
-  return `${resource} require the ${forge} CLI. Install \`${cli}\` and run \`${cli} auth login\` to enable triage.`
+  if (authHint) return t(en, 'surfaceStates.forge.unauthenticatedAuthHint', { resource, forge, authHint })
+  return t(en, 'surfaceStates.forge.unauthenticated', { resource, forge, cli })
 }
 
 /**
@@ -245,7 +248,7 @@ export function formatLogInkForgeNoRemote({
   resource,
   forge = 'GitHub',
 }: LogInkForgeUnavailableArgs): string {
-  return `${resource} require a ${forge} remote (origin or fallback). None detected for this repo.`
+  return t(en, 'surfaceStates.forge.noRemote', { resource, forge })
 }
 
 export type LogInkPullRequestDiffErrorArgs = {
@@ -262,7 +265,7 @@ export type LogInkPullRequestDiffErrorArgs = {
 export function formatLogInkPullRequestDiffError({
   message,
 }: LogInkPullRequestDiffErrorArgs): string {
-  return `Could not load the diff: ${message} Press esc to go back, r to refresh.`
+  return t(en, 'surfaceStates.prDiff.error', { message })
 }
 
 /**
@@ -270,5 +273,5 @@ export function formatLogInkPullRequestDiffError({
  * the patch is empty (e.g. an empty commit or a fully-reverted PR).
  */
 export function formatLogInkPullRequestDiffEmpty(): string {
-  return 'No diff to display for this pull request.'
+  return t(en, 'surfaceStates.prDiff.empty')
 }

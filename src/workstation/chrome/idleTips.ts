@@ -15,6 +15,8 @@
  */
 
 import type { GitProviderType } from '../../git/providerData'
+import { en } from '../../lib/i18n/en'
+import { t } from '../../lib/i18n/t'
 import { forgeNouns } from './forgeNouns'
 
 /**
@@ -24,18 +26,18 @@ import { forgeNouns } from './forgeNouns'
  * (`forgeNouns(provider).abbrev`) when it builds the tip.
  */
 export const IDLE_TIPS: string[] = [
-  'press : to search every command',
-  'g h returns home from anywhere',
-  '/ filters the active view',
-  'press ? to see the full keymap',
-  's cycles sort modes in branches and tags',
-  'gz opens the stash view',
-  '< or esc walks the navigation stack back',
-  'S splits a large staged set into multiple commits',
-  'L generates a changelog for the current branch',
-  'C creates a {abbrev} seeded from the changelog',
-  'E opens the commit draft in $EDITOR or $VISUAL',
-  'I drafts an AI commit message from staged changes',
+  t(en, 'idleTips.searchCommands'),
+  t(en, 'idleTips.home'),
+  t(en, 'idleTips.filterView'),
+  t(en, 'idleTips.fullKeymap'),
+  t(en, 'idleTips.sortCycle'),
+  t(en, 'idleTips.stashView'),
+  t(en, 'idleTips.navBack'),
+  t(en, 'idleTips.splitCommits'),
+  t(en, 'idleTips.changelog'),
+  t(en, 'idleTips.createFromChangelog'),
+  t(en, 'idleTips.editorDraft'),
+  t(en, 'idleTips.aiCommitDraft'),
 ]
 
 /**
