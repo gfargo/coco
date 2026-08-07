@@ -165,6 +165,19 @@ describe('log Ink view model', () => {
     expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
   })
 
+  it('sets an absolute selected index and clamps at list bounds (OSS-1608 click-to-select)', () => {
+    let state = createLogInkState(rows)
+
+    state = applyLogInkAction(state, { type: 'setSelectedIndex', value: 1 })
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('def5678')
+
+    state = applyLogInkAction(state, { type: 'setSelectedIndex', value: 999 })
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('fed9999')
+
+    state = applyLogInkAction(state, { type: 'setSelectedIndex', value: -5 })
+    expect(getSelectedInkCommit(state)?.shortHash).toBe('abc1234')
+  })
+
   it('filters by message, author, hash, and refs', () => {
     let state = createLogInkState(rows)
 

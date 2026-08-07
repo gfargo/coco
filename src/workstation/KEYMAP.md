@@ -1,10 +1,12 @@
 # Workstation Keymap — the deliberate map
 
-The workstation is keyboard-only and key-dense (lazygit-style): single letters
+The workstation is keyboard-first and key-dense (lazygit-style): single letters
 do a lot, and the *same* letter often means different things in different
 views. That density is intentional, but it only stays safe if the overloads are
 **deliberate** — every reused key disambiguated by a known rule, never by
-accident.
+accident. Mouse support (see [Mouse (opt-in)](#mouse-opt-in) below) is a
+strictly additive convenience on top of this — every action it drives
+(pane focus, row select, scroll) already has a keyboard equivalent.
 
 This document is the canonical map. It exists to answer three questions:
 
@@ -50,6 +52,42 @@ Two consequences worth internalizing:
   `activeView !== 'conflicts'`. Adding a new view that wants that key means
   finding and updating the negation. Prefer an explicit allowlist of views when
   you add a new global. (See *Risks* below.)
+
+---
+
+## Mouse (opt-in)
+
+Mouse support is off by default for one release — set `logTui.mouse: true`
+in your coco config to turn it on. When enabled, the workstation asks the
+terminal for SGR mouse reporting (`?1000h` / `?1006h`) for the lifetime of
+the session and disables it again on every exit path (quit, Ctrl+Z, Ctrl+C,
+`kill`, a crash) so your shell never comes back with mouse mode stuck on.
+
+Three actions, no more:
+
+| Action | Effect |
+|---|---|
+| Click a pane | Focuses that pane (sidebar / main / inspector) — same as `Tab`-cycling focus there. |
+| Click a row in the commit history | Selects that commit — same as moving the cursor with `j`/`k` (best-effort row alignment; see caveat below). |
+| Scroll wheel | Moves the list cursor up/down when the history pane is focused; pages the diff/detail preview when the inspector is focused. |
+
+Every one of these has an existing keyboard equivalent — mouse support
+never introduces a new capability, only a faster path to one that's
+already bound.
+
+**Native text selection.** Enabling mouse reporting takes over click-drag
+in most terminals, so your terminal's own text selection stops working
+while the workstation has mouse mode on. Hold **Shift** while
+clicking/dragging to fall back to the terminal's native selection (this is
+a terminal-level override, not something coco implements — it works the
+same way in any SGR-mouse-aware program).
+
+**Known caveat.** Click-to-select-row uses an approximate row calculation
+(`chrome/hitTest.ts`) rather than the exact rendered layout, so a click
+near a date-bucket header or a banner line (e.g. the upstream-ahead
+notice) can land on the row just above or below the one you clicked. Pane
+focus and scroll are unaffected — only row-precision on a click is
+approximate.
 
 ---
 

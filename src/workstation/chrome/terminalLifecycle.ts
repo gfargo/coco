@@ -13,12 +13,22 @@
  *   - `\x1b[?25l`  — hide the cursor
  *   - `\x1b[?1049l` — exit alt screen
  *   - `\x1b[?1049h` — enter alt screen
+ *
+ * Mouse reporting (opt-in via `options.mouse`, OSS-1608) piggybacks on
+ * this same guaranteed-cleanup machinery: `?1000h` asks the terminal to
+ * report button press/release, `?1006h` switches to SGR encoding (safe
+ * coordinates past column/row 223, unlike the legacy X10 encoding). Both
+ * must be disabled on every exit path — a crash or forced-kill that skips
+ * the disable sequence leaves the user's terminal emitting mouse escape
+ * codes into every subsequent program until they run `reset`.
  */
 
 const SHOW_CURSOR = '\x1b[?25h'
 const HIDE_CURSOR = '\x1b[?25l'
 const ENTER_ALT_SCREEN = '\x1b[?1049h'
 const EXIT_ALT_SCREEN = '\x1b[?1049l'
+const ENABLE_MOUSE = '\x1b[?1000h\x1b[?1006h'
+const DISABLE_MOUSE = '\x1b[?1000l\x1b[?1006l'
 
 export type TerminalLifecycleOptions = {
   output: NodeJS.WriteStream
@@ -36,6 +46,13 @@ export type TerminalLifecycleOptions = {
    * however it sees fit (defaults to printing the stack to stderr).
    */
   onPanic?: (error: unknown) => void
+  /**
+   * Enable SGR mouse reporting for the lifetime of this instance
+   * (OSS-1608, `logTui.mouse`). Off by default — when falsy, no mouse
+   * escape sequences are ever written and this module's behavior is
+   * byte-identical to before mouse support existed.
+   */
+  mouse?: boolean
 }
 
 export type TerminalLifecycle = {
@@ -69,7 +86,11 @@ const tryUnmount = (instance: { unmount: () => void }): void => {
 export function installTerminalLifecycle(
   options: TerminalLifecycleOptions
 ): TerminalLifecycle {
-  const { input, instance, output } = options
+  const { input, instance, mouse, output } = options
+
+  if (mouse) {
+    tryWrite(output, ENABLE_MOUSE)
+  }
 
   const restoreTerminal = (): void => {
     // Belt-and-suspenders: tell Ink to unmount AND write the escape
@@ -77,7 +98,7 @@ export function installTerminalLifecycle(
     // seen it leave artifacts when a render is in flight at panic time.
     tryUnmount(instance)
     trySetRawMode(input, false)
-    tryWrite(output, `${SHOW_CURSOR}${EXIT_ALT_SCREEN}`)
+    tryWrite(output, `${mouse ? DISABLE_MOUSE : ''}${SHOW_CURSOR}${EXIT_ALT_SCREEN}`)
   }
 
   const handlePanic = (error: unknown): void => {
@@ -101,7 +122,7 @@ export function installTerminalLifecycle(
   // tree stays alive so SIGCONT can repaint without re-mounting.
   const onSigtstp = (): void => {
     trySetRawMode(input, false)
-    tryWrite(output, `${SHOW_CURSOR}${EXIT_ALT_SCREEN}`)
+    tryWrite(output, `${mouse ? DISABLE_MOUSE : ''}${SHOW_CURSOR}${EXIT_ALT_SCREEN}`)
     process.kill(process.pid, 'SIGSTOP')
   }
 
@@ -109,7 +130,7 @@ export function installTerminalLifecycle(
   // ask the runtime to nudge React so the user lands on a painted screen
   // instead of an empty alt buffer.
   const onSigcont = (): void => {
-    tryWrite(output, `${ENTER_ALT_SCREEN}${HIDE_CURSOR}`)
+    tryWrite(output, `${ENTER_ALT_SCREEN}${HIDE_CURSOR}${mouse ? ENABLE_MOUSE : ''}`)
     trySetRawMode(input, true)
     options.onResume?.()
   }
@@ -145,6 +166,13 @@ export function installTerminalLifecycle(
       process.off('SIGCONT', onSigcont)
       process.off('SIGTERM', onSigterm)
       process.off('SIGHUP', onSighup)
+      // Clean exit (user quit normally) never goes through
+      // `restoreTerminal` — Ink's own unmount handles alt-screen/cursor,
+      // but it has no notion of mouse mode, so this is the only path
+      // that disables it on a normal quit.
+      if (mouse) {
+        tryWrite(output, DISABLE_MOUSE)
+      }
     },
   }
 }

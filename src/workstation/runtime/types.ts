@@ -243,6 +243,12 @@ export type LogInkComponentDeps = LogInkRuntime & {
    * gracefully (no grammar / non-ASCII / parse error → plain line).
    */
   syntaxHighlightEnabled?: boolean
+  /**
+   * Enable mouse support (OSS-1608 / `logTui.mouse`). Off by default;
+   * gates the SGR mouse-sequence interception in `useInputHandler` so a
+   * disabled flag is byte-identical to keyboard-only behavior.
+   */
+  mouseEnabled?: boolean
   initialView: LogInkView
   logArgv?: LogArgv
   rows: GitLogRow[]

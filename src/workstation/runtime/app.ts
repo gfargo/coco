@@ -19,9 +19,13 @@
  *
  * # Accessibility & terminal compatibility
  *
- * The TUI is keyboard-only by design — every action is reachable from the
- * keymap (see inkKeymap.ts) and the command palette (`:`). No mouse input
- * is consumed.
+ * The TUI is keyboard-first — every action is reachable from the keymap
+ * (see inkKeymap.ts) and the command palette (`:`) with no mouse required.
+ * Mouse support (OSS-1608, `logTui.mouse`, off by default) is additive: a
+ * click focuses a pane, a click on a history row selects it, and the wheel
+ * scrolls the pane under the cursor. See `hooks/useInputHandler.ts` for the
+ * SGR mouse-sequence interception and `chrome/hitTest.ts` for the pane/row
+ * math.
  *
  * Color and decorations:
  *   - `NO_COLOR` is honored end-to-end via `LogInkTheme.noColor` (see
@@ -117,7 +121,7 @@ import { renderOnboardingOverlay } from '../runtime/overlays'
 import { getLogInkRuntimeContext, type LogInkRuntimeContextValue } from '../runtime/runtimeContext'
 
 export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, React, resumeRef, rows, syntaxHighlightEnabled, theme: baseTheme, themeConfig } = deps
+  const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, mouseEnabled, React, resumeRef, rows, syntaxHighlightEnabled, theme: baseTheme, themeConfig } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
 
@@ -1118,6 +1122,41 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     resumeRef,
   })
 
+  // In single-pane mode (narrow terminals) only one pane renders, so an
+  // active overlay must pull its own pane into view rather than stay
+  // hidden behind whatever pane focus points at. The split-plan overlay
+  // lives in the main panel; every other overlay (help / palette / theme
+  // / gitignore / input prompt / confirmation / chord) renders in the
+  // inspector. Ignored above the single-pane breakpoint (all panes show).
+  //
+  // Computed here (moved up from its original slot just above the render
+  // path, OSS-1608) so `useInputHandler` below can hit-test mouse clicks
+  // against the SAME layout the render path uses this frame — deriving a
+  // second copy from `windowSize` there would double the layout-recompute
+  // cost and risk drifting out of sync with what's actually on screen.
+  const forcedPane: LogInkVisiblePane | undefined = state.splitPlan
+    ? 'main'
+    : state.showHelp ||
+        state.showViewKeys ||
+        state.showCommandPalette ||
+        state.showThemePicker ||
+        state.gitignorePicker ||
+        state.inputPrompt ||
+        state.pendingConfirmationId ||
+        state.pendingChoice ||
+        state.pendingKey
+      ? 'inspector'
+      : undefined
+
+  const layout = getLogInkLayout({
+    columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
+    rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
+    sidebarFocused: state.focus === 'sidebar',
+    inspectorFocused: state.focus === 'detail',
+    helpOverlayActive: state.showHelp,
+    forcedPane,
+  })
+
   // Lifted verbatim into `useInputHandler` (0.72 app.ts decomposition, the
   // final big cluster). The single `useInput(…)` keyboard handler — the
   // component's largest reader — moves wholesale: it derives the per-keystroke
@@ -1132,6 +1171,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   useInputHandler(useInput, {
     state,
     context,
+    layout,
+    mouseEnabled,
     dispatch,
     showOnboarding,
     dismissOnboarding,
@@ -1197,37 +1238,6 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setThemeSessionPreset,
     saveThemePreset,
     enrichFilterActionWithRectification,
-  })
-
-  // In single-pane mode (narrow terminals) only one pane renders, so an
-  // active overlay must pull its own pane into view rather than stay
-  // hidden behind whatever pane focus points at. The split-plan overlay
-  // lives in the main panel; every other overlay (help / palette / theme
-  // / gitignore / input prompt / confirmation / chord) renders in the
-  // inspector. Ignored above the single-pane breakpoint (all panes show).
-  const forcedPane: LogInkVisiblePane | undefined = state.splitPlan
-    ? 'main'
-    : state.showHelp ||
-        state.showViewKeys ||
-        state.showCommandPalette ||
-        state.showThemePicker ||
-        state.gitignorePicker ||
-        state.inputPrompt ||
-        state.pendingConfirmationId ||
-        state.pendingChoice ||
-        state.pendingKey
-      ? 'inspector'
-      : undefined
-
-  // Layout depends on focus (sidebar grows when focused), so it's
-  // computed here — after state is in scope but before the render path.
-  const layout = getLogInkLayout({
-    columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
-    rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
-    sidebarFocused: state.focus === 'sidebar',
-    inspectorFocused: state.focus === 'detail',
-    helpOverlayActive: state.showHelp,
-    forcedPane,
   })
 
   // Runtime Context provider (#1136). Bundles the five most-drilled
