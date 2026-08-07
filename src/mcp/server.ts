@@ -19,7 +19,6 @@ import {
     AgentOperation,
     AgentOperationContext,
     AgentOperationError,
-    AgentTaskInputSchema,
     asUntrustedChangeContext,
     BlameDataSchema,
     BlameRequestSchema,
