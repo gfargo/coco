@@ -1,6 +1,21 @@
+import { z } from 'zod'
 import { BlameLine } from '../../git/blameData'
 import { GitCommitDetail } from '../../git/logData'
 import { cellWidth, padCells, truncateCells } from '../../workstation/chrome/text'
+
+// Cost guardrails (#OSS-1604): naive --explain would issue one LLM call per
+// blamed sha. Both the CLI handler and the MCP `coco_blame` tool batch into a
+// single call, but still cap the input so a huge file (or an un-narrowed line
+// range) can't balloon the prompt/cost. Shared here so both callers agree.
+export const MAX_EXPLAIN_LINES = 400
+export const MAX_EXPLAIN_COMMITS = 25
+
+export const BlameExplainResponseSchema = z.array(
+  z.object({
+    hash: z.string(),
+    explanation: z.string(),
+  })
+)
 
 export type LineRange = { start: number; end: number }
 

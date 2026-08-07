@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -537,6 +537,124 @@ export type RepoContextConflicts = z.infer<typeof RepoContextConflictsSchema>
 export type RepoContextCapabilities = z.infer<typeof RepoContextCapabilitiesSchema>
 export type RepoContextFileEntry = z.infer<typeof RepoContextFileEntrySchema>
 export type RepoContextSection = z.infer<typeof RepoContextSectionSchema>
+
+// ─── blame operation ──────────────────────────────────────────────────────────
+
+/**
+ * Cost guardrails matching `coco blame --explain` (#OSS-1604): a naive
+ * --explain would issue one LLM call per blamed sha. Both the CLI and the
+ * `coco_blame` MCP tool batch into a single call, but still cap the input so
+ * a huge file (or an un-narrowed `lines`) can't balloon the prompt/cost.
+ */
+export const MAX_BLAME_EXPLAIN_LINES = 400
+export const MAX_BLAME_EXPLAIN_COMMITS = 25
+
+/**
+ * Request schema for the MCP tool `coco_blame`. Read-only: attributes each
+ * line of a repo-relative file to its introducing commit. `explain: true`
+ * additionally resolves the introducing commits and asks an LLM why each
+ * range was written — this requires an API key for the configured provider.
+ */
+export const BlameRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  file: z.string().min(1).describe('Repo-relative path to blame.'),
+  lines: z.string().min(1).optional().describe(
+    'Restrict to a 1-based inclusive line range: "10:50", "10:" (open-ended), or "10" (single line). Omit for the whole file.',
+  ),
+  explain: z.boolean().default(false).describe(
+    'Resolve each blamed commit and ask an LLM why the range was introduced. Requires an API key for the configured ' +
+    `provider. Capped at ${MAX_BLAME_EXPLAIN_LINES} lines and ${MAX_BLAME_EXPLAIN_COMMITS} distinct commits per call.`,
+  ),
+}).strict()
+
+/** Publish the caller-facing blame request shape, before defaults are applied. */
+export function createBlameInputJsonSchema() {
+  return z.toJSONSchema(BlameRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const BlameLineEntrySchema = z.object({
+  lineNumber: z.number().int(),
+  hash: z.string(),
+  shortHash: z.string(),
+  author: z.string(),
+  content: z.string(),
+}).strict()
+
+export const BlameExplanationEntrySchema = z.object({
+  hash: z.string(),
+  author: z.string(),
+  /** Line ranges attributed to this commit, e.g. "12-18, 25". */
+  lines: z.string(),
+  subject: z.string(),
+  explanation: z.string(),
+}).strict()
+
+export const BlameDataSchema = z.object({
+  path: z.string(),
+  /** Present when `explain: false` (the default). */
+  lines: z.array(BlameLineEntrySchema).optional(),
+  /** Present when `explain: true`. */
+  explanations: z.array(BlameExplanationEntrySchema).optional(),
+  /** True when more distinct commits touched the range than `MAX_BLAME_EXPLAIN_COMMITS` allows. */
+  truncated: z.boolean().optional(),
+}).strict()
+
+export type BlameRequest = z.infer<typeof BlameRequestSchema>
+export type BlameData = z.infer<typeof BlameDataSchema>
+export type BlameLineEntry = z.infer<typeof BlameLineEntrySchema>
+export type BlameExplanationEntry = z.infer<typeof BlameExplanationEntrySchema>
+
+// ─── lint operation ────────────────────────────────────────────────────────────
+
+/**
+ * Request schema for the MCP tool `coco_lint`. Read-only: validates the
+ * subject/body of each commit in a range against coco's built-in
+ * Conventional Commits rules. `since`/`range` are mutually exclusive; neither
+ * enables `--fix` (rewriting commit history is not read-only, so it is never
+ * exposed via MCP).
+ */
+export const LintRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  since: gitRevisionSchema.optional().describe(
+    'Lint commits in `<since>..HEAD` instead of comparing against the default branch. Mutually exclusive with `range`.',
+  ),
+  range: gitRevisionSchema.optional().describe(
+    'Lint an explicit commit range (e.g. "abc123..def456"). Mutually exclusive with `since`.',
+  ),
+  severity: z.enum(['error', 'warning']).default('error').describe(
+    'A commit at/above this severity counts toward `summary.failing`.',
+  ),
+}).strict()
+
+/** Publish the caller-facing lint request shape, before defaults are applied. */
+export function createLintInputJsonSchema() {
+  return z.toJSONSchema(LintRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const LintCommitResultSchema = z.object({
+  sha: z.string(),
+  shortSha: z.string(),
+  subject: z.string(),
+  status: z.enum(['pass', 'warn', 'fail', 'skipped']),
+  errors: z.array(z.string()),
+  warnings: z.array(z.string()),
+}).strict()
+
+export const LintDataSchema = z.object({
+  results: z.array(LintCommitResultSchema),
+  summary: z.object({
+    passing: z.number().int(),
+    failing: z.number().int(),
+    warning: z.number().int(),
+    skipped: z.number().int(),
+  }).strict(),
+}).strict()
+
+export type LintRequest = z.infer<typeof LintRequestSchema>
+export type LintData = z.infer<typeof LintDataSchema>
+export type LintCommitResult = z.infer<typeof LintCommitResultSchema>
 
 // ─── commit-apply operation ───────────────────────────────────────────────────
 
