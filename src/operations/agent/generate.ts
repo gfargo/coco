@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve as pathResolve } from 'node:path'
 import { Arguments } from 'yargs'
 import { z } from 'zod'
 
@@ -17,6 +19,9 @@ import {
 import { REVIEW_PROMPT } from '../../commands/review/prompt'
 import { getBlame } from '../../git/blameData'
 import { getCommitDetail, GitCommitDetail } from '../../git/logData'
+import { runConflictResolutionWorkflow } from '../../git/conflictAiActions'
+import { getConflictFileRegions } from '../../git/conflictRegionActions'
+import { getConflictedFiles, getInProgressOperationType } from '../../git/operationData'
 import {
     BlameExplainResponseSchema,
     filterBlameLines,
@@ -63,6 +68,7 @@ import {
     readRepoConflictsContext,
     readRepoCapabilitiesContext,
     digestOf,
+    isPathWithinRoot,
 } from './context'
 import { AgentOperationError } from './errors'
 import { splitUnifiedDiff } from './splitUnifiedDiff'
@@ -82,6 +88,10 @@ import {
     CondenseDiffData,
     CondenseDiffFileResult,
     CondenseDiffRequest,
+    ConflictResolveConflict,
+    ConflictResolveData,
+    ConflictResolveRequest,
+    ConflictResolveUnresolved,
     LintCommitResult,
     LintData,
     LintRequest,
@@ -509,6 +519,14 @@ export async function runAgentOperation(
       throw new AgentOperationError(
         'INVALID_OPERATION',
         'lint must be dispatched via runLint, not runAgentOperation.',
+        false,
+      )
+    case 'conflict-resolve':
+      // conflict-resolve uses its own request schema (ConflictResolveRequest)
+      // and is dispatched via runConflictResolve, not through this shared entry point.
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'conflict-resolve must be dispatched via runConflictResolve, not runAgentOperation.',
         false,
       )
   }
@@ -1107,4 +1125,168 @@ export async function runLint(
   }
 
   return lintEnvelope({ results, summary })
+}
+
+// ─── conflict-resolve operation ─────────────────────────────────────────────
+
+/**
+ * Number of leading bytes scanned for a NUL byte when deciding whether a
+ * conflicted file is binary. Matches the marker-scan cap in
+ * `git/operationData.ts` in spirit: cheap enough to run per file, generous
+ * enough to catch binary formats that pad their header with text.
+ */
+const CONFLICT_BINARY_SCAN_BYTES = 8192
+
+function isBinaryBuffer(buffer: Buffer): boolean {
+  const scanLength = Math.min(buffer.length, CONFLICT_BINARY_SCAN_BYTES)
+  for (let i = 0; i < scanLength; i++) {
+    if (buffer[i] === 0) return true
+  }
+  return false
+}
+
+/** Resolve a repo-relative conflict path against `context.repoRoot`, refusing anything that escapes it. */
+function resolveConflictFilePath(context: AgentOperationContext, relativePath: string): string {
+  const resolved = pathResolve(context.repoRoot, relativePath)
+  if (!isPathWithinRoot(resolved, context.repoRoot)) {
+    throw new AgentOperationError('INVALID_INPUT', `Path escapes the repository root: ${relativePath}`)
+  }
+  return resolved
+}
+
+function conflictResolveEnvelope(data: ConflictResolveData): AgentSuccessEnvelope<ConflictResolveData> {
+  return {
+    version: AGENT_PROTOCOL_VERSION,
+    ok: true,
+    operation: 'conflict-resolve',
+    status: 'completed',
+    data,
+    warnings: [],
+    meta: {
+      kind: 'repository',
+      digest: digestOf(JSON.stringify(data)),
+      verification: 'repository-derived',
+    },
+  }
+}
+
+/**
+ * Enumerate in-merge conflicted files and ask an LLM for a per-region
+ * resolution proposal. Strictly read-only: it never calls
+ * `applyConflictResolution` or writes to the worktree -- proposals are
+ * returned for the caller to review and apply through its own
+ * accept/edit/reject flow, mirroring the `pendingAiDraft` philosophy of the
+ * interactive conflict resolver.
+ */
+export async function runConflictResolve(
+  input: ConflictResolveRequest,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<ConflictResolveData>> {
+  if (!context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'conflict-resolve requires a git repository. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
+
+  const operationType = await getInProgressOperationType(context.git)
+  let files = await getConflictedFiles(context.git)
+  if (input.files) {
+    const requested = new Set(input.files)
+    files = files.filter((file) => requested.has(file.path))
+  }
+
+  const conflicts: ConflictResolveConflict[] = []
+  const unresolved: ConflictResolveUnresolved[] = []
+
+  const filesToProcess = files.slice(0, input.maxFiles)
+  for (const overflowFile of files.slice(input.maxFiles)) {
+    unresolved.push({
+      path: overflowFile.path,
+      regionIndex: -1,
+      reason: `Skipped: exceeds maxFiles (${input.maxFiles}).`,
+    })
+  }
+
+  for (const file of filesToProcess) {
+    if (context.signal?.aborted) {
+      throw new AgentOperationError('CANCELLED', 'Operation was cancelled.', false)
+    }
+
+    let buffer: Buffer
+    try {
+      buffer = readFileSync(resolveConflictFilePath(context, file.path))
+    } catch (error) {
+      unresolved.push({
+        path: file.path,
+        regionIndex: -1,
+        reason: `Failed to read file: ${(error as Error).message.split('\n')[0]}`,
+      })
+      continue
+    }
+
+    if (isBinaryBuffer(buffer)) {
+      unresolved.push({ path: file.path, regionIndex: -1, reason: 'Binary file — skipped.' })
+      continue
+    }
+
+    const regionsResult = await getConflictFileRegions(context.git, file.path)
+    if (!regionsResult.ok) {
+      unresolved.push({ path: file.path, regionIndex: -1, reason: regionsResult.message })
+      continue
+    }
+
+    const regionsToProcess = regionsResult.regions.slice(0, input.maxRegions)
+    for (const overflowRegion of regionsResult.regions.slice(input.maxRegions)) {
+      unresolved.push({
+        path: file.path,
+        regionIndex: overflowRegion.index,
+        reason: `Skipped: exceeds maxRegions (${input.maxRegions}).`,
+      })
+    }
+    if (regionsToProcess.length === 0) continue
+
+    const workflowResult = await runConflictResolutionWorkflow({
+      git: context.git,
+      path: file.path,
+      regions: regionsToProcess,
+      operation: operationType,
+      signal: context.signal,
+    })
+
+    const digest = digestOf(buffer.toString('utf8'))
+
+    if (!workflowResult.ok) {
+      for (const region of regionsToProcess) {
+        unresolved.push({ path: file.path, regionIndex: region.index, reason: workflowResult.message })
+      }
+      continue
+    }
+
+    const proposalByRegion = new Map(workflowResult.proposals.map((proposal) => [proposal.regionIndex, proposal]))
+    for (const region of regionsToProcess) {
+      const proposal = proposalByRegion.get(region.index)
+      if (!proposal) {
+        unresolved.push({
+          path: file.path,
+          regionIndex: region.index,
+          reason: 'The model returned no proposal for this region.',
+        })
+        continue
+      }
+      conflicts.push({
+        path: file.path,
+        regionIndex: region.index,
+        ours: region.ours,
+        theirs: region.theirs,
+        ...(region.base ? { base: region.base } : {}),
+        proposal: proposal.resolution,
+        confidence: proposal.confidence,
+        rationale: proposal.rationale,
+        digest,
+      })
+    }
+  }
+
+  return conflictResolveEnvelope({ conflicts, unresolved })
 }

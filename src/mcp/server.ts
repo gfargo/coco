@@ -27,6 +27,8 @@ import {
     CommitApplyRequestSchema,
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
+    ConflictResolveDataSchema,
+    ConflictResolveRequestSchema,
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
@@ -56,6 +58,7 @@ import {
     runBlame,
     runCommitApply,
     runCondenseDiff,
+    runConflictResolve,
     runLint,
     runRepoContext,
     toAgentOperationError,
@@ -75,6 +78,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, CondenseDiffDataSchema)
     case 'repo-context':
       return createAgentMcpOutputSchema(operation, RepoContextDataSchema)
+    case 'conflict-resolve':
+      return createAgentMcpOutputSchema(operation, ConflictResolveDataSchema)
   }
 }
 
@@ -807,6 +812,58 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
         surface: 'mcp',
       })
       const result = await runLint(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+        structuredContent: failure,
+      }
+    }
+  })
+
+  // coco_conflict_resolve uses its own input schema (ConflictResolveRequestSchema)
+  // and dispatches to runConflictResolve. Read-only: proposals are returned for
+  // the caller to review and apply through its own accept/edit/reject flow —
+  // applyConflictResolution is never called by this tool.
+  server.registerTool('coco_conflict_resolve', {
+    title: 'Propose conflict resolutions',
+    description: [
+      'Propose a per-region resolution for each in-merge conflicted file (merge/rebase/cherry-pick/revert).',
+      'Restrict to specific files with `files` (repo-relative paths) — omit to process every conflicted file.',
+      'Each proposal includes the ours/theirs/base sections, a proposed replacement, a confidence rating',
+      '(high/medium/low), and a rationale. Files/regions beyond `maxFiles`/`maxRegions`, binary files, and files the',
+      'model could not resolve are reported in `unresolved` with a reason instead of failing the whole call.',
+      'Requires an API key for the configured provider.',
+      'Read-only: NEVER writes to the worktree, applies a resolution, or creates a commit — the caller must apply',
+      'accepted proposals itself, e.g. via `coco conflicts` interactively.',
+    ].join(' '),
+    inputSchema: ConflictResolveRequestSchema,
+    outputSchema: outputSchemaFor('conflict-resolve'),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  }, async (rawInput, extra) => {
+    const operation = 'conflict-resolve' as const
+    try {
+      const input = ConflictResolveRequestSchema.parse(rawInput)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const onProgress = makeMcpProgressReporter(extra)
+      const context = await createAgentOperationContext({
+        repoRoot: resolvedRepoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+        onProgress,
+      })
+      const result = await runConflictResolve(input, context)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         structuredContent: result,

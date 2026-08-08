@@ -12,12 +12,15 @@ import {
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
     CondenseDiffRequestSchema,
+    ConflictResolveDataSchema,
+    ConflictResolveRequestSchema,
     createAgentFailureEnvelope,
     createAgentInputJsonSchema,
     createAgentOperationContext,
     createAgentOutputSchema,
     createBlameInputJsonSchema,
     createCondenseDiffInputJsonSchema,
+    createConflictResolveInputJsonSchema,
     createLintInputJsonSchema,
     createRepoContextInputJsonSchema,
     describeRepoResolutionFailure,
@@ -33,6 +36,7 @@ import {
     runAgentOperation,
     runBlame,
     runCondenseDiff,
+    runConflictResolve,
     runLint,
     runRepoContext,
     toAgentOperationError
@@ -77,6 +81,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, BlameDataSchema)
     case 'lint':
       return createAgentOutputSchema(operation, LintDataSchema)
+    case 'conflict-resolve':
+      return createAgentOutputSchema(operation, ConflictResolveDataSchema)
   }
 }
 
@@ -85,6 +91,7 @@ function emitSchema(operation: AgentOperation): void {
   const isRepoContext = operation === 'repo-context'
   const isBlame = operation === 'blame'
   const isLint = operation === 'lint'
+  const isConflictResolve = operation === 'conflict-resolve'
   emit({
     version: AGENT_PROTOCOL_VERSION,
     operation,
@@ -96,6 +103,8 @@ function emitSchema(operation: AgentOperation): void {
       ? createBlameInputJsonSchema()
       : isLint
       ? createLintInputJsonSchema()
+      : isConflictResolve
+      ? createConflictResolveInputJsonSchema()
       : createAgentInputJsonSchema(),
     output: z.toJSONSchema(outputSchemaFor(operation)),
   })
@@ -168,6 +177,20 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
         surface: 'agent-cli',
       })
       emit(await runLint(input, context))
+    } else if (operation === 'conflict-resolve') {
+      // conflict-resolve uses its own request schema — parse and dispatch separately.
+      // Never writes to the worktree; proposals are returned for the caller to
+      // review and apply through its own accept/edit/reject flow.
+      const input = ConflictResolveRequestSchema.parse(raw)
+      const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+      process.chdir(repoRoot)
+      await armNonInteractiveUsageTelemetry(argv, repoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot,
+        signal: controller.signal,
+        surface: 'agent-cli',
+      })
+      emit(await runConflictResolve(input, context))
     } else {
       const input = AgentTaskInputSchema.parse(raw)
       const needsRepo = requiresRepository(operation, input.source)

@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'conflict-resolve'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -655,6 +655,94 @@ export const LintDataSchema = z.object({
 export type LintRequest = z.infer<typeof LintRequestSchema>
 export type LintData = z.infer<typeof LintDataSchema>
 export type LintCommitResult = z.infer<typeof LintCommitResultSchema>
+
+// ─── conflict-resolve operation ────────────────────────────────────────────────
+
+/**
+ * Cost guardrails: cap the number of conflicted files and marker regions per
+ * file that a single call processes, so a large mid-merge conflict set can't
+ * balloon into an unbounded number of LLM calls.
+ */
+export const MAX_CONFLICT_RESOLVE_FILES = 50
+export const DEFAULT_CONFLICT_RESOLVE_MAX_FILES = 10
+export const MAX_CONFLICT_RESOLVE_REGIONS = 200
+export const DEFAULT_CONFLICT_RESOLVE_MAX_REGIONS = 50
+
+/**
+ * Request schema for `coco agent conflict-resolve` and the MCP tool
+ * `coco_conflict_resolve`. Read-only: proposes a per-region resolution for
+ * each in-merge conflicted file without ever writing to disk -- proposals are
+ * returned for the caller to review and apply through its own accept/edit/
+ * reject flow (`applyConflictResolution` is never called by this operation).
+ *
+ * `options` deliberately omits `trustRepositoryConfig` (unlike
+ * `AgentOptionsSchema`) rather than using an `Mcp*` variant like condense-diff
+ * -- the `.strict()` parse already rejects it with `INVALID_INPUT` for both
+ * the agent CLI and MCP callers, and this operation never reads
+ * repository-defined prompt overrides, so there is nothing to trust either way.
+ */
+export const ConflictResolveRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  /** Repo-relative paths to restrict resolution to. Omit to process every conflicted file. */
+  files: z.array(z.string().min(1)).optional(),
+  options: z.object({
+    language: z.string().min(1).max(100).optional().describe(
+      'ISO language code or plain name (e.g. "en", "Spanish") reserved for parity with other operations\' options bag.',
+    ),
+    additionalContext: z.string().max(32 * 1024).optional().describe(
+      'Extra free-text context reserved for parity with other operations\' options bag.',
+    ),
+  }).strict().default({}),
+  maxFiles: z.number().int().min(1).max(MAX_CONFLICT_RESOLVE_FILES).default(DEFAULT_CONFLICT_RESOLVE_MAX_FILES).describe(
+    'Maximum number of conflicted files to process in this call. Files beyond the cap are reported in `unresolved`.',
+  ),
+  maxRegions: z.number().int().min(1).max(MAX_CONFLICT_RESOLVE_REGIONS).default(DEFAULT_CONFLICT_RESOLVE_MAX_REGIONS).describe(
+    'Maximum number of conflict regions to process per file. Regions beyond the cap are reported in `unresolved`.',
+  ),
+}).strict()
+
+/** Publish the caller-facing conflict-resolve request shape, before defaults are applied. */
+export function createConflictResolveInputJsonSchema() {
+  return z.toJSONSchema(ConflictResolveRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const ConflictResolveConflictSchema = z.object({
+  path: z.string(),
+  /** 0-based ordinal of the region within the file, matching `ConflictRegion.index`. */
+  regionIndex: z.number().int(),
+  ours: z.array(z.string()),
+  theirs: z.array(z.string()),
+  /** diff3-style common-ancestor section, present only when the merge used `merge.conflictStyle=diff3`. */
+  base: z.array(z.string()).optional(),
+  proposal: z.string(),
+  confidence: z.enum(['high', 'medium', 'low']),
+  rationale: z.string(),
+  /** Digest of the whole file's content at read time, shared by every region proposed for that file. */
+  digest: z.string(),
+}).strict()
+
+/**
+ * A file or region that could not be resolved. `regionIndex: -1` marks a
+ * whole-file skip (binary/unreadable content, or a `maxFiles` overflow);
+ * a non-negative index marks a single region that overflowed `maxRegions`
+ * or that the model failed to propose a resolution for.
+ */
+export const ConflictResolveUnresolvedSchema = z.object({
+  path: z.string(),
+  regionIndex: z.number().int(),
+  reason: z.string(),
+}).strict()
+
+export const ConflictResolveDataSchema = z.object({
+  conflicts: z.array(ConflictResolveConflictSchema),
+  unresolved: z.array(ConflictResolveUnresolvedSchema),
+}).strict()
+
+export type ConflictResolveRequest = z.infer<typeof ConflictResolveRequestSchema>
+export type ConflictResolveData = z.infer<typeof ConflictResolveDataSchema>
+export type ConflictResolveConflict = z.infer<typeof ConflictResolveConflictSchema>
+export type ConflictResolveUnresolved = z.infer<typeof ConflictResolveUnresolvedSchema>
 
 // ─── commit-apply operation ───────────────────────────────────────────────────
 

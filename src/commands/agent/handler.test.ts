@@ -110,6 +110,23 @@ describe('agent command handler', () => {
     expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
   })
 
+  it('prints versioned input/output schemas for conflict-resolve without starting an operation', async () => {
+    await handler(argv({ operation: 'schema', task: 'conflict-resolve' }))
+
+    const output = JSON.parse(stdout)
+    expect(output).toMatchObject({
+      version: 1,
+      operation: 'conflict-resolve',
+      input: { type: 'object', additionalProperties: false },
+      output: { oneOf: expect.any(Array) },
+    })
+    expect(output.input.properties).toHaveProperty('maxFiles')
+    expect(output.input.properties).toHaveProperty('maxRegions')
+    expect(output.input.properties).not.toHaveProperty('trustRepositoryConfig')
+    expect(mockResolveAgentRepoRoot).not.toHaveBeenCalled()
+    expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
+  })
+
   it('emits a structured INVALID_JSON failure', async () => {
     await handler(argv({ input: writeRequest('{not json') }))
 

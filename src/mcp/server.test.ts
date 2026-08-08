@@ -21,6 +21,7 @@ const mockRunCondenseDiff = jest.fn()
 const mockRunRepoContext = jest.fn()
 const mockRunBlame = jest.fn()
 const mockRunLint = jest.fn()
+const mockRunConflictResolve = jest.fn()
 const mockRunCommitApply = jest.fn()
 
 type HandlerExtra = {
@@ -138,6 +139,7 @@ jest.mock('../operations/agent', () => {
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
     runBlame: (...args: unknown[]) => mockRunBlame(...args),
     runLint: (...args: unknown[]) => mockRunLint(...args),
+    runConflictResolve: (...args: unknown[]) => mockRunConflictResolve(...args),
     runCommitApply: (...args: unknown[]) => mockRunCommitApply(...args),
   }
 })
@@ -220,6 +222,15 @@ describe('createCocoMcpServer', () => {
       warnings: [],
       meta: { kind: 'repository' as const, digest: 'sha256:test', verification: 'repository-derived' as const },
     })
+    mockRunConflictResolve.mockResolvedValue({
+      version: 1 as const,
+      ok: true as const,
+      operation: 'conflict-resolve' as const,
+      status: 'completed' as const,
+      data: { conflicts: [], unresolved: [] },
+      warnings: [],
+      meta: { kind: 'repository' as const, digest: 'sha256:test', verification: 'repository-derived' as const },
+    })
     mockRunCommitApply.mockResolvedValue({
       sha: 'abc123def456',
       shortSha: 'abc123d',
@@ -257,7 +268,7 @@ describe('createCocoMcpServer', () => {
     }
   }
 
-  it('registers eight read-only tools including coco_condense_diff, coco_repo_context, coco_blame, and coco_lint', () => {
+  it('registers nine read-only tools including coco_condense_diff, coco_repo_context, coco_blame, coco_lint, and coco_conflict_resolve', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -269,6 +280,7 @@ describe('createCocoMcpServer', () => {
       'coco_repo_context',
       'coco_blame',
       'coco_lint',
+      'coco_conflict_resolve',
     ])
     // The four LLM-generation tools share the AgentTaskInputSchema and have
     // idempotentHint:false; condense-diff and repo-context have their own schemas and idempotentHint:true.
@@ -370,6 +382,26 @@ describe('createCocoMcpServer', () => {
     const lintOutputJson = z.toJSONSchema(lintTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
     expect(lintOutputJson.type).toBe('object')
     expect(lintOutputJson.oneOf).toHaveLength(2)
+
+    // coco_conflict_resolve uses its own request schema and is read-only/non-destructive.
+    const conflictResolveTool = tool('coco_conflict_resolve')
+    expect(conflictResolveTool.config.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    })
+    const conflictResolveInputJson = z.toJSONSchema(conflictResolveTool.config.inputSchema, { io: 'input', target: 'draft-07' })
+    expect(conflictResolveInputJson).toMatchObject({ type: 'object', additionalProperties: false })
+    expect(conflictResolveInputJson).not.toEqual(createAgentInputJsonSchema())
+    expect(conflictResolveInputJson).not.toHaveProperty('properties.trustRepositoryConfig')
+    const conflictResolveOptionsProperties = (conflictResolveInputJson as {
+      properties?: { options?: { properties?: Record<string, unknown> } }
+    }).properties?.options?.properties
+    expect(conflictResolveOptionsProperties).not.toHaveProperty('trustRepositoryConfig')
+    const conflictResolveOutputJson = z.toJSONSchema(conflictResolveTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
+    expect(conflictResolveOutputJson.type).toBe('object')
+    expect(conflictResolveOutputJson.oneOf).toHaveLength(2)
   })
 
   it('documents repository binding and metadata-only analytics in server instructions', () => {
@@ -1096,6 +1128,69 @@ describe('createCocoMcpServer', () => {
       },
     })
     expect(mockRunLint).not.toHaveBeenCalled()
+  })
+
+  it('routes coco_conflict_resolve to runConflictResolve and returns a structured result, and rejects trustRepositoryConfig', async () => {
+    createServer()
+    const controller = new AbortController()
+
+    const result = await tool('coco_conflict_resolve').handler({}, makeExtra({ signal: controller.signal }))
+
+    expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith(undefined, '/repo', controller.signal)
+    expect(mockRunConflictResolve).toHaveBeenCalled()
+    expect(result).toMatchObject({
+      structuredContent: expect.objectContaining({
+        ok: true,
+        operation: 'conflict-resolve',
+      }),
+    })
+
+    mockRunConflictResolve.mockClear()
+    const rejected = await tool('coco_conflict_resolve').handler(
+      { options: { trustRepositoryConfig: true } },
+      makeExtra(),
+    )
+    expect(rejected).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'conflict-resolve',
+        error: { code: 'INVALID_INPUT' },
+      },
+    })
+    expect(mockRunConflictResolve).not.toHaveBeenCalled()
+  })
+
+  it('returns a structured error when coco_conflict_resolve fails', async () => {
+    createServer()
+    mockRunConflictResolve.mockRejectedValueOnce(new Error('no repository'))
+
+    const result = await tool('coco_conflict_resolve').handler({}, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'conflict-resolve',
+        error: { code: 'OPERATION_FAILED', message: 'no repository' },
+      },
+    })
+  })
+
+  it('returns validation failures for invalid coco_conflict_resolve input', async () => {
+    createServer()
+
+    const result = await tool('coco_conflict_resolve').handler({ maxFiles: 0 }, makeExtra())  // below min=1
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'conflict-resolve',
+        error: { code: 'INVALID_INPUT' },
+      },
+    })
+    expect(mockRunConflictResolve).not.toHaveBeenCalled()
   })
 
   describe('coco_commit_apply (write mode)', () => {

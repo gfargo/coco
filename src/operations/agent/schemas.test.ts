@@ -10,16 +10,23 @@ import {
     CommitApplyRequestSchema,
     CondenseDiffDataSchema,
     CondenseDiffRequestSchema,
+    ConflictResolveDataSchema,
+    ConflictResolveRequestSchema,
     createAgentInputJsonSchema,
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
     createCommitApplyInputJsonSchema,
     createCondenseDiffInputJsonSchema,
+    createConflictResolveInputJsonSchema,
     createMcpAgentInputJsonSchema,
     createMcpCondenseDiffInputJsonSchema,
     createRepoContextInputJsonSchema,
+    DEFAULT_CONFLICT_RESOLVE_MAX_FILES,
+    DEFAULT_CONFLICT_RESOLVE_MAX_REGIONS,
     MAX_AGENT_CONTEXT_BYTES,
     MAX_CONDENSE_BUDGET_TOKENS,
+    MAX_CONFLICT_RESOLVE_FILES,
+    MAX_CONFLICT_RESOLVE_REGIONS,
     McpCondenseDiffRequestSchema,
     McpTaskInputSchema,
     RepoContextDataSchema,
@@ -398,6 +405,79 @@ describe('RepoContextRequestSchema', () => {
     })
     expect(jsonSchema.oneOf?.[1]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'repo-context' } },
+    })
+  })
+})
+
+describe('ConflictResolveRequestSchema', () => {
+  it('applies safe defaults (version, options, maxFiles, maxRegions, no files filter)', () => {
+    const result = ConflictResolveRequestSchema.parse({})
+    expect(result).toEqual({
+      version: AGENT_PROTOCOL_VERSION,
+      options: {},
+      maxFiles: DEFAULT_CONFLICT_RESOLVE_MAX_FILES,
+      maxRegions: DEFAULT_CONFLICT_RESOLVE_MAX_REGIONS,
+    })
+    expect(result).not.toHaveProperty('files')
+  })
+
+  it('enforces maxFiles min=1 and max=MAX_CONFLICT_RESOLVE_FILES', () => {
+    expect(ConflictResolveRequestSchema.safeParse({ maxFiles: 1 }).success).toBe(true)
+    expect(ConflictResolveRequestSchema.safeParse({ maxFiles: MAX_CONFLICT_RESOLVE_FILES }).success).toBe(true)
+    expect(ConflictResolveRequestSchema.safeParse({ maxFiles: 0 }).success).toBe(false)
+    expect(ConflictResolveRequestSchema.safeParse({ maxFiles: MAX_CONFLICT_RESOLVE_FILES + 1 }).success).toBe(false)
+  })
+
+  it('enforces maxRegions min=1 and max=MAX_CONFLICT_RESOLVE_REGIONS', () => {
+    expect(ConflictResolveRequestSchema.safeParse({ maxRegions: 1 }).success).toBe(true)
+    expect(ConflictResolveRequestSchema.safeParse({ maxRegions: MAX_CONFLICT_RESOLVE_REGIONS }).success).toBe(true)
+    expect(ConflictResolveRequestSchema.safeParse({ maxRegions: 0 }).success).toBe(false)
+    expect(ConflictResolveRequestSchema.safeParse({ maxRegions: MAX_CONFLICT_RESOLVE_REGIONS + 1 }).success).toBe(false)
+  })
+
+  it('accepts an optional files filter and options bag', () => {
+    const result = ConflictResolveRequestSchema.parse({
+      files: ['a.ts', 'b.ts'],
+      options: { language: 'es', additionalContext: 'prefer ours on lockfiles' },
+    })
+    expect(result.files).toEqual(['a.ts', 'b.ts'])
+    expect(result.options).toEqual({ language: 'es', additionalContext: 'prefer ours on lockfiles' })
+  })
+
+  it('rejects unknown fields (strict)', () => {
+    expect(ConflictResolveRequestSchema.safeParse({ unexpected: true }).success).toBe(false)
+  })
+
+  it('rejects trustRepositoryConfig inside options (strict) so MCP and CLI callers both get INVALID_INPUT', () => {
+    expect(ConflictResolveRequestSchema.safeParse({
+      options: { trustRepositoryConfig: true },
+    }).success).toBe(false)
+  })
+
+  it('publishes a caller-facing JSON Schema with optional fields', () => {
+    const json = createConflictResolveInputJsonSchema() as unknown as {
+      type: string
+      properties: Record<string, unknown>
+    }
+    expect(json.type).toBe('object')
+    expect(json.properties).toHaveProperty('files')
+    expect(json.properties).toHaveProperty('maxFiles')
+    expect(json.properties).toHaveProperty('maxRegions')
+    expect(json.properties).not.toHaveProperty('trustRepositoryConfig')
+  })
+
+  it('produces a conflict-resolve output envelope with oneOf metadata in MCP schema', () => {
+    const jsonSchema = z.toJSONSchema(
+      createAgentMcpOutputSchema('conflict-resolve', ConflictResolveDataSchema)
+    ) as { type?: string; oneOf?: Array<Record<string, unknown>> }
+
+    expect(jsonSchema.type).toBe('object')
+    expect(jsonSchema.oneOf).toHaveLength(2)
+    expect(jsonSchema.oneOf?.[0]).toMatchObject({
+      properties: { ok: { const: true }, operation: { const: 'conflict-resolve' } },
+    })
+    expect(jsonSchema.oneOf?.[1]).toMatchObject({
+      properties: { ok: { const: false }, operation: { const: 'conflict-resolve' } },
     })
   })
 })
