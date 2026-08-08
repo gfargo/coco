@@ -3988,9 +3988,9 @@ hermes-parser@^0.25.1:
     hermes-estree "0.25.1"
 
 hono@^4.11.4:
-  version "4.12.29"
-  resolved "https://registry.yarnpkg.com/hono/-/hono-4.12.29.tgz#55418a76531dd26df0f3103533f4acd69e356787"
-  integrity sha512-1hNiRjawYrLq/4m3DQQjPGFg0VZkk4RjQJDff/excI6Dm9BiL75qxGrd7/c6YOxPdq6AscP3LiXhQ6fKFC1Waw==
+  version "4.13.0"
+  resolved "https://registry.yarnpkg.com/hono/-/hono-4.13.0.tgz#ac1ba1650b4fd9cbe53e17bea0525f53cb65813d"
+  integrity sha512-jhunvfHWxd7J5EFfSgH4xsYJzSe/lfqbUCxiyyeaQasUsXeEHXtzVid+7EOGByc5JnFa23SSFL3Y2RV/z1T+eQ==
 
 html-escaper@^2.0.0:
   version "2.0.2"
