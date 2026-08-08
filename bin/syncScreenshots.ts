@@ -99,6 +99,7 @@ const SITE_RECIPES = [
   'ui-which-key',
   'ui-view-keys',
   'demo-view-keys',
+  'demo-branch-operations',
   'ui-compare-refs',
   'ui-stage-pathspec',
   // GitHub-integration views (mock-gh) — real data, no longer stubbed
@@ -182,6 +183,7 @@ const FILENAME_MAP: Record<string, string[]> = {
   'ui-which-key': ['which-key.png'],
   'ui-view-keys': ['view-keys.png'],
   'demo-view-keys': ['demo-view-keys.gif'],
+  'demo-branch-operations': ['demo-branch-operations.gif'],
   'ui-compare-refs': ['view-compare.png'],
   'ui-stage-pathspec': ['stage-pathspec.png'],
   'ui-staging-hunks': ['staging-hunks.png'],
