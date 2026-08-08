@@ -4,6 +4,8 @@ import {
     getLogInkPaletteExecuteEvents,
     isCreatePrView,
     isCreateStashView,
+    PUSH_SUB_CHOICE,
+    RESET_TO_BRANCH_MODE_CHOICE,
 } from './inkInput'
 import { getLogInkPaletteCommands } from './inkKeymap'
 import { LogInkState, LogInkView, applyLogInkAction, createLogInkState } from './inkViewModel'
@@ -675,12 +677,15 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('routes P to push-selected-branch when branches sidebar focused with items', () => {
+    it('routes P to push sub-choice when branches sidebar focused with items', () => {
       const events = getLogInkInputEvents(
         branchSidebarState(), 'P', {}, { branchCount: 3 }
       )
       expect(events).toEqual([
-        { type: 'runWorkflowAction', id: 'push-selected-branch' },
+        {
+          type: 'action',
+          action: { type: 'setPendingChoice', value: PUSH_SUB_CHOICE },
+        },
       ])
     })
 
@@ -709,7 +714,10 @@ describe('log Ink input interactions', () => {
       const state = createLogInkState(rows, { activeView: 'branches' })
       const events = getLogInkInputEvents(state, 'P', {}, { branchCount: 3 })
       expect(events).toEqual([
-        { type: 'runWorkflowAction', id: 'push-selected-branch' },
+        {
+          type: 'action',
+          action: { type: 'setPendingChoice', value: PUSH_SUB_CHOICE },
+        },
       ])
     })
   })
@@ -784,6 +792,109 @@ describe('log Ink input interactions', () => {
         currentBranch: 'feature',
         branchSelectedShortName: 'main',
       })).toEqual([{ type: 'refreshContext' }])
+    })
+  })
+
+  describe('M merge-into-current on the branches view', () => {
+    it('dispatches setPendingConfirmation when cursored branch ≠ current', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'M', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'merge-into-current' },
+        },
+      ])
+    })
+
+    it('shows error when cursored branch = current branch', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'M', {}, {
+        branchCount: 3,
+        currentBranch: 'main',
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setStatus',
+            value: 'Cannot merge a branch into itself.',
+            kind: 'error',
+          },
+        },
+      ])
+    })
+  })
+
+  describe('Z reset-to-branch on the branches view', () => {
+    it('dispatches setPendingChoice with reset mode choice when cursored ≠ current', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'Z', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingChoice', value: RESET_TO_BRANCH_MODE_CHOICE },
+        },
+      ])
+    })
+
+    it('shows error when cursored branch = current branch', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'Z', {}, {
+        branchCount: 3,
+        currentBranch: 'main',
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setStatus',
+            value: 'Nothing to reset — already at that ref.',
+            kind: 'error',
+          },
+        },
+      ])
+    })
+  })
+
+  describe('S sync-branch on the branches view', () => {
+    it('dispatches runWorkflowAction sync-branch', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'S', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        { type: 'runWorkflowAction', id: 'sync-branch' },
+      ])
+    })
+  })
+
+  describe('P push sub-choice on the branches view', () => {
+    it('dispatches setPendingChoice with PUSH_SUB_CHOICE', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'P', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingChoice', value: PUSH_SUB_CHOICE },
+        },
+      ])
     })
   })
 
@@ -6588,10 +6699,10 @@ describe('global key allowlists (negation-guard conversion)', () => {
     }
   })
 
-  it('S creates a stash in every view except the commit triad (compose/status/diff)', () => {
-    const triad: LogInkView[] = ['compose', 'status', 'diff']
+  it('S creates a stash in every view except the commit triad (compose/status/diff) and branches (sync)', () => {
+    const excluded: LogInkView[] = ['compose', 'status', 'diff', 'branches']
     for (const view of ALL_VIEWS) {
-      expect(isCreateStashView(view)).toBe(!triad.includes(view))
+      expect(isCreateStashView(view)).toBe(!excluded.includes(view))
     }
   })
 })

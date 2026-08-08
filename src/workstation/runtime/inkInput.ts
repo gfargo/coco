@@ -581,7 +581,7 @@ const CREATE_PR_VIEWS: readonly LogInkView[] = [
 // Bare `S` creates a stash everywhere EXCEPT the commit triad
 // (compose / status / diff), where `S` starts the commit-split flow.
 const CREATE_STASH_VIEWS: readonly LogInkView[] = [
-  'history', 'branches', 'tags', 'stash', 'worktrees', 'pull-request',
+  'history', 'tags', 'stash', 'worktrees', 'pull-request',
   'pull-request-triage', 'issues', 'conflicts', 'reflog', 'bisect',
   'changelog', 'submodules', 'remotes',
 ]
@@ -1017,6 +1017,35 @@ const RESET_MODE_CHOICE = {
     { key: 's', label: 'Soft — keep changes staged', workflowId: 'reset-to-commit', payload: 'soft' },
     { key: 'm', label: 'Mixed — keep changes unstaged', workflowId: 'reset-to-commit', payload: 'mixed' },
     { key: 'h', label: 'Hard — discard working-tree changes', workflowId: 'reset-to-commit', payload: 'hard', destructive: true },
+  ],
+}
+
+/**
+ * Reset the current branch to the cursored branch's ref. Presented when the
+ * user presses `Z` in the branches view — mirrors the history-view
+ * `RESET_MODE_CHOICE` but targets a branch ref instead of a commit.
+ */
+export const RESET_TO_BRANCH_MODE_CHOICE = {
+  id: 'reset-to-branch-mode-choice',
+  title: 'Reset current branch to the cursored branch',
+  warning: 'hard discards ALL uncommitted working-tree changes.',
+  options: [
+    { key: 's', label: 'Soft — keep changes staged', workflowId: 'reset-to-branch', payload: 'soft' },
+    { key: 'm', label: 'Mixed — keep changes unstaged', workflowId: 'reset-to-branch', payload: 'mixed' },
+    { key: 'h', label: 'Hard — discard working-tree changes', workflowId: 'reset-to-branch', payload: 'hard', destructive: true },
+  ],
+}
+
+/**
+ * Push sub-choice raised when the user presses `P` in the branches view.
+ * Lets the user pick between a normal push and a force-push (with lease).
+ */
+export const PUSH_SUB_CHOICE = {
+  id: 'push-sub-choice',
+  title: 'Push branch',
+  options: [
+    { key: 'p', label: 'Push (normal)', workflowId: 'push-selected-branch' },
+    { key: 'f', label: 'Force push (--force-with-lease)', workflowId: 'force-push-selected-branch', destructive: true },
   ],
 }
 
@@ -4343,17 +4372,51 @@ export function getLogInkInputEvents(
     return commitOrComposeEvents(state)
   }
 
-  // Context-sensitive per-branch variants of F / U / P. When the
-  // user has the branches sidebar / view focused with at least one
-  // branch, F / U / P should act on the cursored row, not on the
-  // current branch. This intercept fires BEFORE the generic
-  // workflow-by-key lookup below so the global *-current-branch
-  // variants don't shadow the contextual ones.
+  // Context-sensitive per-branch variants of F / U / P / M / Z / S.
+  // When the user has the branches sidebar / view focused with at least
+  // one branch, these keys act on the cursored row, not on the current
+  // branch. This intercept fires BEFORE the generic workflow-by-key
+  // lookup below so the global *-current-branch variants don't shadow
+  // the contextual ones.
   //
   // Outside the branches context, the generic lookup runs and the
   // F / U / P keys hit the global `fetch-remotes` / `pull-current-branch`
   // / `push-current-branch` workflows as before.
   if (isBranchActionTarget(state) && context.branchCount) {
+    // `M` merges the cursored branch into the current branch.
+    if (inputValue === 'M') {
+      const current = context.currentBranch
+      const target = context.branchSelectedShortName
+      if (!current || target === current) {
+        return [action({
+          type: 'setStatus',
+          value: 'Cannot merge a branch into itself.',
+          kind: 'error',
+        })]
+      }
+      return [action({ type: 'setPendingConfirmation', value: 'merge-into-current' })]
+    }
+
+    // `Z` resets the current branch to the cursored branch's ref.
+    if (inputValue === 'Z') {
+      const current = context.currentBranch
+      const target = context.branchSelectedShortName
+      if (!current || target === current) {
+        return [action({
+          type: 'setStatus',
+          value: 'Nothing to reset — already at that ref.',
+          kind: 'error',
+        })]
+      }
+      return [action({ type: 'setPendingChoice', value: RESET_TO_BRANCH_MODE_CHOICE })]
+    }
+
+    // `S` syncs the cursored branch (pull + push). The upstream guard
+    // is enforced by the workflow handler (it needs async git context).
+    if (inputValue === 'S') {
+      return [{ type: 'runWorkflowAction', id: 'sync-branch' }]
+    }
+
     if (inputValue === 'F') {
       return [{ type: 'runWorkflowAction', id: 'fetch-selected-branch' }]
     }
@@ -4361,7 +4424,7 @@ export function getLogInkInputEvents(
       return [{ type: 'runWorkflowAction', id: 'pull-selected-branch' }]
     }
     if (inputValue === 'P') {
-      return [{ type: 'runWorkflowAction', id: 'push-selected-branch' }]
+      return [action({ type: 'setPendingChoice', value: PUSH_SUB_CHOICE })]
     }
   }
 

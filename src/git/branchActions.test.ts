@@ -1,29 +1,33 @@
 import {
-  checkoutBranch,
-  checkoutBranchByName,
-  createBranch,
-  deleteBranch,
-  deleteBranches,
-  isBranchCheckedOutElsewhereError,
-  isBranchNotFullyMergedError,
-  isDirtyWorktreeCheckoutError,
-  parseCheckedOutWorktreePath,
-  fetchBranch,
-  fetchRemotes,
-  getBranchActionRefs,
-  pullBranch,
-  pullCurrentBranch,
-  pushBranch,
-  pushCurrentBranch,
-  renameBranch,
-  setUpstream,
-  forcePushBranch,
-  forcePushCurrentBranch,
-  isDivergedPullError,
-  isNonFastForwardPushError,
-  pullCurrentBranchMerge,
-  pullCurrentBranchRebase,
-  restoreDeletedBranch,
+    checkoutBranch,
+    checkoutBranchByName,
+    createBranch,
+    deleteBranch,
+    deleteBranches,
+    isBranchCheckedOutElsewhereError,
+    isBranchNotFullyMergedError,
+    isDirtyWorktreeCheckoutError,
+    parseCheckedOutWorktreePath,
+    fetchBranch,
+    fetchRemotes,
+    getBranchActionRefs,
+    pullBranch,
+    pullCurrentBranch,
+    pushBranch,
+    pushCurrentBranch,
+    renameBranch,
+    setUpstream,
+    forcePushBranch,
+    forcePushCurrentBranch,
+    isDivergedPullError,
+    isNonFastForwardPushError,
+    pullCurrentBranchMerge,
+    pullCurrentBranchRebase,
+    restoreDeletedBranch,
+    mergeBranch,
+    canFastForward,
+    resetCurrentBranchToRef,
+    isResetBackward,
 } from './branchActions'
 import { BranchRef } from './branchData'
 
@@ -708,5 +712,146 @@ describe('log branch actions', () => {
       expect(result.message).toContain('Only local branches')
       expect(git.raw).not.toHaveBeenCalled()
     })
+  })
+})
+
+
+describe('mergeBranch', () => {
+  it('merges a branch into current with a standard merge', async () => {
+    const git = { merge: jest.fn().mockResolvedValue({}) }
+    const result = await mergeBranch(git as never, 'feature/widgets')
+    expect(result).toEqual({ ok: true, message: 'Merged feature/widgets into current branch' })
+    expect(git.merge).toHaveBeenCalledWith(['feature/widgets'])
+  })
+
+  it('merges with --ff-only when fastForwardOnly is true', async () => {
+    const git = { merge: jest.fn().mockResolvedValue({}) }
+    const result = await mergeBranch(git as never, 'feature/widgets', true)
+    expect(result).toEqual({ ok: true, message: 'Fast-forwarded to feature/widgets' })
+    expect(git.merge).toHaveBeenCalledWith(['--ff-only', 'feature/widgets'])
+  })
+
+  it('returns an error on merge conflict', async () => {
+    const git = {
+      merge: jest.fn().mockRejectedValue(new Error('CONFLICTS: Merge conflict in src/app.ts')),
+    }
+    const result = await mergeBranch(git as never, 'feature/widgets')
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('CONFLICTS')
+  })
+
+  it('returns an error when ff-only fails due to divergence', async () => {
+    const git = {
+      merge: jest.fn().mockRejectedValue(
+        new Error('fatal: Not possible to fast-forward, aborting.')
+      ),
+    }
+    const result = await mergeBranch(git as never, 'feature/widgets', true)
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Not possible to fast-forward')
+  })
+})
+
+describe('canFastForward', () => {
+  it('returns true when HEAD equals the merge-base (current is ancestor of target)', async () => {
+    const git = {
+      raw: jest.fn()
+        .mockResolvedValueOnce('abc1234\n') // merge-base HEAD targetRef
+        .mockResolvedValueOnce('abc1234\n'), // rev-parse HEAD
+    }
+    const result = await canFastForward(git as never, 'feature/ahead')
+    expect(result).toBe(true)
+    expect(git.raw).toHaveBeenNthCalledWith(1, ['merge-base', 'HEAD', 'feature/ahead'])
+    expect(git.raw).toHaveBeenNthCalledWith(2, ['rev-parse', 'HEAD'])
+  })
+
+  it('returns false when HEAD is ahead of merge-base (branches diverged)', async () => {
+    const git = {
+      raw: jest.fn()
+        .mockResolvedValueOnce('aaa0000\n') // merge-base
+        .mockResolvedValueOnce('bbb1111\n'), // rev-parse HEAD (different)
+    }
+    const result = await canFastForward(git as never, 'feature/diverged')
+    expect(result).toBe(false)
+  })
+
+  it('returns false when target is behind HEAD (merge-base equals target, not HEAD)', async () => {
+    const git = {
+      raw: jest.fn()
+        .mockResolvedValueOnce('ccc2222\n') // merge-base (same as target, not HEAD)
+        .mockResolvedValueOnce('ddd3333\n'), // rev-parse HEAD
+    }
+    const result = await canFastForward(git as never, 'feature/behind')
+    expect(result).toBe(false)
+  })
+
+  it('returns false when git commands fail (e.g. invalid ref)', async () => {
+    const git = {
+      raw: jest.fn().mockRejectedValue(new Error('fatal: Not a valid object name')),
+    }
+    const result = await canFastForward(git as never, 'nonexistent-ref')
+    expect(result).toBe(false)
+  })
+})
+
+describe('resetCurrentBranchToRef', () => {
+  it('resets with --soft mode', async () => {
+    const git = { reset: jest.fn().mockResolvedValue('') }
+    const result = await resetCurrentBranchToRef(git as never, 'feature/target', 'soft')
+    expect(result).toEqual({ ok: true, message: 'Reset current branch to feature/target (soft)' })
+    expect(git.reset).toHaveBeenCalledWith(['--soft', 'feature/target'])
+  })
+
+  it('resets with --mixed mode', async () => {
+    const git = { reset: jest.fn().mockResolvedValue('') }
+    const result = await resetCurrentBranchToRef(git as never, 'feature/target', 'mixed')
+    expect(result).toEqual({ ok: true, message: 'Reset current branch to feature/target (mixed)' })
+    expect(git.reset).toHaveBeenCalledWith(['--mixed', 'feature/target'])
+  })
+
+  it('resets with --hard mode', async () => {
+    const git = { reset: jest.fn().mockResolvedValue('') }
+    const result = await resetCurrentBranchToRef(git as never, 'abc1234', 'hard')
+    expect(result).toEqual({ ok: true, message: 'Reset current branch to abc1234 (hard)' })
+    expect(git.reset).toHaveBeenCalledWith(['--hard', 'abc1234'])
+  })
+
+  it('returns an error when git reset fails', async () => {
+    const git = {
+      reset: jest.fn().mockRejectedValue(new Error('fatal: Could not parse object \'bad-ref\'.')),
+    }
+    const result = await resetCurrentBranchToRef(git as never, 'bad-ref', 'hard')
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('Could not parse object')
+  })
+})
+
+describe('isResetBackward', () => {
+  it('returns true when targetRef is an ancestor of HEAD (reset discards commits)', async () => {
+    const git = {
+      // Exit 0 → targetRef IS an ancestor of HEAD → backward reset
+      raw: jest.fn().mockResolvedValue(''),
+    }
+    const result = await isResetBackward(git as never, 'feature/old')
+    expect(result).toBe(true)
+    expect(git.raw).toHaveBeenCalledWith(['merge-base', '--is-ancestor', 'feature/old', 'HEAD'])
+  })
+
+  it('returns false when targetRef is NOT an ancestor of HEAD (reset goes forward or diverges)', async () => {
+    const git = {
+      // Non-zero exit → not an ancestor
+      raw: jest.fn().mockRejectedValue(new Error('exit code 1')),
+    }
+    const result = await isResetBackward(git as never, 'feature/ahead')
+    expect(result).toBe(false)
+    expect(git.raw).toHaveBeenCalledWith(['merge-base', '--is-ancestor', 'feature/ahead', 'HEAD'])
+  })
+
+  it('returns false when the ref does not exist', async () => {
+    const git = {
+      raw: jest.fn().mockRejectedValue(new Error('fatal: Not a valid commit name nonexistent')),
+    }
+    const result = await isResetBackward(git as never, 'nonexistent')
+    expect(result).toBe(false)
   })
 })
