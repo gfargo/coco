@@ -1,0 +1,476 @@
+{
+  "pbtResults": {},
+  "executionHistory": {
+    "1.1 Implement `mergeBranch` and `canFastForward` in `src/git/branchActions.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212258819
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212267261
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212410375
+      }
+    ],
+    "1.2 Implement `resetCurrentBranchToRef` and `isResetBackward` in `src/git/branchActions.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212258916
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212268162
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212411255
+      }
+    ],
+    "1.3 Write unit tests for new git layer functions in `src/git/branchActions.test.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212258972
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212415435
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212516235
+      }
+    ],
+    "2.1 Add `merge-branch` and `reset-to-branch` variants to `UndoEntry` in `src/workstation/runtime/undoStack.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259021
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212416369
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212517389
+      }
+    ],
+    "2.2 Write unit tests for new undo entry types in `src/workstation/runtime/undoStack.test.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259066
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212521324
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212639082
+      }
+    ],
+    "3.1 Add `M`, `Z`, and `S` key bindings for branches context": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259108
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212522214
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212638007
+      }
+    ],
+    "4.1 Add `merge-into-current`, `reset-to-branch`, and `sync-branch` workflow registrations": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259156
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212642862
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212733465
+      }
+    ],
+    "4.2 Write tests for new workflow registrations in `src/workstation/runtime/inkWorkflows.test.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259198
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212737547
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212841972
+      }
+    ],
+    "5.1 Add choice prompt constants (`MERGE_CONFIRM`, `RESET_TO_BRANCH_MODE_CHOICE`, `PUSH_SUB_CHOICE`)": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259245
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212738394
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212842961
+      }
+    ],
+    "5.2 Add `M`, `Z`, `S` key handlers in the branches view action predicate block": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259296
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212846868
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213092682
+      }
+    ],
+    "5.3 Enhance `P` handler to show push sub-choice instead of direct push": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259346
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212847671
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213093461
+      }
+    ],
+    "5.4 Write tests for new input handling in `src/workstation/runtime/inkInput.test.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259389
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213097352
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213271744
+      }
+    ],
+    "6. Checkpoint - Verify keybinding and registration layer": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259438
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213277622
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213338976
+      }
+    ],
+    "7.1 Add `merge-into-current` handler in `src/workstation/runtime/hooks/useWorkflowAction.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259481
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213343389
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213553737
+      }
+    ],
+    "7.2 Write tests for merge workflow handler": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259523
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213559409
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213779880
+      }
+    ],
+    "8.1 Add `reset-to-branch` handler in `src/workstation/runtime/hooks/useWorkflowAction.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259564
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213344239
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213554656
+      }
+    ],
+    "8.2 Write tests for reset-to-branch workflow handler": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259605
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213560162
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213780609
+      }
+    ],
+    "9.1 Add `sync-branch` handler in `src/workstation/runtime/hooks/useWorkflowAction.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259648
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213345060
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213555428
+      }
+    ],
+    "9.2 Write tests for sync workflow handler": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259690
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213560861
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213781316
+      }
+    ],
+    "10. Checkpoint - Verify workflow handlers": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259731
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213786752
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213932240
+      }
+    ],
+    "11.1 Add footer hints for branches view in `src/workstation/runtime/footer.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259774
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213787096
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213932993
+      }
+    ],
+    "11.2 Ensure command palette discoverability": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259832
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213787981
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213933682
+      }
+    ],
+    "11.3 Write tests for footer hints": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259900
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213938088
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786214076112
+      }
+    ],
+    "12. Final checkpoint - Full validation": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212259948
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786214079670
+      },
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786214250209
+      }
+    ],
+    "1. Add merge and reset git layer functions": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212516291
+      }
+    ],
+    "3. Register new keybindings in `src/workstation/runtime/inkKeymap.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212638055
+      }
+    ],
+    "2. Extend undo stack with merge and reset entry types": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212639144
+      }
+    ],
+    "4. Register new workflow actions in `src/workstation/runtime/inkWorkflows.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786212842018
+      }
+    ],
+    "5. Implement choice constants and input handling in `src/workstation/runtime/inkInput.ts`": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213271812
+      }
+    ],
+    "7. Implement merge workflow handler": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213779945
+      }
+    ],
+    "8. Implement reset-to-branch workflow handler": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213780656
+      }
+    ],
+    "9. Implement sync workflow handler": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786213781357
+      }
+    ],
+    "11. Add footer hints and command palette entries": [
+      {
+        "executionId": "a6a7d89f-0c10-495e-9e40-2f3f565af234",
+        "chatSessionId": "sess_d03402af-66c1-4c50-a90c-7083405226eb",
+        "timestamp": 1786214076167
+      }
+    ]
+  }
+}
