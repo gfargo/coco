@@ -75,6 +75,10 @@ import {
     isNonFastForwardPushError,
     pullCurrentBranchMerge,
     pullCurrentBranchRebase,
+    resetCurrentBranchToRef,
+    isResetBackward,
+    mergeBranch,
+    canFastForward,
 } from '../../../git/branchActions'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
@@ -138,6 +142,7 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'force-push-selected-branch': { kind: 'push', label: 'Force-pushing branch (with lease)…' },
   'pull-rebase-current': { kind: 'pull', label: 'Pulling with rebase…' },
   'pull-merge-current': { kind: 'pull', label: 'Pulling with merge…' },
+  'sync-branch': { kind: 'pull', label: 'Syncing branch (pull + push)…' },
 }
 
 /**
@@ -159,6 +164,7 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
  */
 export const HISTORY_REWRITE_WORKFLOW_IDS = new Set([
   'reset-to-commit',
+  'reset-to-branch',
   'cherry-pick-commit',
   'revert-commit',
   'fixup-into-commit',
@@ -212,12 +218,16 @@ export const HISTORY_MUTATING_WORKFLOW_IDS = new Set([
   'cherry-pick-commit',
   'revert-commit',
   'reset-to-commit',
+  'reset-to-branch',
   'interactive-rebase',
   // Rebasing the current branch onto a ref rewrites its commits —
   // refresh the graph so the replayed history (or the mid-rebase
   // conflict state) shows instead of staying pinned to the pre-rebase
   // tip.
   'rebase-onto-branch',
+  // Merging a branch into the current branch creates (or fast-forwards
+  // to) new commits — refresh the graph so the merge result shows.
+  'merge-into-current',
   'bisect-good',
   'bisect-bad',
   'bisect-skip',
@@ -243,6 +253,8 @@ export const HISTORY_MUTATING_WORKFLOW_IDS = new Set([
   // undoing a branch/tag delete or stash drop changes the ref set. All
   // four warrant a graph refresh.
   'undo-last-action',
+  // Sync pulls remote commits then pushes local — both sides move refs.
+  'sync-branch',
 ])
 
 export function resolvePendingItemAction(
@@ -522,6 +534,48 @@ export function useWorkflowAction(
           return { ok: false, message: 'Cannot rebase a branch onto itself.' }
         }
         return rebaseOnto(git, branch.shortName)
+      },
+      // Merge the cursored branch into the current branch. Determines
+      // whether a fast-forward is available and uses --ff-only when it is;
+      // falls back to a standard merge commit when the branches have
+      // diverged. Conflict routing uses the shared `conflictRecoveryTitles`
+      // pattern (see below).
+      'merge-into-current': async () => {
+        const current = context.branches?.currentBranch
+        if (!current) {
+          return { ok: false, message: 'Detached HEAD — checkout a branch before merging.' }
+        }
+        const branch = getSelectedBranch(state, context)
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        if (branch.shortName === current) {
+          return { ok: false, message: 'Cannot merge a branch into itself.' }
+        }
+        // Capture pre-merge HEAD for the undo entry.
+        const previousHead = await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
+        // Determine merge strategy.
+        const ff = await canFastForward(git, branch.shortName)
+        const result = ff
+          ? await mergeBranch(git, branch.shortName, true)
+          : await mergeBranch(git, branch.shortName)
+        if (result.ok) {
+          if (previousHead) {
+            capturedUndoEntries = [{
+              kind: 'merge-branch',
+              label: `merge ${branch.shortName} into ${current}`,
+              depth: issuedAtDepth,
+              workdir: issuedAtWorkdir,
+              previousSha: previousHead,
+            }]
+          }
+          // Momentum hint distinguishes FF from merge commit.
+          return {
+            ok: true,
+            message: ff
+              ? `Fast-forwarded ${current} to ${branch.shortName}. Push with P`
+              : `Merged ${branch.shortName} into ${current}. Push with P`,
+          }
+        }
+        return result
       },
       'delete-tag': async () => {
         const tag = getSelectedTag(state, context)
@@ -928,6 +982,53 @@ export function useWorkflowAction(
           message: commit.message,
         }, raw as ResetMode)
       },
+      'reset-to-branch': async () => {
+        // Mode arrives via the choice prompt payload — the reset-to-branch
+        // mode choice routes s/m/h here as soft/mixed/hard.
+        const raw = payload?.trim().toLowerCase() || 'mixed'
+        if (!isResetMode(raw)) {
+          return { ok: false, message: `Unknown reset mode: ${raw}. Use soft, mixed, or hard.` }
+        }
+        const branch = getSelectedBranch(state, context)
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        const current = context.branches?.currentBranch
+        if (!current) {
+          return { ok: false, message: 'Detached HEAD — checkout a branch before resetting.' }
+        }
+        if (branch.shortName === current) {
+          return { ok: false, message: 'Nothing to reset — already at that ref.' }
+        }
+        const cursoredRef = branch.shortName
+        // Capture the pre-reset HEAD so a successful reset can be pushed
+        // onto the undo stack.
+        const previousHead = await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
+        // Determine before the reset whether it moves backward (discards
+        // commits) — after the reset HEAD will be at cursoredRef so the
+        // ancestor check would be meaningless.
+        const backward = await isResetBackward(git, cursoredRef).catch(() => false)
+        const result = await resetCurrentBranchToRef(git, cursoredRef, raw as ResetMode)
+        if (result.ok) {
+          // Push undo entry
+          if (previousHead) {
+            capturedUndoEntries = [{
+              kind: 'reset-to-branch',
+              label: `reset --${raw} to ${cursoredRef}`,
+              depth: issuedAtDepth,
+              workdir: issuedAtWorkdir,
+              previousSha: previousHead,
+              mode: raw as ResetMode,
+            }]
+          }
+          // Determine momentum hint based on whether reset was backward
+          // and whether the branch has an upstream.
+          const hasUpstream = Boolean(branch.upstream)
+          const hint = backward && hasUpstream
+            ? `Reset ${current} to ${cursoredRef} (${raw}). Force-push with P → f`
+            : `Reset ${current} to ${cursoredRef} (${raw}). View history with gh`
+          return { ok: true, message: hint }
+        }
+        return result
+      },
       'interactive-rebase': async () => {
         const commit = getSelectedInkCommit(state)
         if (!commit) return { ok: false, message: 'No commit selected' }
@@ -1247,6 +1348,67 @@ export function useWorkflowAction(
       },
       'pull-rebase-current': async () => pullCurrentBranchRebase(git),
       'pull-merge-current': async () => pullCurrentBranchMerge(git),
+      'sync-branch': async () => {
+        // Guard: the current branch must have an upstream configured.
+        const hasUpstream = await git
+          .raw(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+          .then(() => true)
+          .catch(() => false)
+        if (!hasUpstream) {
+          return { ok: false, message: 'No upstream — press u to set one first.' }
+        }
+        // Phase 1: Pull (ff-only).
+        const pullResult = await pullCurrentBranch(git)
+        if (!pullResult.ok) {
+          // Diverged → present strategy choice (rebase/merge) — same as
+          // the standalone pull handler's recovery. The sync aborts here;
+          // the user picks a strategy and then pushes manually with P.
+          const pullFailureText = [pullResult.message, ...(pullResult.details || [])].join('\n')
+          if (isDivergedPullError(pullFailureText)) {
+            dispatch({
+              type: 'setPendingChoice',
+              value: {
+                id: 'diverged-pull-recovery',
+                title: 'Local and remote have diverged',
+                warning: 'A fast-forward pull is not possible. Choose how to reconcile.',
+                options: [
+                  { key: 'r', label: 'Pull with rebase (replay local commits on top)', workflowId: 'pull-rebase-current' },
+                  { key: 'm', label: 'Pull with merge (create a merge commit)', workflowId: 'pull-merge-current' },
+                ],
+              },
+            })
+            return { ok: false, message: pullResult.message }
+          }
+          // Conflicts → abort sync, route to conflicts view.
+          if (isOperationConflictError(pullFailureText)) {
+            dispatch({
+              type: 'setPendingChoice',
+              value: {
+                id: 'operation-conflict-recovery',
+                title: 'Sync interrupted — resolve conflicts then push manually with P',
+                warning: 'The repository is mid-operation. Resolve the conflicts and continue, or abort to unwind.',
+                keepStatusOnDismiss: true,
+                options: [
+                  { key: 'x', label: 'Open conflicts view', intent: 'open-conflicts' },
+                  { key: 'a', label: 'Abort the operation', workflowId: 'abort-operation', destructive: true },
+                ],
+              },
+            })
+            return { ok: false, message: 'Sync interrupted — resolve conflicts then push manually with P' }
+          }
+          // Any other pull failure → surface the error.
+          return pullResult
+        }
+        // Phase 2: Push.
+        const pushResult = await pushCurrentBranch(git)
+        if (!pushResult.ok) {
+          // Push failed — set error status with reason, but pull result
+          // is preserved (already committed).
+          return { ok: false, message: `Pull succeeded but push failed: ${pushResult.message}` }
+        }
+        // Both succeeded — momentum hint.
+        return { ok: true, message: 'Branch fully synchronized. View history with gh' }
+      },
       'add-to-gitignore': async () => addToGitignore(git, payload || ''),
       'rename-branch': async () => {
         const newName = payload?.trim()
@@ -1671,6 +1833,7 @@ export function useWorkflowAction(
       'pull-selected-branch': 'Pull stopped on conflicts',
       'pull-rebase-current': 'Pull stopped on conflicts',
       'pull-merge-current': 'Pull stopped on conflicts',
+      'merge-into-current': 'Merge stopped on conflicts',
     }
     // `continue-operation` covers merge/rebase/cherry-pick/revert, so its
     // title can't be a static string like the siblings above — it stops on

@@ -1,6 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { BranchRef } from './branchData'
 import { rejectFlagLike } from './forgeArgGuards'
+import type { ResetMode } from './historyActions'
 import { listRemotes, resolveDefaultRemoteName } from './remoteResolution'
 
 export type BranchActionResult = {
@@ -338,6 +339,47 @@ export function pullCurrentBranchMerge(git: SimpleGit): Promise<BranchActionResu
   )
 }
 
+/**
+ * Merge the named branch into the current branch.
+ *
+ * When `fastForwardOnly` is true, the merge uses `--ff-only` and refuses
+ * to create a merge commit — use this after `canFastForward` confirms
+ * the fast-forward path is available.
+ */
+export function mergeBranch(
+  git: SimpleGit,
+  branchName: string,
+  fastForwardOnly?: boolean
+): Promise<BranchActionResult> {
+  const args = fastForwardOnly ? ['--ff-only', branchName] : [branchName]
+  return runAction(
+    () => git.merge(args),
+    fastForwardOnly
+      ? `Fast-forwarded to ${branchName}`
+      : `Merged ${branchName} into current branch`
+  )
+}
+
+/**
+ * Detect if the current branch can fast-forward to the given ref.
+ *
+ * Returns true when HEAD is an ancestor of `targetRef` — meaning the
+ * merge-base of HEAD and targetRef equals HEAD itself, so no divergent
+ * commits exist on the current branch.
+ */
+export async function canFastForward(
+  git: SimpleGit,
+  targetRef: string
+): Promise<boolean> {
+  try {
+    const mergeBase = (await git.raw(['merge-base', 'HEAD', targetRef])).trim()
+    const currentHead = (await git.raw(['rev-parse', 'HEAD'])).trim()
+    return mergeBase === currentHead
+  } catch {
+    return false
+  }
+}
+
 export function fetchRemotes(git: SimpleGit): Promise<BranchActionResult> {
   return runAction(
     () => git.raw(['fetch', '--all', '--prune']),
@@ -559,4 +601,37 @@ export function pullBranch(
       ]),
     `Fast-forwarded ${branch.shortName} to ${branch.upstream}`
   )
+}
+
+
+/** Reset the current branch to a given ref with the specified mode. */
+export function resetCurrentBranchToRef(
+  git: SimpleGit,
+  targetRef: string,
+  mode: ResetMode
+): Promise<BranchActionResult> {
+  return runAction(
+    () => git.reset([`--${mode}`, targetRef]),
+    `Reset current branch to ${targetRef} (${mode})`
+  )
+}
+
+/**
+ * Determine if a reset to targetRef would move the branch pointer
+ * backward (history rewrite) vs forward. Returns true when targetRef
+ * is an ancestor of HEAD — meaning HEAD has commits beyond targetRef
+ * that the reset would discard.
+ */
+export async function isResetBackward(
+  git: SimpleGit,
+  targetRef: string
+): Promise<boolean> {
+  try {
+    await git.raw(['merge-base', '--is-ancestor', targetRef, 'HEAD'])
+    // Exit 0 → targetRef IS an ancestor of HEAD → reset goes backward
+    return true
+  } catch {
+    // Non-zero exit → targetRef is not an ancestor of HEAD → reset goes forward or diverges
+    return false
+  }
 }

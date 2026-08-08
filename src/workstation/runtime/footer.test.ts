@@ -425,6 +425,73 @@ describe('renderFooter', () => {
     })
   })
 
+  // Branches view footer hints (workstation-branch-operations)
+  describe('branches view footer hints', () => {
+    const renderBranches = (columns?: number) =>
+      asNode(
+        renderFooter(
+          createElement,
+          { Box, Text },
+          makeState({ activeView: 'branches' }),
+          baseContext,
+          createLogInkTheme({ noColor: false }),
+          undefined,
+          0,
+          false,
+          columns
+        )
+      )
+    const contextualText = (tree: Node): string => {
+      return String(childAt(childAt(tree, 0), 0).props.children)
+    }
+
+    it('includes M merge, Z reset, and S sync in the branches view contextual hints', () => {
+      const ctx = contextualText(renderBranches())
+      expect(ctx).toContain('M merge')
+      expect(ctx).toContain('Z reset')
+      expect(ctx).toContain('S sync')
+    })
+
+    it('includes P push alongside the new branch operation hints', () => {
+      const ctx = contextualText(renderBranches())
+      expect(ctx).toContain('P push')
+    })
+
+    it('preserves enter checkout as the leading action hint', () => {
+      const ctx = contextualText(renderBranches())
+      expect(ctx).toContain('enter checkout')
+      // enter checkout should appear before the new operation hints
+      const checkoutIdx = ctx.indexOf('enter checkout')
+      const mergeIdx = ctx.indexOf('M merge')
+      expect(checkoutIdx).toBeLessThan(mergeIdx)
+    })
+
+    it('fits the branches footer within the 80-column floor', () => {
+      const tree = renderBranches(80)
+      const ctx = contextualText(tree)
+      const glob = String(childAt(childAt(tree, 0), 1).props.children)
+      // paddingX (2) + minimum space-between gap (>=1)
+      expect(ctx.length + glob.length + 2 + 1).toBeLessThanOrEqual(80)
+    })
+
+    it('trims lower-priority hints at 80 columns while keeping the leading essentials', () => {
+      const ctx = contextualText(renderBranches(80))
+      // At 80 columns the leading movement + checkout hints survive;
+      // the tail (lower-priority ops) gets dropped to fit the row.
+      expect(ctx).toContain('↑/↓ branches')
+      expect(ctx).toContain('enter checkout')
+      // Tail hints like yank / sort are dropped before the essential ops.
+      expect(ctx).not.toContain('y yank')
+    })
+
+    it('fits the branches footer within 120 columns', () => {
+      const tree = renderBranches(120)
+      const ctx = contextualText(tree)
+      const glob = String(childAt(childAt(tree, 0), 1).props.children)
+      expect(ctx.length + glob.length + 2 + 1).toBeLessThanOrEqual(120)
+    })
+  })
+
   // Snapshot covers the no-status default — the layout most users see
   // most of the time — to catch incidental structural drift.
   it('structural snapshot — default no-status footer', () => {

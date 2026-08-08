@@ -235,6 +235,43 @@ describe('triage PR checkout workflow (#1363)', () => {
   })
 })
 
+describe('branch-level workflows (merge, reset, sync)', () => {
+  it('registers merge-into-current as destructive and confirmation-gated', () => {
+    const merge = getLogInkWorkflowActionById('merge-into-current')
+    expect(merge).toMatchObject({
+      id: 'merge-into-current',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    })
+  })
+
+  it('registers reset-to-branch as destructive and confirmation-gated', () => {
+    const reset = getLogInkWorkflowActionById('reset-to-branch')
+    expect(reset).toMatchObject({
+      id: 'reset-to-branch',
+      kind: 'destructive',
+      requiresConfirmation: true,
+    })
+  })
+
+  it('registers sync-branch as normal and confirmation-free', () => {
+    const sync = getLogInkWorkflowActionById('sync-branch')
+    expect(sync).toMatchObject({
+      id: 'sync-branch',
+      kind: 'normal',
+      requiresConfirmation: false,
+    })
+  })
+
+  it('returns all three branch workflows from getLogInkWorkflowActions()', () => {
+    const actions = getLogInkWorkflowActions()
+    const ids = actions.map((a) => a.id)
+    expect(ids).toContain('merge-into-current')
+    expect(ids).toContain('reset-to-branch')
+    expect(ids).toContain('sync-branch')
+  })
+})
+
 describe('PR ready-for-review / reopen workflows (#1933)', () => {
   it('registers ready-pr / reopen-pr and their triage counterparts as keyless, confirm-gated, non-destructive', () => {
     for (const id of ['ready-pr', 'reopen-pr', 'triage-pr-ready', 'triage-pr-reopen']) {
