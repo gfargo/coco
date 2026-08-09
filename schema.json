@@ -229,6 +229,18 @@
               "bb.corp.com": "bitbucket-server"
             }
           ]
+        },
+        "updateCheck": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Set to `false` to disable the stale-version notice and its background registry check entirely.",
+              "default": true
+            }
+          },
+          "additionalProperties": false,
+          "description": "The stale-version notice (a one-line \"newer coco is available\" message printed to stderr). Checks a cached, once-daily lookup of the latest `git-coco` version on npm — never a live network call on the command's critical path. Always skipped under `--json`, `--quiet`, CI, and non-interactive (non-TTY) runs, regardless of this setting."
         }
       },
       "required": [

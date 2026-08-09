@@ -1,0 +1,13 @@
+pkgbase = git-coco
+	pkgdesc = AI-powered git assistant: commits, changelogs, reviews, and a terminal workstation
+	pkgver = 0.87.0
+	pkgrel = 1
+	url = https://coco.griffen.codes
+	arch = any
+	license = MIT
+	depends = nodejs
+	provides = coco
+	source = git-coco-0.87.0.tgz::https://registry.npmjs.org/git-coco/-/git-coco-0.87.0.tgz
+	sha256sums = 0db09c65cc472b550c98ff4609bfcfc8f8a763435aa58a44e753c6cf3f0d165e
+
+pkgname = git-coco

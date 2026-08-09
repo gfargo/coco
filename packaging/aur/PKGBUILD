@@ -1,0 +1,33 @@
+# Maintainer: gfargo <ghfargo@gmail.com>
+#
+# AUR package for coco (npm package `git-coco`). This lives here as the
+# canonical source — see packaging/README.md for the one-time AUR repo setup.
+# Regenerate `pkgver`/`source`/`sha256sums` on each release with:
+#
+#     node bin/genManifests.mjs            # latest published version
+#     node bin/genManifests.mjs 0.71.0     # a specific version
+#
+# and regenerate .SRCINFO with `makepkg --printsrcinfo > .SRCINFO`.
+pkgname=git-coco
+pkgver=0.87.0
+pkgrel=1
+pkgdesc="AI-powered git assistant: commits, changelogs, reviews, and a terminal workstation"
+arch=('any')
+url="https://coco.griffen.codes"
+license=('MIT')
+depends=('nodejs')
+provides=('coco')
+source=("$pkgname-$pkgver.tgz::https://registry.npmjs.org/$pkgname/-/$pkgname-$pkgver.tgz")
+sha256sums=('0db09c65cc472b550c98ff4609bfcfc8f8a763435aa58a44e753c6cf3f0d165e')
+
+package() {
+  cd "$srcdir"
+  npm install --global --prefix "$pkgdir/usr" --production --no-save --loglevel=error \
+    "$srcdir/package"
+
+  # npm's global-prefix layout nests the package under lib/node_modules and
+  # leaves an absolute-path shebang shim at usr/bin/coco — both fine as-is,
+  # but the shim also carries an npm-authored `#!/usr/bin/env node` cache
+  # marker file that isn't meaningful outside the build sandbox.
+  rm -f "$pkgdir/usr/lib/node_modules/$pkgname/package.json.orig"
+}

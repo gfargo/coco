@@ -16,6 +16,7 @@ import {
 } from '../langchain/utils/usageLedger'
 import { resolveRepoIdentifier } from '../../git/repoIdentifier'
 import { setForgeHostOverrides } from '../../git/providerData'
+import { maybeNotifyUpdate } from './updateCheck'
 
 /**
  * Formats a network error with helpful troubleshooting information
@@ -260,6 +261,7 @@ function commandExecutor<T extends Argv<BaseArgvOptions>['argv']>(handler: Comma
     setForgeHostOverrides((options as Config).forgeHosts)
 
     await applyUsageTelemetry(argv, options as Config, logger)
+    await maybeNotifyUpdate(argv as { json?: boolean; quiet?: boolean }, options as Config, logger)
 
     try {
       await handler(argv, logger)

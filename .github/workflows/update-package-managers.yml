@@ -1,0 +1,199 @@
+name: Update package managers
+
+# Regenerates the Scoop bucket manifest, AUR PKGBUILD/.SRCINFO, and Nix flake
+# from the freshly published npm package and pushes each to its own target
+# repo — mirroring update-homebrew-tap.yml, one job per ecosystem.
+#
+# winget is intentionally NOT auto-pushed here: a real submission needs a
+# packaged Windows installer artifact (winget has no "run npm install"
+# primitive) and a PR into microsoft/winget-pkgs, not a tap-style push. See
+# packaging/README.md for that follow-up — the in-repo manifest trio still
+# exists and is regenerable so the metadata (version, description, url,
+# sha256) never goes stale, it's just submitted by hand.
+#
+# Setup (one time per ecosystem you want to keep current — each job is a
+# no-op, not a failure, until its secret exists):
+#   1. Scoop: create gfargo/scoop-bucket (bucket/coco.json at the root), add
+#      repo secret SCOOP_BUCKET_TOKEN — a fine-grained PAT that can push to it.
+#   2. AUR: claim the `git-coco` package on aur.archlinux.org, add repo
+#      secret AUR_SSH_KEY — the private half of an SSH key registered on your
+#      AUR account.
+#   3. Nix: create gfargo/nix-coco (flake.nix at the root), add repo secret
+#      NIX_FLAKE_TOKEN — a fine-grained PAT that can push to it.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to publish (e.g. 0.71.0). Blank = latest on npm."
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: update-package-managers
+  cancel-in-progress: true
+
+jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - name: Resolve version
+        id: ver
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            V="${{ github.event.inputs.version }}"
+          elif [ -n "${{ github.event.release.tag_name }}" ]; then
+            V="${{ github.event.release.tag_name }}"
+          else
+            V="latest"
+          fi
+          V="${V#v}"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $V"
+
+      - name: Wait for npm to publish
+        if: steps.ver.outputs.version != 'latest'
+        run: |
+          for i in $(seq 1 30); do
+            if npm view "git-coco@${{ steps.ver.outputs.version }}" version >/dev/null 2>&1; then
+              echo "Found git-coco@${{ steps.ver.outputs.version }} on npm."
+              exit 0
+            fi
+            echo "Not on npm yet, waiting… ($i/30)"
+            sleep 10
+          done
+          echo "::error::git-coco@${{ steps.ver.outputs.version }} did not appear on npm in time."
+          exit 1
+
+  update-scoop:
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout coco
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+
+      - name: Regenerate Scoop manifest
+        run: node bin/genManifests.mjs "${{ needs.resolve-version.outputs.version }}" --only=scoop
+
+      - name: Checkout bucket repo
+        if: ${{ secrets.SCOOP_BUCKET_TOKEN != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: gfargo/scoop-bucket
+          token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
+          path: bucket-repo
+
+      - name: Copy manifest into bucket & push
+        if: ${{ secrets.SCOOP_BUCKET_TOKEN != '' }}
+        working-directory: bucket-repo
+        run: |
+          mkdir -p bucket
+          cp ../packaging/scoop/coco.json bucket/coco.json
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Manifest already up to date — nothing to push."
+            exit 0
+          fi
+          git add bucket/coco.json
+          git commit -m "coco ${{ needs.resolve-version.outputs.version }}"
+          git push
+
+  update-nix:
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout coco
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+
+      - name: Regenerate Nix flake
+        run: node bin/genManifests.mjs "${{ needs.resolve-version.outputs.version }}" --only=nix
+
+      - name: Checkout flake repo
+        if: ${{ secrets.NIX_FLAKE_TOKEN != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: gfargo/nix-coco
+          token: ${{ secrets.NIX_FLAKE_TOKEN }}
+          path: flake-repo
+
+      - name: Copy flake & push
+        if: ${{ secrets.NIX_FLAKE_TOKEN != '' }}
+        working-directory: flake-repo
+        run: |
+          cp ../packaging/nix/flake.nix flake.nix
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Flake already up to date — nothing to push."
+            exit 0
+          fi
+          git add flake.nix
+          git commit -m "coco ${{ needs.resolve-version.outputs.version }}"
+          git push
+
+  update-aur:
+    needs: resolve-version
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout coco
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.2
+
+      - name: Regenerate PKGBUILD + .SRCINFO
+        run: node bin/genManifests.mjs "${{ needs.resolve-version.outputs.version }}" --only=aur
+
+      - name: Configure SSH for aur.archlinux.org
+        if: ${{ secrets.AUR_SSH_KEY != '' }}
+        run: |
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          echo "${{ secrets.AUR_SSH_KEY }}" > ~/.ssh/aur
+          chmod 600 ~/.ssh/aur
+          ssh-keyscan -t ed25519 aur.archlinux.org >> ~/.ssh/known_hosts 2>/dev/null
+          {
+            echo "Host aur.archlinux.org"
+            echo "  IdentityFile ~/.ssh/aur"
+            echo "  User aur"
+          } >> ~/.ssh/config
+
+      - name: Push PKGBUILD + .SRCINFO to AUR
+        if: ${{ secrets.AUR_SSH_KEY != '' }}
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git clone ssh://aur@aur.archlinux.org/git-coco.git aur-repo
+          cp packaging/aur/PKGBUILD packaging/aur/.SRCINFO aur-repo/
+          cd aur-repo
+          if git diff --quiet; then
+            echo "PKGBUILD already up to date — nothing to push."
+            exit 0
+          fi
+          git add PKGBUILD .SRCINFO
+          git commit -m "coco ${{ needs.resolve-version.outputs.version }}"
+          git push origin HEAD:master
