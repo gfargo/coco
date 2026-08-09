@@ -124,7 +124,7 @@
     "ink-testing-library": "4.0.0",
     "jest": "^30.0.5",
     "node-pty": "^1.1.0",
-    "release-it": "^20.0.1",
+    "release-it": "^21.0.1",
     "rollup": "^4.50.0",
     "rollup-plugin-dts": "^6.1.0",
     "rollup-plugin-executable": "^1.6.3",
