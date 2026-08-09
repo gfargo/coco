@@ -39,11 +39,15 @@ const store = createJsonStore<UpdateCheckCache>({
 /**
  * Refreshes the cache for *next* run. Deliberately not awaited by callers —
  * this must never sit on a command's critical path — and every failure mode
- * (network, non-2xx, malformed JSON) is swallowed silently.
+ * (network, non-2xx, malformed JSON) is swallowed silently. Bounded by a 2s
+ * abort signal so a slow/unreachable registry can't delay process exit past
+ * the OS connect-timeout.
  */
 function refreshCacheInBackground(): void {
   try {
-    fetch(`https://registry.npmjs.org/${BUILD_PACKAGE_NAME}/latest`)
+    fetch(`https://registry.npmjs.org/${BUILD_PACKAGE_NAME}/latest`, {
+      signal: AbortSignal.timeout(2000),
+    })
       .then((res) => (res.ok ? (res.json() as Promise<{ version?: string }>) : null))
       .then((data) => {
         if (!data?.version) return

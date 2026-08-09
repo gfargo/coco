@@ -332,8 +332,11 @@ function fishCompletionArgTriggered(rawArgs: string[]): boolean {
 // `--version` (prints the bare version string via its built-in handler, left
 // untouched) and doesn't support combining it with another flag, so the JSON
 // form is handled as its own static path rather than fighting yargs for it.
+// `-V` is intentionally not checked here: yargs doesn't register it as a
+// `--version` alias, so plain `coco -V` isn't a version flag either — treating
+// it as one here would make `-V --json` behave differently from `-V` alone.
 function versionJsonTriggered(rawArgs: string[]): boolean {
-  const hasVersionFlag = rawArgs.includes('--version') || rawArgs.includes('-V')
+  const hasVersionFlag = rawArgs.includes('--version')
   const hasJsonFlag = rawArgs.includes('--json')
   return hasVersionFlag && hasJsonFlag
 }
