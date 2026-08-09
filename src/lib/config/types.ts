@@ -258,21 +258,22 @@ type BaseConfig = {
 
   /**
    * Map self-hosted git remote hosts to a forge so coco talks to the right CLI.
-   * coco auto-detects github.com, gitlab.com, bitbucket.org, codeberg.org, and
-   * hosts whose name contains `gitlab` / `github` / `bitbucket` / `gitea` /
-   * `forgejo` / `codeberg`. For vanity hostnames that carry none of those
-   * words (e.g. `git.acme.com`), set the mapping here so detection and
-   * dispatch work.
+   * coco auto-detects github.com, gitlab.com, bitbucket.org, codeberg.org,
+   * dev.azure.com / ssh.dev.azure.com / `*.visualstudio.com`, and hosts whose
+   * name contains `gitlab` / `github` / `bitbucket` / `gitea` / `forgejo` /
+   * `codeberg`. For vanity hostnames that carry none of those words (e.g.
+   * `git.acme.com`), set the mapping here so detection and dispatch work.
    *
-   * `bitbucket-server` (Bitbucket Server / Data Center) can ONLY be reached
-   * through this map — its REST API (`/rest/api/1.0`) and web UI differ
-   * enough from Bitbucket Cloud that auto-detection isn't reliable, and a
-   * self-hosted install is commonly on a `*bitbucket*`-named host that would
-   * otherwise resolve to Cloud.
+   * `bitbucket-server` (Bitbucket Server / Data Center) and an on-prem Azure
+   * DevOps Server install can ONLY be reached through this map — their REST
+   * APIs and web UIs differ enough from their cloud counterparts that
+   * auto-detection isn't reliable, and a self-hosted install is commonly on a
+   * vanity host that would otherwise go undetected (or resolve to the wrong
+   * forge, for a `*bitbucket*`-named Server host).
    *
    * @example { "git.acme.com": "gitea", "code.internal": "github", "bb.corp.com": "bitbucket-server" }
    */
-  forgeHosts?: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea'>
+  forgeHosts?: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea' | 'azure-devops'>
 }
 
 export type ConfigWithServiceObject = BaseConfig &

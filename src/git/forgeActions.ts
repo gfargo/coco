@@ -192,6 +192,49 @@ import {
 } from './bitbucketServerIssueActions'
 import { makeBitbucketServerRunner } from './bitbucketServerCli'
 
+// Azure DevOps implementations.
+import {
+  getAzureDevOpsPullRequestList,
+  getAzureDevOpsIssueList,
+  getAzureDevOpsPullRequestOverview,
+} from './azureDevOpsListData'
+import {
+  getAzureDevOpsPullRequestDetail,
+  getAzureDevOpsIssueDetail,
+  getAzureDevOpsPullRequestDiff,
+  getAzureDevOpsPullRequestChecks,
+} from './azureDevOpsDetailData'
+import {
+  createAzureDevOpsPullRequest,
+  openAzureDevOpsPullRequest,
+  mergeAzureDevOpsPullRequestByNumber,
+  approveAzureDevOpsPullRequestByNumber,
+  closeAzureDevOpsPullRequestByNumber,
+  commentAzureDevOpsPullRequestByNumber,
+  requestChangesAzureDevOpsPullRequestByNumber,
+  addAzureDevOpsPullRequestLabel,
+  addAzureDevOpsPullRequestReviewer,
+  enableAzureDevOpsAutoMerge,
+  markAzureDevOpsPullRequestReadyByNumber,
+  reopenAzureDevOpsPullRequestByNumber,
+  checkoutAzureDevOpsPullRequestByNumber,
+  mergeAzureDevOpsPullRequest,
+  closeAzureDevOpsPullRequest,
+  approveAzureDevOpsPullRequest,
+  commentAzureDevOpsPullRequest,
+  requestChangesAzureDevOpsPullRequest,
+  rerunFailedAzureDevOpsChecks,
+} from './azureDevOpsPullRequestActions'
+import {
+  commentAzureDevOpsIssue,
+  addAzureDevOpsIssueLabel,
+  addAzureDevOpsIssueAssignee,
+  closeAzureDevOpsIssue,
+  createAzureDevOpsIssue,
+  reopenAzureDevOpsIssue,
+} from './azureDevOpsIssueActions'
+import { makeAzureDevOpsRunner, splitAzureDevOpsPath } from './azureDevOpsCli'
+
 /**
  * Provider-agnostic forge facade. The workstation runtime dispatches every
  * pull-request / issue load and mutation through this interface, so the
@@ -566,6 +609,78 @@ function bitbucketServerActions(
 }
 
 /**
+ * Azure DevOps facade. `path` is the flattened `"{org}/{project}/{repo}"`
+ * (see `getProviderRepository`'s Azure branch), re-split via
+ * `splitAzureDevOpsPath` into the coordinates the runner and every action
+ * need. `host` is the repo's remote hostname — API calls always target the
+ * HTTPS host (`makeAzureDevOpsRunner` normalizes `ssh.dev.azure.com`).
+ * Issue methods are graceful `{ ok: false }` stubs: Azure DevOps tracks Work
+ * Items, not issues (see `azureDevOpsIssueActions.ts`).
+ */
+function azureDevOpsActions(
+  path: string | undefined,
+  host: string | undefined,
+  currentBranch?: string
+): ForgeActions {
+  const project = path ? splitAzureDevOpsPath(path, host || 'dev.azure.com') : undefined
+  const runner = project ? makeAzureDevOpsRunner(project.host, project.org, project.project) : undefined
+  const noProject = () => Promise.resolve({ ok: false as const, message: 'No Azure DevOps project resolved' })
+
+  return {
+    getPullRequestList: (git, filter) => getAzureDevOpsPullRequestList(git, filter),
+    getIssueList: (git, filter) => getAzureDevOpsIssueList(git, filter),
+    getPullRequestDetail: (n) =>
+      project && runner ? getAzureDevOpsPullRequestDetail(project.repo, n, runner) : noProject(),
+    getIssueDetail: () => getAzureDevOpsIssueDetail(),
+    getPullRequestDiffByNumber: () => getAzureDevOpsPullRequestDiff(),
+    commentPullRequestByNumber: (n, body) =>
+      project && runner ? commentAzureDevOpsPullRequestByNumber(project, n, body, runner) : noProject(),
+    addPullRequestLabel: (n, label) =>
+      project && runner ? addAzureDevOpsPullRequestLabel(project, n, label, runner) : noProject(),
+    addPullRequestAssignee: (n, assignee) =>
+      project && runner ? addAzureDevOpsPullRequestReviewer(project, n, assignee, runner) : noProject(),
+    mergePullRequestByNumber: (n, strategy) =>
+      project && runner ? mergeAzureDevOpsPullRequestByNumber(project, n, strategy, runner) : noProject(),
+    closePullRequestByNumber: (n) =>
+      project && runner ? closeAzureDevOpsPullRequestByNumber(project, n, runner) : noProject(),
+    approvePullRequestByNumber: (n) =>
+      project && runner ? approveAzureDevOpsPullRequestByNumber(project, n, runner) : noProject(),
+    requestChangesPullRequestByNumber: (n, body) =>
+      project && runner ? requestChangesAzureDevOpsPullRequestByNumber(project, n, body, runner) : noProject(),
+    checkoutPullRequestByNumber: () => checkoutAzureDevOpsPullRequestByNumber(),
+    getPullRequestChecks: (n) =>
+      project && runner
+        ? getAzureDevOpsPullRequestChecks(project.repo, n, runner)
+        : Promise.resolve({ ok: false, message: 'No Azure DevOps project resolved' }),
+    rerunFailedChecks: () => rerunFailedAzureDevOpsChecks(),
+    enableAutoMerge: () => enableAzureDevOpsAutoMerge(),
+    markPullRequestReadyByNumber: (n) =>
+      project && runner ? markAzureDevOpsPullRequestReadyByNumber(project, n, runner) : noProject(),
+    reopenPullRequestByNumber: (n) =>
+      project && runner ? reopenAzureDevOpsPullRequestByNumber(project, n, runner) : noProject(),
+    mergePullRequest: (strategy) =>
+      project && runner ? mergeAzureDevOpsPullRequest(project, currentBranch, strategy, runner) : noProject(),
+    closePullRequest: () =>
+      project && runner ? closeAzureDevOpsPullRequest(project, currentBranch, runner) : noProject(),
+    approvePullRequest: () =>
+      project && runner ? approveAzureDevOpsPullRequest(project, currentBranch, runner) : noProject(),
+    commentPullRequest: (body) =>
+      project && runner ? commentAzureDevOpsPullRequest(project, currentBranch, body, runner) : noProject(),
+    requestChangesPullRequest: (body) =>
+      project && runner ? requestChangesAzureDevOpsPullRequest(project, currentBranch, body, runner) : noProject(),
+    createPullRequest: (input) =>
+      project && runner ? createAzureDevOpsPullRequest(project, input, runner) : noProject(),
+    openPullRequest: (url) => openAzureDevOpsPullRequest(url),
+    commentIssue: () => commentAzureDevOpsIssue(),
+    addIssueLabel: () => addAzureDevOpsIssueLabel(),
+    addIssueAssignee: () => addAzureDevOpsIssueAssignee(),
+    closeIssue: () => closeAzureDevOpsIssue(),
+    reopenIssue: () => reopenAzureDevOpsIssue(),
+    createIssue: () => createAzureDevOpsIssue(),
+  }
+}
+
+/**
  * Select the forge facade for the detected provider. Anything other than
  * `gitlab`, `bitbucket`, `bitbucket-server`, or `gitea` (github, GitHub
  * Enterprise, unsupported) keeps the GitHub `gh` implementations, preserving
@@ -579,7 +694,9 @@ function bitbucketServerActions(
  * branch. Bitbucket Server is the same shape as Gitea — a per-host REST API
  * base plus current branch — but keyed off its own
  * `bitbucketServerPath`/`bitbucketServerHost` options since a remote can only
- * resolve to one provider at a time.
+ * resolve to one provider at a time. Azure DevOps also reuses the
+ * `gitlabPath`/`gitlabHost`-style plumbing shape: `azureDevOpsPath` is the
+ * flattened `"{org}/{project}/{repo}"` (`splitAzureDevOpsPath` re-splits it).
  */
 export function getForgeActions(
   provider: GitProviderType | undefined,
@@ -592,7 +709,9 @@ export function getForgeActions(
     bitbucketServerHost?: string
     giteaPath?: string
     giteaHost?: string
-    /** Current checked-out branch, required for Bitbucket/Gitea current-branch PR mutations. */
+    azureDevOpsPath?: string
+    azureDevOpsHost?: string
+    /** Current checked-out branch, required for Bitbucket/Gitea/Azure DevOps current-branch PR mutations. */
     currentBranch?: string
   } = {}
 ): ForgeActions {
@@ -602,6 +721,8 @@ export function getForgeActions(
   if (provider === 'bitbucket-server')
     return bitbucketServerActions(options.bitbucketServerPath, options.bitbucketServerHost, options.currentBranch)
   if (provider === 'gitea') return giteaActions(options.giteaPath, options.giteaHost, options.currentBranch)
+  if (provider === 'azure-devops')
+    return azureDevOpsActions(options.azureDevOpsPath, options.azureDevOpsHost, options.currentBranch)
   return githubActions
 }
 
@@ -617,5 +738,6 @@ export async function getForgePullRequestOverview(git: SimpleGit): Promise<PullR
   if (repo?.provider === 'bitbucket') return getBitbucketPullRequestOverview(git)
   if (repo?.provider === 'bitbucket-server') return getBitbucketServerPullRequestOverview(git)
   if (repo?.provider === 'gitea') return getGiteaPullRequestOverview(git)
+  if (repo?.provider === 'azure-devops') return getAzureDevOpsPullRequestOverview(git)
   return getPullRequestOverview(git)
 }

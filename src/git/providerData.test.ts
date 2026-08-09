@@ -1,6 +1,7 @@
 import {
   buildProviderUrl,
   detectLocalDefaultBranch,
+  detectProvider,
   getProviderOverview,
   getProviderRepository,
   parseGitHubRemoteUrl,
@@ -141,6 +142,72 @@ describe('log provider data', () => {
   it('without an override, a *bitbucket*-named host still resolves to Cloud (not Server)', () => {
     const repo = getProviderRepository('origin', 'https://our-bitbucket.acme.com/scm/TEAM/repo.git')
     expect(repo.provider).toBe('bitbucket')
+  })
+
+  it('detects dev.azure.com remotes and flattens org/project/repo into owner/name', () => {
+    const repo = getProviderRepository('origin', 'https://dev.azure.com/myorg/myproject/_git/myrepo')
+    expect(repo).toEqual({
+      provider: 'azure-devops',
+      remote: 'origin',
+      host: 'dev.azure.com',
+      owner: 'myorg/myproject',
+      name: 'myrepo',
+      webUrl: 'https://dev.azure.com/myorg/myproject/_git/myrepo',
+    })
+  })
+
+  it('detects the scp-style ssh.dev.azure.com remote form', () => {
+    const repo = getProviderRepository('origin', 'git@ssh.dev.azure.com:v3/myorg/myproject/myrepo')
+    expect(repo.provider).toBe('azure-devops')
+    expect(repo.owner).toBe('myorg/myproject')
+    expect(repo.name).toBe('myrepo')
+    // API/web calls always target the HTTPS host, never the ssh clone host.
+    expect(repo.webUrl).toBe('https://dev.azure.com/myorg/myproject/_git/myrepo')
+  })
+
+  it('detects the {org}.visualstudio.com remote form (org in the subdomain)', () => {
+    const repo = getProviderRepository('origin', 'https://myorg.visualstudio.com/myproject/_git/myrepo')
+    expect(repo).toEqual({
+      provider: 'azure-devops',
+      remote: 'origin',
+      host: 'myorg.visualstudio.com',
+      owner: 'myorg/myproject',
+      name: 'myrepo',
+      webUrl: 'https://myorg.visualstudio.com/myproject/_git/myrepo',
+    })
+  })
+
+  it('resolves an on-prem Azure DevOps Server install only via a forgeHosts override', () => {
+    setForgeHostOverrides({ 'devops.acme.com': 'azure-devops' })
+    try {
+      expect(detectProvider('devops.acme.com')).toBe('azure-devops')
+    } finally {
+      setForgeHostOverrides(undefined)
+    }
+  })
+
+  it('builds Azure DevOps provider URLs (query-param branch, singular pullrequest, branchCompare)', () => {
+    const azure = {
+      provider: 'azure-devops' as const,
+      remote: 'origin',
+      host: 'dev.azure.com',
+      owner: 'myorg/myproject',
+      name: 'myrepo',
+      webUrl: 'https://dev.azure.com/myorg/myproject/_git/myrepo',
+    }
+    expect(buildProviderUrl(azure, { type: 'repo' })).toBe('https://dev.azure.com/myorg/myproject/_git/myrepo')
+    expect(buildProviderUrl(azure, { type: 'branch', branch: 'feat/x' })).toBe(
+      'https://dev.azure.com/myorg/myproject/_git/myrepo?version=GBfeat%2Fx'
+    )
+    expect(buildProviderUrl(azure, { type: 'commit', commit: 'abc123' })).toBe(
+      'https://dev.azure.com/myorg/myproject/_git/myrepo/commit/abc123'
+    )
+    expect(buildProviderUrl(azure, { type: 'pull-request', number: 9 })).toBe(
+      'https://dev.azure.com/myorg/myproject/_git/myrepo/pullrequest/9'
+    )
+    expect(buildProviderUrl(azure, { type: 'compare', base: 'main', head: 'feat/x' })).toBe(
+      'https://dev.azure.com/myorg/myproject/_git/myrepo/branchCompare?baseVersion=GBmain&targetVersion=GBfeat%2Fx'
+    )
   })
 
   it('builds GitLab provider URLs under the /-/ namespace', () => {

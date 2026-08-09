@@ -1175,6 +1175,8 @@ export async function readRepoCapabilitiesContext(context: AgentOperationContext
         else if (h === 'gitlab.com' || h.includes('gitlab')) forge = 'gitlab'
         else if (h === 'bitbucket.org' || h.includes('bitbucket')) forge = 'bitbucket'
         else if (h === 'codeberg.org' || h.includes('gitea') || h.includes('forgejo')) forge = 'gitea'
+        else if (h === 'dev.azure.com' || h === 'ssh.dev.azure.com' || h.endsWith('.visualstudio.com'))
+          forge = 'azure-devops'
         else forge = 'unsupported'
       }
     }

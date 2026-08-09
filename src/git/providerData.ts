@@ -33,8 +33,26 @@ import {
   type BitbucketServerRunner,
 } from './bitbucketServerCli'
 import { findOpenBitbucketServerPullRequestForBranch } from './bitbucketServerListData'
+import {
+  describeAzureDevOpsStatus,
+  getAzureDevOpsStatus,
+  isAzureDevOpsHost,
+  makeAzureDevOpsRunner,
+  parseAzureDevOpsRemoteUrl,
+  buildAzureDevOpsRepoWebUrl,
+  splitAzureDevOpsPath,
+  type AzureDevOpsRunner,
+} from './azureDevOpsCli'
+import { findOpenAzureDevOpsPullRequestForBranch } from './azureDevOpsListData'
 
-export type GitProviderType = 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea' | 'unsupported'
+export type GitProviderType =
+  | 'github'
+  | 'gitlab'
+  | 'bitbucket'
+  | 'bitbucket-server'
+  | 'gitea'
+  | 'azure-devops'
+  | 'unsupported'
 
 export type ProviderRepository = {
   provider: GitProviderType
@@ -102,10 +120,15 @@ export function parseGitHubRemoteUrl(
  * command executor. Lets self-hosted installs on vanity hostnames (no `gitlab`
  * / `github` in the name) be detected explicitly.
  */
-let forgeHostOverrides: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea'> = {}
+let forgeHostOverrides: Record<
+  string,
+  'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea' | 'azure-devops'
+> = {}
 
 export function setForgeHostOverrides(
-  overrides: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea'> | undefined
+  overrides:
+    | Record<string, 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea' | 'azure-devops'>
+    | undefined
 ): void {
   forgeHostOverrides = {}
   if (overrides) {
@@ -127,6 +150,11 @@ export function detectProvider(host: string): GitProviderType {
   if (forgeHostOverrides[h]) return forgeHostOverrides[h]
   if (h === 'github.com') return 'github'
   if (h === 'gitlab.com') return 'gitlab'
+  // dev.azure.com / ssh.dev.azure.com / {org}.visualstudio.com — cloud Azure
+  // DevOps only. A self-hosted Azure DevOps Server install has no reliable
+  // hostname heuristic (it's whatever the org named it), so it's reachable
+  // ONLY via `forgeHosts`, mirroring `bitbucket-server`.
+  if (isAzureDevOpsHost(h)) return 'azure-devops'
   // Any `*bitbucket*` host is classified as `bitbucket` — including self-hosted
   // Bitbucket Server / Data Center, which coco doesn't implement. The runner
   // (`makeBitbucketRunner`) gates non-`bitbucket.org` hosts with an explicit
@@ -160,6 +188,36 @@ export function getProviderRepository(remoteName: string, remoteUrl: string): Pr
       owner: parsed.owner,
       name: parsed.name,
       message: `Unsupported remote host "${parsed.host}" for ${remoteName}.`,
+    }
+  }
+
+  // Azure DevOps's resource hierarchy is org/project/repo — three segments
+  // where the generic `parseRemoteUrl` heuristic (built for two-segment
+  // owner/name forges) yields a garbled owner (`"{org}/{project}/_git"`).
+  // `parseAzureDevOpsRemoteUrl` re-parses the raw URL to get clean
+  // coordinates; `owner` carries `"{org}/{project}"` and `name` the bare
+  // repo slug, so `path` (`owner/name`) round-trips to the full
+  // `"{org}/{project}/{repo}"` triple everywhere downstream expects a
+  // two-segment `owner/name` shape (see `azureDevOpsCli.ts`'s docblock).
+  if (provider === 'azure-devops') {
+    const azureProject = parseAzureDevOpsRemoteUrl(remoteUrl)
+    if (!azureProject) {
+      return {
+        provider: 'unsupported',
+        remote: remoteName,
+        host: parsed.host,
+        owner: parsed.owner,
+        name: parsed.name,
+        message: `Could not parse Azure DevOps remote host "${parsed.host}" for ${remoteName}.`,
+      }
+    }
+    return {
+      provider,
+      remote: remoteName,
+      host: azureProject.host,
+      owner: azureProject.owner,
+      name: azureProject.name,
+      webUrl: buildAzureDevOpsRepoWebUrl(azureProject),
     }
   }
 
@@ -234,6 +292,7 @@ export function buildProviderUrl(
   const isBitbucket = repository.provider === 'bitbucket'
   const isBitbucketServer = repository.provider === 'bitbucket-server'
   const isGitea = repository.provider === 'gitea'
+  const isAzureDevOps = repository.provider === 'azure-devops'
   // GitLab namespaces every sub-path under `/-/`; GitHub and Bitbucket do not.
   const seg = repository.provider === 'gitlab' ? '/-' : ''
 
@@ -249,11 +308,15 @@ export function buildProviderUrl(
     if (isBitbucket) return `${base}/branch/${encodeURIComponent(target.branch)}`
     // Gitea/Forgejo browse a branch under `/src/branch/`, not GitHub's `/tree/`.
     if (isGitea) return `${base}/src/branch/${encodeURIComponent(target.branch)}`
+    // Azure DevOps addresses a branch via a `version=GB<branch>` query param
+    // on the repo root, not a path segment.
+    if (isAzureDevOps) return `${base}?version=GB${encodeURIComponent(target.branch)}`
     return `${base}${seg}/tree/${encodeURIComponent(target.branch)}`
   }
 
   if (target.type === 'commit') {
     if (isBitbucketServer) return `${base}/commits/${encodeURIComponent(target.commit)}`
+    if (isAzureDevOps) return `${base}/commit/${encodeURIComponent(target.commit)}`
     return isBitbucket
       ? `${base}/commits/${encodeURIComponent(target.commit)}`
       : `${base}${seg}/commit/${encodeURIComponent(target.commit)}`
@@ -265,6 +328,8 @@ export function buildProviderUrl(
     if (isBitbucket) return `${base}/pull-requests/${target.number}`
     // Gitea/Forgejo use the plural `/pulls/{n}`, unlike GitHub's singular `/pull/{n}`.
     if (isGitea) return `${base}/pulls/${target.number}`
+    // Azure DevOps uses the singular, unhyphenated `/pullrequest/{n}`.
+    if (isAzureDevOps) return `${base}/pullrequest/${target.number}`
     return `${base}/pull/${target.number}`
   }
 
@@ -276,6 +341,12 @@ export function buildProviderUrl(
 
   if (isBitbucket) {
     return `${base}/branches/compare/${encodeURIComponent(target.head)}%0D${encodeURIComponent(target.base)}`
+  }
+
+  if (isAzureDevOps) {
+    const baseVersion = encodeURIComponent(`GB${target.base}`)
+    const targetVersion = encodeURIComponent(`GB${target.head}`)
+    return `${base}/branchCompare?baseVersion=${baseVersion}&targetVersion=${targetVersion}`
   }
 
   return `${base}${seg}/compare/${encodeURIComponent(target.base)}...${encodeURIComponent(target.head)}`
@@ -618,6 +689,87 @@ async function getBitbucketServerProviderOverview(
   }
 }
 
+/**
+ * Azure DevOps overview via REST API: auth probe, default branch,
+ * current-branch PR. `runnerFactory` builds the org/project-bound runner
+ * (see `makeAzureDevOpsRunner`), mirroring the Gitea/Bitbucket Server
+ * overviews. `repository.owner`/`.name` are re-split back into
+ * org/project/repo (see `splitAzureDevOpsPath`) since Azure's three-segment
+ * hierarchy is flattened into the two-segment `owner`/`name` shape by
+ * `getProviderRepository`.
+ */
+async function getAzureDevOpsProviderOverview(
+  repository: ProviderRepository,
+  currentBranch: string | undefined,
+  localDefaultBranch: string | undefined,
+  runnerFactory: (host: string, org: string, project: string) => AzureDevOpsRunner
+): Promise<ProviderOverview> {
+  const path =
+    repository.owner && repository.name ? `${repository.owner}/${repository.name}` : undefined
+  const project = path ? splitAzureDevOpsPath(path, repository.host || 'dev.azure.com') : undefined
+
+  if (!project) {
+    return {
+      repository: { ...repository, defaultBranch: localDefaultBranch },
+      currentBranch,
+      authenticated: false,
+      message: 'Could not resolve the Azure DevOps org/project/repo from this remote.',
+    }
+  }
+
+  const runner = runnerFactory(project.host, project.org, project.project)
+  const status = await getAzureDevOpsStatus(runner)
+  if (status.kind !== 'ok') {
+    return {
+      repository: { ...repository, defaultBranch: localDefaultBranch },
+      currentBranch,
+      authenticated: false,
+      message: describeAzureDevOpsStatus(status),
+    }
+  }
+
+  const azureProject = project
+
+  async function getDefaultBranchAzureDevOps(): Promise<string | undefined> {
+    try {
+      const out = (await runner(`git/repositories/${encodeURIComponent(azureProject.repo)}`)).trim()
+      const ref = out ? (JSON.parse(out) as { defaultBranch?: string }).defaultBranch : undefined
+      return ref ? ref.replace(/^refs\/heads\//, '') : undefined
+    } catch {
+      return undefined
+    }
+  }
+
+  async function getCurrentPRAzureDevOps(): Promise<ProviderPullRequestStatus | undefined> {
+    if (!currentBranch) return undefined
+    try {
+      const pr = await findOpenAzureDevOpsPullRequestForBranch(azureProject, currentBranch, runner)
+      if (pr?.pullRequestId == null) return undefined
+      const status = String(pr.status || '').toLowerCase()
+      return {
+        number: Number(pr.pullRequestId),
+        title: String(pr.title || ''),
+        state: status === 'completed' ? 'MERGED' : status === 'abandoned' ? 'CLOSED' : 'OPEN',
+        isDraft: Boolean(pr.isDraft),
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  const [defaultBranch, currentPullRequest] = await Promise.all([
+    getDefaultBranchAzureDevOps(),
+    getCurrentPRAzureDevOps(),
+  ])
+
+  return {
+    repository: { ...repository, defaultBranch: defaultBranch || localDefaultBranch },
+    currentBranch,
+    currentPullRequest,
+    authenticated: true,
+  }
+}
+
 /** GitLab overview via glab: auth probe, default branch, current-branch MR. */
 async function getGitLabProviderOverview(
   repository: ProviderRepository,
@@ -658,7 +810,8 @@ export async function getProviderOverview(
   glabRunner: GlabRunner = defaultGlabRunner,
   bitbucketRunnerFactory: (host: string) => BitbucketRunner = makeBitbucketRunner,
   giteaRunnerFactory: (host: string) => GiteaRunner = makeGiteaRunner,
-  bitbucketServerRunnerFactory: (host: string) => BitbucketServerRunner = makeBitbucketServerRunner
+  bitbucketServerRunnerFactory: (host: string) => BitbucketServerRunner = makeBitbucketServerRunner,
+  azureDevOpsRunnerFactory: (host: string, org: string, project: string) => AzureDevOpsRunner = makeAzureDevOpsRunner
 ): Promise<ProviderOverview> {
   const [resolvedRepository, currentBranchOutput, localDefaultBranch] = await Promise.all([
     getProviderRepositoryForGit(git),
@@ -695,6 +848,10 @@ export async function getProviderOverview(
       localDefaultBranch,
       bitbucketServerRunnerFactory
     )
+  }
+
+  if (repository.provider === 'azure-devops') {
+    return getAzureDevOpsProviderOverview(repository, currentBranch, localDefaultBranch, azureDevOpsRunnerFactory)
   }
 
   if (repository.provider !== 'github') {

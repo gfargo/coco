@@ -38,9 +38,16 @@ export const handler: CommandHandler<IssuesCreateArgv> = async (argv, logger) =>
   const overview = await getProviderOverview(git)
   const provider = overview.repository.provider
 
-  if (provider !== 'github' && provider !== 'gitlab' && provider !== 'bitbucket' && provider !== 'gitea') {
+  if (
+    provider !== 'github' &&
+    provider !== 'gitlab' &&
+    provider !== 'bitbucket' &&
+    provider !== 'gitea' &&
+    provider !== 'azure-devops'
+  ) {
     logger.error(
-      overview.repository.message || 'No supported remote (GitHub, GitLab, Bitbucket, or Gitea) detected.',
+      overview.repository.message ||
+        'No supported remote (GitHub, GitLab, Bitbucket, Gitea, or Azure DevOps) detected.',
       { color: 'red' }
     )
     commandExit(1)
@@ -177,6 +184,8 @@ export const handler: CommandHandler<IssuesCreateArgv> = async (argv, logger) =>
     bitbucketPath: repoPath,
     giteaPath: repoPath,
     giteaHost: overview.repository.host,
+    azureDevOpsPath: repoPath,
+    azureDevOpsHost: overview.repository.host,
   })
 
   const result = await forge.createIssue({ title, body })

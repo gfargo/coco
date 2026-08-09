@@ -76,6 +76,19 @@ export function forgeNouns(provider: GitProviderType | undefined): ForgeNouns {
       authHint: 'Set the GITEA_TOKEN environment variable to enable triage.',
     }
   }
+  if (provider === 'azure-devops') {
+    return {
+      abbrev: 'PR',
+      singular: 'Pull request',
+      plural: 'Pull requests',
+      singularLower: 'pull request',
+      pluralLower: 'pull requests',
+      // No CLI dependency — Azure DevOps auth is an AZURE_DEVOPS_TOKEN PAT, not a binary.
+      cli: 'azure-devops',
+      name: 'Azure DevOps',
+      authHint: 'Set the AZURE_DEVOPS_TOKEN environment variable (a Personal Access Token) to enable triage.',
+    }
+  }
   return {
     abbrev: 'PR',
     singular: 'Pull request',

@@ -158,10 +158,17 @@ export class TaskList {
       const overview = await getProviderOverview(this.git)
       const provider = overview.repository.provider
 
-      if (provider !== 'github' && provider !== 'gitlab' && provider !== 'bitbucket' && provider !== 'gitea') {
+      if (
+        provider !== 'github' &&
+        provider !== 'gitlab' &&
+        provider !== 'bitbucket' &&
+        provider !== 'gitea' &&
+        provider !== 'azure-devops'
+      ) {
         console.log(
           chalk.yellow(
-            overview.repository.message || 'No supported remote (GitHub, GitLab, Bitbucket, or Gitea) detected.'
+            overview.repository.message ||
+              'No supported remote (GitHub, GitLab, Bitbucket, Gitea, or Azure DevOps) detected.'
           )
         )
         return
@@ -194,6 +201,8 @@ export class TaskList {
         bitbucketPath: repoPath,
         giteaPath: repoPath,
         giteaHost: overview.repository.host,
+        azureDevOpsPath: repoPath,
+        azureDevOpsHost: overview.repository.host,
       })
 
       const result = await forge.createIssue({ title, body })

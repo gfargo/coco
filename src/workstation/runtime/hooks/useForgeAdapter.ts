@@ -50,6 +50,8 @@ export function useForgeAdapter(
       bitbucketServerHost: forgeGitlabHost,
       giteaPath: forgePath,
       giteaHost: forgeGitlabHost,
+      azureDevOpsPath: forgePath,
+      azureDevOpsHost: forgeGitlabHost,
       currentBranch: forgeCurrentBranch,
     }),
     [forgeProvider, forgePath, forgeGitlabHost, forgeCurrentBranch]
