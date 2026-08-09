@@ -2,8 +2,11 @@ import { z } from 'zod'
 
 import {
     AgentOptionsSchema,
+    AgentPlanSchema,
     AgentTaskInputSchema,
     AGENT_PROTOCOL_VERSION,
+    CapabilitiesRequestSchema,
+    CapabilitiesResultSchema,
     ChangelogDataSchema,
     ChangeSourceSchema,
     CommitApplyDataSchema,
@@ -13,6 +16,8 @@ import {
     createAgentInputJsonSchema,
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
+    createAgentPlannedSchema,
+    createCapabilitiesInputJsonSchema,
     createCommitApplyInputJsonSchema,
     createCondenseDiffInputJsonSchema,
     createMcpAgentInputJsonSchema,
@@ -45,6 +50,7 @@ describe('AgentTaskInputSchema', () => {
         previousCommitCount: 0,
         author: false,
         trustRepositoryConfig: false,
+        dryRun: false,
       },
     })
     expect(ChangeSourceSchema.parse({ kind: 'repository' })).toEqual({
@@ -163,6 +169,7 @@ describe('McpTaskInputSchema', () => {
         includeBranchName: false,
         previousCommitCount: 0,
         author: false,
+        dryRun: false,
       },
     })
   })
@@ -228,6 +235,26 @@ describe('agent output schemas', () => {
     warnings: [],
     meta,
   }
+  const plan = {
+    provider: 'openai',
+    model: 'gpt-5.4',
+    task: 'changelog' as const,
+    promptTokens: 100,
+    budgetTokens: 4096,
+    responseTokenReserve: 512,
+    willTruncate: false,
+    estimatedAnalyzedRatio: 1,
+    authenticationReady: true,
+  }
+  const planned = {
+    version: AGENT_PROTOCOL_VERSION,
+    ok: true as const,
+    operation: 'changelog' as const,
+    status: 'planned' as const,
+    plan,
+    warnings: [],
+    meta,
+  }
   const failure = {
     version: AGENT_PROTOCOL_VERSION,
     ok: false as const,
@@ -235,36 +262,46 @@ describe('agent output schemas', () => {
     error: { code: 'GENERATION_FAILED', message: 'no result', retryable: false },
   }
 
-  it('accepts only the matching success and failure envelopes', () => {
+  it('accepts only the matching success, planned, and failure envelopes', () => {
     expect(schema.parse(success)).toEqual(success)
+    expect(schema.parse(planned)).toEqual(planned)
     expect(schema.parse(failure)).toEqual(failure)
     expect(schema.safeParse({ ...success, error: failure.error }).success).toBe(false)
     expect(schema.safeParse({ ...failure, data: changelog }).success).toBe(false)
     expect(schema.safeParse({ ...success, operation: 'review' }).success).toBe(false)
+    expect(schema.safeParse({ ...planned, data: changelog }).success).toBe(false)
+    expect(schema.safeParse({ ...success, status: 'planned' }).success).toBe(false)
   })
 
   it('keeps MCP output top-level-object compatible while enforcing discrimination', () => {
     const mcpSchema = createAgentMcpOutputSchema('changelog', ChangelogDataSchema)
 
     expect(mcpSchema.parse(success)).toEqual(success)
+    expect(mcpSchema.parse(planned)).toEqual(planned)
     expect(mcpSchema.parse(failure)).toEqual(failure)
     expect(mcpSchema.safeParse({ ...success, error: failure.error }).success).toBe(false)
     expect(mcpSchema.safeParse({ ...failure, status: 'completed' }).success).toBe(false)
+    expect(mcpSchema.safeParse({ ...planned, data: changelog }).success).toBe(false)
+    expect(mcpSchema.safeParse({ ...success, plan }).success).toBe(false)
   })
 
-  it('publishes success/failure oneOf metadata in the MCP JSON schema', () => {
+  it('publishes success/planned/failure oneOf metadata in the MCP JSON schema', () => {
     const jsonSchema = z.toJSONSchema(createAgentMcpOutputSchema('changelog', ChangelogDataSchema)) as {
       type?: string
       oneOf?: Array<Record<string, unknown>>
     }
 
     expect(jsonSchema.type).toBe('object')
-    expect(jsonSchema.oneOf).toHaveLength(2)
+    expect(jsonSchema.oneOf).toHaveLength(3)
     expect(jsonSchema.oneOf?.[0]).toMatchObject({
       properties: { ok: { const: true }, operation: { const: 'changelog' } },
       required: expect.arrayContaining(['status', 'data', 'warnings', 'meta']),
     })
     expect(jsonSchema.oneOf?.[1]).toMatchObject({
+      properties: { ok: { const: true }, operation: { const: 'changelog' }, status: { const: 'planned' } },
+      required: expect.arrayContaining(['status', 'plan', 'warnings', 'meta']),
+    })
+    expect(jsonSchema.oneOf?.[2]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'changelog' } },
       required: expect.arrayContaining(['error']),
     })
@@ -332,11 +369,15 @@ describe('CondenseDiffRequestSchema', () => {
     ) as { type?: string; oneOf?: Array<Record<string, unknown>> }
 
     expect(jsonSchema.type).toBe('object')
-    expect(jsonSchema.oneOf).toHaveLength(2)
+    // condense-diff never actually returns status: 'planned' (dryRun is
+    // only meaningful for review/changelog/recap), but the envelope
+    // builders are generic over AgentOperation, so the shape is still
+    // published here.
+    expect(jsonSchema.oneOf).toHaveLength(3)
     expect(jsonSchema.oneOf?.[0]).toMatchObject({
       properties: { ok: { const: true }, operation: { const: 'condense-diff' } },
     })
-    expect(jsonSchema.oneOf?.[1]).toMatchObject({
+    expect(jsonSchema.oneOf?.[2]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'condense-diff' } },
     })
   })
@@ -392,11 +433,11 @@ describe('RepoContextRequestSchema', () => {
     ) as { type?: string; oneOf?: Array<Record<string, unknown>> }
 
     expect(jsonSchema.type).toBe('object')
-    expect(jsonSchema.oneOf).toHaveLength(2)
+    expect(jsonSchema.oneOf).toHaveLength(3)
     expect(jsonSchema.oneOf?.[0]).toMatchObject({
       properties: { ok: { const: true }, operation: { const: 'repo-context' } },
     })
-    expect(jsonSchema.oneOf?.[1]).toMatchObject({
+    expect(jsonSchema.oneOf?.[2]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'repo-context' } },
     })
   })
@@ -442,5 +483,107 @@ describe('CommitApplyRequestSchema', () => {
       message: 'feat: add thing',
     }).success).toBe(true)
     expect(CommitApplyDataSchema.safeParse({ sha: 'abc' }).success).toBe(false)
+  })
+})
+
+describe('AgentOptionsSchema dryRun', () => {
+  it('defaults dryRun to false and documents its applicability', () => {
+    expect(AgentOptionsSchema.parse({}).dryRun).toBe(false)
+    expect(AgentOptionsSchema.parse({ dryRun: true }).dryRun).toBe(true)
+  })
+})
+
+describe('AgentPlanSchema / createAgentPlannedSchema', () => {
+  const plan = {
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-6',
+    task: 'review' as const,
+    promptTokens: 1234,
+    budgetTokens: 4096,
+    responseTokenReserve: 512,
+    willTruncate: false,
+    estimatedAnalyzedRatio: 1,
+    authenticationReady: true,
+  }
+
+  it('accepts a well-formed plan and rejects unknown fields (strict)', () => {
+    expect(AgentPlanSchema.safeParse(plan).success).toBe(true)
+    expect(AgentPlanSchema.safeParse({ ...plan, priceUsd: 0.01 }).success).toBe(false)
+  })
+
+  it('rejects a task outside review/changelog/recap', () => {
+    expect(AgentPlanSchema.safeParse({ ...plan, task: 'commit-draft' }).success).toBe(false)
+  })
+
+  it('constrains estimatedAnalyzedRatio to [0, 1]', () => {
+    expect(AgentPlanSchema.safeParse({ ...plan, estimatedAnalyzedRatio: 1.5 }).success).toBe(false)
+    expect(AgentPlanSchema.safeParse({ ...plan, estimatedAnalyzedRatio: -0.1 }).success).toBe(false)
+  })
+
+  it('createAgentPlannedSchema requires status: "planned" and a plan, not data', () => {
+    const plannedSchema = createAgentPlannedSchema('review')
+    const planned = {
+      version: AGENT_PROTOCOL_VERSION,
+      ok: true as const,
+      operation: 'review' as const,
+      status: 'planned' as const,
+      plan,
+      warnings: [],
+      meta,
+    }
+    expect(plannedSchema.parse(planned)).toEqual(planned)
+    expect(plannedSchema.safeParse({ ...planned, status: 'completed' }).success).toBe(false)
+    expect(plannedSchema.safeParse({ ...planned, data: {} }).success).toBe(false)
+  })
+})
+
+describe('CapabilitiesRequestSchema / CapabilitiesResultSchema', () => {
+  it('accepts an empty request and an optional repo', () => {
+    expect(CapabilitiesRequestSchema.safeParse({}).success).toBe(true)
+    expect(CapabilitiesRequestSchema.safeParse({ repo: '/some/repo' }).success).toBe(true)
+  })
+
+  it('rejects unknown fields (strict)', () => {
+    expect(CapabilitiesRequestSchema.safeParse({ unexpected: true }).success).toBe(false)
+  })
+
+  it('publishes a caller-facing JSON Schema', () => {
+    const json = createCapabilitiesInputJsonSchema() as unknown as {
+      type: string
+      properties: Record<string, unknown>
+    }
+    expect(json.type).toBe('object')
+    expect(json.properties).toHaveProperty('repo')
+  })
+
+  const result = {
+    version: '1.2.3',
+    protocolVersion: AGENT_PROTOCOL_VERSION,
+    providers: { configured: 'anthropic', authenticationReady: false },
+    routing: {
+      dynamic: false,
+      preference: 'balanced',
+      provider: 'anthropic',
+      rows: [{ task: 'review', model: 'claude-sonnet-4-6' }],
+    },
+    limits: { maxContextBytes: MAX_AGENT_CONTEXT_BYTES, defaultTokenLimit: 4096 },
+    operations: ['commit-draft', 'review', 'changelog', 'recap'],
+    features: { streaming: false },
+  }
+
+  it('validates the full capabilities result shape, hasCommitlintConfig optional', () => {
+    expect(CapabilitiesResultSchema.safeParse(result).success).toBe(true)
+    expect(CapabilitiesResultSchema.safeParse({
+      ...result,
+      features: { ...result.features, hasCommitlintConfig: true },
+    }).success).toBe(true)
+  })
+
+  it('rejects unknown fields at every level (strict) and any pricing-shaped field', () => {
+    expect(CapabilitiesResultSchema.safeParse({ ...result, priceUsd: 0.01 }).success).toBe(false)
+    expect(CapabilitiesResultSchema.safeParse({
+      ...result,
+      providers: { ...result.providers, costUsd: 0 },
+    }).success).toBe(false)
   })
 })

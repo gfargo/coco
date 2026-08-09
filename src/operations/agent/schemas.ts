@@ -116,6 +116,14 @@ export const AgentOptionsSchema = z.object({
   trustRepositoryConfig: z.boolean().default(false).describe(
     'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety. Honored by: all operations, agent CLI only -- not present in the MCP input schema.',
   ),
+  dryRun: z.boolean().default(false).describe(
+    'Run every step up to but not including the model call and return a `status: "planned"` envelope (resolved ' +
+    'provider/model, prompt/budget token estimates, and a truncation projection) instead of generating output. Makes ' +
+    'no inference call, but still resolves the change source (a git read for repository scope) and enforces the same ' +
+    'root-confinement and untrusted-content safety checks as a real call. Honored by: review, changelog, recap. ' +
+    'Not honored by commit-draft, which rejects it with UNSUPPORTED_OPERATION -- use coco_capabilities to check ' +
+    'authentication readiness instead. Token counts are estimates, not currency.',
+  ),
 }).strict()
 
 export const AgentTaskInputSchema = z.object({
@@ -128,6 +136,7 @@ export const AgentTaskInputSchema = z.object({
     previousCommitCount: 0,
     author: false,
     trustRepositoryConfig: false,
+    dryRun: false,
   }),
 }).strict()
 
@@ -152,6 +161,7 @@ export const McpTaskInputSchema = z.object({
     includeBranchName: false,
     previousCommitCount: 0,
     author: false,
+    dryRun: false,
   }),
 }).strict()
 
@@ -222,9 +232,60 @@ export function createAgentFailureSchema(operation: AgentOperation) {
   }).strict()
 }
 
+/**
+ * The token/model plan returned by `dryRun: true`. Every token figure here is
+ * an estimate for budgeting purposes -- not a price. `promptTokens` is exact
+ * (the real rendered-prompt count `enforcePromptBudget` computes); the model's
+ * response length is not knowable in advance, so `responseTokenReserve` is the
+ * reservation coco would budget for it, not a prediction of actual output size.
+ */
+export const AgentPlanSchema = z.object({
+  provider: z.string().describe('Configured LLM provider that would handle this call.'),
+  model: z.string().describe('Resolved model (after dynamic routing, if enabled) that would handle this call.'),
+  task: z.enum(['review', 'changelog', 'recap']).describe(
+    'Dynamic-model routing task label used to resolve `model`.',
+  ),
+  promptTokens: z.number().int().describe(
+    'Token estimate (not currency) for the fully rendered prompt this call would send -- the exact count a real ' +
+    'run of the same request would produce.',
+  ),
+  budgetTokens: z.number().int().describe(
+    'Token estimate (not currency) for the configured request budget (prompt + reserved response space).',
+  ),
+  responseTokenReserve: z.number().int().describe(
+    'Token estimate (not currency) reserved for the model response. Output length cannot be known in advance -- ' +
+    'this is the reservation a real call would budget, not a prediction of actual output size.',
+  ),
+  willTruncate: z.boolean().describe(
+    'True when the rendered prompt would exceed the budget and be trimmed by the same truncation a real call applies.',
+  ),
+  estimatedAnalyzedRatio: z.number().min(0).max(1).describe(
+    'Fraction (0-1) of the original change summary that would survive truncation. 1 when no truncation would occur.',
+  ),
+  authenticationReady: z.boolean().describe(
+    'True when a usable API key/credential is configured for this provider.',
+  ),
+}).strict()
+
+export function createAgentPlannedSchema(operation: AgentOperation) {
+  return z.object({
+    version: z.literal(AGENT_PROTOCOL_VERSION),
+    ok: z.literal(true),
+    operation: z.literal(operation),
+    status: z.literal('planned'),
+    plan: AgentPlanSchema,
+    warnings: z.array(z.string()),
+    meta: SourceMetadataSchema,
+  }).strict()
+}
+
 export function createAgentOutputSchema<T extends z.ZodType>(operation: AgentOperation, data: T) {
-  return z.discriminatedUnion('ok', [
+  // A plain union, not discriminatedUnion('ok', ...): the completed and
+  // planned envelopes both carry ok: true and are distinguished only by
+  // `status`, so 'ok' alone cannot discriminate all three shapes.
+  return z.union([
     createAgentSuccessSchema(operation, data),
+    createAgentPlannedSchema(operation),
     createAgentFailureSchema(operation),
   ])
 }
@@ -236,22 +297,34 @@ export function createAgentOutputSchema<T extends z.ZodType>(operation: AgentOpe
  */
 export function createAgentMcpOutputSchema<T extends z.ZodType>(operation: AgentOperation, data: T) {
   const successJsonSchema = z.toJSONSchema(createAgentSuccessSchema(operation, data))
+  const plannedJsonSchema = z.toJSONSchema(createAgentPlannedSchema(operation))
   const failureJsonSchema = z.toJSONSchema(createAgentFailureSchema(operation))
   delete successJsonSchema.$schema
+  delete plannedJsonSchema.$schema
   delete failureJsonSchema.$schema
 
   return z.object({
     version: z.literal(AGENT_PROTOCOL_VERSION),
     ok: z.boolean(),
     operation: z.literal(operation),
-    status: z.literal('completed').optional(),
+    status: z.enum(['completed', 'planned']).optional(),
     data: data.optional(),
+    plan: AgentPlanSchema.optional(),
     warnings: z.array(z.string()).optional(),
     meta: SourceMetadataSchema.optional(),
     error: AgentErrorSchema.optional(),
   }).strict().superRefine((value, context) => {
     if (value.ok) {
-      if (!value.status || value.data === undefined || !value.warnings || !value.meta || value.error) {
+      if (value.status === 'planned') {
+        if (value.plan === undefined || !value.warnings || !value.meta || value.data !== undefined || value.error) {
+          context.addIssue({
+            code: 'custom',
+            message: 'Planned agent output must include status, plan, warnings, and meta only.',
+          })
+        }
+        return
+      }
+      if (!value.status || value.data === undefined || !value.warnings || !value.meta || value.error || value.plan !== undefined) {
         context.addIssue({
           code: 'custom',
           message: 'Successful agent output must include status, data, warnings, and meta only.',
@@ -259,14 +332,14 @@ export function createAgentMcpOutputSchema<T extends z.ZodType>(operation: Agent
       }
       return
     }
-    if (!value.error || value.status || value.data !== undefined || value.warnings || value.meta) {
+    if (!value.error || value.status || value.data !== undefined || value.plan !== undefined || value.warnings || value.meta) {
       context.addIssue({
         code: 'custom',
         message: 'Failed agent output must include only the versioned error envelope.',
       })
     }
   }).meta({
-    oneOf: [successJsonSchema, failureJsonSchema],
+    oneOf: [successJsonSchema, plannedJsonSchema, failureJsonSchema],
   })
 }
 
@@ -407,6 +480,18 @@ export type AgentSuccessEnvelope<T> = {
   operation: AgentOperation
   status: 'completed'
   data: T
+  warnings: string[]
+  meta: SourceMetadata
+}
+
+export type AgentPlan = z.infer<typeof AgentPlanSchema>
+
+export type AgentPlannedEnvelope = {
+  version: typeof AGENT_PROTOCOL_VERSION
+  ok: true
+  operation: AgentOperation
+  status: 'planned'
+  plan: AgentPlan
   warnings: string[]
   meta: SourceMetadata
 }
@@ -686,3 +771,65 @@ export function createCommitApplyInputJsonSchema() {
 
 export type CommitApplyRequest = z.infer<typeof CommitApplyRequestSchema>
 export type CommitApplyData = z.infer<typeof CommitApplyDataSchema>
+
+// ─── capabilities operation ───────────────────────────────────────────────────
+
+/**
+ * Request schema for the MCP tool `coco_capabilities` and `coco agent
+ * capabilities`. Deliberately minimal (an optional `repo` only) -- this is
+ * the zero-token handshake a cost-aware caller runs before any generation
+ * call, so it must never require a repository the way the generation
+ * operations do.
+ */
+export const CapabilitiesRequestSchema = z.object({
+  repo: z.string().min(1).optional(),
+}).strict()
+
+/** Publish the caller-facing capabilities request schema. */
+export function createCapabilitiesInputJsonSchema() {
+  return z.toJSONSchema(CapabilitiesRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const CapabilitiesRoutingRowSchema = z.object({
+  task: z.string(),
+  model: z.string(),
+}).strict()
+
+/**
+ * Flat, not wrapped in the versioned `AgentSuccessEnvelope`/`SourceMetadata`
+ * shape the generation operations use -- like `CommitApplyDataSchema`, this
+ * operation has no `source`/`options` bag and does not belong in
+ * `AgentOperationSchema` (it needs no repository and reports no per-request
+ * digest). Deliberately carries no pricing or currency figures anywhere --
+ * only token counts and model routing.
+ */
+export const CapabilitiesResultSchema = z.object({
+  version: z.string().describe('coco package version.'),
+  protocolVersion: z.literal(AGENT_PROTOCOL_VERSION),
+  providers: z.object({
+    configured: z.string(),
+    authenticationReady: z.boolean().describe(
+      'True when a usable API key/credential is configured for the configured provider.',
+    ),
+  }).strict(),
+  routing: z.object({
+    dynamic: z.boolean().describe('True when service.model === "dynamic" (per-task routing active).'),
+    preference: z.string().describe('Active dynamic-model preference (only meaningful when `dynamic`).'),
+    provider: z.string(),
+    rows: z.array(CapabilitiesRoutingRowSchema),
+  }).strict().describe('Same per-task model routing table `coco doctor --cost` renders, produced by buildModelRoutingProfile.'),
+  limits: z.object({
+    maxContextBytes: z.number().int(),
+    defaultTokenLimit: z.number().int(),
+  }).strict(),
+  operations: z.array(z.string()),
+  features: z.object({
+    streaming: z.boolean(),
+    hasCommitlintConfig: z.boolean().optional().describe(
+      'Omitted when no repository was available to check -- capabilities never requires a repository.',
+    ),
+  }).strict(),
+}).strict()
+
+export type CapabilitiesRequest = z.infer<typeof CapabilitiesRequestSchema>
+export type CapabilitiesResult = z.infer<typeof CapabilitiesResultSchema>

@@ -217,6 +217,7 @@ describe('agent generate progress reporting', () => {
 
       expect(mockExecuteChainStreaming).toHaveBeenCalledTimes(1)
       expect(mockExecuteChain).toHaveBeenCalledTimes(1)
+      if (result.status !== 'completed') throw new Error('expected a completed envelope')
       expect(result.data.findings).toHaveLength(1)
     })
 
@@ -261,6 +262,7 @@ describe('agent generate progress reporting', () => {
 
       const result = await generateAgentReview(baseInput, context)
 
+      if (result.status !== 'completed') throw new Error('expected a completed envelope')
       expect(result.data.findings).toHaveLength(1)
       // Called once per stage boundary/chunk tick despite always throwing.
       expect(onProgress).toHaveBeenCalledTimes(4)
@@ -438,5 +440,156 @@ describe('generateAgentCommitDraft — retryable flag (OSS-1326 / #1854)', () =>
     expect(result.ok).toBe(true)
     expect(result.operation).toBe('commit-draft')
     expect(result.data.title).toBe('fix: handle edge case')
+  })
+})
+
+// dryRun planning (OSS-1206): review/changelog/recap accept `options.dryRun`
+// and must return a `status: 'planned'` envelope without ever invoking the
+// model (executeChain/executeChainStreaming/getLlm).
+describe('agent generate dryRun planning (OSS-1206)', () => {
+  const dryRunInput: AgentTaskInput = {
+    ...baseInput,
+    options: AgentOptionsSchema.parse({ dryRun: true }),
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockResolveChangeSource.mockResolvedValue({
+      text: 'diff content',
+      warnings: [],
+      meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
+    })
+    mockLoadConfig.mockReturnValue({
+      service: {
+        tokenLimit: 100000,
+        authentication: { type: 'None' },
+        streaming: { enabled: true },
+        provider: 'test-provider',
+      },
+      prompt: undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    mockGetApiKeyForModel.mockReturnValue('test-key')
+    mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'test-provider' } as never)
+    mockResolveDynamicService.mockReturnValue({ model: 'test-model' } as never)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mockGetLlm.mockResolvedValue({} as any)
+    mockGetTokenCounterForProvider.mockResolvedValue(((text: string) => text.length) as never)
+  })
+
+  it('returns a planned envelope and never calls getLlm/executeChain/executeChainStreaming', async () => {
+    const context = makeContext(undefined)
+
+    const reviewResult = await generateAgentReview(dryRunInput, context)
+    const changelogResult = await generateAgentChangelog(dryRunInput, context)
+    const recapResult = await generateAgentRecap(dryRunInput, context)
+
+    expect(reviewResult.status).toBe('planned')
+    expect(changelogResult.status).toBe('planned')
+    expect(recapResult.status).toBe('planned')
+    expect(mockGetLlm).not.toHaveBeenCalled()
+    expect(mockExecuteChain).not.toHaveBeenCalled()
+    expect(mockExecuteChainStreaming).not.toHaveBeenCalled()
+  })
+
+  it('reports the resolved provider/model/task and an unsaturated budget as willTruncate: false', async () => {
+    const context = makeContext(undefined)
+
+    const result = await generateAgentReview(dryRunInput, context)
+
+    if (result.status !== 'planned') throw new Error('expected a planned envelope')
+    expect(result.plan.provider).toBe('test-provider')
+    expect(result.plan.model).toBe('test-model')
+    expect(result.plan.task).toBe('review')
+    expect(result.plan.promptTokens).toBeGreaterThan(0)
+    expect(result.plan.budgetTokens).toBe(100000)
+    expect(result.plan.willTruncate).toBe(false)
+    expect(result.plan.estimatedAnalyzedRatio).toBe(1)
+    expect(result.plan.authenticationReady).toBe(true)
+  })
+
+  it('reports the exact promptTokens a real run of the same request would send', async () => {
+    // Both the dryRun and real paths share prepareStructuredCall, so the
+    // rendered-prompt token count for identical request variables must be
+    // byte-for-byte identical between a plan and a real run.
+    mockExecuteChain.mockResolvedValueOnce([{
+      title: 'finding',
+      summary: 'summary',
+      severity: 5,
+      category: 'bug',
+      filePath: 'a.ts',
+    }] as never)
+
+    const planned = await generateAgentReview(dryRunInput, makeContext(undefined))
+    const real = await generateAgentReview(
+      { ...baseInput, options: AgentOptionsSchema.parse({}) },
+      makeContext(undefined),
+    )
+
+    if (planned.status !== 'planned') throw new Error('expected a planned envelope')
+    if (real.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(mockExecuteChain).toHaveBeenCalledTimes(1)
+    // Both the real call and the plan go through getPrompt's real
+    // PromptTemplate (only executeChain/executeChainStreaming/getLlm are
+    // mocked in this suite) -- format() reproduces exactly what
+    // enforcePromptBudget's tokenizer counted for the real run.
+    const sentPrompt = mockExecuteChain.mock.calls[0][0].prompt
+    const sentVariables = mockExecuteChain.mock.calls[0][0].variables as Record<string, string>
+    const rendered = await sentPrompt.format(sentVariables)
+    expect(planned.plan.promptTokens).toBe(rendered.length)
+  })
+
+  it('sets willTruncate: true and estimatedAnalyzedRatio < 1 when the rendered prompt exceeds the budget', async () => {
+    mockLoadConfig.mockReturnValue({
+      service: {
+        // Between this request's overhead (~1169 chars) and full rendered
+        // size (~1340 chars) so truncation engages without exceeding budget
+        // even with an empty summary (which would throw instead).
+        tokenLimit: 1800,
+        authentication: { type: 'None' },
+        streaming: { enabled: true },
+        provider: 'test-provider',
+      },
+      prompt: undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    const context = makeContext(undefined)
+
+    const result = await generateAgentReview(dryRunInput, context)
+
+    if (result.status !== 'planned') throw new Error('expected a planned envelope')
+    expect(result.plan.willTruncate).toBe(true)
+    expect(result.plan.budgetTokens).toBe(1800)
+  })
+
+  it('reports authenticationReady: false when the configured provider has no usable key, without throwing', async () => {
+    mockLoadConfig.mockReturnValue({
+      service: {
+        tokenLimit: 100000,
+        authentication: { type: 'APIKey', credentials: {} },
+        streaming: { enabled: true },
+        provider: 'test-provider',
+      },
+      prompt: undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    mockGetApiKeyForModel.mockImplementation(() => {
+      throw new Error('no api key configured')
+    })
+    const context = makeContext(undefined)
+
+    const result = await generateAgentReview(dryRunInput, context)
+
+    if (result.status !== 'planned') throw new Error('expected a planned envelope')
+    expect(result.plan.authenticationReady).toBe(false)
+  })
+
+  it('rejects commit-draft dryRun with UNSUPPORTED_OPERATION instead of running a real generation', async () => {
+    const context = makeContext(undefined)
+
+    await expect(generateAgentCommitDraft(dryRunInput, context)).rejects.toMatchObject({
+      code: 'UNSUPPORTED_OPERATION',
+    })
+    expect(mockGenerateCommitDraft).not.toHaveBeenCalled()
   })
 })

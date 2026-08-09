@@ -5,7 +5,7 @@ import { BaseCommandOptions } from '../types'
 import { AgentOperation } from '../../operations/agent'
 
 export interface AgentCommandOptions extends BaseCommandOptions {
-  operation: AgentOperation | 'schema'
+  operation: AgentOperation | 'schema' | 'capabilities'
   input?: string
   task?: AgentOperation
 }
@@ -31,7 +31,7 @@ export const builder = (yargs: Argv) => yargs
   .positional('operation', {
     describe: 'Agent operation to run',
     type: 'string',
-    choices: ['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'schema'] as const,
+    choices: ['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'capabilities', 'schema'] as const,
   })
   .options(options)
   .check((argv) => {
