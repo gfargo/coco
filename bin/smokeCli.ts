@@ -398,6 +398,20 @@ async function main(): Promise<void> {
       label: 'ESM entrypoint help',
     })
 
+    const versionJsonOutput = runCheck({
+      command: process.execPath,
+      args: ['dist/index.js', '--version', '--json'],
+      label: '--version --json',
+    })
+    const versionInfo = JSON.parse(versionJsonOutput) as { version?: unknown; node?: unknown }
+    if (typeof versionInfo.version !== 'string' || !versionInfo.version) {
+      throw new Error(`--version --json did not include a version string:\n${versionJsonOutput}`)
+    }
+    if (versionInfo.node !== process.versions.node) {
+      throw new Error(`--version --json reported node ${String(versionInfo.node)}, expected ${process.versions.node}`)
+    }
+    console.log('✓ --version --json')
+
     const packOutput = runCheck({
       command: npmCommand(),
       args: ['pack', '--pack-destination', tempRoot, '--silent'],

@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
+PackageIdentifier: Gfargo.Coco
+PackageVersion: 0.87.0
+PackageLocale: en-US
+Publisher: gfargo
+PublisherUrl: https://github.com/gfargo
+PublisherSupportUrl: https://github.com/gfargo/coco/issues
+PackageName: coco
+PackageUrl: https://coco.griffen.codes
+License: MIT
+LicenseUrl: https://github.com/gfargo/coco/blob/main/LICENSE
+Copyright: Copyright (c) gfargo
+ShortDescription: AI-powered git assistant — commits, changelogs, reviews, and a terminal workstation
+Description: >-
+  coco is an AI-powered git assistant CLI: generates Conventional Commit
+  messages, changelogs, code reviews, and PR/MR descriptions from your diff,
+  plus an interactive terminal workstation. Works with GitHub, GitHub
+  Enterprise, and GitLab; supports OpenAI, Anthropic, Gemini, Mistral, Azure,
+  Bedrock, and local Ollama.
+Moniker: coco
+Tags:
+  - git
+  - cli
+  - ai
+  - commit
+  - changelog
+  - code-review
+ManifestType: defaultLocale
+ManifestVersion: 1.9.0
