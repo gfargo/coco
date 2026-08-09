@@ -337,7 +337,7 @@ async function runMcpHandshakeSmoke(): Promise<void> {
 
     const toolsListResponse = await Promise.race([client.request('tools/list'), childFailure])
     const tools = (toolsListResponse.result as ToolsListResult | undefined)?.tools ?? []
-    const expectedNames = ['coco_commit_draft', 'coco_review', 'coco_changelog', 'coco_recap', 'coco_condense_diff', 'coco_repo_context', 'coco_blame', 'coco_lint']
+    const expectedNames = ['coco_commit_draft', 'coco_review', 'coco_changelog', 'coco_recap', 'coco_condense_diff', 'coco_repo_context', 'coco_blame', 'coco_lint', 'coco_capabilities']
     const actualNames = [...tools.map((tool) => tool.name)].sort()
     if (JSON.stringify(actualNames) !== JSON.stringify([...expectedNames].sort())) {
       throw new Error(`tools/list returned an unexpected tool set.\nExpected: ${expectedNames.join(', ')}\nActual: ${actualNames.join(', ')}`)
