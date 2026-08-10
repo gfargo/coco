@@ -8,6 +8,7 @@ const mockArmNonInteractiveUsageTelemetry = jest.fn()
 const mockResolveAgentRepoRoot = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
+const mockRunCapabilities = jest.fn()
 
 jest.mock('../utils/usageTelemetry', () => ({
   armNonInteractiveUsageTelemetry: (...args: unknown[]) => Promise.resolve(mockArmNonInteractiveUsageTelemetry(...args)),
@@ -26,6 +27,7 @@ jest.mock('../../operations/agent', () => {
     createAgentOperationContext: (...args: unknown[]) => mockCreateAgentOperationContext(...args),
     resolveAgentRepoRoot: (...args: unknown[]) => mockResolveAgentRepoRoot(...args),
     runAgentOperation: (...args: unknown[]) => mockRunAgentOperation(...args),
+    runCapabilities: (...args: unknown[]) => mockRunCapabilities(...args),
   }
 })
 
@@ -79,6 +81,15 @@ describe('agent command handler', () => {
     mockResolveAgentRepoRoot.mockResolvedValue('/repo')
     mockCreateAgentOperationContext.mockResolvedValue({ signal: undefined } as never)
     mockRunAgentOperation.mockResolvedValue(success)
+    mockRunCapabilities.mockResolvedValue({
+      version: '0.0.0-test',
+      protocolVersion: 1,
+      providers: { configured: 'anthropic', authenticationReady: true },
+      routing: { dynamic: false, preference: 'balanced', provider: 'anthropic', rows: [] },
+      limits: { maxContextBytes: 2 * 1024 * 1024, defaultTokenLimit: 4096 },
+      operations: ['commit-draft', 'review', 'changelog', 'recap'],
+      features: { streaming: false },
+    })
   })
 
   afterEach(() => {
@@ -102,7 +113,7 @@ describe('agent command handler', () => {
       version: 1,
       operation: 'review',
       input: { type: 'object', additionalProperties: false },
-      output: { oneOf: expect.any(Array) },
+      output: { anyOf: expect.any(Array) },
     })
     expect(output.input.required).toBeUndefined()
     expect(output.input.properties.options.required).toBeUndefined()
@@ -211,5 +222,44 @@ describe('agent command handler', () => {
       error: { code: 'OPERATION_FAILED', message: 'provider unavailable', retryable: false },
     })
     expect(process.exitCode).toBe(1)
+  })
+
+  describe('coco agent capabilities (OSS-1206)', () => {
+    it('emits the capabilities report when a repository resolves, without arming telemetry', async () => {
+      await handler(argv({ operation: 'capabilities' }))
+
+      expect(mockRunCapabilities).toHaveBeenCalledWith('/repo')
+      expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
+      expect(JSON.parse(stdout)).toMatchObject({
+        providers: { configured: 'anthropic', authenticationReady: true },
+      })
+      expect(process.exitCode).toBeUndefined()
+    })
+
+    it('degrades to the repo-optional report instead of failing when no repository is available', async () => {
+      const { AgentOperationError } = jest.requireActual('../../operations/agent/errors') as typeof import('../../operations/agent/errors')
+      mockResolveAgentRepoRoot.mockRejectedValueOnce(
+        new AgentOperationError('INVALID_REPOSITORY', 'Not a git repository: /tmp/notgit'),
+      )
+
+      await handler(argv({ operation: 'capabilities' }))
+
+      expect(mockRunCapabilities).toHaveBeenCalledWith(undefined)
+      expect(JSON.parse(stdout)).toMatchObject({
+        providers: { configured: 'anthropic' },
+      })
+      expect(process.exitCode).toBeUndefined()
+    })
+
+    it('emits a flat error envelope (not the versioned AgentFailureEnvelope) when runCapabilities throws', async () => {
+      mockRunCapabilities.mockRejectedValueOnce(new Error('config file is malformed JSON'))
+
+      await handler(argv({ operation: 'capabilities' }))
+
+      expect(JSON.parse(stdout)).toEqual({
+        error: { code: 'OPERATION_FAILED', message: 'config file is malformed JSON', retryable: false },
+      })
+      expect(process.exitCode).toBe(1)
+    })
   })
 })

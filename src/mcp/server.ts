@@ -22,6 +22,8 @@ import {
     asUntrustedChangeContext,
     BlameDataSchema,
     BlameRequestSchema,
+    CapabilitiesRequestSchema,
+    CapabilitiesResultSchema,
     ChangelogDataSchema,
     CommitApplyDataSchema,
     CommitApplyRequestSchema,
@@ -54,6 +56,7 @@ import {
     ReviewDataSchema,
     runAgentOperation,
     runBlame,
+    runCapabilities,
     runCommitApply,
     runCondenseDiff,
     runLint,
@@ -580,6 +583,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     allowWrite
       ? 'This server was started with --allow-write: coco_commit_apply is also registered. It creates a git commit from whatever is currently staged — it never runs `git add` and never pushes.'
       : 'coco_commit_apply is NOT registered on this server; start it with `coco mcp --allow-write` to opt into that write-capable tool.',
+    'coco_capabilities is a zero-token handshake -- call it first to learn whether coco is usable, for which operations, with which model routing, and within what limits, before spending on a generation call. It never requires a repository.',
+    'review, changelog, and recap accept `options.dryRun: true` to return a `status: "planned"` token/model plan instead of generating output -- no inference call, though the change source is still resolved (a git read for repository scope) and the same safety checks still apply. commit-draft does not support dryRun.',
     'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, tracked-file tree, resolved config) so a client can browse without spending a tool call.',
     'Prompts expose coco\'s built-in commit, review, changelog, and recap templates, fully rendered from curated arguments, for the client to run on its own model. Caller-supplied change content is wrapped in untrusted-content framing before rendering; repository-defined config is never used to source prompt text.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
@@ -822,6 +827,60 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
   })
 
   if (allowWrite) registerCommitApplyTool(server, repoRoot)
+
+  // coco_capabilities is the zero-token, no-repository handshake: it never
+  // requires a repository, so repo resolution failures degrade to "no repo"
+  // (used only for optional commitlint-config detection) rather than erroring.
+  server.registerTool('coco_capabilities', {
+    title: 'Coco capabilities',
+    description: [
+      'Zero-token handshake: reports whether coco is usable, for which operations, with which model routing, and',
+      'within what limits -- before spending on a generation call. Call this once per session.',
+      'No repository is required. When one is available (bound at server start, declared via client roots, or',
+      'passed as `repo`), capabilities additionally reports repository-level details like commitlint config detection.',
+      '`authenticationReady: false` means no usable API key/credential is configured for the active provider --',
+      'generation calls would fail with AUTHENTICATION_REQUIRED.',
+      'Reports token counts and model routing only -- no pricing or currency figures.',
+      'Read-only; makes no LLM call.',
+    ].join(' '),
+    inputSchema: CapabilitiesRequestSchema,
+    outputSchema: CapabilitiesResultSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  }, async (rawInput, extra) => {
+    try {
+      const input = CapabilitiesRequestSchema.parse(rawInput)
+      let resolvedRepoRoot: string | undefined
+      try {
+        resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+        await assertClientAllowsRoot(server, resolvedRepoRoot)
+      } catch {
+        // No repository available (or not declared as an allowed client
+        // root) -- capabilities degrades to the repo-optional report rather
+        // than failing, since it must work before any repository is known.
+        resolvedRepoRoot = undefined
+      }
+      const result = await runCapabilities(resolvedRepoRoot)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = toAgentOperationError(error)
+      const errorPayload = {
+        error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+      }
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(errorPayload, null, 2) }],
+        structuredContent: errorPayload,
+      }
+    }
+  })
 
   registerRepoResource(
     server,
