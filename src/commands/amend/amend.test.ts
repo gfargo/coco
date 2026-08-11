@@ -211,6 +211,19 @@ describe('amend command', () => {
     expect(mockCreateCommit).not.toHaveBeenCalled()
   })
 
+  it('forwards argv.language to generateCommitDraft as a per-invocation override (OSS-2217)', async () => {
+    ;(argv as unknown as { language?: string }).language = 'French'
+    const { restore } = spyStdout()
+    try {
+      await handler(argv, logger)
+    } finally {
+      restore()
+    }
+    expect(mockGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ argv: expect.objectContaining({ language: 'French' }) })
+    )
+  })
+
   it('exits non-zero when draft generation fails', async () => {
     mockGenerate.mockResolvedValue({
       ok: false,

@@ -2,7 +2,7 @@ import type ReactTypes from 'react'
 import type { GitLogRow } from '../../../git/logData'
 import { createLogInkState, applyLogInkAction } from '../inkViewModel'
 import { checkoutReflogEntry, performReflogUndo, planReflogUndo } from '../../../git/reflogActions'
-import { checkoutBranch, checkoutBranchByName, deleteBranches, pullCurrentBranch, pullCurrentBranchRebase, pushBranch } from '../../../git/branchActions'
+import { checkoutBranch, checkoutBranchByName, deleteBranches, pullCurrentBranch, pullCurrentBranchRebase, pushBranch, pushCurrentBranch, mergeBranch, canFastForward, resetCurrentBranchToRef, isResetBackward } from '../../../git/branchActions'
 import { cherryPickCommit, cherryPickRange, cherryPickCommits, autosquashRebase } from '../../../git/historyActions'
 import { createStash, dropStashes, restoreStash } from '../../../git/stashActions'
 import { addOrEditCommitNote } from '../../../git/notesActions'
@@ -30,11 +30,16 @@ jest.mock('../../../git/branchActions', () => {
   return {
     ...actual,
     pushBranch: jest.fn(),
+    pushCurrentBranch: jest.fn(),
     pullCurrentBranch: jest.fn(),
     pullCurrentBranchRebase: jest.fn(),
     checkoutBranch: jest.fn(),
     checkoutBranchByName: jest.fn(),
     deleteBranches: jest.fn(),
+    mergeBranch: jest.fn(),
+    canFastForward: jest.fn(),
+    resetCurrentBranchToRef: jest.fn(),
+    isResetBackward: jest.fn(),
   }
 })
 
@@ -1647,5 +1652,574 @@ describe('undo stack (OSS-1606)', () => {
     await runWorkflowAction('undo-last-action')
     expect(git.raw).toHaveBeenCalledWith(['tag', 'v1.0.0', 'abc1234'])
     expect(dispatch).toHaveBeenCalledWith({ type: 'popUndoEntry' })
+  })
+})
+
+
+const mergeBranchMock = mergeBranch as jest.MockedFunction<typeof mergeBranch>
+const canFastForwardMock = canFastForward as jest.MockedFunction<typeof canFastForward>
+
+const mergeBranch_otherBranch = {
+  type: 'local',
+  name: 'refs/heads/feature/merge-target',
+  shortName: 'feature/merge-target',
+  hash: 'merge123',
+  current: false,
+  upstream: undefined,
+  remote: undefined,
+  date: '2026-05-01',
+  subject: 'feat: merge target',
+  ahead: 0,
+  behind: 0,
+} as never
+
+describe('merge-into-current workflow handler', () => {
+  beforeEach(() => {
+    mergeBranchMock.mockReset()
+    canFastForwardMock.mockReset()
+  })
+
+  it('calls mergeBranch with ff-only when canFastForward returns true', async () => {
+    canFastForwardMock.mockResolvedValue(true)
+    mergeBranchMock.mockResolvedValue({ ok: true, message: 'Fast-forward merge complete' })
+    const git = {
+      revparse: jest.fn().mockResolvedValue('previoushead123\n'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      context: { branches: { localBranches: [mergeBranch_otherBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('merge-into-current')
+    expect(canFastForwardMock).toHaveBeenCalledWith(expect.anything(), 'feature/merge-target')
+    expect(mergeBranchMock).toHaveBeenCalledWith(expect.anything(), 'feature/merge-target', true)
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: expect.stringContaining('Fast-forwarded'),
+      kind: 'success',
+    }))
+  })
+
+  it('calls mergeBranch without ff-only when canFastForward returns false', async () => {
+    canFastForwardMock.mockResolvedValue(false)
+    mergeBranchMock.mockResolvedValue({ ok: true, message: 'Merge complete' })
+    const git = {
+      revparse: jest.fn().mockResolvedValue('previoushead123\n'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      context: { branches: { localBranches: [mergeBranch_otherBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('merge-into-current')
+    expect(canFastForwardMock).toHaveBeenCalledWith(expect.anything(), 'feature/merge-target')
+    expect(mergeBranchMock).toHaveBeenCalledWith(expect.anything(), 'feature/merge-target')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: expect.stringContaining('Merged feature/merge-target into main'),
+      kind: 'success',
+    }))
+  })
+
+  it('captures undo entry with kind merge-branch and pre-merge HEAD on success', async () => {
+    canFastForwardMock.mockResolvedValue(false)
+    mergeBranchMock.mockResolvedValue({ ok: true, message: 'Merge complete' })
+    const git = {
+      revparse: jest.fn().mockResolvedValue('deadbeef9876\n'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      context: { branches: { localBranches: [mergeBranch_otherBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('merge-into-current')
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: {
+        kind: 'merge-branch',
+        label: 'merge feature/merge-target into main',
+        depth: 0,
+        previousSha: 'deadbeef9876',
+      },
+    })
+  })
+
+  it('routes to conflicts view when merge produces conflicts', async () => {
+    canFastForwardMock.mockResolvedValue(false)
+    mergeBranchMock.mockResolvedValue({
+      ok: false,
+      message: 'CONFLICT (content): Merge conflict in src/app.ts\nerror: Automatic merge failed',
+    })
+    const git = {
+      revparse: jest.fn().mockResolvedValue('previoushead123\n'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      context: { branches: { localBranches: [mergeBranch_otherBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('merge-into-current')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'operation-conflict-recovery',
+        title: 'Merge stopped on conflicts',
+        keepStatusOnDismiss: true,
+        options: [
+          expect.objectContaining({ key: 'x', intent: 'open-conflicts' }),
+          expect.objectContaining({ key: 'a', workflowId: 'abort-operation', destructive: true }),
+        ],
+      }),
+    }))
+  })
+
+  it('returns error when cursored branch equals current branch (self-merge guard)', async () => {
+    const currentBranch = {
+      type: 'local',
+      name: 'refs/heads/main',
+      shortName: 'main',
+      hash: 'abc',
+      current: true,
+      upstream: 'origin/main',
+      remote: 'origin',
+      date: '2026-05-01',
+      subject: 'feat',
+      ahead: 0,
+      behind: 0,
+    } as never
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      context: { branches: { localBranches: [currentBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('merge-into-current')
+    // Self-merge guard fires BEFORE canFastForward or mergeBranch
+    expect(canFastForwardMock).not.toHaveBeenCalled()
+    expect(mergeBranchMock).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Cannot merge a branch into itself.',
+      kind: 'error',
+    }))
+  })
+})
+
+
+const resetCurrentBranchToRefMock = resetCurrentBranchToRef as jest.MockedFunction<typeof resetCurrentBranchToRef>
+const isResetBackwardMock = isResetBackward as jest.MockedFunction<typeof isResetBackward>
+
+// A non-current branch with upstream for the reset-to-branch tests.
+const resetTargetBranch = {
+  type: 'local',
+  name: 'refs/heads/feature/target',
+  shortName: 'feature/target',
+  hash: 'targetabc',
+  current: false,
+  upstream: 'origin/feature/target',
+  remote: 'origin',
+  date: '2026-05-01',
+  subject: 'feat: target',
+  ahead: 0,
+  behind: 0,
+} as never
+
+// A non-current branch WITHOUT upstream.
+const resetTargetBranchNoUpstream = {
+  type: 'local',
+  name: 'refs/heads/feature/local-only',
+  shortName: 'feature/local-only',
+  hash: 'localonly',
+  current: false,
+  upstream: undefined,
+  remote: undefined,
+  date: '2026-05-01',
+  subject: 'feat: local only',
+  ahead: 0,
+  behind: 0,
+} as never
+
+// The current branch for reset-to-branch context.
+const currentBranchForReset = {
+  type: 'local',
+  name: 'refs/heads/main',
+  shortName: 'main',
+  hash: 'currentabc',
+  current: true,
+  upstream: 'origin/main',
+  remote: 'origin',
+  date: '2026-05-01',
+  subject: 'feat: current',
+  ahead: 0,
+  behind: 0,
+} as never
+
+describe('reset-to-branch workflow handler', () => {
+  beforeEach(() => {
+    resetCurrentBranchToRefMock.mockReset()
+    isResetBackwardMock.mockReset()
+  })
+
+  it('dispatches with soft mode when payload is "soft"', async () => {
+    resetCurrentBranchToRefMock.mockResolvedValue({ ok: true, message: 'Reset to feature/target' })
+    isResetBackwardMock.mockResolvedValue(false)
+    const git = {
+      revparse: jest.fn().mockResolvedValue('deadbeef1234\n'),
+    }
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: { ...createLogInkState([]), selectedBranchId: 'feature/target' } as never,
+      context: { branches: { localBranches: [currentBranchForReset, resetTargetBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('reset-to-branch', 'soft')
+    expect(resetCurrentBranchToRefMock).toHaveBeenCalledWith(expect.anything(), 'feature/target', 'soft')
+  })
+
+  it('dispatches with mixed mode when payload is "mixed"', async () => {
+    resetCurrentBranchToRefMock.mockResolvedValue({ ok: true, message: 'Reset to feature/target' })
+    isResetBackwardMock.mockResolvedValue(false)
+    const git = {
+      revparse: jest.fn().mockResolvedValue('deadbeef1234\n'),
+    }
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: { ...createLogInkState([]), selectedBranchId: 'feature/target' } as never,
+      context: { branches: { localBranches: [currentBranchForReset, resetTargetBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('reset-to-branch', 'mixed')
+    expect(resetCurrentBranchToRefMock).toHaveBeenCalledWith(expect.anything(), 'feature/target', 'mixed')
+  })
+
+  it('dispatches with hard mode when payload is "hard"', async () => {
+    resetCurrentBranchToRefMock.mockResolvedValue({ ok: true, message: 'Reset to feature/target' })
+    isResetBackwardMock.mockResolvedValue(false)
+    const git = {
+      revparse: jest.fn().mockResolvedValue('deadbeef1234\n'),
+    }
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: { ...createLogInkState([]), selectedBranchId: 'feature/target' } as never,
+      context: { branches: { localBranches: [currentBranchForReset, resetTargetBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('reset-to-branch', 'hard')
+    expect(resetCurrentBranchToRefMock).toHaveBeenCalledWith(expect.anything(), 'feature/target', 'hard')
+  })
+
+  it('captures an undo entry with previousSha and mode preserved on success', async () => {
+    resetCurrentBranchToRefMock.mockResolvedValue({ ok: true, message: 'Reset to feature/target' })
+    isResetBackwardMock.mockResolvedValue(false)
+    const git = {
+      revparse: jest.fn().mockResolvedValue('abc123previous\n'),
+    }
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: { ...createLogInkState([]), selectedBranchId: 'feature/target' } as never,
+      context: { branches: { localBranches: [currentBranchForReset, resetTargetBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('reset-to-branch', 'hard')
+    expect(dispatch).toHaveBeenCalledWith({
+      type: 'pushUndoEntry',
+      value: {
+        kind: 'reset-to-branch',
+        label: 'reset --hard to feature/target',
+        depth: 0,
+        previousSha: 'abc123previous',
+        mode: 'hard',
+      },
+    })
+  })
+
+  it('suggests force-push when isResetBackward is true and branch has upstream', async () => {
+    resetCurrentBranchToRefMock.mockResolvedValue({ ok: true, message: 'Reset to feature/target' })
+    isResetBackwardMock.mockResolvedValue(true)
+    const git = {
+      revparse: jest.fn().mockResolvedValue('deadbeef1234\n'),
+    }
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: { ...createLogInkState([]), selectedBranchId: 'feature/target' } as never,
+      context: { branches: { localBranches: [currentBranchForReset, resetTargetBranch], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('reset-to-branch', 'mixed')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: expect.stringContaining('Force-push with P'),
+      kind: 'success',
+    }))
+  })
+
+  it('suggests view history when isResetBackward is false', async () => {
+    resetCurrentBranchToRefMock.mockResolvedValue({ ok: true, message: 'Reset to feature/local-only' })
+    isResetBackwardMock.mockResolvedValue(false)
+    const git = {
+      revparse: jest.fn().mockResolvedValue('deadbeef1234\n'),
+    }
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: { ...createLogInkState([]), selectedBranchId: 'feature/local-only' } as never,
+      context: { branches: { localBranches: [currentBranchForReset, resetTargetBranchNoUpstream], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('reset-to-branch', 'soft')
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: expect.stringContaining('View history with gh'),
+      kind: 'success',
+    }))
+  })
+
+  it('errors when cursored branch equals current branch (self-reset guard)', async () => {
+    const dispatch = jest.fn()
+    const git = {
+      revparse: jest.fn().mockResolvedValue('deadbeef\n'),
+    }
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+      state: { ...createLogInkState([]), selectedBranchId: 'main' } as never,
+      context: { branches: { localBranches: [currentBranchForReset], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('reset-to-branch', 'mixed')
+    expect(resetCurrentBranchToRefMock).not.toHaveBeenCalled()
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Nothing to reset — already at that ref.',
+      kind: 'error',
+    }))
+  })
+})
+
+const pushCurrentBranchMock = pushCurrentBranch as jest.MockedFunction<typeof pushCurrentBranch>
+
+describe('sync-branch workflow handler (Requirement 6)', () => {
+  beforeEach(() => {
+    pullCurrentBranchMock.mockReset()
+    pushCurrentBranchMock.mockReset()
+  })
+
+  it('successful pull+push returns "Branch fully synchronized" momentum hint', async () => {
+    pullCurrentBranchMock.mockResolvedValue({ ok: true, message: 'Already up to date.' })
+    pushCurrentBranchMock.mockResolvedValue({ ok: true, message: 'Pushed to origin' })
+    const git = {
+      raw: jest.fn().mockResolvedValue('origin/main'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+    }))
+
+    await runWorkflowAction('sync-branch')
+    // Upstream check passed
+    expect(git.raw).toHaveBeenCalledWith(['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'])
+    // Both phases called
+    expect(pullCurrentBranchMock).toHaveBeenCalled()
+    expect(pushCurrentBranchMock).toHaveBeenCalled()
+    // Final success message
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: expect.stringContaining('Branch fully synchronized'),
+      kind: 'success',
+    }))
+  })
+
+  it('returns error "No upstream — press u to set one first." when no upstream is configured', async () => {
+    const git = {
+      raw: jest.fn().mockRejectedValue(new Error("fatal: no upstream configured for branch 'feature'")),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+    }))
+
+    await runWorkflowAction('sync-branch')
+    // Neither pull nor push should be attempted
+    expect(pullCurrentBranchMock).not.toHaveBeenCalled()
+    expect(pushCurrentBranchMock).not.toHaveBeenCalled()
+    // Error status dispatched
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'No upstream — press u to set one first.',
+      kind: 'error',
+    }))
+  })
+
+  it('dispatches diverged-pull-recovery setPendingChoice when pull diverges', async () => {
+    pullCurrentBranchMock.mockResolvedValue({
+      ok: false,
+      message: 'fatal: Not possible to fast-forward, aborting.',
+    })
+    const git = {
+      raw: jest.fn().mockResolvedValue('origin/main'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+    }))
+
+    await runWorkflowAction('sync-branch')
+    // Push should NOT be attempted after a diverged pull
+    expect(pushCurrentBranchMock).not.toHaveBeenCalled()
+    // Should present the rebase/merge strategy choice
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'diverged-pull-recovery',
+        title: 'Local and remote have diverged',
+        options: [
+          expect.objectContaining({ key: 'r', workflowId: 'pull-rebase-current' }),
+          expect.objectContaining({ key: 'm', workflowId: 'pull-merge-current' }),
+        ],
+      }),
+    }))
+  })
+
+  it('dispatches operation-conflict-recovery when pull encounters conflicts', async () => {
+    pullCurrentBranchMock.mockResolvedValue({
+      ok: false,
+      message: 'CONFLICT (content): Merge conflict in src/app.ts\nerror: could not apply abc1234... feat',
+    })
+    const git = {
+      raw: jest.fn().mockResolvedValue('origin/main'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+    }))
+
+    await runWorkflowAction('sync-branch')
+    // Push should NOT be attempted after a conflicted pull
+    expect(pushCurrentBranchMock).not.toHaveBeenCalled()
+    // Should present the conflict recovery choice
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setPendingChoice',
+      value: expect.objectContaining({
+        id: 'operation-conflict-recovery',
+        title: 'Sync interrupted — resolve conflicts then push manually with P',
+        options: [
+          expect.objectContaining({ key: 'x', intent: 'open-conflicts' }),
+          expect.objectContaining({ key: 'a', workflowId: 'abort-operation', destructive: true }),
+        ],
+      }),
+    }))
+  })
+
+  it('returns "Pull succeeded but push failed" when push fails after successful pull', async () => {
+    pullCurrentBranchMock.mockResolvedValue({ ok: true, message: 'Pulled from origin' })
+    pushCurrentBranchMock.mockResolvedValue({
+      ok: false,
+      message: "error: failed to push some refs to 'origin'",
+    })
+    const git = {
+      raw: jest.fn().mockResolvedValue('origin/main'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+    }))
+
+    await runWorkflowAction('sync-branch')
+    // Both pull and push were attempted
+    expect(pullCurrentBranchMock).toHaveBeenCalled()
+    expect(pushCurrentBranchMock).toHaveBeenCalled()
+    // Error status includes both context
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: expect.stringContaining('Pull succeeded but push failed'),
+      kind: 'error',
+    }))
+  })
+
+  it('returns the pull error directly when pull fails with a generic error', async () => {
+    pullCurrentBranchMock.mockResolvedValue({
+      ok: false,
+      message: 'fatal: could not read from remote repository',
+    })
+    const git = {
+      raw: jest.fn().mockResolvedValue('origin/main'),
+    }
+    const harness = createHookHarness()
+    const dispatch = jest.fn()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: git as never,
+    }))
+
+    await runWorkflowAction('sync-branch')
+    // Push should NOT be attempted after a failed pull
+    expect(pushCurrentBranchMock).not.toHaveBeenCalled()
+    // The pull error should surface directly
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'fatal: could not read from remote repository',
+      kind: 'error',
+    }))
+    // No choice prompts should have been raised
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingChoice' }))
   })
 })

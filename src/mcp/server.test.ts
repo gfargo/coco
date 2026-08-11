@@ -19,7 +19,10 @@ const mockGetRepoTree = jest.fn()
 const mockGetRepoConfig = jest.fn()
 const mockRunCondenseDiff = jest.fn()
 const mockRunRepoContext = jest.fn()
+const mockRunBlame = jest.fn()
+const mockRunLint = jest.fn()
 const mockRunCommitApply = jest.fn()
+const mockRunCapabilities = jest.fn()
 
 type HandlerExtra = {
   signal: AbortSignal
@@ -134,7 +137,10 @@ jest.mock('../operations/agent', () => {
     getRepoConfig: (...args: unknown[]) => mockGetRepoConfig(...args),
     runCondenseDiff: (...args: unknown[]) => mockRunCondenseDiff(...args),
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
+    runBlame: (...args: unknown[]) => mockRunBlame(...args),
+    runLint: (...args: unknown[]) => mockRunLint(...args),
     runCommitApply: (...args: unknown[]) => mockRunCommitApply(...args),
+    runCapabilities: (...args: unknown[]) => mockRunCapabilities(...args),
   }
 })
 
@@ -198,10 +204,37 @@ describe('createCocoMcpServer', () => {
       warnings: [],
       meta: { kind: 'repository' as const, digest: 'sha256:test', verification: 'repository-derived' as const },
     })
+    mockRunBlame.mockResolvedValue({
+      version: 1 as const,
+      ok: true as const,
+      operation: 'blame' as const,
+      status: 'completed' as const,
+      data: { path: 'a.ts', lines: [] },
+      warnings: [],
+      meta: { kind: 'repository' as const, digest: 'sha256:test', verification: 'repository-derived' as const },
+    })
+    mockRunLint.mockResolvedValue({
+      version: 1 as const,
+      ok: true as const,
+      operation: 'lint' as const,
+      status: 'completed' as const,
+      data: { results: [], summary: { passing: 0, failing: 0, warning: 0, skipped: 0 } },
+      warnings: [],
+      meta: { kind: 'repository' as const, digest: 'sha256:test', verification: 'repository-derived' as const },
+    })
     mockRunCommitApply.mockResolvedValue({
       sha: 'abc123def456',
       shortSha: 'abc123d',
       message: 'feat: add thing',
+    })
+    mockRunCapabilities.mockResolvedValue({
+      version: '0.0.0-test',
+      protocolVersion: 1,
+      providers: { configured: 'anthropic', authenticationReady: true },
+      routing: { dynamic: false, preference: 'balanced', provider: 'anthropic', rows: [{ task: 'review', model: 'claude-sonnet-4-6' }] },
+      limits: { maxContextBytes: 2 * 1024 * 1024, defaultTokenLimit: 4096 },
+      operations: ['commit-draft', 'review', 'changelog', 'recap'],
+      features: { streaming: false },
     })
   })
 
@@ -235,7 +268,7 @@ describe('createCocoMcpServer', () => {
     }
   }
 
-  it('registers six read-only generation tools including coco_condense_diff and coco_repo_context', () => {
+  it('registers nine read-only tools including coco_condense_diff, coco_repo_context, coco_blame, coco_lint, and coco_capabilities', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -245,6 +278,9 @@ describe('createCocoMcpServer', () => {
       'coco_recap',
       'coco_condense_diff',
       'coco_repo_context',
+      'coco_blame',
+      'coco_lint',
+      'coco_capabilities',
     ])
     // The four LLM-generation tools share the AgentTaskInputSchema and have
     // idempotentHint:false; condense-diff and repo-context have their own schemas and idempotentHint:true.
@@ -275,7 +311,7 @@ describe('createCocoMcpServer', () => {
       }).properties?.options?.properties
       expect(cliOptionsProperties).toHaveProperty('trustRepositoryConfig')
       expect(outputJson.type).toBe('object')
-      expect(outputJson.oneOf).toHaveLength(2)
+      expect(outputJson.oneOf).toHaveLength(3)
     }
 
     // coco_condense_diff uses its own request schema.
@@ -297,7 +333,7 @@ describe('createCocoMcpServer', () => {
     expect(condenseInputJson).not.toHaveProperty('properties.trustRepositoryConfig')
     const condenseOutputJson = z.toJSONSchema(condenseTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
     expect(condenseOutputJson.type).toBe('object')
-    expect(condenseOutputJson.oneOf).toHaveLength(2)
+    expect(condenseOutputJson.oneOf).toHaveLength(3)
 
     // coco_repo_context uses its own request schema.
     const repoContextTool = tool('coco_repo_context')
@@ -315,7 +351,37 @@ describe('createCocoMcpServer', () => {
     expect(repoContextInputJson).not.toEqual(createAgentInputJsonSchema())
     const repoContextOutputJson = z.toJSONSchema(repoContextTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
     expect(repoContextOutputJson.type).toBe('object')
-    expect(repoContextOutputJson.oneOf).toHaveLength(2)
+    expect(repoContextOutputJson.oneOf).toHaveLength(3)
+
+    // coco_blame uses its own request schema.
+    const blameTool = tool('coco_blame')
+    expect(blameTool.config.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    })
+    const blameInputJson = z.toJSONSchema(blameTool.config.inputSchema, { io: 'input', target: 'draft-07' })
+    expect(blameInputJson).toMatchObject({ type: 'object', additionalProperties: false })
+    expect(blameInputJson).not.toEqual(createAgentInputJsonSchema())
+    const blameOutputJson = z.toJSONSchema(blameTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
+    expect(blameOutputJson.type).toBe('object')
+    expect(blameOutputJson.oneOf).toHaveLength(3)
+
+    // coco_lint uses its own request schema.
+    const lintTool = tool('coco_lint')
+    expect(lintTool.config.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    })
+    const lintInputJson = z.toJSONSchema(lintTool.config.inputSchema, { io: 'input', target: 'draft-07' })
+    expect(lintInputJson).toMatchObject({ type: 'object', additionalProperties: false })
+    expect(lintInputJson).not.toEqual(createAgentInputJsonSchema())
+    const lintOutputJson = z.toJSONSchema(lintTool.config.outputSchema) as { type?: string; oneOf?: unknown[] }
+    expect(lintOutputJson.type).toBe('object')
+    expect(lintOutputJson.oneOf).toHaveLength(3)
   })
 
   it('documents repository binding and metadata-only analytics in server instructions', () => {
@@ -942,6 +1008,108 @@ describe('createCocoMcpServer', () => {
     })
   })
 
+  it('routes coco_blame to runBlame and returns a structured result', async () => {
+    createServer()
+    const controller = new AbortController()
+
+    const result = await tool('coco_blame').handler(
+      { file: 'src/a.ts' },
+      makeExtra({ signal: controller.signal }),
+    )
+
+    expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith(undefined, '/repo', controller.signal)
+    expect(mockRunBlame).toHaveBeenCalledWith(
+      expect.objectContaining({ file: 'src/a.ts', explain: false }),
+      expect.anything(),
+    )
+    expect(result).toMatchObject({
+      structuredContent: expect.objectContaining({
+        ok: true,
+        operation: 'blame',
+      }),
+    })
+  })
+
+  it('returns a structured error when coco_blame fails', async () => {
+    createServer()
+    mockRunBlame.mockRejectedValueOnce(new Error('git blame failed'))
+
+    const result = await tool('coco_blame').handler({ file: 'src/a.ts' }, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'blame',
+        error: { code: 'OPERATION_FAILED', message: 'git blame failed' },
+      },
+    })
+  })
+
+  it('returns validation failures for invalid coco_blame input', async () => {
+    createServer()
+
+    const result = await tool('coco_blame').handler({}, makeExtra())  // file is required
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'blame',
+        error: { code: 'INVALID_INPUT' },
+      },
+    })
+    expect(mockRunBlame).not.toHaveBeenCalled()
+  })
+
+  it('routes coco_lint to runLint and returns a structured result', async () => {
+    createServer()
+    const controller = new AbortController()
+
+    const result = await tool('coco_lint').handler({}, makeExtra({ signal: controller.signal }))
+
+    expect(mockResolveAgentRepoRoot).toHaveBeenCalledWith(undefined, '/repo', controller.signal)
+    expect(mockRunLint).toHaveBeenCalled()
+    expect(result).toMatchObject({
+      structuredContent: expect.objectContaining({
+        ok: true,
+        operation: 'lint',
+      }),
+    })
+  })
+
+  it('returns a structured error when coco_lint fails', async () => {
+    createServer()
+    mockRunLint.mockRejectedValueOnce(new Error('bad revision range'))
+
+    const result = await tool('coco_lint').handler({}, makeExtra())
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'lint',
+        error: { code: 'OPERATION_FAILED', message: 'bad revision range' },
+      },
+    })
+  })
+
+  it('returns validation failures for invalid coco_lint input', async () => {
+    createServer()
+
+    const result = await tool('coco_lint').handler({ severity: 'critical' }, makeExtra())  // not a valid severity
+
+    expect(result).toMatchObject({
+      isError: true,
+      structuredContent: {
+        ok: false,
+        operation: 'lint',
+        error: { code: 'INVALID_INPUT' },
+      },
+    })
+    expect(mockRunLint).not.toHaveBeenCalled()
+  })
+
   describe('coco_commit_apply (write mode)', () => {
     it('is not registered when the server is started without --allow-write', () => {
       createServer(false)
@@ -1011,6 +1179,46 @@ describe('createCocoMcpServer', () => {
           error: { code: 'EMPTY_INDEX', message: 'Nothing staged to commit.' },
         },
       })
+    })
+  })
+
+  describe('coco_capabilities', () => {
+    it('is registered with read-only, no-write annotations', () => {
+      createServer()
+
+      expect(registrations.has('coco_capabilities')).toBe(true)
+      const registration = tool('coco_capabilities')
+      expect(registration.config.annotations).toEqual({
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      })
+    })
+
+    it('returns the capabilities report when a repository is bound', async () => {
+      createServer()
+
+      const result = await tool('coco_capabilities').handler({}, makeExtra())
+
+      expect(mockRunCapabilities).toHaveBeenCalledWith('/repo')
+      expect(result).toMatchObject({
+        structuredContent: {
+          providers: { configured: 'anthropic', authenticationReady: true },
+        },
+      })
+    })
+
+    it('degrades to the repo-optional report when no repository can be resolved', async () => {
+      // No bound root, no `repo` input, and no declared client roots --
+      // capabilities must still succeed rather than erroring the way a
+      // generation tool would.
+      createCocoMcpServer(undefined, false)
+
+      const result = await tool('coco_capabilities').handler({}, makeExtra())
+
+      expect(mockRunCapabilities).toHaveBeenCalledWith(undefined)
+      expect(result).not.toHaveProperty('isError', true)
     })
   })
 })

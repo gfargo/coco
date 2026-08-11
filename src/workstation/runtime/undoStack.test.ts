@@ -1,11 +1,11 @@
 import {
-  MAX_UNDO_STACK_SIZE,
-  findMostRecentUndoEntry,
-  performUndo,
-  popUndoEntry,
-  pushUndoEntry,
-  removeUndoEntry,
-  type UndoEntry,
+    MAX_UNDO_STACK_SIZE,
+    findMostRecentUndoEntry,
+    performUndo,
+    popUndoEntry,
+    pushUndoEntry,
+    removeUndoEntry,
+    type UndoEntry,
 } from './undoStack'
 
 function branchEntry(overrides: Partial<Extract<UndoEntry, { kind: 'delete-branch' }>> = {}): UndoEntry {
@@ -149,6 +149,133 @@ describe('undo stack (OSS-1606)', () => {
       const result = await performUndo(git as never, entry)
       expect(result).toEqual({ ok: true, message: 'Restored tag v1.0.0' })
       expect(git.raw).toHaveBeenCalledWith(['tag', 'v1.0.0', 'abc1234'])
+    })
+
+    it('resets --hard back to pre-merge HEAD for a merge-branch undo', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      const entry: UndoEntry = {
+        kind: 'merge-branch',
+        label: 'merge feature/xyz into main',
+        depth: 0,
+        previousSha: 'aabbccdd1234',
+      }
+      const result = await performUndo(git as never, entry)
+      expect(result).toEqual({ ok: true, message: 'Restored HEAD to aabbccd' })
+      expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'aabbccdd1234'])
+    })
+
+    it('resets using the recorded mode for a reset-to-branch undo (hard)', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      const entry: UndoEntry = {
+        kind: 'reset-to-branch',
+        label: 'reset --hard to feature/other',
+        depth: 0,
+        previousSha: 'deadbeef5678',
+        mode: 'hard',
+      }
+      const result = await performUndo(git as never, entry)
+      expect(result).toEqual({ ok: true, message: 'Restored HEAD to deadbee' })
+      expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'deadbeef5678'])
+    })
+
+    it('resets using the recorded mode for a reset-to-branch undo (soft)', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      const entry: UndoEntry = {
+        kind: 'reset-to-branch',
+        label: 'reset --soft to feature/other',
+        depth: 0,
+        previousSha: 'deadbeef5678',
+        mode: 'soft',
+      }
+      const result = await performUndo(git as never, entry)
+      expect(result).toEqual({ ok: true, message: 'Restored HEAD to deadbee' })
+      expect(git.raw).toHaveBeenCalledWith(['reset', '--soft', 'deadbeef5678'])
+    })
+
+    it('resets using the recorded mode for a reset-to-branch undo (mixed)', async () => {
+      const git = {
+        revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
+        raw: jest.fn().mockResolvedValue(''),
+      }
+      const entry: UndoEntry = {
+        kind: 'reset-to-branch',
+        label: 'reset --mixed to feature/other',
+        depth: 0,
+        previousSha: 'deadbeef5678',
+        mode: 'mixed',
+      }
+      const result = await performUndo(git as never, entry)
+      expect(result).toEqual({ ok: true, message: 'Restored HEAD to deadbee' })
+      expect(git.raw).toHaveBeenCalledWith(['reset', '--mixed', 'deadbeef5678'])
+    })
+  })
+
+  describe('pushUndoEntry / popUndoEntry with new entry types', () => {
+    it('push/pop works with merge-branch entries', () => {
+      const entry: UndoEntry = {
+        kind: 'merge-branch',
+        label: 'merge feature/xyz into main',
+        depth: 0,
+        previousSha: 'aabbccdd1234',
+      }
+      let stack: UndoEntry[] = []
+      stack = pushUndoEntry(stack, entry)
+      const { entry: popped, stack: remaining } = popUndoEntry(stack)
+      expect(popped).toEqual(entry)
+      expect(remaining).toEqual([])
+    })
+
+    it('push/pop works with reset-to-branch entries', () => {
+      const entry: UndoEntry = {
+        kind: 'reset-to-branch',
+        label: 'reset --hard to feature/other',
+        depth: 0,
+        previousSha: 'deadbeef5678',
+        mode: 'hard',
+      }
+      let stack: UndoEntry[] = []
+      stack = pushUndoEntry(stack, entry)
+      const { entry: popped, stack: remaining } = popUndoEntry(stack)
+      expect(popped).toEqual(entry)
+      expect(remaining).toEqual([])
+    })
+
+    it('interleaves new entry types with existing kinds in LIFO order', () => {
+      const deleteBranch = branchEntry({ name: 'old-branch' })
+      const mergeBranch: UndoEntry = {
+        kind: 'merge-branch',
+        label: 'merge feature/xyz',
+        depth: 0,
+        previousSha: 'aabb1234',
+      }
+      const resetToBranch: UndoEntry = {
+        kind: 'reset-to-branch',
+        label: 'reset --hard to develop',
+        depth: 0,
+        previousSha: 'ccdd5678',
+        mode: 'hard',
+      }
+
+      let stack: UndoEntry[] = []
+      stack = pushUndoEntry(stack, deleteBranch)
+      stack = pushUndoEntry(stack, mergeBranch)
+      stack = pushUndoEntry(stack, resetToBranch)
+
+      const pop1 = popUndoEntry(stack)
+      expect(pop1.entry).toEqual(resetToBranch)
+      const pop2 = popUndoEntry(pop1.stack)
+      expect(pop2.entry).toEqual(mergeBranch)
+      const pop3 = popUndoEntry(pop2.stack)
+      expect(pop3.entry).toEqual(deleteBranch)
     })
   })
 })

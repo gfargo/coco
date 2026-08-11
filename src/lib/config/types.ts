@@ -157,6 +157,18 @@ type BaseConfig = {
      * @default true
      */
     syntaxHighlight?: boolean
+
+    /**
+     * Enable mouse support: click a pane to focus it, click a commit
+     * row to select it, and scroll the wheel to move the list cursor
+     * (or page the diff preview) under the focused pane. Off by
+     * default for one release — enabling SGR mouse reporting disables
+     * the terminal's native click-drag text selection unless the user
+     * holds Shift, which is surprising enough to gate behind opt-in.
+     *
+     * @default false
+     */
+    mouse?: boolean
   }
 
   /**
@@ -261,6 +273,23 @@ type BaseConfig = {
    * @example { "git.acme.com": "gitea", "code.internal": "github", "bb.corp.com": "bitbucket-server" }
    */
   forgeHosts?: Record<string, 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea'>
+
+  /**
+   * The stale-version notice (a one-line "newer coco is available" message
+   * printed to stderr). Checks a cached, once-daily lookup of the latest
+   * `git-coco` version on npm — never a live network call on the command's
+   * critical path. Always skipped under `--json`, `--quiet`, CI, and
+   * non-interactive (non-TTY) runs, regardless of this setting.
+   */
+  updateCheck?: {
+    /**
+     * Set to `false` to disable the stale-version notice and its background
+     * registry check entirely.
+     *
+     * @default true
+     */
+    enabled?: boolean
+  }
 }
 
 export type ConfigWithServiceObject = BaseConfig &

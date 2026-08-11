@@ -6,6 +6,8 @@ import {
     AgentOperationError,
     AgentTaskInputSchema,
     AGENT_PROTOCOL_VERSION,
+    BlameDataSchema,
+    BlameRequestSchema,
     ChangelogDataSchema,
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
@@ -14,9 +16,13 @@ import {
     createAgentInputJsonSchema,
     createAgentOperationContext,
     createAgentOutputSchema,
+    createBlameInputJsonSchema,
     createCondenseDiffInputJsonSchema,
+    createLintInputJsonSchema,
     createRepoContextInputJsonSchema,
     describeRepoResolutionFailure,
+    LintDataSchema,
+    LintRequestSchema,
     RecapDataSchema,
     RepoContextDataSchema,
     RepoContextRequestSchema,
@@ -25,7 +31,10 @@ import {
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
+    runBlame,
+    runCapabilities,
     runCondenseDiff,
+    runLint,
     runRepoContext,
     toAgentOperationError
 } from '../../operations/agent'
@@ -65,12 +74,18 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, CondenseDiffDataSchema)
     case 'repo-context':
       return createAgentOutputSchema(operation, RepoContextDataSchema)
+    case 'blame':
+      return createAgentOutputSchema(operation, BlameDataSchema)
+    case 'lint':
+      return createAgentOutputSchema(operation, LintDataSchema)
   }
 }
 
 function emitSchema(operation: AgentOperation): void {
   const isCondense = operation === 'condense-diff'
   const isRepoContext = operation === 'repo-context'
+  const isBlame = operation === 'blame'
+  const isLint = operation === 'lint'
   emit({
     version: AGENT_PROTOCOL_VERSION,
     operation,
@@ -78,6 +93,10 @@ function emitSchema(operation: AgentOperation): void {
       ? createCondenseDiffInputJsonSchema()
       : isRepoContext
       ? createRepoContextInputJsonSchema()
+      : isBlame
+      ? createBlameInputJsonSchema()
+      : isLint
+      ? createLintInputJsonSchema()
       : createAgentInputJsonSchema(),
     output: z.toJSONSchema(outputSchemaFor(operation)),
   })
@@ -86,6 +105,35 @@ function emitSchema(operation: AgentOperation): void {
 export async function handler(argv: AgentCommandArgv): Promise<void> {
   if (argv.operation === 'schema') {
     emitSchema(argv.task!)
+    return
+  }
+
+  if (argv.operation === 'capabilities') {
+    // Zero-token, no-repository handshake: unlike every other operation,
+    // failing to resolve a repository is not an error here -- it degrades
+    // to the repo-optional report (used only for commitlint-config
+    // detection), since capabilities must work before any repository is
+    // known. Deliberately outside AgentOperation/AgentTaskInputSchema (see
+    // CapabilitiesResultSchema), so it can't share the versioned envelope
+    // failure handling below.
+    const controller = new AbortController()
+    const abort = () => controller.abort()
+    process.once('SIGINT', abort)
+    try {
+      let repoRoot: string | undefined
+      try {
+        repoRoot = await resolveAgentRepoRoot(argv.repo, undefined, controller.signal)
+      } catch {
+        repoRoot = undefined
+      }
+      emit(await runCapabilities(repoRoot))
+    } catch (error) {
+      const failure = toAgentOperationError(error)
+      emit({ error: { code: failure.code, message: failure.message, retryable: failure.retryable } })
+      process.exitCode = failure.code === 'CANCELLED' ? 130 : 1
+    } finally {
+      process.removeListener('SIGINT', abort)
+    }
     return
   }
 
@@ -123,6 +171,33 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
         surface: 'agent-cli',
       })
       emit(await runRepoContext(input, context))
+    } else if (operation === 'blame') {
+      // blame uses its own request schema — parse and dispatch separately.
+      // No LLM call, no API key required, unless the request sets `explain: true`.
+      const input = BlameRequestSchema.parse(raw)
+      const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+      process.chdir(repoRoot)
+      await armNonInteractiveUsageTelemetry(argv, repoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot,
+        signal: controller.signal,
+        surface: 'agent-cli',
+      })
+      emit(await runBlame(input, context))
+    } else if (operation === 'lint') {
+      // lint uses its own request schema — parse and dispatch separately.
+      // No LLM call, no API key required. Never loads repository-defined
+      // commitlint configuration — see runLint.
+      const input = LintRequestSchema.parse(raw)
+      const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+      process.chdir(repoRoot)
+      await armNonInteractiveUsageTelemetry(argv, repoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot,
+        signal: controller.signal,
+        surface: 'agent-cli',
+      })
+      emit(await runLint(input, context))
     } else {
       const input = AgentTaskInputSchema.parse(raw)
       const needsRepo = requiresRepository(operation, input.source)

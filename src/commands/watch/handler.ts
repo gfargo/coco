@@ -87,6 +87,7 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
     previousCommitCount: 0,
     author: false,
     trustRepositoryConfig,
+    dryRun: false,
   }
 
   const input = AgentTaskInputSchema.parse({ source, options })
@@ -150,7 +151,10 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
         // Shutdown may land while an operation is resolving successfully;
         // `stopped` already emitted the terminal `stopped` event by the time
         // this settles, so don't emit a trailing result after it.
-        if (!stopped) {
+        if (!stopped && envelope.status !== 'planned') {
+          // `options.dryRun` is always false above, so `status: 'planned'`
+          // never actually happens here -- narrowed only so `envelope.data`
+          // type-checks against the discriminated union.
           emitEvent(argv, logger, { type: 'result', operation, data: envelope.data, warnings: envelope.warnings })
         }
       } catch (error) {

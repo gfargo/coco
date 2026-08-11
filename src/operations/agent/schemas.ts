@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -116,6 +116,14 @@ export const AgentOptionsSchema = z.object({
   trustRepositoryConfig: z.boolean().default(false).describe(
     'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety. Honored by: all operations, agent CLI only -- not present in the MCP input schema.',
   ),
+  dryRun: z.boolean().default(false).describe(
+    'Run every step up to but not including the model call and return a `status: "planned"` envelope (resolved ' +
+    'provider/model, prompt/budget token estimates, and a truncation projection) instead of generating output. Makes ' +
+    'no inference call, but still resolves the change source (a git read for repository scope) and enforces the same ' +
+    'root-confinement and untrusted-content safety checks as a real call. Honored by: review, changelog, recap. ' +
+    'Not honored by commit-draft, which rejects it with UNSUPPORTED_OPERATION -- use coco_capabilities to check ' +
+    'authentication readiness instead. Token counts are estimates, not currency.',
+  ),
 }).strict()
 
 export const AgentTaskInputSchema = z.object({
@@ -128,6 +136,7 @@ export const AgentTaskInputSchema = z.object({
     previousCommitCount: 0,
     author: false,
     trustRepositoryConfig: false,
+    dryRun: false,
   }),
 }).strict()
 
@@ -152,6 +161,7 @@ export const McpTaskInputSchema = z.object({
     includeBranchName: false,
     previousCommitCount: 0,
     author: false,
+    dryRun: false,
   }),
 }).strict()
 
@@ -222,9 +232,60 @@ export function createAgentFailureSchema(operation: AgentOperation) {
   }).strict()
 }
 
+/**
+ * The token/model plan returned by `dryRun: true`. Every token figure here is
+ * an estimate for budgeting purposes -- not a price. `promptTokens` is exact
+ * (the real rendered-prompt count `enforcePromptBudget` computes); the model's
+ * response length is not knowable in advance, so `responseTokenReserve` is the
+ * reservation coco would budget for it, not a prediction of actual output size.
+ */
+export const AgentPlanSchema = z.object({
+  provider: z.string().describe('Configured LLM provider that would handle this call.'),
+  model: z.string().describe('Resolved model (after dynamic routing, if enabled) that would handle this call.'),
+  task: z.enum(['review', 'changelog', 'recap']).describe(
+    'Dynamic-model routing task label used to resolve `model`.',
+  ),
+  promptTokens: z.number().int().describe(
+    'Token estimate (not currency) for the fully rendered prompt this call would send -- the exact count a real ' +
+    'run of the same request would produce.',
+  ),
+  budgetTokens: z.number().int().describe(
+    'Token estimate (not currency) for the configured request budget (prompt + reserved response space).',
+  ),
+  responseTokenReserve: z.number().int().describe(
+    'Token estimate (not currency) reserved for the model response. Output length cannot be known in advance -- ' +
+    'this is the reservation a real call would budget, not a prediction of actual output size.',
+  ),
+  willTruncate: z.boolean().describe(
+    'True when the rendered prompt would exceed the budget and be trimmed by the same truncation a real call applies.',
+  ),
+  estimatedAnalyzedRatio: z.number().min(0).max(1).describe(
+    'Fraction (0-1) of the original change summary that would survive truncation. 1 when no truncation would occur.',
+  ),
+  authenticationReady: z.boolean().describe(
+    'True when a usable API key/credential is configured for this provider.',
+  ),
+}).strict()
+
+export function createAgentPlannedSchema(operation: AgentOperation) {
+  return z.object({
+    version: z.literal(AGENT_PROTOCOL_VERSION),
+    ok: z.literal(true),
+    operation: z.literal(operation),
+    status: z.literal('planned'),
+    plan: AgentPlanSchema,
+    warnings: z.array(z.string()),
+    meta: SourceMetadataSchema,
+  }).strict()
+}
+
 export function createAgentOutputSchema<T extends z.ZodType>(operation: AgentOperation, data: T) {
-  return z.discriminatedUnion('ok', [
+  // A plain union, not discriminatedUnion('ok', ...): the completed and
+  // planned envelopes both carry ok: true and are distinguished only by
+  // `status`, so 'ok' alone cannot discriminate all three shapes.
+  return z.union([
     createAgentSuccessSchema(operation, data),
+    createAgentPlannedSchema(operation),
     createAgentFailureSchema(operation),
   ])
 }
@@ -236,22 +297,34 @@ export function createAgentOutputSchema<T extends z.ZodType>(operation: AgentOpe
  */
 export function createAgentMcpOutputSchema<T extends z.ZodType>(operation: AgentOperation, data: T) {
   const successJsonSchema = z.toJSONSchema(createAgentSuccessSchema(operation, data))
+  const plannedJsonSchema = z.toJSONSchema(createAgentPlannedSchema(operation))
   const failureJsonSchema = z.toJSONSchema(createAgentFailureSchema(operation))
   delete successJsonSchema.$schema
+  delete plannedJsonSchema.$schema
   delete failureJsonSchema.$schema
 
   return z.object({
     version: z.literal(AGENT_PROTOCOL_VERSION),
     ok: z.boolean(),
     operation: z.literal(operation),
-    status: z.literal('completed').optional(),
+    status: z.enum(['completed', 'planned']).optional(),
     data: data.optional(),
+    plan: AgentPlanSchema.optional(),
     warnings: z.array(z.string()).optional(),
     meta: SourceMetadataSchema.optional(),
     error: AgentErrorSchema.optional(),
   }).strict().superRefine((value, context) => {
     if (value.ok) {
-      if (!value.status || value.data === undefined || !value.warnings || !value.meta || value.error) {
+      if (value.status === 'planned') {
+        if (value.plan === undefined || !value.warnings || !value.meta || value.data !== undefined || value.error) {
+          context.addIssue({
+            code: 'custom',
+            message: 'Planned agent output must include status, plan, warnings, and meta only.',
+          })
+        }
+        return
+      }
+      if (!value.status || value.data === undefined || !value.warnings || !value.meta || value.error || value.plan !== undefined) {
         context.addIssue({
           code: 'custom',
           message: 'Successful agent output must include status, data, warnings, and meta only.',
@@ -259,14 +332,14 @@ export function createAgentMcpOutputSchema<T extends z.ZodType>(operation: Agent
       }
       return
     }
-    if (!value.error || value.status || value.data !== undefined || value.warnings || value.meta) {
+    if (!value.error || value.status || value.data !== undefined || value.plan !== undefined || value.warnings || value.meta) {
       context.addIssue({
         code: 'custom',
         message: 'Failed agent output must include only the versioned error envelope.',
       })
     }
   }).meta({
-    oneOf: [successJsonSchema, failureJsonSchema],
+    oneOf: [successJsonSchema, plannedJsonSchema, failureJsonSchema],
   })
 }
 
@@ -411,6 +484,18 @@ export type AgentSuccessEnvelope<T> = {
   meta: SourceMetadata
 }
 
+export type AgentPlan = z.infer<typeof AgentPlanSchema>
+
+export type AgentPlannedEnvelope = {
+  version: typeof AGENT_PROTOCOL_VERSION
+  ok: true
+  operation: AgentOperation
+  status: 'planned'
+  plan: AgentPlan
+  warnings: string[]
+  meta: SourceMetadata
+}
+
 export type AgentFailureEnvelope = z.infer<typeof AgentFailureEnvelopeSchema>
 
 // ─── repo-context operation ───────────────────────────────────────────────────
@@ -538,6 +623,124 @@ export type RepoContextCapabilities = z.infer<typeof RepoContextCapabilitiesSche
 export type RepoContextFileEntry = z.infer<typeof RepoContextFileEntrySchema>
 export type RepoContextSection = z.infer<typeof RepoContextSectionSchema>
 
+// ─── blame operation ──────────────────────────────────────────────────────────
+
+/**
+ * Cost guardrails matching `coco blame --explain` (#OSS-1604): a naive
+ * --explain would issue one LLM call per blamed sha. Both the CLI and the
+ * `coco_blame` MCP tool batch into a single call, but still cap the input so
+ * a huge file (or an un-narrowed `lines`) can't balloon the prompt/cost.
+ */
+export const MAX_BLAME_EXPLAIN_LINES = 400
+export const MAX_BLAME_EXPLAIN_COMMITS = 25
+
+/**
+ * Request schema for the MCP tool `coco_blame`. Read-only: attributes each
+ * line of a repo-relative file to its introducing commit. `explain: true`
+ * additionally resolves the introducing commits and asks an LLM why each
+ * range was written — this requires an API key for the configured provider.
+ */
+export const BlameRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  file: z.string().min(1).describe('Repo-relative path to blame.'),
+  lines: z.string().min(1).optional().describe(
+    'Restrict to a 1-based inclusive line range: "10:50", "10:" (open-ended), or "10" (single line). Omit for the whole file.',
+  ),
+  explain: z.boolean().default(false).describe(
+    'Resolve each blamed commit and ask an LLM why the range was introduced. Requires an API key for the configured ' +
+    `provider. Capped at ${MAX_BLAME_EXPLAIN_LINES} lines and ${MAX_BLAME_EXPLAIN_COMMITS} distinct commits per call.`,
+  ),
+}).strict()
+
+/** Publish the caller-facing blame request shape, before defaults are applied. */
+export function createBlameInputJsonSchema() {
+  return z.toJSONSchema(BlameRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const BlameLineEntrySchema = z.object({
+  lineNumber: z.number().int(),
+  hash: z.string(),
+  shortHash: z.string(),
+  author: z.string(),
+  content: z.string(),
+}).strict()
+
+export const BlameExplanationEntrySchema = z.object({
+  hash: z.string(),
+  author: z.string(),
+  /** Line ranges attributed to this commit, e.g. "12-18, 25". */
+  lines: z.string(),
+  subject: z.string(),
+  explanation: z.string(),
+}).strict()
+
+export const BlameDataSchema = z.object({
+  path: z.string(),
+  /** Present when `explain: false` (the default). */
+  lines: z.array(BlameLineEntrySchema).optional(),
+  /** Present when `explain: true`. */
+  explanations: z.array(BlameExplanationEntrySchema).optional(),
+  /** True when more distinct commits touched the range than `MAX_BLAME_EXPLAIN_COMMITS` allows. */
+  truncated: z.boolean().optional(),
+}).strict()
+
+export type BlameRequest = z.infer<typeof BlameRequestSchema>
+export type BlameData = z.infer<typeof BlameDataSchema>
+export type BlameLineEntry = z.infer<typeof BlameLineEntrySchema>
+export type BlameExplanationEntry = z.infer<typeof BlameExplanationEntrySchema>
+
+// ─── lint operation ────────────────────────────────────────────────────────────
+
+/**
+ * Request schema for the MCP tool `coco_lint`. Read-only: validates the
+ * subject/body of each commit in a range against coco's built-in
+ * Conventional Commits rules. `since`/`range` are mutually exclusive; neither
+ * enables `--fix` (rewriting commit history is not read-only, so it is never
+ * exposed via MCP).
+ */
+export const LintRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  since: gitRevisionSchema.optional().describe(
+    'Lint commits in `<since>..HEAD` instead of comparing against the default branch. Mutually exclusive with `range`.',
+  ),
+  range: gitRevisionSchema.optional().describe(
+    'Lint an explicit commit range (e.g. "abc123..def456"). Mutually exclusive with `since`.',
+  ),
+  severity: z.enum(['error', 'warning']).default('error').describe(
+    'A commit at/above this severity counts toward `summary.failing`.',
+  ),
+}).strict()
+
+/** Publish the caller-facing lint request shape, before defaults are applied. */
+export function createLintInputJsonSchema() {
+  return z.toJSONSchema(LintRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const LintCommitResultSchema = z.object({
+  sha: z.string(),
+  shortSha: z.string(),
+  subject: z.string(),
+  status: z.enum(['pass', 'warn', 'fail', 'skipped']),
+  errors: z.array(z.string()),
+  warnings: z.array(z.string()),
+}).strict()
+
+export const LintDataSchema = z.object({
+  results: z.array(LintCommitResultSchema),
+  summary: z.object({
+    passing: z.number().int(),
+    failing: z.number().int(),
+    warning: z.number().int(),
+    skipped: z.number().int(),
+  }).strict(),
+}).strict()
+
+export type LintRequest = z.infer<typeof LintRequestSchema>
+export type LintData = z.infer<typeof LintDataSchema>
+export type LintCommitResult = z.infer<typeof LintCommitResultSchema>
+
 // ─── commit-apply operation ───────────────────────────────────────────────────
 
 /**
@@ -568,3 +771,65 @@ export function createCommitApplyInputJsonSchema() {
 
 export type CommitApplyRequest = z.infer<typeof CommitApplyRequestSchema>
 export type CommitApplyData = z.infer<typeof CommitApplyDataSchema>
+
+// ─── capabilities operation ───────────────────────────────────────────────────
+
+/**
+ * Request schema for the MCP tool `coco_capabilities` and `coco agent
+ * capabilities`. Deliberately minimal (an optional `repo` only) -- this is
+ * the zero-token handshake a cost-aware caller runs before any generation
+ * call, so it must never require a repository the way the generation
+ * operations do.
+ */
+export const CapabilitiesRequestSchema = z.object({
+  repo: z.string().min(1).optional(),
+}).strict()
+
+/** Publish the caller-facing capabilities request schema. */
+export function createCapabilitiesInputJsonSchema() {
+  return z.toJSONSchema(CapabilitiesRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const CapabilitiesRoutingRowSchema = z.object({
+  task: z.string(),
+  model: z.string(),
+}).strict()
+
+/**
+ * Flat, not wrapped in the versioned `AgentSuccessEnvelope`/`SourceMetadata`
+ * shape the generation operations use -- like `CommitApplyDataSchema`, this
+ * operation has no `source`/`options` bag and does not belong in
+ * `AgentOperationSchema` (it needs no repository and reports no per-request
+ * digest). Deliberately carries no pricing or currency figures anywhere --
+ * only token counts and model routing.
+ */
+export const CapabilitiesResultSchema = z.object({
+  version: z.string().describe('coco package version.'),
+  protocolVersion: z.literal(AGENT_PROTOCOL_VERSION),
+  providers: z.object({
+    configured: z.string(),
+    authenticationReady: z.boolean().describe(
+      'True when a usable API key/credential is configured for the configured provider.',
+    ),
+  }).strict(),
+  routing: z.object({
+    dynamic: z.boolean().describe('True when service.model === "dynamic" (per-task routing active).'),
+    preference: z.string().describe('Active dynamic-model preference (only meaningful when `dynamic`).'),
+    provider: z.string(),
+    rows: z.array(CapabilitiesRoutingRowSchema),
+  }).strict().describe('Same per-task model routing table `coco doctor --cost` renders, produced by buildModelRoutingProfile.'),
+  limits: z.object({
+    maxContextBytes: z.number().int(),
+    defaultTokenLimit: z.number().int(),
+  }).strict(),
+  operations: z.array(z.string()),
+  features: z.object({
+    streaming: z.boolean(),
+    hasCommitlintConfig: z.boolean().optional().describe(
+      'Omitted when no repository was available to check -- capabilities never requires a repository.',
+    ),
+  }).strict(),
+}).strict()
+
+export type CapabilitiesRequest = z.infer<typeof CapabilitiesRequestSchema>
+export type CapabilitiesResult = z.infer<typeof CapabilitiesResultSchema>

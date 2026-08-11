@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.9.0.schema.json
+#
+# winget version manifest for coco (npm package `git-coco`). Canonical source
+# — see packaging/README.md. Regenerated (version only) by
+# `node bin/genManifests.mjs`; the installer manifest's URL/hash are also
+# regenerated but the underlying installer artifact is still a placeholder,
+# see the comment at the top of Gfargo.Coco.installer.yaml.
+PackageIdentifier: Gfargo.Coco
+PackageVersion: 0.87.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.9.0

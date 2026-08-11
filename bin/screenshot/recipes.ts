@@ -1263,6 +1263,42 @@ export const RECIPES: ScreenshotRecipe[] = [
     ],
   },
   {
+    name: 'demo-branch-operations',
+    description: 'UI: branches view — merge (M), reset mode choice (Z), push sub-choice (P), demonstrating the branch write workflow',
+    scenario: 'branch-sync-showcase',
+    command: 'ui',
+    emitGif: true,
+    actions: [
+      // Open branches view
+      { kind: 'sleep', ms: 800 },
+      { kind: 'type', text: 'gb' },
+      { kind: 'sleep', ms: 1500 },
+      // Move cursor down to a non-current branch
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 500 },
+      { kind: 'key', key: 'Down' },
+      { kind: 'sleep', ms: 800 },
+      // Press M to merge — shows the confirmation overlay
+      { kind: 'type', text: 'M' },
+      { kind: 'sleep', ms: 2400 },
+      // Cancel the merge confirmation (Esc) so we can show the next op
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 800 },
+      // Press Z to reset — shows soft/mixed/hard mode choice
+      { kind: 'type', text: 'Z' },
+      { kind: 'sleep', ms: 2400 },
+      // Cancel the reset mode choice
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 800 },
+      // Press P to push — shows push sub-choice (normal / force-push)
+      { kind: 'type', text: 'P' },
+      { kind: 'sleep', ms: 2400 },
+      // Cancel the push sub-choice
+      { kind: 'key', key: 'Escape' },
+      { kind: 'sleep', ms: 1000 },
+    ],
+  },
+  {
     name: 'demo-search-filter',
     description: 'UI: open search, type query, see results filter live, clear',
     scenario: 'multi-commit-branch',

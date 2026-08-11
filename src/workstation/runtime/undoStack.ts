@@ -49,6 +49,8 @@ export type UndoEntry =
   | { kind: 'drop-stash'; label: string; depth: number; workdir?: string; hash: string; message: string }
   | { kind: 'reset-to-commit'; label: string; depth: number; workdir?: string; previousSha: string; mode: ResetMode }
   | { kind: 'delete-tag'; label: string; depth: number; workdir?: string; name: string; sha: string }
+  | { kind: 'merge-branch'; label: string; depth: number; workdir?: string; previousSha: string }
+  | { kind: 'reset-to-branch'; label: string; depth: number; workdir?: string; previousSha: string; mode: ResetMode }
 
 export type UndoActionResult = { ok: boolean; message: string }
 
@@ -98,5 +100,9 @@ export function performUndo(git: SimpleGit, entry: UndoEntry): Promise<UndoActio
       return restorePreviousHead(git, entry.previousSha, entry.mode)
     case 'delete-tag':
       return restoreDeletedTag(git, entry.name, entry.sha)
+    case 'merge-branch':
+      return restorePreviousHead(git, entry.previousSha, 'hard')
+    case 'reset-to-branch':
+      return restorePreviousHead(git, entry.previousSha, entry.mode)
   }
 }

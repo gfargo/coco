@@ -115,6 +115,9 @@ export type LogInkCommandId =
   | 'workflowTriagePrOpen'
   | 'workflowTriageIssueOpen'
   | 'workflowRemoveWorktreeAndBranch'
+  | 'viewMergeIntoCurrent'
+  | 'viewResetToBranch'
+  | 'viewSyncBranch'
 
 export type LogInkBindingCategory =
   | 'essentials'
@@ -627,6 +630,27 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['r'],
     label: t(en, 'keymap.binding.viewRebaseOnto.label'),
     description: t(en, 'keymap.binding.viewRebaseOnto.desc'),
+    contexts: ['branches'],
+  },
+  {
+    id: 'viewMergeIntoCurrent',
+    keys: ['M'],
+    label: 'merge',
+    description: 'Merge the cursored branch into the current branch after confirmation.',
+    contexts: ['branches'],
+  },
+  {
+    id: 'viewResetToBranch',
+    keys: ['Z'],
+    label: 'reset',
+    description: 'Reset the current branch to the cursored ref (prompts for soft/mixed/hard).',
+    contexts: ['branches'],
+  },
+  {
+    id: 'viewSyncBranch',
+    keys: ['S'],
+    label: 'sync',
+    description: 'Pull from remote then push local commits (compound pull + push).',
     contexts: ['branches'],
   },
   {
@@ -1182,6 +1206,10 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   // Branches-view-only rebase-onto (#0.71) — a confirmation-gated
   // destructive op, grouped with the global mutate cluster.
   viewRebaseOnto: 'mutate',
+  // Branches-view-only merge/reset/sync (workstation-branch-operations)
+  viewMergeIntoCurrent: 'mutate',
+  viewResetToBranch: 'mutate',
+  viewSyncBranch: 'mutate',
   // ── History actions: per-view-only mutations scoped to the history
   //    surface. Distinct from the global mutate cluster so users see
   //    them grouped under their actual context.
@@ -1628,9 +1656,16 @@ function branchesHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints 
     }
   }
   return {
-    // `x/v mark` covers both multi-select primitives (#1361): x
-    // toggles a mark, v anchors a range; D then deletes the batch.
-    contextual: [t(en, 'keymap.footer.branches'), t(en, 'keymap.footer.enterCheckout'), t(en, 'keymap.footer.new'), t(en, 'keymap.footer.xVMark'), t(en, 'keymap.footer.dDelete'), t(en, 'keymap.footer.rRebase'), t(en, 'keymap.footer.mCompare'), t(en, 'keymap.footer.sSort'), t(en, 'keymap.footer.yYank')],
+    // Priority ordering (highest → lowest, leftmost survives narrow-
+    // terminal trimming): Enter checkout > M merge > P push > S sync >
+    // Z reset > existing utility keys. `x/v mark` covers both multi-
+    // select primitives (#1361): x toggles a mark, v anchors a range;
+    // D then deletes the batch.
+    contextual: [
+      t(en, 'keymap.footer.branches'), t(en, 'keymap.footer.enterCheckout'),
+      t(en, 'keymap.footer.mMergeBranch'), t(en, 'keymap.footer.pPush'), t(en, 'keymap.footer.sSyncBranch'), t(en, 'keymap.footer.zReset'),
+      t(en, 'keymap.footer.new'), t(en, 'keymap.footer.xVMark'), t(en, 'keymap.footer.dDelete'), t(en, 'keymap.footer.rRebase'), t(en, 'keymap.footer.mCompare'), t(en, 'keymap.footer.sSort'), t(en, 'keymap.footer.yYank'),
+    ],
     global: NORMAL_GLOBAL_HINTS,
   }
 }

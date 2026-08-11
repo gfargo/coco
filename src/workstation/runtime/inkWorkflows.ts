@@ -359,6 +359,37 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: false,
     },
     {
+      // Branch-level workflows — merge, reset, sync. Bound to M / Z / S
+      // in the branches view (inkInput); the key field reflects the
+      // palette-visible binding (empty for reset-to-branch because it's
+      // routed via mode-choice, not a direct palette key).
+      id: 'merge-into-current',
+      key: 'M',
+      label: 'Merge branch into current',
+      description: 'Merge the selected branch into the current branch.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: (state) => state.pendingConfirmationPayload
+        || 'Merging into the current branch. Creates a merge commit (or fast-forwards if possible).',
+    },
+    {
+      id: 'reset-to-branch',
+      key: '',
+      label: 'Reset current branch to ref',
+      description: 'Move the current branch pointer to match the selected ref.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: 'Rewrites local history. Use g u to undo if needed.',
+    },
+    {
+      id: 'sync-branch',
+      key: 'S',
+      label: 'Sync branch (pull + push)',
+      description: 'Pull from remote then push local commits.',
+      kind: 'normal',
+      requiresConfirmation: false,
+    },
+    {
       // Per-view-only — the inkInput handler scopes this to the tags
       // surface so we don't expose `R` as a remote-delete from elsewhere.
       // The empty `key` keeps the workflow palette-discoverable but does

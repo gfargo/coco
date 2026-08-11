@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
+#
+# PLACEHOLDER — winget has no "run npm install" installer primitive (unlike
+# Scoop's installer.script or Homebrew's `depends_on`/`install do`), so a real
+# submission needs an actual Windows installer/portable artifact (e.g. a
+# signed zip containing a `coco.cmd` shim + the bundled `dist/index.js`,
+# published as a GitHub release asset). Until that artifact exists, this
+# points at the plain npm tarball so the manifest trio stays structurally
+# complete and regenerable; treat InstallerType/InstallerUrl below as
+# something to replace before actually opening a winget-pkgs PR.
+PackageIdentifier: Gfargo.Coco
+PackageVersion: 0.87.0
+InstallerLocale: en-US
+Platform:
+  - Windows.Desktop
+MinimumOSVersion: 10.0.0.0
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: package\bin\coco
+    PortableCommandAlias: coco
+Dependencies:
+  ExternalDependencies:
+    - Node.js >=22.22 or >=24.15 or >=26 — https://nodejs.org
+Installers:
+  - Architecture: neutral
+    InstallerUrl: https://registry.npmjs.org/git-coco/-/git-coco-0.87.0.tgz
+    InstallerSha256: 0DB09C65CC472B550C98FF4609BFCFC8F8A763435AA58A44E753C6CF3F0D165E
+ManifestType: installer
+ManifestVersion: 1.9.0

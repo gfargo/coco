@@ -20,6 +20,10 @@ import {
     AgentOperationContext,
     AgentOperationError,
     asUntrustedChangeContext,
+    BlameDataSchema,
+    BlameRequestSchema,
+    CapabilitiesRequestSchema,
+    CapabilitiesResultSchema,
     ChangelogDataSchema,
     CommitApplyDataSchema,
     CommitApplyRequestSchema,
@@ -37,6 +41,10 @@ import {
     getRepoTree,
     getStagedDiff,
     isPathWithinRoot,
+    LintDataSchema,
+    LintRequestSchema,
+    MAX_BLAME_EXPLAIN_COMMITS,
+    MAX_BLAME_EXPLAIN_LINES,
     McpCondenseDiffRequestSchema,
     McpTaskInputSchema,
     RecapDataSchema,
@@ -47,8 +55,11 @@ import {
     resolveAgentRepoRoot,
     ReviewDataSchema,
     runAgentOperation,
+    runBlame,
+    runCapabilities,
     runCommitApply,
     runCondenseDiff,
+    runLint,
     runRepoContext,
     toAgentOperationError,
 } from '../operations/agent'
@@ -572,6 +583,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     allowWrite
       ? 'This server was started with --allow-write: coco_commit_apply is also registered. It creates a git commit from whatever is currently staged — it never runs `git add` and never pushes.'
       : 'coco_commit_apply is NOT registered on this server; start it with `coco mcp --allow-write` to opt into that write-capable tool.',
+    'coco_capabilities is a zero-token handshake -- call it first to learn whether coco is usable, for which operations, with which model routing, and within what limits, before spending on a generation call. It never requires a repository.',
+    'review, changelog, and recap accept `options.dryRun: true` to return a `status: "planned"` token/model plan instead of generating output -- no inference call, though the change source is still resolved (a git read for repository scope) and the same safety checks still apply. commit-draft does not support dryRun.',
     'Resources (coco://repo/...) expose read-only repository context (status, staged diff, branch context, recent log, tracked-file tree, resolved config) so a client can browse without spending a tool call.',
     'Prompts expose coco\'s built-in commit, review, changelog, and recap templates, fully rendered from curated arguments, for the client to run on its own model. Caller-supplied change content is wrapped in untrusted-content framing before rendering; repository-defined config is never used to source prompt text.',
     'If local usage analytics are enabled, coco appends metadata-only call statistics to its user cache; prompts, diffs, and code are never recorded.',
@@ -714,7 +727,160 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     }
   })
 
+  // coco_blame uses its own input schema (BlameRequestSchema) and dispatches
+  // to runBlame. No LLM call, no API key required unless `explain: true`.
+  // Read-only, root-confined, never reads repository-defined prompt overrides.
+  server.registerTool('coco_blame', {
+    title: 'Blame file',
+    description: [
+      'Attribute each line of a repo-relative file to its introducing commit (`git blame`).',
+      'Restrict to a subset of lines with `lines` ("10:50", "10:", or "10" — 1-based, inclusive).',
+      'Set `explain: true` to resolve each blamed commit and ask an LLM why that range was introduced — the response',
+      'then omits raw `lines` and returns `explanations` instead, one entry per introducing commit.',
+      `Capped at ${MAX_BLAME_EXPLAIN_LINES} lines and ${MAX_BLAME_EXPLAIN_COMMITS} distinct commits per \`explain\` call;`,
+      'narrow `lines` for larger files or ranges. Uncommitted/staged lines have no introducing commit and are never explained.',
+      'MCP tools never read repository-defined prompt overrides — the built-in explanation prompt is always used.',
+      'Read-only; never writes repository files, creates commits, or calls a forge.',
+    ].join(' '),
+    inputSchema: BlameRequestSchema,
+    outputSchema: createAgentMcpOutputSchema('blame', BlameDataSchema),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: false,
+      openWorldHint: true,
+    },
+  }, async (rawInput, extra) => {
+    const operation = 'blame' as const
+    try {
+      const input = BlameRequestSchema.parse(rawInput)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot: resolvedRepoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const result = await runBlame(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+        structuredContent: failure,
+      }
+    }
+  })
+
+  // coco_lint uses its own input schema (LintRequestSchema) and dispatches
+  // to runLint. No LLM call, no API key required. Read-only, root-confined;
+  // --fix is intentionally not exposed (rewriting commit history is not
+  // read-only).
+  server.registerTool('coco_lint', {
+    title: 'Lint commit messages',
+    description: [
+      "Validate the subject/body of each commit in a range against coco's built-in Conventional Commits rules.",
+      'Range defaults to `<defaultBranch>..HEAD`; override with `since` (`<since>..HEAD`) or an explicit `range`',
+      '(mutually exclusive). Merge commits are reported with status `skipped`.',
+      'Repository-defined commitlint configuration (commitlint.config.js etc.) is never loaded by this tool, even when',
+      "present in the repository — MCP tools do not execute repository-defined configuration. Results may differ from",
+      '`coco lint` on the command line when the repository customizes its commitlint rules.',
+      '`--fix` is not exposed here: rewriting commit history is not read-only.',
+      'Read-only; never rewrites history, creates commits, or calls a forge.',
+    ].join(' '),
+    inputSchema: LintRequestSchema,
+    outputSchema: createAgentMcpOutputSchema('lint', LintDataSchema),
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  }, async (rawInput, extra) => {
+    const operation = 'lint' as const
+    try {
+      const input = LintRequestSchema.parse(rawInput)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const context = await createAgentOperationContext({
+        repoRoot: resolvedRepoRoot,
+        signal: extra.signal,
+        surface: 'mcp',
+      })
+      const result = await runLint(input, context)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+        structuredContent: failure,
+      }
+    }
+  })
+
   if (allowWrite) registerCommitApplyTool(server, repoRoot)
+
+  // coco_capabilities is the zero-token, no-repository handshake: it never
+  // requires a repository, so repo resolution failures degrade to "no repo"
+  // (used only for optional commitlint-config detection) rather than erroring.
+  server.registerTool('coco_capabilities', {
+    title: 'Coco capabilities',
+    description: [
+      'Zero-token handshake: reports whether coco is usable, for which operations, with which model routing, and',
+      'within what limits -- before spending on a generation call. Call this once per session.',
+      'No repository is required. When one is available (bound at server start, declared via client roots, or',
+      'passed as `repo`), capabilities additionally reports repository-level details like commitlint config detection.',
+      '`authenticationReady: false` means no usable API key/credential is configured for the active provider --',
+      'generation calls would fail with AUTHENTICATION_REQUIRED.',
+      'Reports token counts and model routing only -- no pricing or currency figures.',
+      'Read-only; makes no LLM call.',
+    ].join(' '),
+    inputSchema: CapabilitiesRequestSchema,
+    outputSchema: CapabilitiesResultSchema,
+    annotations: {
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    },
+  }, async (rawInput, extra) => {
+    try {
+      const input = CapabilitiesRequestSchema.parse(rawInput)
+      let resolvedRepoRoot: string | undefined
+      try {
+        resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
+        await assertClientAllowsRoot(server, resolvedRepoRoot)
+      } catch {
+        // No repository available (or not declared as an allowed client
+        // root) -- capabilities degrades to the repo-optional report rather
+        // than failing, since it must work before any repository is known.
+        resolvedRepoRoot = undefined
+      }
+      const result = await runCapabilities(resolvedRepoRoot)
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        structuredContent: result,
+      }
+    } catch (error) {
+      const failure = toAgentOperationError(error)
+      const errorPayload = {
+        error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+      }
+      return {
+        isError: true,
+        content: [{ type: 'text' as const, text: JSON.stringify(errorPayload, null, 2) }],
+        structuredContent: errorPayload,
+      }
+    }
+  })
 
   registerRepoResource(
     server,

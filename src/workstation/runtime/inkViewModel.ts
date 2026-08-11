@@ -1108,6 +1108,10 @@ export type LogInkAction =
   | { type: 'focusNext' }
   | { type: 'focusPrevious' }
   | { type: 'move'; delta: number }
+  // OSS-1608 — click-to-select on the history list: sets the cursor to an
+  // absolute index rather than a relative `move` delta. Same clamping /
+  // side-effect reset as `move`.
+  | { type: 'setSelectedIndex'; value: number }
   | { type: 'selectCommitByHash'; hash: string }
   | { type: 'moveDetailFile'; delta: number; fileCount: number }
   | { type: 'moveWorktreeFile'; delta: number; fileCount: number }
@@ -2165,6 +2169,15 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       return {
         ...state,
         selectedIndex: clampIndex(state.selectedIndex + action.delta, state.filteredCommits.length),
+        selectedFileIndex: 0,
+        diffPreviewOffset: 0,
+        pendingCommitFocused: false,
+        pendingKey: undefined,
+      }
+    case 'setSelectedIndex':
+      return {
+        ...state,
+        selectedIndex: clampIndex(action.value, state.filteredCommits.length),
         selectedFileIndex: 0,
         diffPreviewOffset: 0,
         pendingCommitFocused: false,

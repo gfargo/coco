@@ -238,6 +238,13 @@ export function reopenBitbucketPullRequestByNumber(): Promise<PullRequestActionR
   })
 }
 
+/**
+ * Bitbucket's PUT is a full-resource update where `title` is required, so
+ * adding a reviewer must fetch and echo back the current `title` (and
+ * `description`) alongside `reviewers` — otherwise the PUT can 400 or
+ * silently clobber the PR's title/description (OSS-1639). Mirrors the
+ * pattern in `markBitbucketPullRequestReadyByNumber`.
+ */
 export function addBitbucketPullRequestReviewer(
   projectPath: string,
   pullRequestNumber: number,
@@ -264,14 +271,24 @@ export function addBitbucketPullRequestReviewer(
       return { ok: false, message: `Bitbucket user '${username}' not found.` }
     }
 
-    // Fetch current reviewers so we can append rather than replace.
+    // Fetch the current title/description/reviewers to echo back (see the
+    // function doc block above).
+    let title: string | undefined
+    let description: string | undefined
     let currentReviewers: Array<{ account_id: string }> = []
     try {
       const out = (await runner(`repositories/${projectPath}/pullrequests/${pullRequestNumber}`)).trim()
-      const pr = out ? JSON.parse(out) as { reviewers?: Array<{ account_id?: string }> } : undefined
+      const pr = out ? JSON.parse(out) as { title?: string; description?: string; reviewers?: Array<{ account_id?: string }> } : undefined
+      title = pr?.title
+      description = pr?.description
       currentReviewers = (pr?.reviewers ?? []).filter((r) => r.account_id).map((r) => ({ account_id: r.account_id as string }))
-    } catch {
-      // If we can't fetch current reviewers, proceed with just the new one.
+    } catch (error) {
+      const { message, details } = await resolveBitbucketActionError(error, runner)
+      return { ok: false, message, ...(details && details.length ? { details } : {}) }
+    }
+
+    if (title === undefined) {
+      return { ok: false, message: `Could not fetch pull request #${pullRequestNumber}.` }
     }
 
     const alreadyAdded = currentReviewers.some((r) => r.account_id === accountId)
@@ -283,7 +300,7 @@ export function addBitbucketPullRequestReviewer(
       runner,
       `repositories/${projectPath}/pullrequests/${pullRequestNumber}`,
       'PUT',
-      { reviewers: [...currentReviewers, { account_id: accountId }] },
+      { title, description, reviewers: [...currentReviewers, { account_id: accountId }] },
       () => ({ ok: true, message: `Added ${username} as reviewer to pull request #${pullRequestNumber}` })
     )
   })()

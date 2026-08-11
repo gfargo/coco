@@ -337,7 +337,7 @@ async function runMcpHandshakeSmoke(): Promise<void> {
 
     const toolsListResponse = await Promise.race([client.request('tools/list'), childFailure])
     const tools = (toolsListResponse.result as ToolsListResult | undefined)?.tools ?? []
-    const expectedNames = ['coco_commit_draft', 'coco_review', 'coco_changelog', 'coco_recap', 'coco_condense_diff', 'coco_repo_context']
+    const expectedNames = ['coco_commit_draft', 'coco_review', 'coco_changelog', 'coco_recap', 'coco_condense_diff', 'coco_repo_context', 'coco_blame', 'coco_lint', 'coco_capabilities']
     const actualNames = [...tools.map((tool) => tool.name)].sort()
     if (JSON.stringify(actualNames) !== JSON.stringify([...expectedNames].sort())) {
       throw new Error(`tools/list returned an unexpected tool set.\nExpected: ${expectedNames.join(', ')}\nActual: ${actualNames.join(', ')}`)
@@ -397,6 +397,20 @@ async function main(): Promise<void> {
       args: ['dist/index.esm.mjs', '--help'],
       label: 'ESM entrypoint help',
     })
+
+    const versionJsonOutput = runCheck({
+      command: process.execPath,
+      args: ['dist/index.js', '--version', '--json'],
+      label: '--version --json',
+    })
+    const versionInfo = JSON.parse(versionJsonOutput) as { version?: unknown; node?: unknown }
+    if (typeof versionInfo.version !== 'string' || !versionInfo.version) {
+      throw new Error(`--version --json did not include a version string:\n${versionJsonOutput}`)
+    }
+    if (versionInfo.node !== process.versions.node) {
+      throw new Error(`--version --json reported node ${String(versionInfo.node)}, expected ${process.versions.node}`)
+    }
+    console.log('✓ --version --json')
 
     const packOutput = runCheck({
       command: npmCommand(),

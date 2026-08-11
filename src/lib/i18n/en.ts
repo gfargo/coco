@@ -263,6 +263,8 @@ export const en: Catalog = {
   'keymap.footer.fFetch': 'F fetch',
   'keymap.footer.uPull': 'U pull',
   'keymap.footer.pPush': 'P push',
+  'keymap.footer.mMergeBranch': 'M merge',
+  'keymap.footer.sSyncBranch': 'S sync',
   'keymap.footer.dDelete': 'D delete',
   'keymap.footer.rRename': 'R rename',
   'keymap.footer.uUpstream': 'u upstream',

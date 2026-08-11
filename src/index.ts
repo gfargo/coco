@@ -47,6 +47,7 @@ import { WorkspaceOptions } from './commands/workspace/config'
 import { Config } from './lib/config/types'
 import * as types from './lib/types'
 import { handleFatalError } from './lib/ui/handleFatalError'
+import { emitVersionJson } from './lib/ui/versionInfo'
 import commandExecutor from './lib/utils/commandExecutor'
 
 const y = yargs()
@@ -327,6 +328,19 @@ function fishCompletionArgTriggered(rawArgs: string[]): boolean {
     (rest.includes('--shell') && rest[rest.indexOf('--shell') + 1] === 'fish')
 }
 
+// `coco --version --json` short-circuits before yargs too — yargs owns plain
+// `--version` (prints the bare version string via its built-in handler, left
+// untouched) and doesn't support combining it with another flag, so the JSON
+// form is handled as its own static path rather than fighting yargs for it.
+// `-V` is intentionally not checked here: yargs doesn't register it as a
+// `--version` alias, so plain `coco -V` isn't a version flag either — treating
+// it as one here would make `-V --json` behave differently from `-V` alone.
+function versionJsonTriggered(rawArgs: string[]): boolean {
+  const hasVersionFlag = rawArgs.includes('--version')
+  const hasJsonFlag = rawArgs.includes('--json')
+  return hasVersionFlag && hasJsonFlag
+}
+
 // Escapes backslashes BEFORE quotes — reversing the order would let a
 // description ending in a backslash consume the closing quote's own escape
 // (`foo\` -> `"foo\"` reads as unterminated to fish), breaking out of the
@@ -378,6 +392,13 @@ async function main(): Promise<void> {
   // rather than fighting yargs for control of its own command.
   if (fishCompletionArgTriggered(rawArgs)) {
     process.stdout.write(generateFishCompletionScript())
+    return
+  }
+
+  // `--version --json` is likewise handled before yargs sees it — plain
+  // `--version` keeps yargs' own bare-string behavior unchanged.
+  if (versionJsonTriggered(rawArgs)) {
+    emitVersionJson()
     return
   }
 

@@ -296,6 +296,35 @@ describe('lint command handler', () => {
       ])
     })
 
+    it('honors a per-invocation --language flag over the configured language when rewording (OSS-2217)', async () => {
+      const log = record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'bad message', ''])
+      mockApplyRepoFlag.mockReturnValue(makeGit({ log }))
+      mockValidateCommitMessage
+        .mockResolvedValueOnce({ valid: false, errors: ['type may not be empty'], warnings: [] })
+        .mockResolvedValueOnce({ valid: true, errors: [], warnings: [] })
+      mockExecuteChain.mockResolvedValue({ subject: 'fix: a conforming subject' })
+      mockExecuteRebasePlan.mockResolvedValue({ ok: true, message: 'Rebase applied — 1 of 1 commits kept' })
+      mockLoadConfig.mockReturnValue({
+        defaultBranch: 'main',
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        language: 'German',
+      } as unknown as Config)
+
+      await expect(
+        handler({ ...baseArgv, fix: true, language: 'French' }, logger)
+      ).rejects.toMatchObject({ code: 0 })
+
+      const variables = mockExecuteChain.mock.calls[0][0].variables as Record<string, string>
+      expect(variables.language_context).toContain('French')
+    })
+
     it('exits 0 without consulting safety guards when the range is already conforming', async () => {
       const log = record(['sha1', 'sha1', '', 'Jane', '2026-01-01', 'feat: add thing', ''])
       mockApplyRepoFlag.mockReturnValue(makeGit({ log }))

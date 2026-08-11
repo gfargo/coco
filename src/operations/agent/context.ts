@@ -1127,7 +1127,7 @@ export async function readRepoConflictsContext(context: AgentOperationContext): 
 /**
  * Detect commitlint config in the repo root (no cwd dependency).
  */
-function hasCommitlintConfigAtRoot(root: string): boolean {
+export function hasCommitlintConfigAtRoot(root: string): boolean {
   for (const file of COMMITLINT_CONFIG_FILES) {
     if (existsSync(pathJoin(root, file))) return true
   }
