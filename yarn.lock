@@ -1576,9 +1576,9 @@
     zod "^3.25.76 || ^4"
 
 "@langchain/google-genai@^2.1.31":
-  version "2.1.31"
-  resolved "https://registry.yarnpkg.com/@langchain/google-genai/-/google-genai-2.1.31.tgz#848e0b45a54d907ce8ddd85a3577dabf361141fa"
-  integrity sha512-lHIJGtZab0jqoufKRPXyHHg1nLXrE74LXd0ftgibWEACc1SpSLu6XwtA23+dX4l7Q/YeSgb9n40YJx5k00/fqw==
+  version "2.2.0"
+  resolved "https://registry.yarnpkg.com/@langchain/google-genai/-/google-genai-2.2.0.tgz#42879b9694a47e40341822d709d5c8aee24a1266"
+  integrity sha512-1mDqbmB6+iC6ZBQY15r5xJg9wPErnQ774inpKh6qi6BrrjadDwaPHoklJW5IXU94edKiDpm1akIzJCrQDWe6yA==
   dependencies:
     "@google/generative-ai" "^0.24.1"
 
