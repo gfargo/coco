@@ -115,10 +115,12 @@ coco hooks uninstall   # remove it
 ```yaml
 repos:
   - repo: https://github.com/gfargo/coco
-    rev: v0.88.0
+    rev: v0.89.0
     hooks:
       - id: coco-commit-msg
 ```
+
+Pin `rev` to the latest coco release tag (`v0.89.0` or newer — run `pre-commit autoupdate` to resolve it automatically); tags before `v0.89.0` predate `.pre-commit-hooks.yaml` and won't resolve.
 
 Both paths run `coco commit --print-message`'s draft-generation logic and fail open — a missing API key, a generation error, or `coco` being unavailable simply leaves the message file untouched rather than blocking the commit. Set `COCO_SKIP=1` to bypass either hook for a single commit.
 
