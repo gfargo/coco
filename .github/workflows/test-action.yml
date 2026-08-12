@@ -1,0 +1,135 @@
+name: Test composite action
+
+# Exercises the repo-root action.yml itself (uses: ./), not coco's source.
+# Runs `coco lint` (no --fix) against scratch repos it builds on the fly,
+# since that path is pure commitlint validation with no LLM call — so the
+# severity-gate behaviour is deterministic and needs no API key.
+on:
+  pull_request:
+    paths:
+      - 'action.yml'
+      - '.github/workflows/test-action.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'action.yml'
+      - '.github/workflows/test-action.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-action-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  severity-gate-fails:
+    name: severity gate fails the job on a bad commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build a scratch repo with a non-conforming commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "${RUNNER_TEMP}/coco-action-fail-repo"
+          mkdir -p "${RUNNER_TEMP}/coco-action-fail-repo"
+          cd "${RUNNER_TEMP}/coco-action-fail-repo"
+          git init -q
+          git config user.email test@example.com
+          git config user.name 'coco action test'
+          echo one > file.txt
+          git add file.txt
+          git commit -q -m 'chore: initial commit'
+          echo two >> file.txt
+          git add file.txt
+          git commit -q -m 'this is not a conventional commit'
+
+      - name: Run coco lint against the scratch repo (expect failure)
+        id: run
+        continue-on-error: true
+        uses: ./
+        with:
+          command: 'lint'
+          args: '--since HEAD~1'
+          severity: error
+          json: 'true'
+          repo: ${{ runner.temp }}/coco-action-fail-repo
+
+      - name: Assert the severity gate failed the step
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ steps.run.outcome }}" != 'failure' ]; then
+            echo "expected the action step to fail (severity gate), got outcome: ${{ steps.run.outcome }}"
+            exit 1
+          fi
+          echo 'confirmed: non-conforming commit failed the severity gate and propagated exit 1'
+
+      - name: Assert findings output parses as JSON
+        shell: bash
+        env:
+          FINDINGS: ${{ steps.run.outputs.findings }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const findings = JSON.parse(process.env.FINDINGS)
+            if (!Array.isArray(findings) || findings.length === 0) {
+              throw new Error("expected a non-empty findings array, got: " + process.env.FINDINGS)
+            }
+            console.log("confirmed: outputs.findings parsed as JSON with", findings.length, "entr(y|ies)")
+          '
+
+  severity-gate-passes:
+    name: severity gate passes the job on a clean commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build a scratch repo with only conforming commits
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf "${RUNNER_TEMP}/coco-action-pass-repo"
+          mkdir -p "${RUNNER_TEMP}/coco-action-pass-repo"
+          cd "${RUNNER_TEMP}/coco-action-pass-repo"
+          git init -q
+          git config user.email test@example.com
+          git config user.name 'coco action test'
+          echo one > file.txt
+          git add file.txt
+          git commit -q -m 'chore: initial commit'
+          echo two >> file.txt
+          git add file.txt
+          git commit -q -m 'feat: add a conforming commit'
+
+      - name: Run coco lint against the scratch repo (expect success)
+        id: run
+        uses: ./
+        with:
+          command: 'lint'
+          args: '--since HEAD~1'
+          severity: error
+          json: 'true'
+          repo: ${{ runner.temp }}/coco-action-pass-repo
+
+      - name: Assert findings output parses as JSON
+        shell: bash
+        env:
+          FINDINGS: ${{ steps.run.outputs.findings }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const findings = JSON.parse(process.env.FINDINGS)
+            if (!Array.isArray(findings)) {
+              throw new Error("expected a findings array, got: " + process.env.FINDINGS)
+            }
+            console.log("confirmed: outputs.findings parsed as JSON with", findings.length, "entr(y|ies)")
+          '
