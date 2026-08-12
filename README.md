@@ -79,6 +79,50 @@ coco commit -i       # generate your first commit (interactive)
 
 Global flags: `--repo <dir>` targets any repo without `cd`, `--json` for machine output, `--quiet` suppresses chrome.
 
+## Use coco in CI
+
+The repo ships a composite GitHub Action (`action.yml`) that installs a pinned `git-coco` and runs a `coco` command, so you don't have to hand-roll the Node setup / `npm install -g` / severity-flag plumbing yourself:
+
+```yaml
+# .github/workflows/review.yml
+name: coco review
+
+on: pull_request
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # coco diffs against the base branch
+
+      - id: coco
+        uses: gfargo/coco@v1
+        with:
+          command: review --staged
+          severity: 7 # fail the job if any finding is severity >= 7
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Show findings
+        if: always()
+        run: echo '${{ steps.coco.outputs.findings }}' | jq '.'
+```
+
+The action's `severity` gate exits non-zero (failing the job) when a finding meets the threshold — it isn't swallowed. `outputs.findings` carries whatever the `coco` command wrote to stdout; with the default `json: true` on `coco review`, that's the `--json` findings array (`fromJSON(steps.coco.outputs.findings)` parses it downstream).
+
+| Input | Default | Description |
+|---|---|---|
+| `command` | *(required)* | The `coco` subcommand and its args, e.g. `review --staged`, `lint`, `review --pr 42` |
+| `version` | `latest` | `git-coco` npm version/dist-tag to install |
+| `severity` | *(none)* | Forwarded as `--severity`. Numeric 1-10 for `review`, `error`\|`warning` for `lint` |
+| `json` | `true` | Adds `--json --quiet` so `outputs.findings` is clean, machine-readable JSON |
+| `args` | *(none)* | Extra raw args appended after severity/json, e.g. `--pr 42` |
+| `repo` | *(checkout root)* | Forwarded as `--repo <dir>` to target a different directory |
+
+coco reads provider credentials from the environment, same as local usage — supply `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / etc. via the workflow's `env` or repo secrets; the action does not manage keys itself.
+
 ## Agent and MCP integration
 
 Use `coco` directly from coding agents and IDEs without scraping interactive terminal output:

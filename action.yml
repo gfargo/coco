@@ -1,0 +1,94 @@
+name: 'coco'
+description: 'Install a pinned git-coco and run a coco command in CI, with --severity gating and JSON findings output.'
+
+inputs:
+  command:
+    description: 'coco subcommand and its arguments, e.g. "review --staged".'
+    required: true
+  version:
+    description: 'npm version or dist-tag of git-coco to install, e.g. "latest", "1", "1.2.3".'
+    required: false
+    default: 'latest'
+  severity:
+    description: 'Value passed to --severity. Numeric 1-10 for `review`, or error|warning for `lint`. Leave empty to skip the severity gate.'
+    required: false
+    default: ''
+  json:
+    description: 'Pass --json (and --quiet, so stdout stays pure JSON) so outputs.findings is machine-readable.'
+    required: false
+    default: 'true'
+  args:
+    description: 'Extra raw arguments appended after --severity/--json, e.g. "--pr 42".'
+    required: false
+    default: ''
+  repo:
+    description: 'Target repository directory, forwarded as --repo. Defaults to the checkout root.'
+    required: false
+    default: ''
+
+outputs:
+  findings:
+    description: 'stdout captured from the coco command. With the default json=true on `coco review`, this is the JSON findings array emitted via --json.'
+    value: ${{ steps.run.outputs.findings }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.22.2
+
+    - name: Install git-coco
+      shell: bash
+      env:
+        COCO_VERSION: ${{ inputs.version }}
+      run: npm install --global "git-coco@${COCO_VERSION}"
+
+    - name: Run coco
+      id: run
+      shell: bash
+      env:
+        COCO_COMMAND: ${{ inputs.command }}
+        COCO_ARGS: ${{ inputs.args }}
+        COCO_SEVERITY: ${{ inputs.severity }}
+        COCO_JSON: ${{ inputs.json }}
+        COCO_REPO: ${{ inputs.repo }}
+      run: |
+        set -euo pipefail
+
+        # Values arrive via `env:`, never interpolated into this script's
+        # text, so they cannot break out of the script. `read -ra` below
+        # word-splits on whitespace (needed since COCO_COMMAND/COCO_ARGS are
+        # multi-token, e.g. "review --staged") without globbing, and every
+        # element is passed to `coco` as its own quoted argv entry, so shell
+        # metacharacters in the values are never re-interpreted.
+        read -ra COMMAND_PARTS <<< "${COCO_COMMAND}"
+        read -ra EXTRA_ARGS <<< "${COCO_ARGS}"
+
+        FLAGS=()
+        if [ -n "${COCO_SEVERITY}" ]; then
+          FLAGS+=(--severity "${COCO_SEVERITY}")
+        fi
+        if [ "${COCO_JSON}" = "true" ]; then
+          FLAGS+=(--json --quiet)
+        fi
+        if [ -n "${COCO_REPO}" ]; then
+          FLAGS+=(--repo "${COCO_REPO}")
+        fi
+
+        set +e
+        OUTPUT=$(coco "${COMMAND_PARTS[@]}" "${FLAGS[@]}" "${EXTRA_ARGS[@]}")
+        EXIT_CODE=$?
+        set -e
+
+        printf '%s\n' "$OUTPUT"
+
+        EOF_TOKEN="COCO_FINDINGS_EOF_$$"
+        {
+          echo "findings<<${EOF_TOKEN}"
+          printf '%s\n' "$OUTPUT"
+          echo "${EOF_TOKEN}"
+        } >> "$GITHUB_OUTPUT"
+
+        exit "$EXIT_CODE"
