@@ -5,16 +5,22 @@ import { StackArgv, builder as stackBuilder, command as stackCommand } from './c
 import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { createStackedBranch } from '../../git/stackActions'
 import { buildStack, getAllStackParents } from '../../git/stackData'
+import { checkoutBranchByName } from '../../git/branchActions'
+import { rebaseOnto } from '../../git/rebaseActions'
 import { Logger } from '../../lib/utils/logger'
 
 jest.mock('../utils/applyRepoFlag')
 jest.mock('../../git/stackActions')
 jest.mock('../../git/stackData')
+jest.mock('../../git/branchActions')
+jest.mock('../../git/rebaseActions')
 
 const mockApplyRepoFlag = applyRepoFlag as jest.MockedFunction<typeof applyRepoFlag>
 const mockCreateStackedBranch = createStackedBranch as jest.MockedFunction<typeof createStackedBranch>
 const mockGetAllStackParents = getAllStackParents as jest.MockedFunction<typeof getAllStackParents>
 const mockBuildStack = buildStack as jest.MockedFunction<typeof buildStack>
+const mockCheckoutBranchByName = checkoutBranchByName as jest.MockedFunction<typeof checkoutBranchByName>
+const mockRebaseOnto = rebaseOnto as jest.MockedFunction<typeof rebaseOnto>
 
 describe('stack command', () => {
   let argv: StackArgv
@@ -27,6 +33,8 @@ describe('stack command', () => {
     mockCreateStackedBranch.mockResolvedValue({ ok: true, message: 'Created child stacked on feature' })
     mockGetAllStackParents.mockResolvedValue({})
     mockBuildStack.mockResolvedValue([{ branch: 'feature', parent: undefined, ahead: 0, behind: 0 }])
+    mockCheckoutBranchByName.mockResolvedValue({ ok: true, message: 'Checked out' })
+    mockRebaseOnto.mockResolvedValue({ ok: true, message: 'Rebased' })
 
     logger = { log: jest.fn(), verbose: jest.fn(), setConfig: jest.fn(), error: jest.fn() } as unknown as Logger
   })
@@ -132,6 +140,89 @@ describe('stack command', () => {
         spy.mockRestore()
       }
       expect(JSON.parse(writes.join(''))).toEqual(stack)
+    })
+  })
+
+  describe('restack', () => {
+    it('rebases each descendant onto its parent, root→tip, skipping the root', async () => {
+      mockBuildStack.mockResolvedValue([
+        { branch: 'main', parent: undefined, ahead: 0, behind: 0 },
+        { branch: 'b1', parent: 'main', ahead: 1, behind: 0 },
+        { branch: 'b2', parent: 'b1', ahead: 1, behind: 0 },
+      ])
+      argv = baseArgv({ action: 'restack' })
+
+      await handler(argv, logger)
+
+      expect(mockCheckoutBranchByName).toHaveBeenNthCalledWith(1, expect.anything(), 'b1')
+      expect(mockCheckoutBranchByName).toHaveBeenNthCalledWith(2, expect.anything(), 'b2')
+      expect(mockRebaseOnto).toHaveBeenNthCalledWith(1, expect.anything(), 'main')
+      expect(mockRebaseOnto).toHaveBeenNthCalledWith(2, expect.anything(), 'b1')
+      expect(mockCheckoutBranchByName).not.toHaveBeenCalledWith(expect.anything(), 'main')
+    })
+
+    it('halts on the first conflict and skips branches after it', async () => {
+      mockBuildStack.mockResolvedValue([
+        { branch: 'main', parent: undefined, ahead: 0, behind: 0 },
+        { branch: 'b1', parent: 'main', ahead: 1, behind: 0 },
+        { branch: 'b2', parent: 'b1', ahead: 1, behind: 0 },
+      ])
+      mockRebaseOnto.mockImplementation(async (_git, ref) => {
+        if (ref === 'main') return { ok: false, message: 'CONFLICT (content): b1' }
+        return { ok: true, message: 'Rebased' }
+      })
+      argv = baseArgv({ action: 'restack' })
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+
+      expect(mockRebaseOnto).toHaveBeenCalledTimes(1)
+      expect(mockCheckoutBranchByName).toHaveBeenCalledTimes(1)
+      expect(mockCheckoutBranchByName).not.toHaveBeenCalledWith(expect.anything(), 'b2')
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Restack halted on b1'), expect.anything())
+    })
+
+    it('emits JSON with per-branch ok/failed/skipped statuses', async () => {
+      mockBuildStack.mockResolvedValue([
+        { branch: 'main', parent: undefined, ahead: 0, behind: 0 },
+        { branch: 'b1', parent: 'main', ahead: 1, behind: 0 },
+        { branch: 'b2', parent: 'b1', ahead: 1, behind: 0 },
+      ])
+      mockRebaseOnto.mockImplementation(async (_git, ref) => {
+        if (ref === 'main') return { ok: false, message: 'CONFLICT (content): b1' }
+        return { ok: true, message: 'Rebased' }
+      })
+      argv = baseArgv({ action: 'restack', json: true })
+
+      const writes: string[] = []
+      const spy = jest.spyOn(process.stdout, 'write').mockImplementation(((c: string) => {
+        writes.push(String(c))
+        return true
+      }) as never)
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      } finally {
+        spy.mockRestore()
+      }
+
+      const parsed = JSON.parse(writes.join(''))
+      expect(logger.log).not.toHaveBeenCalled()
+      expect(parsed).toEqual({
+        ok: false,
+        results: [
+          { branch: 'b1', parent: 'main', status: 'failed', message: 'CONFLICT (content): b1' },
+          { branch: 'b2', parent: 'b1', status: 'skipped' },
+        ],
+      })
+    })
+
+    it('reports no-op when the current branch is not part of a stack', async () => {
+      mockBuildStack.mockResolvedValue([{ branch: 'feature', parent: undefined, ahead: 0, behind: 0 }])
+      argv = baseArgv({ action: 'restack' })
+
+      await handler(argv, logger)
+
+      expect(mockRebaseOnto).not.toHaveBeenCalled()
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('not part of a stack'))
     })
   })
 

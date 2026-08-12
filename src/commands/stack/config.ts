@@ -4,7 +4,7 @@ import { BaseCommandOptions } from '../types'
 
 export interface StackOptions extends BaseCommandOptions {
   /** Positional stack action. `choices` enforced natively by yargs. */
-  action: 'create' | 'status'
+  action: 'create' | 'status' | 'restack'
   /** Branch to create (for `create`). */
   name?: string
   /** Branch to stack on top of (for `create`) — defaults to the current branch. */
@@ -14,9 +14,9 @@ export interface StackOptions extends BaseCommandOptions {
 export type StackArgv = Arguments<StackOptions>
 
 /**
- * `create` and `status` share one command string with a positional
- * `<action>` constrained by an explicit `choices` list — mirroring `pr
- * <action>` (`prCreate/config.ts`) and `cache <subcommand>`
+ * `create`, `status`, and `restack` share one command string with a
+ * positional `<action>` constrained by an explicit `choices` list —
+ * mirroring `pr <action>` (`prCreate/config.ts`) and `cache <subcommand>`
  * (`cache/config.ts`) — so `coco stack rebase` fails with yargs' native
  * "Invalid values" error instead of silently falling through, and bare
  * `coco stack` fails with yargs' native "Not enough non-option arguments"
@@ -36,7 +36,7 @@ export const builder = (yargs: Argv) => {
     .positional('action', {
       describe: 'Stack action to run',
       type: 'string',
-      choices: ['create', 'status'] as const,
+      choices: ['create', 'status', 'restack'] as const,
     })
     .positional('name', {
       describe: 'Branch name to create (for `create`)',
