@@ -117,6 +117,64 @@ nix run nixpkgs#prefetch-npm-deps -- package-lock.json
 1. Create a public repo named **`gfargo/nix-coco`** with `flake.nix` at the root.
 2. Add repo secret `NIX_FLAKE_TOKEN` — a fine-grained PAT that can push to it.
 
+## 7. Container (Docker / GHCR)
+
+The root `Dockerfile` builds `ghcr.io/gfargo/coco` — a multi-stage image
+(`node:22-alpine` builder → slim `node:22-alpine` runtime) that installs the
+already-published `git-coco` from npm, same as the curl installer and
+Homebrew/Scoop/AUR do. This is **not** a source build; the builder stage
+exists to keep the npm cache off the runtime image, not to compile coco.
+
+```bash
+docker run --rm ghcr.io/gfargo/coco:latest --help
+
+# mount a repo and pass provider keys through
+docker run --rm \
+  -v "$PWD:/repo" -w /repo \
+  -e ANTHROPIC_API_KEY \
+  ghcr.io/gfargo/coco:latest commit
+```
+
+### Decisions
+
+- **Registry: GHCR.** Reuses the `packages: write` permission and
+  `GITHUB_TOKEN` the release workflow already has — no new secret.
+- **`gh` / `glab`: not baked in.** The image only installs `git` (coco shells
+  out to it via `simple-git` for every core operation). `coco pr create` /
+  `coco prs` / `coco issues` need `gh` or `glab` on the host and aren't
+  expected to work out of the box in the container; that's the minority
+  containerized use case, and adding both CLIs would meaningfully bloat an
+  otherwise slim image. Run those commands from a host with `gh`/`glab`
+  installed, or build a downstream image that layers them on.
+- **Multi-arch: amd64 + arm64**, built via Buildx + QEMU emulation. No native
+  modules are compiled at runtime (`tiktoken` and `web-tree-sitter` ship
+  prebuilt/WASM), so emulated `npm install -g` is the only emulation cost.
+- **Runtime user: non-root.** The runtime stage adds an unprivileged `coco`
+  user and switches to it before `ENTRYPOINT`; nothing in the image needs to
+  write outside the mounted repo, so root is unnecessary.
+
+### One-time GHCR setup
+
+`ghcr.io/gfargo/coco` defaults to **private** on first push. After the first
+release publishes it, make the package public in the repo's Packages
+settings so `docker pull` works without authentication.
+
+### Keeping the image current
+
+Wired into the release flow via the `docker` job in
+`.github/workflows/publish-release.yml`, which runs after `publish` (so
+`npm publish` has already happened), waits for the version to appear on npm,
+builds a single-arch image and smoke-tests `coco --help` inside it, then
+builds and pushes the multi-arch `:<version>` and `:latest` tags. Both builds
+share a GHA layer cache (`scope=release-docker`), so the multi-arch push
+reuses the amd64 layers the smoke build already compiled instead of
+rebuilding them.
+
+The `Dockerfile` itself is also build-tested on every push/PR via the
+`docker` job in `.github/workflows/ci.yml` (build against the default/latest
+`COCO_VERSION` ARG + `coco --help` smoke test), so a broken `COPY` path or
+missing package surfaces at review time rather than during a release.
+
 ## Regenerating every manifest at once
 
 `bin/genManifests.mjs` generalizes `genHomebrewFormula.mjs` to cover all of
@@ -145,3 +203,4 @@ merge before every tap does. winget is intentionally excluded (see §4).
 - [ ] winget manifest reviewed by hand — needs a real installer artifact before submitting to `microsoft/winget-pkgs`
 - [ ] `install.sh` unchanged or re-copied to `.www/public/install.sh`
 - [ ] `brew install gfargo/tap/coco` smoke-tested on a clean machine (or CI)
+- [ ] `ghcr.io/gfargo/coco:<version>` and `:latest` published; `docker run --rm ghcr.io/gfargo/coco:latest --help` works
