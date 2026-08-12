@@ -62,6 +62,9 @@ export async function createStackedBranch(
   const nameError = rejectFlagLike(name, `Branch name '${name}'`)
   if (nameError) return { ok: false, message: nameError }
 
+  const parentError = rejectFlagLike(parent, `Parent branch '${parent}'`)
+  if (parentError) return { ok: false, message: parentError }
+
   const created = await createBranch(git, name, parent)
   if (!created.ok) return created
 

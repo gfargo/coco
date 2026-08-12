@@ -101,6 +101,16 @@ describe('createStackedBranch', () => {
     expect(raw).not.toHaveBeenCalled()
   })
 
+  it('rejects a flag-like parent without touching git (would otherwise reach `git branch` as an option)', async () => {
+    const raw = jest.fn()
+    const git = { raw } as unknown as SimpleGit
+
+    const result = await createStackedBranch(git, 'feature', '-D')
+
+    expect(result.ok).toBe(false)
+    expect(raw).not.toHaveBeenCalled()
+  })
+
   it('propagates a createBranch failure (e.g. duplicate branch name) without linking', async () => {
     const raw = jest.fn(async (args: string[]) => {
       if (args[0] === 'branch') throw new Error("fatal: A branch named 'feature' already exists.")
