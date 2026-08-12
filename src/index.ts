@@ -17,6 +17,7 @@ import mcp from './commands/mcp'
 import prCreate from './commands/prCreate'
 import prs from './commands/prs'
 import recap from './commands/recap'
+import resolve from './commands/resolve'
 import review from './commands/review'
 import ui from './commands/ui'
 import watch from './commands/watch'
@@ -40,6 +41,7 @@ import { McpOptions } from './commands/mcp/config'
 import { PrCreateOptions } from './commands/prCreate/config'
 import { PrsOptions } from './commands/prs/config'
 import { RecapOptions } from './commands/recap/config'
+import { ResolveOptions } from './commands/resolve/config'
 import { ReviewOptions } from './commands/review/config'
 import { UiOptions } from './commands/ui/config'
 import { WatchOptions } from './commands/watch/config'
@@ -174,6 +176,13 @@ y.command<ReviewOptions>(
   review.handler
 )
 
+y.command<ResolveOptions>(
+  resolve.command,
+  resolve.desc,
+  resolve.builder,
+  resolve.handler
+)
+
 y.command<InitOptions>(
   init.command,
   init.desc,
@@ -292,6 +301,7 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(changelog.command), desc: changelog.desc },
   { name: firstCommandToken(recap.command), desc: recap.desc },
   { name: firstCommandToken(review.command), desc: review.desc },
+  { name: firstCommandToken(resolve.command), desc: resolve.desc },
   { name: firstCommandToken(init.command), desc: init.desc },
   { name: firstCommandToken(doctor.command), desc: doctor.desc },
   { name: firstCommandToken(log.command), desc: log.desc },
