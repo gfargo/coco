@@ -4,8 +4,17 @@ import { commandExit } from '../../lib/utils/commandExit'
 import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { HooksArgv } from './config'
 import { getHooksStatus, installHooks, uninstallHooks } from './manageHooks'
+import { runHookEntry } from './runHookEntry'
 
 export const handler: CommandHandler<HooksArgv> = async (argv, logger) => {
+  // `run` must fail open (#2460), so it's handled entirely by
+  // `runHookEntry` before `applyRepoFlag` — which throws outside a git
+  // repo — ever runs.
+  if (argv.action === 'run') {
+    await runHookEntry(argv)
+    return
+  }
+
   const git = applyRepoFlag(argv)
 
   switch (argv.action) {

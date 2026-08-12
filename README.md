@@ -142,6 +142,32 @@ Both transports share typed `commit-draft`, `review`, `changelog`, and `recap` o
 
 See **[Agent CLI and MCP](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP)** for client setup, every parameter and schema, safety boundaries, examples, analytics, and troubleshooting.
 
+## Git hooks
+
+Get an AI-drafted message on every plain `git commit`, without typing `coco commit`.
+
+**Native git hook** — `coco hooks install` writes a `prepare-commit-msg` hook that fills the message only when it's still empty (chaining to any existing hook first):
+
+```bash
+coco hooks install     # add the hook (--force to replace an existing one)
+coco hooks status      # check what's installed
+coco hooks uninstall   # remove it
+```
+
+**[pre-commit](https://pre-commit.com) framework** — repos already using `pre-commit` can pull in the same behavior via `.pre-commit-hooks.yaml`:
+
+```yaml
+repos:
+  - repo: https://github.com/gfargo/coco
+    rev: v0.89.0
+    hooks:
+      - id: coco-commit-msg
+```
+
+Pin `rev` to the latest coco release tag (`v0.89.0` or newer — run `pre-commit autoupdate` to resolve it automatically); tags before `v0.89.0` predate `.pre-commit-hooks.yaml` and won't resolve.
+
+Both paths run `coco commit --print-message`'s draft-generation logic and fail open — a missing API key, a generation error, or `coco` being unavailable simply leaves the message file untouched rather than blocking the commit. Set `COCO_SKIP=1` to bypass either hook for a single commit.
+
 ## Configuration
 
 ```bash

@@ -1,0 +1,7 @@
+- id: coco-commit-msg
+  name: coco commit message
+  description: Fill an empty commit message with an AI-generated draft (coco).
+  entry: coco hooks run
+  language: node
+  stages: [prepare-commit-msg]
+  minimum_pre_commit_version: "2.9.0"

@@ -97,6 +97,7 @@
     "wiki:push": "tsx bin/wiki.ts push",
     "wiki:status": "tsx bin/wiki.ts status",
     "prepublishOnly": "npm run clean && npm run build",
+    "prepare": "npm run build",
     "coco": "npm run coco:ts",
     "coco:ts": "tsx src/index.ts",
     "coco:cjs": "node dist/index.js",
