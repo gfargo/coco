@@ -18,6 +18,7 @@ import prCreate from './commands/prCreate'
 import prs from './commands/prs'
 import recap from './commands/recap'
 import review from './commands/review'
+import stack from './commands/stack'
 import ui from './commands/ui'
 import watch from './commands/watch'
 import workspace from './commands/workspace'
@@ -41,6 +42,7 @@ import { PrCreateOptions } from './commands/prCreate/config'
 import { PrsOptions } from './commands/prs/config'
 import { RecapOptions } from './commands/recap/config'
 import { ReviewOptions } from './commands/review/config'
+import { StackOptions } from './commands/stack/config'
 import { UiOptions } from './commands/ui/config'
 import { WatchOptions } from './commands/watch/config'
 import { WorkspaceOptions } from './commands/workspace/config'
@@ -272,6 +274,13 @@ y.command<PrsOptions>(
   prs.handler
 )
 
+y.command<StackOptions>(
+  stack.command,
+  stack.desc,
+  stack.builder,
+  stack.handler
+)
+
 // #1587 — shell completions. yargs generates bash/zsh scripts natively
 // (auto-detected from $SHELL at generation time) and answers
 // `--get-yargs-completions` for live tab-completion in both. Fish has
@@ -306,6 +315,7 @@ const FISH_COMPLETION_SUBCOMMANDS: Array<{ name: string; desc: string }> = [
   { name: firstCommandToken(issues.command), desc: issues.desc },
   { name: firstCommandToken(prCreate.command), desc: prCreate.desc },
   { name: firstCommandToken(prs.command), desc: prs.desc },
+  { name: firstCommandToken(stack.command), desc: stack.desc },
 ]
 
 const FISH_COMPLETION_GLOBAL_FLAGS: Array<{ name: string; desc: string }> = [
