@@ -46,6 +46,9 @@ npm install -g git-coco
 
 # try without installing
 npx git-coco@latest init
+
+# Docker (no Node install required)
+docker run --rm -v "$PWD:/repo" -w /repo ghcr.io/gfargo/coco:latest commit
 ```
 
 ## Quick Start

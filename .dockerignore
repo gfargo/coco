@@ -1,0 +1,4 @@
+# The image installs git-coco from npm, not from local source, so the
+# build context only needs to be as large as the Dockerfile itself.
+*
+!Dockerfile
