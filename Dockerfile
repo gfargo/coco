@@ -14,9 +14,11 @@ RUN npm install --global --prefix /opt/coco "git-coco@${COCO_VERSION}"
 FROM node:22-alpine AS runtime
 # git is required at runtime: coco shells out to it (via simple-git) for
 # every core operation (commit, log, diff, blame, etc).
-RUN apk add --no-cache git
-COPY --from=builder /opt/coco /opt/coco
+RUN apk add --no-cache git \
+    && addgroup -S coco && adduser -S coco -G coco
+COPY --from=builder --chown=coco:coco /opt/coco /opt/coco
 ENV PATH="/opt/coco/bin:${PATH}"
 
+USER coco
 ENTRYPOINT ["coco"]
 CMD ["--help"]

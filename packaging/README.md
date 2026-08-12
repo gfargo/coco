@@ -149,6 +149,9 @@ docker run --rm \
 - **Multi-arch: amd64 + arm64**, built via Buildx + QEMU emulation. No native
   modules are compiled at runtime (`tiktoken` and `web-tree-sitter` ship
   prebuilt/WASM), so emulated `npm install -g` is the only emulation cost.
+- **Runtime user: non-root.** The runtime stage adds an unprivileged `coco`
+  user and switches to it before `ENTRYPOINT`; nothing in the image needs to
+  write outside the mounted repo, so root is unnecessary.
 
 ### One-time GHCR setup
 
@@ -162,7 +165,15 @@ Wired into the release flow via the `docker` job in
 `.github/workflows/publish-release.yml`, which runs after `publish` (so
 `npm publish` has already happened), waits for the version to appear on npm,
 builds a single-arch image and smoke-tests `coco --help` inside it, then
-builds and pushes the multi-arch `:<version>` and `:latest` tags.
+builds and pushes the multi-arch `:<version>` and `:latest` tags. Both builds
+share a GHA layer cache (`scope=release-docker`), so the multi-arch push
+reuses the amd64 layers the smoke build already compiled instead of
+rebuilding them.
+
+The `Dockerfile` itself is also build-tested on every push/PR via the
+`docker` job in `.github/workflows/ci.yml` (build against the default/latest
+`COCO_VERSION` ARG + `coco --help` smoke test), so a broken `COPY` path or
+missing package surfaces at review time rather than during a release.
 
 ## Regenerating every manifest at once
 

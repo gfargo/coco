@@ -122,6 +122,8 @@ jobs:
           load: true
           build-args: COCO_VERSION=${{ steps.ver.outputs.version }}
           tags: coco:smoke
+          cache-from: type=gha,scope=release-docker
+          cache-to: type=gha,mode=max,scope=release-docker
 
       - name: Smoke test image
         run: docker run --rm coco:smoke --help
@@ -136,3 +138,5 @@ jobs:
           tags: |
             ghcr.io/gfargo/coco:${{ steps.ver.outputs.version }}
             ghcr.io/gfargo/coco:latest
+          cache-from: type=gha,scope=release-docker
+          cache-to: type=gha,mode=max,scope=release-docker
