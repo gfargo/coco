@@ -4,6 +4,7 @@ import { getXdgConfigPath } from '../services/xdg'
 import { PROJECT_CONFIG_CANDIDATES, TRUSTED_PROJECT_SERVICE_KEYS } from '../constants/projectConfig'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
 import { SCHEMA_PUBLIC_URL } from '../../schema'
+import { writeFileAtomic } from '../../utils/atomicFileWrite'
 
 export { PROJECT_CONFIG_CANDIDATES } from '../constants/projectConfig'
 
@@ -69,12 +70,19 @@ export function readScopedConfigFile(filePath: string): Record<string, unknown> 
   return parsed as Record<string, unknown>
 }
 
-/** Writes a scoped config object back to disk as pretty-printed JSON with a `$schema` pointer. */
+/**
+ * Writes a scoped config object back to disk as pretty-printed JSON with a
+ * `$schema` pointer. Config files may hold credentials (`coco config set
+ * service.authentication.credentials.apiKey`), so this always writes via
+ * `writeFileAtomic` — 0600 permissions, tmp+rename — rather than a bare
+ * `writeFileSync`, which would leave the file world-readable at the
+ * umask-derived default and vulnerable to a truncated partial write (#1874).
+ */
 export function writeScopedConfigFile(filePath: string, config: Record<string, unknown>): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { $schema, ...rest } = config
-  fs.writeFileSync(
+  writeFileAtomic(
     filePath,
     JSON.stringify({ $schema: SCHEMA_PUBLIC_URL, ...rest }, null, 2) + '\n'
   )

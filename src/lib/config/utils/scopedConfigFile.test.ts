@@ -95,6 +95,19 @@ describe('readScopedConfigFile / writeScopedConfigFile', () => {
     expect(written.$schema).not.toBe('https://stale.example/old.json')
     expect(Object.keys(written).filter((k) => k === '$schema')).toHaveLength(1)
   })
+
+  it('writes the file 0600 (owner-only), not world-readable (#1874)', () => {
+    writeScopedConfigFile(filePath, { defaultBranch: 'develop' })
+    const mode = fs.statSync(filePath).mode & 0o777
+    expect(mode).toBe(0o600)
+  })
+
+  it('re-hardens an existing world-readable file back to 0600 on overwrite', () => {
+    fs.writeFileSync(filePath, '{}', { mode: 0o644 })
+    writeScopedConfigFile(filePath, { defaultBranch: 'develop' })
+    const mode = fs.statSync(filePath).mode & 0o777
+    expect(mode).toBe(0o600)
+  })
 })
 
 describe('checkProjectScopeKeyTrust', () => {
