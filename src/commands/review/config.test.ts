@@ -52,3 +52,32 @@ describe('review config validation (#1596)', () => {
     expect(check({})).toBe(true)
   })
 })
+
+describe('review --pr NaN validation (#1880)', () => {
+  const check = extractCheckFn()
+
+  it('rejects --pr coerced to NaN by yargs (e.g. `--pr abc`)', () => {
+    // yargs' `type: 'number'` coerces an unparseable value to NaN rather
+    // than failing the parse — same hole --severity had (#1599). NaN !==
+    // undefined, so without this check the value reached
+    // getPullRequestDiffByNumber(NaN) as a real forge request.
+    expect(() => check({ pr: NaN })).toThrow('--pr must be a positive integer')
+  })
+
+  it('rejects --mr coerced to NaN (the --pr alias)', () => {
+    expect(() => check({ pr: NaN, mr: NaN })).toThrow('--pr must be a positive integer')
+  })
+
+  it('rejects a zero or negative --pr', () => {
+    expect(() => check({ pr: 0 })).toThrow('--pr must be a positive integer')
+    expect(() => check({ pr: -1 })).toThrow('--pr must be a positive integer')
+  })
+
+  it('rejects a non-integer --pr', () => {
+    expect(() => check({ pr: 1.5 })).toThrow('--pr must be a positive integer')
+  })
+
+  it('still accepts a valid positive integer --pr', () => {
+    expect(check({ pr: 42 })).toBe(true)
+  })
+})
