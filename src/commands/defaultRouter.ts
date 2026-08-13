@@ -157,11 +157,15 @@ export function buildSyntheticArgv<T>(
   overrides: Partial<{ interactive: boolean }> = {}
 ): T {
   return ({
+    // Spread first so every global flag the user actually passed
+    // (json, quiet, and anything else yargs put on `$0`'s argv)
+    // reaches the routed-to handler by default. Previously this
+    // hand-picked fields and silently dropped `json`/`quiet`, which
+    // for the `commit` route flipped `coco --commit --json` (a
+    // documented preview-only escape hatch) into a real commit,
+    // since commit/handler.ts reads argv.json as that switch (#1877).
+    ...argv,
     _: ['$0'],
-    $0: argv.$0,
-    repo: argv.repo,
-    cwd: argv.cwd,
-    verbose: argv.verbose,
     interactive: true,
     version: false,
     help: false,
