@@ -4,6 +4,7 @@ import { buildStack, getAllStackParents } from '../../git/stackData'
 import { createStackedBranch } from '../../git/stackActions'
 import { checkoutBranchByName } from '../../git/branchActions'
 import { rebaseOnto } from '../../git/rebaseActions'
+import { submitStack } from '../../git/stackSubmit'
 import { commandExit } from '../../lib/utils/commandExit'
 import { emitJson } from '../../lib/ui/emitJson'
 import { StackArgv } from './config'
@@ -155,6 +156,47 @@ async function handleRestack(argv: StackArgv, git: ReturnType<typeof applyRepoFl
   if (failedBranch) commandExit(1)
 }
 
+async function handleSubmit(git: ReturnType<typeof applyRepoFlag>, argv: StackArgv, logger: Parameters<CommandHandler<StackArgv>>[1]): Promise<void> {
+  const result = await submitStack(git, { draft: Boolean(argv.draft) })
+
+  if (!result.ok) {
+    if (argv.json) {
+      emitJson({ ok: false, message: result.message })
+    } else {
+      logger.error(result.message, { color: 'red' })
+    }
+    commandExit(1)
+    return
+  }
+
+  const { summary } = result
+
+  if (argv.json) {
+    emitJson(summary)
+    if (summary.failed > 0) commandExit(1)
+    return
+  }
+
+  if (!summary.entries.length) {
+    logger.log('No branches in the stack need a pull request.')
+    return
+  }
+
+  for (const entry of summary.entries) {
+    if (entry.status === 'created') {
+      logger.log(`✔ ${entry.branch}: created${entry.url ? ` → ${entry.url}` : ''}`, { color: 'green' })
+    } else if (entry.status === 'already-exists') {
+      logger.log(`• ${entry.branch}: ${entry.message}`, { color: 'yellow' })
+    } else {
+      logger.error(`✘ ${entry.branch}: ${entry.message}`, { color: 'red' })
+    }
+  }
+
+  logger.log(`\n${summary.created} created, ${summary.skipped} already exist, ${summary.failed} failed.`)
+
+  if (summary.failed > 0) commandExit(1)
+}
+
 export const handler: CommandHandler<StackArgv> = async (argv, logger) => {
   const git = applyRepoFlag(argv)
 
@@ -165,6 +207,11 @@ export const handler: CommandHandler<StackArgv> = async (argv, logger) => {
 
   if (argv.action === 'restack') {
     await handleRestack(argv, git, logger)
+    return
+  }
+
+  if (argv.action === 'submit') {
+    await handleSubmit(git, argv, logger)
     return
   }
 

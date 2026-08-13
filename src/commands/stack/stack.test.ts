@@ -7,6 +7,7 @@ import { createStackedBranch } from '../../git/stackActions'
 import { buildStack, getAllStackParents } from '../../git/stackData'
 import { checkoutBranchByName } from '../../git/branchActions'
 import { rebaseOnto } from '../../git/rebaseActions'
+import { submitStack } from '../../git/stackSubmit'
 import { Logger } from '../../lib/utils/logger'
 
 jest.mock('../utils/applyRepoFlag')
@@ -14,6 +15,7 @@ jest.mock('../../git/stackActions')
 jest.mock('../../git/stackData')
 jest.mock('../../git/branchActions')
 jest.mock('../../git/rebaseActions')
+jest.mock('../../git/stackSubmit')
 
 const mockApplyRepoFlag = applyRepoFlag as jest.MockedFunction<typeof applyRepoFlag>
 const mockCreateStackedBranch = createStackedBranch as jest.MockedFunction<typeof createStackedBranch>
@@ -21,6 +23,7 @@ const mockGetAllStackParents = getAllStackParents as jest.MockedFunction<typeof 
 const mockBuildStack = buildStack as jest.MockedFunction<typeof buildStack>
 const mockCheckoutBranchByName = checkoutBranchByName as jest.MockedFunction<typeof checkoutBranchByName>
 const mockRebaseOnto = rebaseOnto as jest.MockedFunction<typeof rebaseOnto>
+const mockSubmitStack = submitStack as jest.MockedFunction<typeof submitStack>
 
 describe('stack command', () => {
   let argv: StackArgv
@@ -226,6 +229,96 @@ describe('stack command', () => {
     })
   })
 
+  describe('submit', () => {
+    beforeEach(() => {
+      mockSubmitStack.mockResolvedValue({
+        ok: true,
+        summary: {
+          entries: [
+            { branch: 'a', parent: 'main', status: 'created', message: 'Created pull request: https://gh/pr/1', url: 'https://gh/pr/1' },
+            { branch: 'b', parent: 'a', status: 'already-exists', message: 'Pull request #5 already exists (OPEN)', number: 5 },
+          ],
+          created: 1,
+          skipped: 1,
+          failed: 0,
+        },
+      })
+    })
+
+    it('delegates to submitStack and prints a per-branch summary', async () => {
+      argv = baseArgv({ action: 'submit' })
+      await handler(argv, logger)
+
+      expect(mockSubmitStack).toHaveBeenCalledWith(expect.anything(), { draft: false })
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('a: created'), expect.anything())
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('b:'), expect.anything())
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('1 created, 1 already exist, 0 failed.'))
+    })
+
+    it('passes --draft through to submitStack', async () => {
+      argv = baseArgv({ action: 'submit', draft: true })
+      await handler(argv, logger)
+
+      expect(mockSubmitStack).toHaveBeenCalledWith(expect.anything(), { draft: true })
+    })
+
+    it('emits JSON with --json', async () => {
+      argv = baseArgv({ action: 'submit', json: true })
+      const writes: string[] = []
+      const spy = jest.spyOn(process.stdout, 'write').mockImplementation(((c: string) => {
+        writes.push(String(c))
+        return true
+      }) as never)
+      try {
+        await handler(argv, logger)
+      } finally {
+        spy.mockRestore()
+      }
+      expect(logger.log).not.toHaveBeenCalled()
+      const parsed = JSON.parse(writes.join(''))
+      expect(parsed).toMatchObject({ created: 1, skipped: 1, failed: 0 })
+    })
+
+    it('exits non-zero when any branch fails', async () => {
+      mockSubmitStack.mockResolvedValue({
+        ok: true,
+        summary: {
+          entries: [{ branch: 'a', parent: 'main', status: 'failed', message: 'forge unavailable' }],
+          created: 0,
+          skipped: 0,
+          failed: 1,
+        },
+      })
+      argv = baseArgv({ action: 'submit' })
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('forge unavailable'), expect.anything())
+    })
+
+    it('surfaces a top-level submitStack failure and exits non-zero', async () => {
+      mockSubmitStack.mockResolvedValue({ ok: false, message: 'Working tree has uncommitted changes' })
+      argv = baseArgv({ action: 'submit' })
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('uncommitted changes'),
+        expect.anything()
+      )
+    })
+
+    it('prints a friendly message when the stack has no branches needing a PR', async () => {
+      mockSubmitStack.mockResolvedValue({
+        ok: true,
+        summary: { entries: [], created: 0, skipped: 0, failed: 0 },
+      })
+      argv = baseArgv({ action: 'submit' })
+
+      await handler(argv, logger)
+
+      expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('No branches in the stack need a pull request.'))
+    })
+  })
+
   describe('unknown action', () => {
     it('hits yargs choices validation before the handler runs', () => {
       let failMessage: string | null = null
@@ -255,6 +348,31 @@ describe('stack command', () => {
 
       expect(failMessage).toMatch(/invalid values/i)
       expect(handlerCalled).toBe(false)
+    })
+
+    it('accepts `submit` as a valid action', () => {
+      let failMessage: string | null = null
+      let handlerCalled = false
+
+      const y = yargs()
+      y.option('repo', { type: 'string', alias: 'cwd', global: true })
+      y.option('verbose', { type: 'boolean', alias: 'v', global: true })
+      y.option('quiet', { type: 'boolean', alias: 'q', global: true })
+      y.option('json', { type: 'boolean', global: true })
+
+      y.command(stackCommand, 'desc', stackBuilder, () => {
+        handlerCalled = true
+      })
+
+      y.strictOptions()
+        .fail((msg) => {
+          failMessage = msg
+        })
+        .exitProcess(false)
+        .parse(['stack', 'submit'])
+
+      expect(failMessage).toBeNull()
+      expect(handlerCalled).toBe(true)
     })
   })
 })
