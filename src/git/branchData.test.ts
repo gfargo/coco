@@ -1,5 +1,5 @@
 import { FIELD_SEPARATOR } from './logData'
-import { getBranchOverview, parseBranchRefs, parseDivergence } from './branchData'
+import { getBranchOverview, parseBranchRefs, parseDivergence, parseUpstreamTrack } from './branchData'
 
 describe('log branch data', () => {
   it('parses local and remote branch refs from stable git output', () => {
@@ -12,6 +12,7 @@ describe('log branch data', () => {
         '*',
         '2026-04-27',
         'feat: current branch',
+        '[ahead 3, behind 2]',
       ].join(FIELD_SEPARATOR),
       [
         'refs/remotes/origin/main',
@@ -21,6 +22,7 @@ describe('log branch data', () => {
         '',
         '2026-04-26',
         'feat: remote branch',
+        '',
       ].join(FIELD_SEPARATOR),
       [
         'refs/remotes/origin/HEAD',
@@ -30,6 +32,7 @@ describe('log branch data', () => {
         '',
         '2026-04-26',
         'origin/main',
+        '',
       ].join(FIELD_SEPARATOR),
     ].join('\n'))
 
@@ -39,12 +42,16 @@ describe('log branch data', () => {
         shortName: 'main',
         upstream: 'origin/main',
         current: true,
+        ahead: 3,
+        behind: 2,
       }),
       expect.objectContaining({
         type: 'remote',
         remote: 'origin',
         shortName: 'origin/main',
         current: false,
+        ahead: 0,
+        behind: 0,
       }),
     ])
   })
@@ -54,6 +61,59 @@ describe('log branch data', () => {
       behind: 2,
       ahead: 5,
     })
+  })
+})
+
+describe('parseUpstreamTrack', () => {
+  it('treats an empty string as up to date', () => {
+    expect(parseUpstreamTrack('')).toEqual({ ahead: 0, behind: 0 })
+  })
+
+  it('parses an ahead-only track', () => {
+    expect(parseUpstreamTrack('[ahead 3]')).toEqual({ ahead: 3, behind: 0 })
+  })
+
+  it('parses a behind-only track', () => {
+    expect(parseUpstreamTrack('[behind 5]')).toEqual({ ahead: 0, behind: 5 })
+  })
+
+  it('parses an ahead-and-behind track', () => {
+    expect(parseUpstreamTrack('[ahead 3, behind 2]')).toEqual({ ahead: 3, behind: 2 })
+  })
+
+  it('treats a gone upstream as zero ahead/behind', () => {
+    expect(parseUpstreamTrack('[gone]')).toEqual({ ahead: 0, behind: 0 })
+  })
+})
+
+describe('getBranchOverview ahead/behind from for-each-ref', () => {
+  it('sources ahead/behind from the upstream:track field without extra subprocesses', async () => {
+    const forEachRefOutput = [
+      'refs/heads/main',
+      'main',
+      'abc1234',
+      'origin/main',
+      '*',
+      '2026-04-27',
+      'feat: current branch',
+      '[ahead 3, behind 2]',
+    ].join(FIELD_SEPARATOR)
+
+    const git = {
+      raw: jest.fn().mockImplementation(async (args: string[]) => {
+        if (args[0] === 'for-each-ref') return forEachRefOutput
+        if (args[0] === 'status') return ''
+        if (args[0] === 'branch') return 'main\n'
+        return ''
+      }),
+    }
+
+    const result = await getBranchOverview(git as never)
+
+    expect(result.localBranches).toEqual([
+      expect.objectContaining({ shortName: 'main', ahead: 3, behind: 2 }),
+    ])
+    expect(git.raw).toHaveBeenCalledTimes(3)
   })
 })
 
