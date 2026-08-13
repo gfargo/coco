@@ -122,6 +122,7 @@ describe('review command', () => {
     }
     logger = {
       log: jest.fn(),
+      result: jest.fn(),
       verbose: jest.fn(),
       setConfig: jest.fn(),
       error: jest.fn(),

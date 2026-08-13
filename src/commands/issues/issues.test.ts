@@ -36,6 +36,7 @@ const fakeGit = {} as SimpleGit
 function createLogger(): Logger {
   return {
     log: jest.fn(),
+    result: jest.fn(),
     verbose: jest.fn(),
     setConfig: jest.fn(),
     error: jest.fn(),

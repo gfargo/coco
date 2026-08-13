@@ -114,7 +114,9 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   }
 
   if (argv.dryRun) {
-    logger.log(`${title}\n\n${body}`)
+    // The generated title/body is --dry-run's entire result — must
+    // survive --quiet (#1879).
+    logger.result(`${title}\n\n${body}`)
     return
   }
 

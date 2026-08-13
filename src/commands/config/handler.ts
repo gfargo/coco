@@ -64,7 +64,11 @@ function warnIfInvalid(scopeConfig: Record<string, unknown>, logger: Parameters<
     service: { ...DEFAULT_CONFIG.service, ...(rest.service as Record<string, unknown> | undefined) },
   }
   if (!validate(trial)) {
-    logger.log(
+    // A warning the user needs to see even under --quiet, same as any
+    // other logger.error() call — it was previously routed through
+    // log(), so `coco config set --quiet` hid a real schema problem
+    // while still writing the file (#1879).
+    logger.error(
       `Warning: this value may not match coco's config schema: ${ajv.errorsText(validate.errors)}`,
       { color: 'yellow' }
     )
@@ -91,12 +95,12 @@ export const handler: CommandHandler<ConfigArgv> = async (argv, logger) => {
     }
 
     if (resolved === undefined) {
-      logger.log(`${key} is not set.`, { color: 'yellow' })
+      logger.result(`${key} is not set.`, { color: 'yellow' })
       return
     }
 
-    logger.log(`${key} = ${JSON.stringify(masked)}`)
-    logger.log(`  source: ${source}${path ? ` (${path})` : ''}`, { color: 'gray' })
+    logger.result(`${key} = ${JSON.stringify(masked)}`)
+    logger.result(`  source: ${source}${path ? ` (${path})` : ''}`, { color: 'gray' })
     return
   }
 
@@ -114,7 +118,7 @@ export const handler: CommandHandler<ConfigArgv> = async (argv, logger) => {
       }
       logger.log(`${scope} scope (${filePath}):`)
       for (const [k, v] of Object.entries(masked)) {
-        logger.log(`  ${k} = ${JSON.stringify(v)}`)
+        logger.result(`  ${k} = ${JSON.stringify(v)}`)
       }
       return
     }
@@ -132,7 +136,7 @@ export const handler: CommandHandler<ConfigArgv> = async (argv, logger) => {
     }
 
     for (const entry of entries) {
-      logger.log(`${entry.key} = ${JSON.stringify(entry.value)}  ${entry.source}${entry.path ? ` (${entry.path})` : ''}`)
+      logger.result(`${entry.key} = ${JSON.stringify(entry.value)}  ${entry.source}${entry.path ? ` (${entry.path})` : ''}`)
     }
     return
   }
@@ -153,7 +157,10 @@ export const handler: CommandHandler<ConfigArgv> = async (argv, logger) => {
     warnIfInvalid(raw, logger)
     writeScopedConfigFile(filePath, raw)
 
-    logger.log(`Set ${key} in ${scope} scope (${filePath}).`, { color: 'green' })
+    // `set` has no --json branch, so this confirmation is the only signal
+    // the command did anything — suppressing it under --quiet made a
+    // successful write indistinguishable from a silent no-op (#1879).
+    logger.result(`Set ${key} in ${scope} scope (${filePath}).`, { color: 'green' })
     return
   }
 

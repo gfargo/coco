@@ -195,6 +195,8 @@ export function createGitHubListHandler<
       logger.log('')
     }
 
-    logger.log(spec.formatList(items, listNoun))
+    // The list itself is the command's result, not status chrome — must
+    // still print under --quiet (#1879), unlike the header above it.
+    logger.result(spec.formatList(items, listNoun))
   }
 }
