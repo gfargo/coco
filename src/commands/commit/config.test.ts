@@ -16,4 +16,23 @@ describe('commit config options', () => {
     expect(parse(['--includeBranchName']).includeBranchName).toBe(true)
     expect(parse(['--no-includeBranchName']).includeBranchName).toBe(false)
   })
+
+  // #1892: openInEditor was part of CommitOptions (read at handler.ts:480)
+  // and settable via config, but had no yargs entry — under the CLI's real
+  // .strictOptions() (src/index.ts), --open-in-editor was rejected as an
+  // unknown argument even though the type it's meant to control is public.
+  it('accepts --open-in-editor under strictOptions instead of "Unknown arguments" (#1892)', () => {
+    let failMessage: string | null = null
+    const argv = yargs(['--open-in-editor'])
+      .options(options)
+      .strictOptions()
+      .fail((msg) => {
+        failMessage = msg
+      })
+      .exitProcess(false)
+      .parseSync()
+
+    expect(failMessage).toBeNull()
+    expect(argv.openInEditor).toBe(true)
+  })
 })

@@ -158,6 +158,10 @@ export const options = {
     type: 'boolean',
     default: false,
   },
+  openInEditor: {
+    description: 'When editing a commit message (e.g. after a validation failure), open it in $EDITOR instead of the inline prompt',
+    type: 'boolean',
+  },
   // `--json` is a global flag (see src/index.ts). On `commit` it behaves like
   // `--print-message` — generate a draft, don't commit — but emits the result
   // as structured `{ "title", "body" }` for machine consumers.
