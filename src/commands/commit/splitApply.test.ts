@@ -79,16 +79,21 @@ describe('applyCommitSplitPlan apply-loop safety', () => {
 
     // The recovery reset must land between group A's staging and group
     // B's staging — group A's files were left in the index by the
-    // failed commit and used to be absorbed into B's commit.
+    // failed commit and used to be absorbed into B's commit. Group A's
+    // file (a.ts) belonged to the failed group and was originally
+    // staged, so it must be re-staged after the loop rather than left
+    // unstaged with no warning (#1876).
     expect(ops).toEqual([
       'list-staged',
       'reset',
       'stage a.ts',
       'reset',
       'stage b.ts',
+      'add -- a.ts',
     ])
     expect(result.commitHashes).toEqual(['head-1'])
     expect(result.message).toContain('1 of 2')
+    expect(result.message).toContain('re-staged')
   })
 
   it('re-stages staged files the plan never claimed (config-filtered lockfiles)', async () => {
@@ -133,6 +138,33 @@ describe('applyCommitSplitPlan apply-loop safety', () => {
 
     expect(ops.filter((op) => op.startsWith('add --'))).toEqual([])
     expect(result.message).not.toContain('re-staged')
+  })
+
+  it('re-stages every planned file before throwing when every group fails (#1876)', async () => {
+    // The other half of the bug: "if every group fails, throw — but the
+    // index is left empty" (no rollback of the up-front reset at all).
+    const { git, ops } = makeFakeGit.staged(['a.ts', 'b.ts'])
+    mockedCreateCommit.mockImplementation(async () => {
+      throw new Error('Pre-commit hook failed')
+    })
+
+    const plan = makePlan([
+      { title: 'feat: a', files: ['a.ts'] },
+      { title: 'feat: b', files: ['b.ts'] },
+    ])
+
+    await expect(
+      applyCommitSplitPlan({
+        plan,
+        changes: { staged: [fileChange('a.ts'), fileChange('b.ts')], unstaged: [], untracked: [] },
+        hunkInventory: emptyHunkInventory,
+        git: git as never,
+        logger,
+        noVerify: false,
+      })
+    ).rejects.toThrow('Split apply created zero commits')
+
+    expect(ops).toContain('add -- a.ts b.ts')
   })
 })
 
@@ -212,7 +244,7 @@ describe('applyCommitSplitPlan onHookFailure recovery (OSS-662)', () => {
   })
 
   it('stops processing remaining groups and reports partial success when onHookFailure resolves "abort"', async () => {
-    const { git } = makeFakeGit.staged(['a.ts', 'b.ts', 'c.ts'])
+    const { git, ops } = makeFakeGit.staged(['a.ts', 'b.ts', 'c.ts'])
     mockedCreateCommit
       .mockImplementationOnce(async () => {
         git.advanceHead()
@@ -249,6 +281,12 @@ describe('applyCommitSplitPlan onHookFailure recovery (OSS-662)', () => {
     expect(result.commitHashes).toEqual(['head-1'])
     expect(result.message).toContain('1 of 3')
     expect(result.message).toContain('aborted')
+
+    // b.ts (failed group) and c.ts (never attempted after the abort)
+    // must both come back staged rather than left in the unstaged pile
+    // with no warning (#1876).
+    expect(ops).toContain('add -- b.ts c.ts')
+    expect(result.message).toContain('re-staged')
   })
 
   it('records the failure and continues to the next group when no onHookFailure callback is supplied', async () => {

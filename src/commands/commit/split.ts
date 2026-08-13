@@ -530,6 +530,12 @@ export async function applyCommitSplitPlan({
   }
   const unplannedStaged = stagedBeforeReset.filter((file) => !plannedFiles.has(file))
 
+  // Files that actually landed in a commit. Anything in `plannedFiles`
+  // still missing from this set after the loop belongs to a group that
+  // failed or was never attempted (aborted) — restored to staged below
+  // instead of silently left out of the index (#1876).
+  const committedFiles = new Set<string>()
+
   await git.raw(['reset'])
 
   logger.startSpinner(`Applying ${applicableGroups.length} commits…`)
@@ -608,6 +614,10 @@ export async function applyCommitSplitPlan({
         }
         commitHashes.push(newHead)
         previousHead = newHead
+        for (const file of groupFiles) committedFiles.add(file)
+        for (const hunk of groupHunks) {
+          if (hunk) committedFiles.add(hunk.filePath)
+        }
         logger.verbose(`Created split commit ${newHead.slice(0, 8)}: ${group.title}`, { color: 'green' })
         break
       } catch (error) {
@@ -657,8 +667,26 @@ export async function applyCommitSplitPlan({
       // Best-effort — a path may have vanished from disk mid-apply.
     }
   }
+
+  // Restore the staging intent for planned files whose group failed or
+  // was never attempted (aborted). Without this, a hook rejecting one
+  // group — or a mid-run SIGINT — left the user with those files
+  // unstaged and no warning, discarding a hand-curated index (#1876).
+  const unresolvedPlannedFiles = [...plannedFiles].filter(
+    (file) => !committedFiles.has(file) && stagedBeforeReset.includes(file)
+  )
+  if (unresolvedPlannedFiles.length > 0) {
+    try {
+      await git.raw(['add', '--', ...unresolvedPlannedFiles])
+    } catch {
+      // Best-effort — a path may have vanished from disk mid-apply.
+    }
+  }
   const unplannedNote = unplannedStaged.length > 0
     ? ` ${unplannedStaged.length} staged file(s) the plan excluded by config (e.g. lockfiles) were re-staged — commit them separately.`
+    : ''
+  const unresolvedNote = unresolvedPlannedFiles.length > 0
+    ? ` ${unresolvedPlannedFiles.length} file(s) from failed/unattempted group(s) were re-staged — resolve and commit them separately.`
     : ''
   const abortedNote = aborted
     ? ' Stopped after the hook failure was aborted — remaining groups were not attempted.'
@@ -672,7 +700,7 @@ export async function applyCommitSplitPlan({
     logger.stopSpinner('Split apply failed', { mode: 'fail', color: 'red' })
     const detail = failures.map((f) => `  - ${f.title}: ${f.reason}`).join('\n')
     throw new Error(
-      `Split apply created zero commits across ${applicableGroups.length} group(s).${abortedNote}\n${detail}`
+      `Split apply created zero commits across ${applicableGroups.length} group(s).${abortedNote}${unresolvedNote}\n${detail}`
     )
   }
 
@@ -686,7 +714,7 @@ export async function applyCommitSplitPlan({
     )
     return {
       commitHashes,
-      message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}${unplannedNote}${abortedNote}`,
+      message: `Created ${commitHashes.length} of ${applicableGroups.length} planned commit(s). Failed: ${partial}${unplannedNote}${unresolvedNote}${abortedNote}`,
       fallback,
     }
   }
