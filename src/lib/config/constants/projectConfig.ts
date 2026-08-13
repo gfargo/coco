@@ -46,3 +46,22 @@ export const TRUSTED_PROJECT_SERVICE_KEYS = [
   'requestOptions',
   'provider',
 ] as const
+
+/**
+ * Top-level (non-`service.*`) config keys that a repo-committed project
+ * config is NOT trusted to set, for the same reason `service.baseURL` /
+ * `endpoint` / `authentication` are excluded above: they decide what runs
+ * on the victim's machine or what credentials get used, not how a request
+ * is tuned. `autoFixTool` / `autoFixToolOptions` choose which agentic CLI
+ * `coco review`'s auto-fix spawns and the flags it receives — including
+ * each tool's own permission/sandbox-bypass flags — so an unfiltered
+ * repo-local value lets a hostile repo run an autonomous file-editing CLI
+ * with permission checks disabled the moment a user accepts an auto-fix
+ * (#1840). `autoFixToolApiKey` is a bare credential and has no legitimate
+ * reason to live in a repo-committed file at all.
+ */
+export const UNTRUSTED_PROJECT_TOP_LEVEL_KEYS = [
+  'autoFixTool',
+  'autoFixToolOptions',
+  'autoFixToolApiKey',
+] as const
