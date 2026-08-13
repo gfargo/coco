@@ -98,10 +98,25 @@ describe('createCommit', () => {
   })
 
   it('wraps GitError as PreCommitHookError', async () => {
-    const gitErr = new GitError(undefined, '🔍 Running ruff...\nFound 2 errors.')
+    // Realistic `pre-commit` framework output: a "- hook id: …" line, per
+    // isPreCommitHookModifiedFilesError's own doc comment on that format.
+    const gitErr = new GitError(undefined, 'ruff.....................Failed\n- hook id: ruff\n\n🔍 Running ruff...\nFound 2 errors.')
     const commitMock = jest.fn().mockRejectedValue(gitErr)
     const git = makeGit(commitMock)
     await expect(createCommit('test commit', git)).rejects.toBeInstanceOf(PreCommitHookError)
+  })
+
+  it('does not wrap a GitError with no hook indication in its message (#1886)', async () => {
+    // GPG signing failures, index.lock contention, unborn-branch, and
+    // missing-identity errors all reach this same catch with hooks
+    // entirely out of the picture. Wrapping them misdirected users at
+    // hook config / --no-verify — which doesn't disable GPG signing, so
+    // the "fix" silently failed again the same way.
+    const gitErr = new GitError(undefined, 'error: gpg failed to sign the data\nfatal: failed to write commit object')
+    const commitMock = jest.fn().mockRejectedValue(gitErr)
+    const git = makeGit(commitMock)
+
+    await expect(createCommit('test commit', git)).rejects.toBe(gitErr)
   })
 
   it('does not blame hooks for "nothing to commit"', async () => {
@@ -121,7 +136,7 @@ describe('createCommit', () => {
   })
 
   it('preserves hook output in PreCommitHookError', async () => {
-    const hookOutput = '🔍 Running ruff...\nFound 2 errors.'
+    const hookOutput = 'ruff.....................Failed\n- hook id: ruff\n\n🔍 Running ruff...\nFound 2 errors.'
     const gitErr = new GitError(undefined, hookOutput)
     const commitMock = jest.fn().mockRejectedValue(gitErr)
     const git = makeGit(commitMock)

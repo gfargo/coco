@@ -51,6 +51,21 @@ function isKnownNonHookCommitFailure(message: string): boolean {
   )
 }
 
+/**
+ * Whether a GitError's message actually indicates a hook rejected the
+ * commit, as opposed to some other commit failure (GPG signing, an
+ * index.lock left by a crashed process, an unborn branch, a missing
+ * `user.name`/`user.email`) that git also reports via a non-zero exit
+ * with hooks entirely out of the picture. Deliberately narrow — err
+ * toward rethrowing the real GitError over misclassifying it, since the
+ * hook-failure UX (retry / skip hooks / abort) actively misdirects the
+ * user for these: `--no-verify` doesn't disable GPG signing, so "skip
+ * hooks" on a signing failure silently fails again the same way (#1886).
+ */
+function isLikelyHookFailure(message: string): boolean {
+  return /\bhook\b/i.test(message) || message.includes('pre-commit') || message.includes('commit-msg')
+}
+
 export interface CreateCommitOptions {
   /** When true, passes --no-verify to git commit, skipping pre-commit and commit-msg hooks. */
   noVerify?: boolean
@@ -114,10 +129,15 @@ export async function createCommit(
       if (isKnownNonHookCommitFailure(error.message)) {
         throw error
       }
-      // Wrap remaining GitErrors so callers can present them cleanly
-      // rather than showing a raw Node.js stack trace originating
-      // from simple-git internals.
-      throw new PreCommitHookError(error.message)
+      // Only wrap when the message actually indicates a hook — GPG
+      // signing failures, index.lock contention, unborn-branch and
+      // missing-identity errors all reach here too, and misclassifying
+      // them as a blocked hook pointed users at hook config / --no-verify
+      // for a problem neither one touches (#1886).
+      if (isLikelyHookFailure(error.message)) {
+        throw new PreCommitHookError(error.message)
+      }
+      throw error
     }
 
     throw error
