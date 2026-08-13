@@ -726,7 +726,7 @@ export async function applyCommitSplitPlan({
 
   return {
     commitHashes,
-    message: `Created ${commitHashes.length} split commit(s).${unplannedNote}`,
+    message: `Created ${commitHashes.length} split commit(s).${unplannedNote}${unresolvedNote}`,
     fallback,
   }
 }
