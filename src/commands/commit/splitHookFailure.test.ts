@@ -133,7 +133,9 @@ describe('handleCommitSplit — pre-commit hook failure recovery (OSS-662)', () 
     mockedSelectPrompt.mockResolvedValue('retry')
 
     const logger = new Logger({})
-    const logSpy = jest.spyOn(logger, 'log')
+    // Hook output goes through error(), not log() (#1887) — it must survive
+    // the quiet mode the non-interactive commit path mutes the logger with.
+    const errorSpy = jest.spyOn(logger, 'error')
 
     const output = await handleCommitSplit({
       argv: baseArgv,
@@ -146,7 +148,7 @@ describe('handleCommitSplit — pre-commit hook failure recovery (OSS-662)', () 
     })
 
     expect(mockedSelectPrompt).toHaveBeenCalledTimes(1)
-    const loggedLines = logSpy.mock.calls.map((call) => String(call[0]))
+    const loggedLines = errorSpy.mock.calls.map((call) => String(call[0]))
     expect(loggedLines.some((line) => line.includes('Hook output:'))).toBe(true)
     expect(loggedLines.some((line) => line.includes('biome check failed on widget.ts'))).toBe(true)
     expect(mockedCreateCommit).toHaveBeenCalledTimes(2)

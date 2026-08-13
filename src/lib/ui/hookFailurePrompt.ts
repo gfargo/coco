@@ -24,10 +24,15 @@ export async function promptHookFailureRecovery({
   interactive: boolean
 }): Promise<HookFailureRecoveryChoice> {
   logger.error(`\n${header}`, { color: 'red' })
-  logger.log('\nHook output:', { color: 'yellow' })
-  logger.log(SEPERATOR)
-  logger.log(hookOutput)
-  logger.log(SEPERATOR)
+  // logger.error(), not log(): the commit handler mutes the logger for
+  // every non-interactive run (logger.setConfig({ quiet: true })), and the
+  // non-interactive branch below tells the user to "fix the issues above"
+  // — which, printed via log(), were the issues actually suppressed
+  // (#1887). Matches the header line above, which was already error().
+  logger.error('\nHook output:', { color: 'yellow' })
+  logger.error(SEPERATOR)
+  logger.error(hookOutput)
+  logger.error(SEPERATOR)
 
   if (!interactive) {
     logger.error(
