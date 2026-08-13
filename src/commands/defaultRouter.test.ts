@@ -139,6 +139,24 @@ describe('bare `coco` → workstation history view (#1169 regression)', () => {
   })
 })
 
+describe('buildSyntheticArgv forwards global json/quiet (#1877)', () => {
+  it('carries --json through to the routed handler', () => {
+    const synthetic = buildSyntheticArgv<UiArgv>(routeArgv({ json: true }))
+    expect(synthetic.json).toBe(true)
+  })
+
+  it('carries --quiet through to the routed handler', () => {
+    const synthetic = buildSyntheticArgv<UiArgv>(routeArgv({ quiet: true }))
+    expect(synthetic.quiet).toBe(true)
+  })
+
+  it('leaves json/quiet unset when the caller did not pass them', () => {
+    const synthetic = buildSyntheticArgv<UiArgv>(routeArgv())
+    expect(synthetic.json).toBeUndefined()
+    expect(synthetic.quiet).toBeUndefined()
+  })
+})
+
 describe('buildSyntheticArgv interactive override', () => {
   it('defaults `interactive` to true when no override is given (ui/workspace/init regression guard)', () => {
     const synthetic = buildSyntheticArgv<UiArgv>(routeArgv())
@@ -183,5 +201,29 @@ describe('legacy `--commit`/COCO_DEFAULT=commit route does not force interactive
     expect(commitHandler).toHaveBeenCalledTimes(1)
     const mockCommitHandler = commitHandler as jest.Mock
     expect(mockCommitHandler.mock.calls[0][0].interactive).toBe(false)
+  })
+
+  it('forwards --json to commitHandler instead of dropping it (#1877)', async () => {
+    // The exploit: `COCO_DEFAULT=commit coco --json` is documented as a
+    // preview-only escape hatch (commit/handler.ts treats argv.json as
+    // "generate a draft, don't commit"). Losing the flag here silently
+    // turned that preview into a real commit.
+    process.env.COCO_DEFAULT = 'commit'
+    const logger = new Logger({ silent: true })
+
+    await defaultRouteHandler(routeArgv({ json: true }), logger)
+
+    const mockCommitHandler = commitHandler as jest.Mock
+    expect(mockCommitHandler.mock.calls[0][0].json).toBe(true)
+  })
+
+  it('forwards --quiet to commitHandler instead of dropping it (#1877)', async () => {
+    process.env.COCO_DEFAULT = 'commit'
+    const logger = new Logger({ silent: true })
+
+    await defaultRouteHandler(routeArgv({ quiet: true }), logger)
+
+    const mockCommitHandler = commitHandler as jest.Mock
+    expect(mockCommitHandler.mock.calls[0][0].quiet).toBe(true)
   })
 })
