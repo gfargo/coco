@@ -48,7 +48,10 @@ async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
   }
 }
 
-export async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> {
+export async function loadLogInkContext(
+  git: SimpleGit,
+  options: { silent?: boolean } = {},
+): Promise<LogInkContext> {
   // Fetch status --porcelain -z and branch --show-current once, then thread
   // the snapshot into the three consumers that would otherwise each issue an
   // independent probe.  On failure the fields remain `undefined` and each
@@ -65,16 +68,22 @@ export async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> 
     // Fall through: snapshot fields stay undefined, consumers fetch fresh.
   }
 
+  // When called from a silent (fs-watcher-triggered) refresh, skip the forge
+  // and provider network calls.  The keys are omitted entirely from the
+  // returned object so that `mergeRefreshedContext` ({...prev, ...next})
+  // preserves the previously-loaded values instead of blanking them.
+  const skipForge = options.silent === true
+
   const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, sparse, submodules, remotes] =
     await Promise.all([
       safe(getBranchOverview(git, snapshot)),
-      safe(getForgePullRequestOverview(git)),
+      skipForge ? Promise.resolve(undefined) : safe(getForgePullRequestOverview(git)),
       safe(getTagOverview(git)),
       safe(getWorktreeOverview(git, snapshot)),
       safe(getStashOverview(git)),
       safe(getWorktreeListOverview(git)),
       safe(getGitOperationOverview(git, snapshot)),
-      safe(getProviderOverview(git)),
+      skipForge ? Promise.resolve(undefined) : safe(getProviderOverview(git)),
       safe(getReflogOverview(git)),
       safe(getBisectStatus(git)),
       safe(getLfsAttributeStatus(git)),
@@ -83,14 +92,12 @@ export async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> 
       safe(getRemoteOverview(git)),
     ])
 
-  return {
+  const result: LogInkContext = {
     bisect,
     branches,
     lfs,
     sparse,
     operation,
-    provider,
-    pullRequest,
     reflog,
     remotes,
     stashes,
@@ -99,6 +106,15 @@ export async function loadLogInkContext(git: SimpleGit): Promise<LogInkContext> 
     worktree,
     worktreeList,
   }
+
+  // Only include forge/provider keys on non-silent refreshes so that a silent
+  // refresh never blanks previously-loaded values in the merged context.
+  if (!skipForge) {
+    result.provider = provider
+    result.pullRequest = pullRequest
+  }
+
+  return result
 }
 
 /**
@@ -214,7 +230,7 @@ export function useContextRefresh(
       dispatch({ type: 'setStatus', value: 'refreshing repository context' })
       setContextStatus(createLogInkContextStatus('loading'), issuedAtDepth)
     }
-    const next = await loadLogInkContext(git)
+    const next = await loadLogInkContext(git, { silent: options.silent })
     // #1385 — a newer refresh was issued for this frame while ours was
     // in flight; its snapshot is fresher than ours, so drop this one.
     if (refreshContextRequestRef.current[issuedAtDepth] !== requestId) {
