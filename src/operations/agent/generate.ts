@@ -1,3 +1,5 @@
+import { readFileSync, statSync } from 'node:fs'
+import { resolve as resolvePath } from 'node:path'
 import { Arguments } from 'yargs'
 import { z } from 'zod'
 
@@ -17,6 +19,9 @@ import {
 import { REVIEW_PROMPT } from '../../commands/review/prompt'
 import { getBlame } from '../../git/blameData'
 import { getCommitDetail, GitCommitDetail } from '../../git/logData'
+import { runConflictResolutionWorkflow } from '../../git/conflictAiActions'
+import { ConflictRegion, getConflictFileRegions } from '../../git/conflictRegionActions'
+import { getConflictedFiles, getInProgressOperationType, MAX_CONFLICT_MARKER_FILE_BYTES } from '../../git/operationData'
 import {
     BlameExplainResponseSchema,
     filterBlameLines,
@@ -70,6 +75,7 @@ import {
     readRepoConflictsContext,
     readRepoCapabilitiesContext,
     digestOf,
+    isPathWithinRoot,
 } from './context'
 import { AgentOperationError } from './errors'
 import { splitUnifiedDiff } from './splitUnifiedDiff'
@@ -92,12 +98,16 @@ import {
     CondenseDiffData,
     CondenseDiffFileResult,
     CondenseDiffRequest,
+    ConflictResolveData,
+    ConflictResolveRequest,
     LintCommitResult,
     LintData,
     LintRequest,
     MAX_AGENT_CONTEXT_BYTES,
     MAX_BLAME_EXPLAIN_COMMITS,
     MAX_BLAME_EXPLAIN_LINES,
+    MAX_CONFLICT_RESOLVE_FILES,
+    MAX_CONFLICT_RESOLVE_REGIONS,
     RecapData,
     ReviewData,
     RepoContextData,
@@ -718,6 +728,15 @@ export async function runAgentOperation(
       throw new AgentOperationError(
         'INVALID_OPERATION',
         'lint must be dispatched via runLint, not runAgentOperation.',
+        false,
+      )
+    case 'conflict-resolve':
+      // conflict-resolve uses its own request schema (ConflictResolveRequest)
+      // and is dispatched via runConflictResolve, not through this shared
+      // entry point.
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'conflict-resolve must be dispatched via runConflictResolve, not runAgentOperation.',
         false,
       )
   }
@@ -1352,4 +1371,176 @@ export async function runLint(
   }
 
   return lintEnvelope({ results, summary })
+}
+
+// ─── conflict-resolve operation ─────────────────────────────────────────────
+
+function conflictResolveEnvelope(data: ConflictResolveData): AgentSuccessEnvelope<ConflictResolveData> {
+  return {
+    version: AGENT_PROTOCOL_VERSION,
+    ok: true,
+    operation: 'conflict-resolve',
+    status: 'completed',
+    data,
+    warnings: [],
+    meta: {
+      kind: 'repository',
+      digest: digestOf(JSON.stringify(data)),
+      verification: 'repository-derived',
+    },
+  }
+}
+
+type ConflictResolveFileScan =
+  | { ok: true; content: string }
+  | { ok: false; reason: string }
+
+/**
+ * Confines the path to the worktree root, enforces the same size cap
+ * `getConflictMarkers` uses, and rejects binary content via a NUL-byte scan
+ * -- conflict resolution proposals are text-only, so a binary/generated file
+ * (lockfile, minified bundle, image) is reported in `unresolved` instead of
+ * being sent to the LLM.
+ */
+function scanConflictFile(repoRoot: string, relativePath: string): ConflictResolveFileScan {
+  const absolute = resolvePath(repoRoot, relativePath)
+  if (!isPathWithinRoot(absolute, repoRoot)) {
+    return { ok: false, reason: 'Path escapes the repository worktree root.' }
+  }
+  let size: number
+  try {
+    size = statSync(absolute).size
+  } catch {
+    return { ok: false, reason: 'File not found on disk.' }
+  }
+  if (size > MAX_CONFLICT_MARKER_FILE_BYTES) {
+    return { ok: false, reason: `File exceeds the ${MAX_CONFLICT_MARKER_FILE_BYTES}-byte scan limit.` }
+  }
+  const buffer = readFileSync(absolute)
+  if (buffer.includes(0)) {
+    return { ok: false, reason: 'File appears to be binary (NUL byte detected) -- conflict resolution is text-only.' }
+  }
+  return { ok: true, content: buffer.toString('utf8') }
+}
+
+/**
+ * Enumerates in-progress merge conflicts and asks an LLM for a per-region
+ * resolution proposal, returned as structured `proposal`/`confidence`/
+ * `rationale`/`digest` data. NEVER writes to the working tree --
+ * `applyConflictResolution` is a separate, non-read-only action outside this
+ * operation's surface. Requires an API key for the configured provider, like
+ * `blame --explain`.
+ */
+export async function runConflictResolve(
+  input: ConflictResolveRequest,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<ConflictResolveData>> {
+  if (!context.git) {
+    throw new AgentOperationError(
+      'INVALID_REPOSITORY',
+      'conflict-resolve requires a git repository. Specify a git repository via the `repo` field or run from within a git repository.',
+    )
+  }
+
+  const allConflicted = await getConflictedFiles(context.git)
+  const wanted = input.files ? new Set(input.files) : undefined
+  const conflicted = wanted ? allConflicted.filter((file) => wanted.has(file.path)) : allConflicted
+
+  if (conflicted.length === 0) {
+    return conflictResolveEnvelope({ conflicts: [], unresolved: [] })
+  }
+
+  const operation = await getInProgressOperationType(context.git)
+
+  const maxFiles = input.maxFiles ?? MAX_CONFLICT_RESOLVE_FILES
+  const maxRegions = input.maxRegions ?? MAX_CONFLICT_RESOLVE_REGIONS
+
+  const filesToProcess = conflicted.slice(0, maxFiles)
+  const overflowFiles = conflicted.slice(maxFiles)
+
+  const conflicts: ConflictResolveData['conflicts'] = []
+  const unresolved: ConflictResolveData['unresolved'] = []
+
+  for (const file of overflowFiles) {
+    unresolved.push({ path: file.path, regionIndex: 0, reason: `Exceeded maxFiles budget (${maxFiles}).` })
+  }
+
+  let regionsRemaining = maxRegions
+
+  for (const file of filesToProcess) {
+    const scan = scanConflictFile(context.repoRoot, file.path)
+    if (!scan.ok) {
+      unresolved.push({ path: file.path, regionIndex: 0, reason: scan.reason })
+      continue
+    }
+
+    const regionsResult = await getConflictFileRegions(context.git, file.path)
+    if (!regionsResult.ok) {
+      unresolved.push({ path: file.path, regionIndex: 0, reason: regionsResult.message })
+      continue
+    }
+
+    const regions = regionsResult.regions
+    const budgeted = regions.slice(0, regionsRemaining)
+    const overflowRegions = regions.slice(regionsRemaining)
+    regionsRemaining -= budgeted.length
+
+    for (const region of overflowRegions) {
+      unresolved.push({ path: file.path, regionIndex: region.index, reason: `Exceeded maxRegions budget (${maxRegions}).` })
+    }
+
+    if (budgeted.length === 0) continue
+
+    const digest = digestOf(scan.content)
+    const byIndex = new Map<number, ConflictRegion>(budgeted.map((region) => [region.index, region]))
+
+    const workflowResult = await runConflictResolutionWorkflow({
+      git: context.git,
+      path: file.path,
+      regions: budgeted,
+      operation,
+      signal: context.signal,
+    })
+
+    if (!workflowResult.ok) {
+      if (workflowResult.cancelled) {
+        throw new AgentOperationError('CANCELLED', workflowResult.message, false)
+      }
+      if (workflowResult.message.startsWith('No API key configured')) {
+        throw new AgentOperationError('AUTHENTICATION_REQUIRED', workflowResult.message)
+      }
+      for (const region of budgeted) {
+        unresolved.push({ path: file.path, regionIndex: region.index, reason: workflowResult.message })
+      }
+      continue
+    }
+
+    const proposedIndexes = new Set<number>()
+    for (const proposal of workflowResult.proposals) {
+      const region = byIndex.get(proposal.regionIndex)
+      if (!region) continue
+      proposedIndexes.add(proposal.regionIndex)
+      conflicts.push({
+        path: file.path,
+        regionIndex: proposal.regionIndex,
+        ours: region.ours,
+        theirs: region.theirs,
+        ...(region.base ? { base: region.base } : {}),
+        proposal: proposal.resolution,
+        confidence: proposal.confidence,
+        rationale: proposal.rationale,
+        digest,
+      })
+    }
+    for (const region of budgeted) {
+      if (proposedIndexes.has(region.index)) continue
+      unresolved.push({
+        path: file.path,
+        regionIndex: region.index,
+        reason: 'The model returned no proposal for this region.',
+      })
+    }
+  }
+
+  return conflictResolveEnvelope({ conflicts, unresolved })
 }

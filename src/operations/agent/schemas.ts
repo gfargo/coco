@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'conflict-resolve'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -740,6 +740,84 @@ export const LintDataSchema = z.object({
 export type LintRequest = z.infer<typeof LintRequestSchema>
 export type LintData = z.infer<typeof LintDataSchema>
 export type LintCommitResult = z.infer<typeof LintCommitResultSchema>
+
+// ─── conflict-resolve operation ────────────────────────────────────────────────
+
+/**
+ * Cost/scope guardrails for `conflict-resolve`: a naive call would enumerate
+ * every conflicted file and region in the repository, each costing an LLM
+ * call. Both the CLI and the `coco_conflict_resolve` MCP tool cap the number
+ * of files processed and the total number of regions resolved (a running
+ * budget across all processed files); overflow is reported in `unresolved`
+ * rather than silently dropped.
+ */
+export const MAX_CONFLICT_RESOLVE_FILES = 20
+export const MAX_CONFLICT_RESOLVE_REGIONS = 50
+
+export const ConflictResolveConfidenceSchema = z.enum(['high', 'medium', 'low'])
+
+const ConflictResolveOptionsSchema = z.object({
+  language: AgentOptionsSchema.shape.language,
+  additionalContext: AgentOptionsSchema.shape.additionalContext,
+}).strict()
+
+/**
+ * Request schema for `coco agent conflict-resolve` and the MCP tool
+ * `coco_conflict_resolve`. Read-only: enumerates in-progress merge conflicts
+ * and asks an LLM for a per-region resolution proposal, but never writes to
+ * the working tree -- applying a proposal is a separate, non-read-only
+ * action outside this operation's surface. Requires an API key for the
+ * configured provider, like `blame --explain`.
+ */
+export const ConflictResolveRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  files: z.array(z.string().min(1)).optional().describe(
+    'Restrict resolution to these repo-relative conflicted file paths. Omit to process every conflicted file, bounded by `maxFiles`.',
+  ),
+  options: ConflictResolveOptionsSchema.default({}),
+  maxFiles: z.number().int().min(1).optional().describe(
+    `Maximum number of conflicted files to process in one call. Defaults to ${MAX_CONFLICT_RESOLVE_FILES}. Files beyond the limit are reported in \`unresolved\`.`,
+  ),
+  maxRegions: z.number().int().min(1).optional().describe(
+    `Maximum total conflict regions to resolve across all processed files in one call (a running budget, not per-file). Defaults to ${MAX_CONFLICT_RESOLVE_REGIONS}. Regions beyond the budget are reported in \`unresolved\`.`,
+  ),
+}).strict()
+
+/** Publish the caller-facing conflict-resolve request schema. */
+export function createConflictResolveInputJsonSchema() {
+  return z.toJSONSchema(ConflictResolveRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const ConflictResolveConflictSchema = z.object({
+  path: z.string(),
+  regionIndex: z.number().int(),
+  ours: z.array(z.string()),
+  theirs: z.array(z.string()),
+  /** diff3-style base section, present only when the merge used that conflict style. */
+  base: z.array(z.string()).optional(),
+  proposal: z.string(),
+  confidence: ConflictResolveConfidenceSchema,
+  rationale: z.string(),
+  digest: z.string(),
+}).strict()
+
+export const ConflictResolveUnresolvedSchema = z.object({
+  path: z.string(),
+  regionIndex: z.number().int(),
+  reason: z.string(),
+}).strict()
+
+export const ConflictResolveDataSchema = z.object({
+  conflicts: z.array(ConflictResolveConflictSchema),
+  unresolved: z.array(ConflictResolveUnresolvedSchema),
+}).strict()
+
+export type ConflictResolveConfidence = z.infer<typeof ConflictResolveConfidenceSchema>
+export type ConflictResolveRequest = z.infer<typeof ConflictResolveRequestSchema>
+export type ConflictResolveData = z.infer<typeof ConflictResolveDataSchema>
+export type ConflictResolveConflict = z.infer<typeof ConflictResolveConflictSchema>
+export type ConflictResolveUnresolved = z.infer<typeof ConflictResolveUnresolvedSchema>
 
 // ─── commit-apply operation ───────────────────────────────────────────────────
 

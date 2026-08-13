@@ -13,6 +13,8 @@ import {
     CommitApplyRequestSchema,
     CondenseDiffDataSchema,
     CondenseDiffRequestSchema,
+    ConflictResolveDataSchema,
+    ConflictResolveRequestSchema,
     createAgentInputJsonSchema,
     createAgentMcpOutputSchema,
     createAgentOutputSchema,
@@ -20,6 +22,7 @@ import {
     createCapabilitiesInputJsonSchema,
     createCommitApplyInputJsonSchema,
     createCondenseDiffInputJsonSchema,
+    createConflictResolveInputJsonSchema,
     createMcpAgentInputJsonSchema,
     createMcpCondenseDiffInputJsonSchema,
     createRepoContextInputJsonSchema,
@@ -379,6 +382,73 @@ describe('CondenseDiffRequestSchema', () => {
     })
     expect(jsonSchema.oneOf?.[2]).toMatchObject({
       properties: { ok: { const: false }, operation: { const: 'condense-diff' } },
+    })
+  })
+})
+
+describe('ConflictResolveRequestSchema', () => {
+  it('applies safe defaults (version, empty options) with no required fields', () => {
+    const result = ConflictResolveRequestSchema.parse({})
+    expect(result).toEqual({
+      version: AGENT_PROTOCOL_VERSION,
+      options: {},
+    })
+  })
+
+  it('accepts files, maxFiles, and maxRegions', () => {
+    const result = ConflictResolveRequestSchema.parse({
+      files: ['a.ts', 'b.ts'],
+      maxFiles: 5,
+      maxRegions: 10,
+    })
+    expect(result.files).toEqual(['a.ts', 'b.ts'])
+    expect(result.maxFiles).toBe(5)
+    expect(result.maxRegions).toBe(10)
+  })
+
+  it('rejects maxFiles/maxRegions below 1', () => {
+    expect(ConflictResolveRequestSchema.safeParse({ maxFiles: 0 }).success).toBe(false)
+    expect(ConflictResolveRequestSchema.safeParse({ maxRegions: 0 }).success).toBe(false)
+  })
+
+  it('rejects an empty file path in files', () => {
+    expect(ConflictResolveRequestSchema.safeParse({ files: [''] }).success).toBe(false)
+  })
+
+  it('rejects unknown top-level and options fields', () => {
+    expect(ConflictResolveRequestSchema.safeParse({ unexpected: true }).success).toBe(false)
+    expect(ConflictResolveRequestSchema.safeParse({ options: { trustRepositoryConfig: false } }).success).toBe(false)
+  })
+
+  it('accepts language and additionalContext in options', () => {
+    const result = ConflictResolveRequestSchema.parse({
+      options: { language: 'es', additionalContext: 'prefer the incoming side' },
+    })
+    expect(result.options).toEqual({ language: 'es', additionalContext: 'prefer the incoming side' })
+  })
+
+  it('publishes a caller-facing JSON Schema with no required fields', () => {
+    const json = createConflictResolveInputJsonSchema() as unknown as {
+      type: string
+      additionalProperties: boolean
+      required?: string[]
+    }
+    expect(json).toMatchObject({ type: 'object', additionalProperties: false })
+    expect(json.required).toBeUndefined()
+  })
+
+  it('produces a conflict-resolve output envelope with oneOf metadata in MCP schema', () => {
+    const jsonSchema = z.toJSONSchema(
+      createAgentMcpOutputSchema('conflict-resolve', ConflictResolveDataSchema)
+    ) as { type?: string; oneOf?: Array<Record<string, unknown>> }
+
+    expect(jsonSchema.type).toBe('object')
+    expect(jsonSchema.oneOf).toHaveLength(3)
+    expect(jsonSchema.oneOf?.[0]).toMatchObject({
+      properties: { ok: { const: true }, operation: { const: 'conflict-resolve' } },
+    })
+    expect(jsonSchema.oneOf?.[2]).toMatchObject({
+      properties: { ok: { const: false }, operation: { const: 'conflict-resolve' } },
     })
   })
 })
