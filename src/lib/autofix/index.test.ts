@@ -40,6 +40,7 @@ const item: ReviewFeedbackItem = {
   severity: 7,
   category: 'bug',
   filePath: 'src/foo.ts',
+  side: 'RIGHT',
 }
 
 describe('runAutoFix', () => {
