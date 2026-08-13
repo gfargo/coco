@@ -22,6 +22,7 @@ const ORIGINAL_XDG_CONFIG_HOME = process.env.XDG_CONFIG_HOME
 function createLogger(): Logger {
   return {
     log: jest.fn(),
+    result: jest.fn(),
     verbose: jest.fn(),
     setConfig: jest.fn(),
     error: jest.fn(),
@@ -87,7 +88,7 @@ describe('config command (#1605)', () => {
 
     const written = JSON.parse(fs.readFileSync(path.join(projectDir, '.coco.json'), 'utf8'))
     expect(written.defaultBranch).toBe('develop')
-    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('Set defaultBranch'), expect.anything())
+    expect(logger.result).toHaveBeenCalledWith(expect.stringContaining('Set defaultBranch'), expect.anything())
   })
 
   it('set coerces booleans and numbers before writing', async () => {
@@ -143,13 +144,13 @@ describe('config command (#1605)', () => {
     await handler(createArgv({ action: 'set', key: 'defaultBranch', value: 'develop', scope: 'project' }), logger)
     await handler(createArgv({ action: 'get', key: 'defaultBranch' }), logger)
 
-    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('defaultBranch = "develop"'))
-    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('source: project'), expect.anything())
+    expect(logger.result).toHaveBeenCalledWith(expect.stringContaining('defaultBranch = "develop"'))
+    expect(logger.result).toHaveBeenCalledWith(expect.stringContaining('source: project'), expect.anything())
   })
 
   it('get reports "not set" for a key nothing defines', async () => {
     await handler(createArgv({ action: 'get', key: 'nonexistent.key' }), logger)
-    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('is not set'), expect.anything())
+    expect(logger.result).toHaveBeenCalledWith(expect.stringContaining('is not set'), expect.anything())
   })
 
   it('get --json emits a structured payload', async () => {
@@ -185,7 +186,7 @@ describe('config command (#1605)', () => {
     )
     await handler(createArgv({ action: 'get', key: 'service.authentication.credentials.apiKey' }), logger)
 
-    const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
+    const loggedLines = (logger.result as jest.Mock).mock.calls.map((call) => call[0] as string)
     expect(loggedLines.some((line) => line.includes('sk-real-secret-key'))).toBe(false)
     expect(loggedLines.some((line) => line.includes('•••'))).toBe(true)
   })
@@ -210,7 +211,7 @@ describe('config command (#1605)', () => {
     await handler(createArgv({ action: 'get', key: 'service.secretAccessKey' }), logger)
     await handler(createArgv({ action: 'get', key: 'service.sessionToken' }), logger)
 
-    const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
+    const loggedLines = (logger.result as jest.Mock).mock.calls.map((call) => call[0] as string)
     expect(loggedLines.some((line) => line.includes('wJalrXUtnFEMI-secret'))).toBe(false)
     expect(loggedLines.some((line) => line.includes('session-token-secret'))).toBe(false)
     expect(loggedLines.filter((line) => line.includes('•••')).length).toBeGreaterThanOrEqual(2)
@@ -227,7 +228,7 @@ describe('config command (#1605)', () => {
     )
     await handler(createArgv({ action: 'list' }), logger)
 
-    const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
+    const loggedLines = (logger.result as jest.Mock).mock.calls.map((call) => call[0] as string)
     expect(loggedLines.some((line) => line.includes('wJalrXUtnFEMI-secret'))).toBe(false)
     expect(loggedLines.some((line) => line.includes('service.secretAccessKey') && line.includes('•••'))).toBe(true)
   })
@@ -240,7 +241,7 @@ describe('config command (#1605)', () => {
     await handler(createArgv({ action: 'get', key: 'service.model' }), logger)
     await handler(createArgv({ action: 'get', key: 'service.provider' }), logger)
 
-    const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
+    const loggedLines = (logger.result as jest.Mock).mock.calls.map((call) => call[0] as string)
     expect(loggedLines.some((line) => line.includes('service.model = "gpt-4o"'))).toBe(true)
     expect(loggedLines.some((line) => line.includes('service.provider = "openai"'))).toBe(true)
     expect(loggedLines.some((line) => line.includes('is not set'))).toBe(false)
@@ -253,14 +254,14 @@ describe('config command (#1605)', () => {
     )
     await handler(createArgv({ action: 'get', key: 'service.temperature' }), logger)
 
-    expect(logger.log).toHaveBeenCalledWith(expect.stringContaining('service.temperature = 0.2'))
+    expect(logger.result).toHaveBeenCalledWith(expect.stringContaining('service.temperature = 0.2'))
   })
 
   it('list --scope project prints only that scope\'s raw contents', async () => {
     await handler(createArgv({ action: 'set', key: 'defaultBranch', value: 'develop', scope: 'project' }), logger)
     await handler(createArgv({ action: 'list', scope: 'project' }), logger)
 
-    const loggedLines = (logger.log as jest.Mock).mock.calls.map((call) => call[0] as string)
+    const loggedLines = (logger.result as jest.Mock).mock.calls.map((call) => call[0] as string)
     expect(loggedLines.some((line) => line.includes('defaultBranch = "develop"'))).toBe(true)
   })
 })

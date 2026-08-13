@@ -401,7 +401,9 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
   const canShowTaskList = process.stdin.isTTY && process.stdout.isTTY
   if (!canShowTaskList) {
     logger.log(chalk.bold('Review findings:\n'))
-    logger.log(formatFindings(findings))
+    // The findings are the result, not status chrome — must survive
+    // --quiet (piped/CI usage of this exact non-TTY branch) (#1879).
+    logger.result(formatFindings(findings))
     logger.log(chalk.dim('\nNon-interactive session detected — re-run with --json for machine-readable output.'))
   } else {
     const repoRoot = resolveGitRepoRoot(process.cwd())

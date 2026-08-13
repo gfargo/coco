@@ -68,6 +68,29 @@ export class Logger {
   }
 
   /**
+   * Always writes to stdout, regardless of `silent` or `quiet`.
+   *
+   * `--quiet` is documented as suppressing status chrome only — "Results
+   * (and --json) still print to stdout." `log()` doesn't honor that for
+   * anything routed through it: a command whose *output* (not just its
+   * spinners/banners) goes through `logger.log()` prints nothing at all
+   * under `--quiet`, exits 0, and the caller has no way to tell "quiet
+   * success" from "silently produced nothing" (#1879). Use this for a
+   * command's actual result/payload; keep `log()` for chrome.
+   */
+  public result(message: string, options: LoggerOptions = {}): Logger {
+    let outputMessage = message
+
+    if (options.color) {
+      outputMessage = chalk[options.color](outputMessage)
+    }
+
+    process.stdout.write(outputMessage + '\n')
+
+    return this
+  }
+
+  /**
    * Always writes to stderr, regardless of `silent` or `quiet`.
    * Use this for error messages that must reach the user even when status
    * output is suppressed.
