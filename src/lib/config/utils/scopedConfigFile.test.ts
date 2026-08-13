@@ -134,4 +134,13 @@ describe('checkProjectScopeKeyTrust', () => {
     expect(message).toContain('service.baseURL')
     expect(message).toContain('--scope global')
   })
+
+  it('rejects autoFixTool/autoFixToolOptions/autoFixToolApiKey at project scope (#1840)', () => {
+    expect(checkProjectScopeKeyTrust('autoFixTool')).toBeDefined()
+    expect(checkProjectScopeKeyTrust('autoFixToolOptions')).toBeDefined()
+    // Nested option writes (`coco config autoFixToolOptions.gemini ... --scope project`)
+    // must be caught too, not just the bare top-level key.
+    expect(checkProjectScopeKeyTrust('autoFixToolOptions.gemini')).toBeDefined()
+    expect(checkProjectScopeKeyTrust('autoFixToolApiKey')).toBeDefined()
+  })
 })

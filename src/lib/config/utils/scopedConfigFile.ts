@@ -1,7 +1,11 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import { getXdgConfigPath } from '../services/xdg'
-import { PROJECT_CONFIG_CANDIDATES, TRUSTED_PROJECT_SERVICE_KEYS } from '../constants/projectConfig'
+import {
+  PROJECT_CONFIG_CANDIDATES,
+  TRUSTED_PROJECT_SERVICE_KEYS,
+  UNTRUSTED_PROJECT_TOP_LEVEL_KEYS,
+} from '../constants/projectConfig'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
 import { SCHEMA_PUBLIC_URL } from '../../schema'
 import { writeFileAtomic } from '../../utils/atomicFileWrite'
@@ -92,12 +96,24 @@ export function writeScopedConfigFile(filePath: string, config: Record<string, u
  * A repo-committed project config is untrusted (see
  * `TRUSTED_PROJECT_SERVICE_KEYS` in `services/project.ts`): only tuning
  * knobs under `service.*` may be set there, never anything that decides
- * where a request goes or what credentials it carries. Top-level keys
- * (`defaultBranch`, `conventionalCommits`, `logTui.*`, ...) are unrestricted.
- * Returns an error message when the key is rejected, or undefined when
- * it's allowed.
+ * where a request goes or what credentials it carries. A handful of other
+ * top-level keys (`UNTRUSTED_PROJECT_TOP_LEVEL_KEYS` — currently the
+ * auto-fix tool selection/options/API key) are rejected outright for the
+ * same reason. Everything else at top level (`defaultBranch`,
+ * `conventionalCommits`, `logTui.*`, ...) is unrestricted. Returns an error
+ * message when the key is rejected, or undefined when it's allowed.
  */
 export function checkProjectScopeKeyTrust(key: string): string | undefined {
+  const topLevelKey = key.split('.')[0]
+  if ((UNTRUSTED_PROJECT_TOP_LEVEL_KEYS as readonly string[]).includes(topLevelKey)) {
+    return (
+      `"${key}" can't be set in a repo-committed project config — it can decide what runs on ` +
+      `your machine or what credentials it uses, and a repo-local file is untrusted content ` +
+      `(anyone who can get you to clone the repo controls it). Set it via \`coco config ${key} <value> --scope global\`, ` +
+      `\`~/.gitconfig\`, or an environment variable instead.`
+    )
+  }
+
   if (!key.startsWith('service.')) return undefined
 
   const serviceKey = key.slice('service.'.length).split('.')[0]

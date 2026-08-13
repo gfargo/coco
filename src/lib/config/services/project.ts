@@ -4,7 +4,11 @@ import { Config } from '../types'
 import { SCHEMA_PUBLIC_URL, schema } from '../../schema'
 import { ajv } from '../../ajv'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
-import { PROJECT_CONFIG_CANDIDATES, TRUSTED_PROJECT_SERVICE_KEYS } from '../constants/projectConfig'
+import {
+  PROJECT_CONFIG_CANDIDATES,
+  TRUSTED_PROJECT_SERVICE_KEYS,
+  UNTRUSTED_PROJECT_TOP_LEVEL_KEYS,
+} from '../constants/projectConfig'
 
 export { TRUSTED_PROJECT_SERVICE_KEYS } from '../constants/projectConfig'
 
@@ -44,7 +48,7 @@ export function pickTrustedProjectServiceFields<T extends Record<string, unknown
 const warnedKeys = new Set<string>()
 
 function warnOnce(
-  kind: 'parse' | 'validation' | 'untrusted-service-fields',
+  kind: 'parse' | 'validation' | 'untrusted-service-fields' | 'untrusted-top-level-fields',
   resolvedPath: string,
   message: string
 ): void {
@@ -133,7 +137,32 @@ export function loadProjectJsonConfig<ConfigType = Config>(
     if (parsed) {
     // Removing $schema from the project config to avoid validation errors.
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { $schema, service: projectService, ...projectConfig } = parsed
+    const { $schema, service: projectService, ...rest } = parsed
+
+    // A handful of top-level keys are excluded from the repo-local file the
+    // same way untrusted service.* fields are below — see
+    // UNTRUSTED_PROJECT_TOP_LEVEL_KEYS for why (#1840).
+    const projectConfig: Record<string, unknown> = { ...rest }
+    const rejectedTopLevelKeys: string[] = []
+    for (const key of UNTRUSTED_PROJECT_TOP_LEVEL_KEYS) {
+      if (key in projectConfig) {
+        delete projectConfig[key]
+        rejectedTopLevelKeys.push(key)
+      }
+    }
+
+    if (rejectedTopLevelKeys.length > 0) {
+      warnOnce(
+        'untrusted-top-level-fields',
+        resolvedPath,
+        `[coco] Warning: ${resolvedPath} tried to set field(s) that a repo-local config is not ` +
+        `trusted to control: ${rejectedTopLevelKeys.join(', ')}.\n` +
+        `  These decide what runs on your machine and/or what credentials it uses, so they are ` +
+        `ignored when set from a project file (anyone who can get you to clone a repo could ` +
+        `otherwise choose the command line of a tool that edits your files).\n` +
+        `  Configure them via an env var, \`~/.gitconfig\`, or your global (XDG) config instead.`
+      )
+    }
 
     const merged = { ...config, ...projectConfig } as Config
 
