@@ -19,6 +19,7 @@ const baseItem: ReviewFeedbackItem = {
   severity: 7,
   category: 'Bug',
   filePath: 'src/utils/parse.ts',
+  side: 'RIGHT',
 }
 
 describe('buildPrompt — real filesystem', () => {

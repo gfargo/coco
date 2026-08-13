@@ -75,6 +75,7 @@ const makeItem = (overrides?: Partial<ReviewFeedbackItem>): ReviewFeedbackItem =
   severity: 5,
   category: 'bug',
   filePath: 'src/foo.ts',
+  side: 'RIGHT',
   ...overrides,
 })
 

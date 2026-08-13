@@ -22,6 +22,7 @@ const item: ReviewFeedbackItem = {
   severity: 7,
   category: 'Bug',
   filePath: 'src/utils/parse.ts',
+  side: 'RIGHT',
 }
 
 beforeEach(() => {
