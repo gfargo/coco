@@ -1,7 +1,7 @@
 import { Arguments } from 'yargs'
 import { SimpleGit } from 'simple-git'
 import { handler } from './handler'
-import { ReviewOptions } from './config'
+import { ReviewOptions, ReviewFeedbackItemSchema, ReviewFeedbackItemArraySchema } from './config'
 import { Config } from '../../commands/types'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { getChanges } from '../../lib/simple-git/getChanges'
@@ -69,6 +69,42 @@ const mockGetTokenCounterForProvider = getTokenCounterForProvider as jest.Mocked
 const mockGetProviderOverview = getProviderOverview as jest.MockedFunction<typeof getProviderOverview>
 const mockGetForgeActions = getForgeActions as jest.MockedFunction<typeof getForgeActions>
 const MockTaskList = TaskList as unknown as jest.Mock
+
+describe('ReviewFeedbackItemSchema (line/side fields, OSS-2405)', () => {
+  const base = {
+    title: 'Review finding',
+    summary: 'A review finding.',
+    severity: 5 as const,
+    category: 'maintainability',
+    filePath: 'src/file.ts',
+  }
+
+  it('parses a finding with a structured line number', () => {
+    const parsed = ReviewFeedbackItemSchema.parse({ ...base, line: 42 })
+    expect(parsed.line).toBe(42)
+    expect(parsed.side).toBe('RIGHT')
+  })
+
+  it('parses a finding without a line, defaulting side to RIGHT (backward compatible)', () => {
+    const parsed = ReviewFeedbackItemSchema.parse(base)
+    expect(parsed.line).toBeUndefined()
+    expect(parsed.side).toBe('RIGHT')
+  })
+
+  it('preserves an explicit side value', () => {
+    const parsed = ReviewFeedbackItemSchema.parse({ ...base, line: 10, side: 'LEFT' })
+    expect(parsed.side).toBe('LEFT')
+  })
+
+  it('rejects an invalid side value', () => {
+    expect(() => ReviewFeedbackItemSchema.parse({ ...base, side: 'MIDDLE' })).toThrow()
+  })
+
+  it('parses an array of legacy findings lacking line/side', () => {
+    const parsed = ReviewFeedbackItemArraySchema.parse([base])
+    expect(parsed[0].side).toBe('RIGHT')
+  })
+})
 
 describe('review command', () => {
   let argv: Arguments<ReviewOptions>
@@ -183,6 +219,55 @@ describe('review command', () => {
       severity: 5,
       category: 'maintainability',
       filePath: 'src/file.ts',
+    })
+  })
+
+  it('threads structured line/side fields through to --json output (OSS-2405)', async () => {
+    argv.json = true
+    mockExecuteChain.mockResolvedValue([
+      {
+        title: 'Review finding',
+        summary: 'A review finding.',
+        severity: 5,
+        category: 'maintainability',
+        filePath: 'src/file.ts',
+        line: 42,
+        side: 'LEFT',
+      },
+    ])
+
+    const writes: string[] = []
+    const writeSpy = jest
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(((chunk: string) => {
+        writes.push(String(chunk))
+        return true
+      }) as never)
+    try {
+      await handler(argv, logger)
+    } finally {
+      writeSpy.mockRestore()
+    }
+
+    const jsonCall = writes.find((message) => {
+      try {
+        JSON.parse(message)
+        return true
+      } catch {
+        return false
+      }
+    })
+
+    expect(jsonCall).toBeDefined()
+    const parsed = JSON.parse(jsonCall as string)
+    expect(parsed[0]).toEqual({
+      title: 'Review finding',
+      summary: 'A review finding.',
+      severity: 5,
+      category: 'maintainability',
+      filePath: 'src/file.ts',
+      line: 42,
+      side: 'LEFT',
     })
   })
 
@@ -501,6 +586,31 @@ describe('review command', () => {
 
       expect(mockRequestChangesPullRequestByNumber).toHaveBeenCalledWith(42, expect.stringContaining('Review finding'))
       expect(mockCommentPullRequestByNumber).not.toHaveBeenCalled()
+    })
+
+    it('keeps the posted markdown unchanged when a finding carries line/side data (OSS-2405)', async () => {
+      argv.pr = 42
+      argv.comment = true
+      argv.severity = 8 // below threshold → plain comment path
+
+      mockExecuteChain.mockResolvedValue([
+        {
+          title: 'Review finding',
+          summary: 'A review finding.',
+          severity: 5,
+          category: 'maintainability',
+          filePath: 'src/file.ts',
+          line: 42,
+          side: 'LEFT',
+        },
+      ])
+
+      await handler(argv, logger)
+
+      expect(mockCommentPullRequestByNumber).toHaveBeenCalledWith(
+        42,
+        '- **[5] Review finding** (maintainability) — `src/file.ts`\n  A review finding.'
+      )
     })
   })
 })
