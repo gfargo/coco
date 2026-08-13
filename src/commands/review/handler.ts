@@ -27,7 +27,7 @@ import { TaskList } from '../../lib/ui/TaskList'
 import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { resolveGitRepoRoot } from '../../lib/utils/resolveGitRepoRoot'
-import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbackItem } from './config'
+import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbackItem, SEVERITY_GATE_EXIT_CODE } from './config'
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
@@ -386,14 +386,18 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     if (postResult.ok) {
       logger.log(postResult.message, { color: 'green' })
     } else {
+      // A CI job whose whole purpose is "post the review to the PR" must
+      // not report success when nothing was posted (permissions, closed
+      // PR, gh not authenticated for that host, ...) (#1882).
       logger.error(postResult.message, { color: 'red' })
+      commandExit(1)
     }
   }
 
   if (argv.json) {
     emitJson(findings)
     if (exceedsThreshold) {
-      commandExit(1)
+      commandExit(SEVERITY_GATE_EXIT_CODE)
     }
     return
   }
@@ -429,6 +433,6 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       `Review found ${findings.filter((f) => f.severity >= severityThreshold!).length} finding(s) at or above severity ${severityThreshold}.`,
       { color: 'red' }
     )
-    commandExit(1)
+    commandExit(SEVERITY_GATE_EXIT_CODE)
   }
 }

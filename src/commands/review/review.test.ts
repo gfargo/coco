@@ -1,7 +1,7 @@
 import { Arguments } from 'yargs'
 import { SimpleGit } from 'simple-git'
 import { handler } from './handler'
-import { ReviewOptions, ReviewFeedbackItemSchema, ReviewFeedbackItemArraySchema } from './config'
+import { ReviewOptions, ReviewFeedbackItemSchema, ReviewFeedbackItemArraySchema, SEVERITY_GATE_EXIT_CODE } from './config'
 import { Config } from '../../commands/types'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { getChanges } from '../../lib/simple-git/getChanges'
@@ -272,11 +272,15 @@ describe('review command', () => {
     })
   })
 
-  it('exits non-zero when a finding meets the --severity threshold (--json)', async () => {
+  it('exits with the dedicated severity-gate code when a finding meets the --severity threshold (--json)', async () => {
+    // Exit 1 is reserved for operational failure (commandExecutor's generic
+    // catch already uses it for missing API key, rate limit, etc.) — a
+    // pipeline gating on --severity must be able to tell "the reviewer
+    // found blocking issues" from "the reviewer never ran" (#1881).
     argv.json = true
     argv.severity = 4 // finding severity is 5 → should gate
 
-    await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+    await expect(handler(argv, logger)).rejects.toMatchObject({ code: SEVERITY_GATE_EXIT_CODE })
   })
 
   it('does not gate when findings are below the --severity threshold', async () => {
@@ -583,10 +587,21 @@ describe('review command', () => {
       argv.comment = true
       argv.severity = 4 // finding severity is 5 → meets threshold
 
-      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: SEVERITY_GATE_EXIT_CODE })
 
       expect(mockRequestChangesPullRequestByNumber).toHaveBeenCalledWith(42, expect.stringContaining('Review finding'))
       expect(mockCommentPullRequestByNumber).not.toHaveBeenCalled()
+    })
+
+    it('exits 1 (not the severity-gate code) when the post itself fails (#1882)', async () => {
+      // A CI job whose whole purpose is "post the review to the PR" must
+      // not report success when nothing was posted.
+      argv.pr = 42
+      argv.comment = true
+      mockCommentPullRequestByNumber.mockResolvedValue({ ok: false, message: 'Permission denied.' })
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      expect(logger.error).toHaveBeenCalledWith('Permission denied.', { color: 'red' })
     })
 
     it('keeps the posted markdown unchanged when a finding carries line/side data (OSS-2405)', async () => {
