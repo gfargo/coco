@@ -5,7 +5,12 @@ import { BaseCommandOptions } from '../types'
 export const CONFIDENCE_LEVELS = ['high', 'medium', 'low'] as const
 export type ConfidenceLevel = typeof CONFIDENCE_LEVELS[number]
 
+export const RESOLVE_SUBCOMMANDS = ['status', 'explain'] as const
+export type ResolveSubcommand = typeof RESOLVE_SUBCOMMANDS[number]
+
 export interface ResolveOptions extends BaseCommandOptions {
+  /** `status` | `explain`, or omitted for the default AI-resolution flow. */
+  subcommand?: ResolveSubcommand
   /** Resolve only this conflicted file instead of every conflicted file. */
   file?: string
   /** Preview proposals without applying or staging anything. */
@@ -17,7 +22,7 @@ export interface ResolveOptions extends BaseCommandOptions {
 
 export type ResolveArgv = Arguments<ResolveOptions>
 
-export const command = 'resolve'
+export const command = 'resolve [subcommand]'
 
 export const options = {
   file: {
@@ -43,5 +48,12 @@ export const options = {
 } as Record<string, Options>
 
 export const builder = (yargs: Argv) => {
-  return yargs.options(options).usage(getCommandUsageHeader(command))
+  return yargs
+    .positional('subcommand', {
+      describe: 'Subcommand to run: `status` (report conflict state) or `explain` (describe a conflict). Omit for the default AI-resolution flow.',
+      type: 'string',
+      choices: RESOLVE_SUBCOMMANDS,
+    })
+    .options(options)
+    .usage(getCommandUsageHeader(command))
 }
