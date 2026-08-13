@@ -99,7 +99,11 @@ async function main() {
     sh("npm", ["run", "build"], { stdio: "inherit" })
   }
   log("Packing local tarball…")
-  const packJson = JSON.parse(sh("npm", ["pack", "--json"]))
+  // --ignore-scripts prevents `prepare` from re-running the build (which
+  // prints status lines that corrupt the JSON stdout npm pack emits).
+  const packOutput = sh("npm", ["pack", "--json", "--ignore-scripts"])
+  // Defensive: strip any leading non-JSON lines (lifecycle noise, warnings)
+  const packJson = JSON.parse(packOutput.slice(packOutput.indexOf("[")))
   const localTgz = join(repoRoot, packJson[0].filename)
 
   log(`Downloading published ${PKG}@${latest}…`)
