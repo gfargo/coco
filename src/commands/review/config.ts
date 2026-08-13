@@ -3,6 +3,17 @@ import { z } from 'zod'
 import { getCommandUsageHeader } from '../../lib/ui/helpers'
 import { BaseCommandOptions } from '../types'
 
+/**
+ * Exit code for "the --severity CI gate found a finding at/above the
+ * threshold" — distinct from exit 1, which `commandExecutor`'s generic
+ * catch already uses for operational failures (missing API key, rate
+ * limit, unparseable model output, missing `gh`, ...). Before this, both
+ * outcomes exited 1, so a pipeline gating on `coco review --severity 7`
+ * couldn't tell "the reviewer found blocking issues" from "the reviewer
+ * never ran" (#1881).
+ */
+export const SEVERITY_GATE_EXIT_CODE = 2
+
 export interface ReviewOptions extends BaseCommandOptions {
   interactive: boolean
   branch: string
@@ -69,7 +80,7 @@ export const options = {
   severity: {
     type: 'number',
     alias: 's',
-    description: 'Exit non-zero if any finding has severity >= this threshold (1-10). For CI gating.',
+    description: `Exit ${SEVERITY_GATE_EXIT_CODE} if any finding has severity >= this threshold (1-10), distinct from exit 1 (operational failure — missing API key, rate limit, etc.) so CI can tell them apart. For CI gating.`,
   },
   language: {
     type: 'string',
