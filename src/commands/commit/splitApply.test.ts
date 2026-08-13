@@ -140,6 +140,40 @@ describe('applyCommitSplitPlan apply-loop safety', () => {
     expect(result.message).not.toContain('re-staged')
   })
 
+  it('re-stages a rescued "unclaimed" group file instead of dropping it silently (#1878)', async () => {
+    // rescueMissingFiles tags files the model failed to place with a
+    // synthetic `unclaimed: true` group so validation passes; applicableGroups
+    // then filters unclaimed groups out of the apply loop entirely (#1180).
+    // Those files are still in plannedFiles (built from every plan.group,
+    // unclaimed included) but never reach committedFiles, since they're
+    // never attempted — so they fall out of the same #1876 restage path as
+    // a failed group, without needing separate handling.
+    const { git, ops } = makeFakeGit.staged(['a.ts', 'c.ts'])
+    mockedCreateCommit.mockImplementation(async () => {
+      git.advanceHead()
+      return {} as never
+    })
+
+    const plan = {
+      groups: [
+        { title: 'feat: a', files: ['a.ts'], body: '' },
+        { title: 'unclaimed', files: ['c.ts'], body: '', unclaimed: true },
+      ],
+    } as CommitSplitPlan
+
+    const result = await applyCommitSplitPlan({
+      plan,
+      changes: { staged: [fileChange('a.ts'), fileChange('c.ts')], unstaged: [], untracked: [] },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+    })
+
+    expect(ops).toContain('add -- c.ts')
+    expect(result.message).toContain('re-staged')
+  })
+
   it('re-stages every planned file before throwing when every group fails (#1876)', async () => {
     // The other half of the bug: "if every group fails, throw — but the
     // index is left empty" (no rollback of the up-front reset at all).
