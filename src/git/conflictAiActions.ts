@@ -62,7 +62,7 @@ const ProposalsSchema = z.object({
 })
 
 const CONFLICT_PROMPT_TEMPLATE = `You are resolving git merge conflicts in the file \`{path}\` during a {operation}.
-
+{batch_note}
 For each conflict region below, produce the final resolved text that should replace the ENTIRE conflict block (both sides and all markers). Preserve the surrounding code style and indentation exactly. When both sides made compatible changes, combine them; when they contradict, prefer the change that is consistent with the rest of the region and explain the choice.
 
 Rules:
@@ -93,6 +93,102 @@ function formatRegions(regions: ConflictRegion[]): string {
     .join('\n\n')
 }
 
+function countWords(lines: string[]): number {
+  return lines.reduce(
+    (sum, line) => sum + (line.trim() === '' ? 0 : line.trim().split(/\s+/).length),
+    0
+  )
+}
+
+/**
+ * Rough token estimate for one region's prompt footprint (both sides +
+ * base, if present). Word count × ~1.3 approximates subword tokenization
+ * well enough for batch sizing — this doesn't need to be exact, only
+ * consistent enough that batches stay under the model's context window.
+ */
+export function estimateRegionTokens(region: ConflictRegion): number {
+  const words = countWords(region.ours) + countWords(region.base || []) + countWords(region.theirs)
+  return Math.ceil(words * 1.3)
+}
+
+export type RegionBatch = {
+  regions: ConflictRegion[]
+  /** Index of the first region in this batch (for the prompt's progress note). */
+  first: number
+  /** Index of the last region in this batch. */
+  last: number
+  /** Total region count across all batches for this file. */
+  total: number
+}
+
+/**
+ * Greedily partitions `regions` into batches that each stay under
+ * `tokenBudget` (per {@link estimateRegionTokens}), plus the subset of
+ * regions that exceed the budget all on their own — those never fit in a
+ * batch, so they're reported separately rather than silently dropped.
+ *
+ * With no `tokenBudget` (or an empty region list), everything lands in a
+ * single batch — the pre-chunking behavior of one call per file.
+ */
+export function chunkRegions(
+  regions: ConflictRegion[],
+  tokenBudget?: number
+): { batches: RegionBatch[]; oversized: ConflictRegion[] } {
+  if (regions.length === 0) {
+    return { batches: [], oversized: [] }
+  }
+  if (!tokenBudget) {
+    return {
+      batches: [
+        {
+          regions,
+          first: regions[0].index,
+          last: regions[regions.length - 1].index,
+          total: regions.length,
+        },
+      ],
+      oversized: [],
+    }
+  }
+
+  const total = regions.length
+  const oversized: ConflictRegion[] = []
+  const fits: ConflictRegion[] = []
+  for (const region of regions) {
+    if (estimateRegionTokens(region) > tokenBudget) {
+      oversized.push(region)
+    } else {
+      fits.push(region)
+    }
+  }
+
+  const batches: RegionBatch[] = []
+  let current: ConflictRegion[] = []
+  let currentTokens = 0
+  const flush = () => {
+    if (current.length === 0) return
+    batches.push({
+      regions: current,
+      first: current[0].index,
+      last: current[current.length - 1].index,
+      total,
+    })
+    current = []
+    currentTokens = 0
+  }
+  for (const region of fits) {
+    const regionTokens = estimateRegionTokens(region)
+    if (current.length > 0 && currentTokens + regionTokens > tokenBudget) {
+      flush()
+    }
+    current.push(region)
+    currentTokens += regionTokens
+  }
+  flush()
+
+  return { batches, oversized }
+}
+
 type ConflictWorkflowArgv = Arguments<CommitOptions>
 
 function createConflictWorkflowArgv(): ConflictWorkflowArgv {
@@ -121,6 +217,13 @@ export async function runConflictResolutionWorkflow(input: {
   /** In-progress operation label ('merge' / 'rebase' / …) for the prompt. */
   operation: string
   signal?: AbortSignal
+  /**
+   * Approximate per-call token budget. When set, regions are greedily
+   * batched (see {@link chunkRegions}) so a file with many/large
+   * conflicts doesn't blow past the model's context window in one call.
+   * Omit to keep the pre-chunking behavior — every region in one call.
+   */
+  tokenBudget?: number
 }): Promise<ConflictResolutionResult> {
   if (input.regions.length === 0) {
     return { ok: false, message: 'No conflict regions to resolve.' }
@@ -138,6 +241,35 @@ export async function runConflictResolutionWorkflow(input: {
     }
   }
 
+  const { batches, oversized } = chunkRegions(input.regions, input.tokenBudget)
+
+  // Regions that alone exceed the budget never reach the model — a
+  // synthetic low-confidence proposal surfaces them for human review
+  // instead of silently dropping them from the result.
+  const byRegion = new Map<number, ConflictResolutionProposal>()
+  for (const region of oversized) {
+    byRegion.set(region.index, {
+      regionIndex: region.index,
+      resolution: '',
+      rationale: 'Region too large for model context',
+      confidence: 'low',
+    })
+  }
+
+  if (batches.length === 0) {
+    const proposals = [...byRegion.values()].sort((a, b) => a.regionIndex - b.regionIndex)
+    if (proposals.length === 0) {
+      return { ok: false, message: 'No conflict regions to resolve.' }
+    }
+    return {
+      ok: true,
+      proposals,
+      message: `${proposals.length} of ${input.regions.length} region${
+        input.regions.length === 1 ? '' : 's'
+      } have proposals`,
+    }
+  }
+
   try {
     const llm = await getLlm(provider, service.model as LLMModel, { ...config, service })
     // `any`: @langchain/core bundles its own zod copy, so the parser's
@@ -149,39 +281,45 @@ export async function runConflictResolutionWorkflow(input: {
     const parser: any = createSchemaParser(ProposalsSchema)
     const prompt = PromptTemplate.fromTemplate(CONFLICT_PROMPT_TEMPLATE)
 
-    const raw = await executeChain<z.infer<typeof ProposalsSchema>>({
-      llm,
-      prompt,
-      variables: {
-        path: input.path,
-        operation: input.operation === 'none' ? 'merge' : input.operation,
-        conflicts: formatRegions(input.regions),
-        format_instructions: parser.getFormatInstructions(),
-      },
-      parser,
-      logger: new Logger({ silent: true }),
-      signal: input.signal,
-      metadata: {
-        task: 'conflict-resolution',
-        command: 'workstation',
-        provider,
-        model: String(service.model),
-      },
-    })
-
-    // Keep only proposals that target a real region, one per region
-    // (first wins on duplicates).
-    const byRegion = new Map<number, ConflictResolutionProposal>()
-    for (const proposal of raw.proposals) {
-      const region = input.regions.find((candidate) => candidate.index === proposal.region)
-      if (!region || byRegion.has(region.index)) continue
-      byRegion.set(region.index, {
-        regionIndex: region.index,
-        resolution: proposal.resolution,
-        rationale: proposal.rationale,
-        confidence: proposal.confidence,
+    for (const batch of batches) {
+      const raw = await executeChain<z.infer<typeof ProposalsSchema>>({
+        llm,
+        prompt,
+        variables: {
+          path: input.path,
+          operation: input.operation === 'none' ? 'merge' : input.operation,
+          conflicts: formatRegions(batch.regions),
+          batch_note:
+            batches.length > 1
+              ? `\nThis call covers Regions ${batch.first}-${batch.last} of ${batch.total} in this file — only propose resolutions for the regions listed below.\n`
+              : '',
+          format_instructions: parser.getFormatInstructions(),
+        },
+        parser,
+        logger: new Logger({ silent: true }),
+        signal: input.signal,
+        metadata: {
+          task: 'conflict-resolution',
+          command: 'workstation',
+          provider,
+          model: String(service.model),
+        },
       })
+
+      // Keep only proposals that target a real region in this batch, one
+      // per region (first wins on duplicates).
+      for (const proposal of raw.proposals) {
+        const region = batch.regions.find((candidate) => candidate.index === proposal.region)
+        if (!region || byRegion.has(region.index)) continue
+        byRegion.set(region.index, {
+          regionIndex: region.index,
+          resolution: proposal.resolution,
+          rationale: proposal.rationale,
+          confidence: proposal.confidence,
+        })
+      }
     }
+
     const proposals = [...byRegion.values()].sort((a, b) => a.regionIndex - b.regionIndex)
     if (proposals.length === 0) {
       return { ok: false, message: 'The model returned no usable proposals — try again.' }
@@ -209,4 +347,6 @@ export async function runConflictResolutionWorkflow(input: {
 export const conflictAiTestInternals = {
   formatRegions,
   ProposalsSchema,
+  estimateRegionTokens,
+  chunkRegions,
 }
