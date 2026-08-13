@@ -102,6 +102,14 @@ export const builder = (yargs: Argv) => {
         throw new Error('--severity must be an integer between 1 and 10')
       }
       const rawArgv = argv as { pr?: number; comment?: boolean; branch?: string; staged?: boolean }
+      // Same NaN hole as --severity above (#1599): yargs coerces an
+      // unparseable --pr/--mr value to NaN rather than failing, and
+      // `rawArgv.pr !== undefined` is true for NaN too — so a typo'd
+      // --pr reached getPullRequestDiffByNumber(NaN) as a real request
+      // instead of a clear CLI error (#1880).
+      if (rawArgv.pr !== undefined && !(Number.isInteger(rawArgv.pr) && rawArgv.pr > 0)) {
+        throw new Error('--pr must be a positive integer')
+      }
       if (rawArgv.comment && rawArgv.pr === undefined) {
         throw new Error('--comment requires --pr <number>.')
       }
