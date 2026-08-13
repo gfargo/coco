@@ -352,7 +352,7 @@ export const handler: CommandHandler<InitArgv> = async (argv, logger) => {
       const configToWrite: ConfigWithServiceObject = isProjectScope
         ? { ...config, service: pickTrustedProjectServiceFields(config.service) as ConfigWithServiceObject['service'] }
         : config
-      appendToProjectJsonConfig(configFilePath, configToWrite)
+      await appendToProjectJsonConfig(configFilePath, configToWrite)
     } else {
       // Fail loud rather than silently no-op: any config-file type without a
       // writer branch is a bug, and a silent skip here looks like success.
