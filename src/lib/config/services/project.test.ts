@@ -1,12 +1,16 @@
 import * as fs from 'fs'
 import * as path from 'path'
-import { loadProjectJsonConfig, pickTrustedProjectServiceFields, resetConfigLoadWarnings } from './project'
+import { appendToProjectJsonConfig, loadProjectJsonConfig, pickTrustedProjectServiceFields, resetConfigLoadWarnings } from './project'
 import { Config } from '../types'
 import { getDefaultServiceConfigFromAlias } from '../../langchain/utils'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
+import { writeFileAtomic } from '../../utils/atomicFileWrite'
+import { confirmPrompt } from '../../ui/inquirerPrompts'
 
 jest.mock('fs')
 jest.mock('os')
+jest.mock('../../utils/atomicFileWrite')
+jest.mock('../../ui/inquirerPrompts')
 // Real implementation: project.ts joins the resolved repo root with the
 // candidate filename via path.join (#1616) — nothing in this file asserts
 // on a mocked path.join, so keeping the real behavior lets that join
@@ -23,6 +27,8 @@ jest.mock('../../utils/resolveGitRepoRoot')
 
 const mockFs = fs as jest.Mocked<typeof fs>
 const mockResolveGitRepoRoot = resolveGitRepoRoot as jest.MockedFunction<typeof resolveGitRepoRoot>
+const mockWriteFileAtomic = writeFileAtomic as jest.MockedFunction<typeof writeFileAtomic>
+const mockConfirmPrompt = confirmPrompt as jest.MockedFunction<typeof confirmPrompt>
 
 // project.ts joins this with path.join, which is platform-native (`\` on
 // Windows) — comparisons below must go through the same real `path.join`
@@ -344,5 +350,88 @@ describe('pickTrustedProjectServiceFields', () => {
       tokenLimit: 4096,
       requestOptions: { timeout: 30000, maxRetries: 2 },
     })
+  })
+})
+
+describe('appendToProjectJsonConfig (#1875)', () => {
+  const FILE_PATH = '/fake/repo/root/.coco.json'
+
+  afterEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('writes directly with no confirm prompt when the file does not exist yet', async () => {
+    mockFs.existsSync.mockReturnValue(false)
+
+    await appendToProjectJsonConfig(FILE_PATH, { defaultBranch: 'main' })
+
+    expect(mockConfirmPrompt).not.toHaveBeenCalled()
+    expect(mockWriteFileAtomic).toHaveBeenCalledTimes(1)
+    const [writtenPath, writtenContent, opts] = mockWriteFileAtomic.mock.calls[0]
+    expect(writtenPath).toBe(FILE_PATH)
+    expect(opts).toEqual({ preserveExistingMode: true })
+    expect(JSON.parse(writtenContent)).toMatchObject({ defaultBranch: 'main' })
+  })
+
+  it('prompts before touching an existing file, and writes nothing when declined', async () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(JSON.stringify({ defaultBranch: 'main' }))
+    mockConfirmPrompt.mockResolvedValue(false)
+
+    await appendToProjectJsonConfig(FILE_PATH, { defaultBranch: 'develop' })
+
+    expect(mockConfirmPrompt).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining(FILE_PATH) })
+    )
+    expect(mockWriteFileAtomic).not.toHaveBeenCalled()
+  })
+
+  it('merges into existing unrelated keys instead of destroying them, once confirmed (core exploit)', async () => {
+    // The bug: re-running `coco init --scope project` (e.g. to change the
+    // model) used to wipe a committed .coco.json down to just what this
+    // call sets, silently dropping keys like logTui.theme.
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        defaultBranch: 'main',
+        logTui: { theme: { preset: 'dracula' } },
+        ignoredFiles: ['package-lock.json'],
+      })
+    )
+    mockConfirmPrompt.mockResolvedValue(true)
+
+    await appendToProjectJsonConfig(FILE_PATH, { defaultBranch: 'develop' })
+
+    const written = JSON.parse(mockWriteFileAtomic.mock.calls[0][1])
+    expect(written.defaultBranch).toBe('develop')
+    expect(written.logTui).toEqual({ theme: { preset: 'dracula' } })
+    expect(written.ignoredFiles).toEqual(['package-lock.json'])
+  })
+
+  it('shallow-merges service, with the new call winning over existing values', async () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue(
+      JSON.stringify({ service: { provider: 'openai', model: 'gpt-4o-mini', temperature: 0.2 } })
+    )
+    mockConfirmPrompt.mockResolvedValue(true)
+
+    await appendToProjectJsonConfig(FILE_PATH, {
+      service: { provider: 'openai', model: 'gpt-4o' } as unknown as Config['service'],
+    })
+
+    const written = JSON.parse(mockWriteFileAtomic.mock.calls[0][1])
+    expect(written.service).toEqual({ provider: 'openai', model: 'gpt-4o', temperature: 0.2 })
+  })
+
+  it('confirms then writes a fresh config when the existing file is malformed JSON', async () => {
+    mockFs.existsSync.mockReturnValue(true)
+    mockFs.readFileSync.mockReturnValue('{ not valid json')
+    mockConfirmPrompt.mockResolvedValue(true)
+
+    await appendToProjectJsonConfig(FILE_PATH, { defaultBranch: 'develop' })
+
+    expect(mockConfirmPrompt).toHaveBeenCalled()
+    const written = JSON.parse(mockWriteFileAtomic.mock.calls[0][1])
+    expect(written).toMatchObject({ defaultBranch: 'develop' })
   })
 })

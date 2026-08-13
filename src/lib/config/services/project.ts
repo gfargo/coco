@@ -4,6 +4,10 @@ import { Config } from '../types'
 import { SCHEMA_PUBLIC_URL, schema } from '../../schema'
 import { ajv } from '../../ajv'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
+import { writeFileAtomic } from '../../utils/atomicFileWrite'
+import { CONFIG_ALREADY_EXISTS } from '../../ui/helpers'
+import { confirmPrompt } from '../../ui/inquirerPrompts'
+import { isRecord } from './xdg'
 import {
   PROJECT_CONFIG_CANDIDATES,
   TRUSTED_PROJECT_SERVICE_KEYS,
@@ -250,20 +254,66 @@ export function loadProjectJsonConfig<ConfigType = Config>(
   return config as ConfigType
 }
 
-export const appendToProjectJsonConfig = (filePath: string, config: Partial<Config>) => {
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, '{}')
+/**
+ * Writes `config` into a repo-local project config file, read-merging
+ * with any existing content instead of overwriting it wholesale. Despite
+ * the name, this used to be a blind overwrite — any keys the user (or a
+ * prior `coco doctor --fix`) had set that this call doesn't know about
+ * (`logTui.theme`, `workspace.roots`, `ignoredFiles`, `prompt`,
+ * `forgeHosts`, `telemetry`, ...) were silently destroyed, with no
+ * "existing config found, override?" prompt even though the sibling
+ * global-scope writer (`appendToGitConfig`) already has one (#1875).
+ *
+ * Confirms via `CONFIG_ALREADY_EXISTS` before touching a file that
+ * already exists — declining leaves the file untouched. `service` is
+ * merged one level deep (existing knobs survive unless this call's
+ * config explicitly sets them); everything else is a shallow merge,
+ * matching how the read path (`loadProjectJsonConfig`) already merges
+ * `service` from a project file.
+ */
+export const appendToProjectJsonConfig = async (filePath: string, config: Partial<Config>): Promise<void> => {
+  let existing: Partial<Config> & { $schema?: string } = {}
+
+  if (fs.existsSync(filePath)) {
+    try {
+      const raw = fs.readFileSync(filePath, 'utf-8')
+      if (raw.trim()) {
+        const parsed: unknown = JSON.parse(raw)
+        if (isRecord(parsed)) {
+          existing = parsed as Partial<Config> & { $schema?: string }
+        }
+      }
+    } catch {
+      // Malformed existing file — fall through to the confirm prompt;
+      // confirming replaces it with a fresh, valid config instead of
+      // crashing `coco init`.
+    }
+
+    const confirmOverwrite = await confirmPrompt({
+      message: CONFIG_ALREADY_EXISTS(filePath),
+      default: false,
+    })
+    if (!confirmOverwrite) {
+      return
+    }
   }
 
-  fs.writeFileSync(
-    filePath,
-    JSON.stringify(
-      {
-        $schema: SCHEMA_PUBLIC_URL,
-        ...config,
-      },
-      null,
-      2
-    )
-  )
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { $schema: _existingSchema, service: existingService, ...existingRest } = existing
+  const { service: newService, ...newRest } = config
+
+  const merged: Partial<Config> & { $schema?: string } = {
+    ...existingRest,
+    ...newRest,
+    $schema: SCHEMA_PUBLIC_URL,
+  }
+
+  if (isRecord(existingService) || isRecord(newService)) {
+    merged.service = {
+      ...(isRecord(existingService) ? existingService : {}),
+      ...(isRecord(newService) ? newService : {}),
+    } as Config['service']
+  }
+
+  writeFileAtomic(filePath, JSON.stringify(merged, null, 2) + '\n', { preserveExistingMode: true })
 }
