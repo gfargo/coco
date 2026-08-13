@@ -15,6 +15,7 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
   'getPullRequestChecks',
   'rerunFailedChecks',
   'enableAutoMerge',
+  'getPullRequestReviewThreads',
   'markPullRequestReadyByNumber',
   'reopenPullRequestByNumber',
   'mergePullRequest',
@@ -201,5 +202,39 @@ describe('getForgeActions (#0.70)', () => {
     const forge = getForgeActions('gitea', { giteaPath: 'o/r' })
     await expect(forge.mergePullRequestByNumber(1, 'merge')).resolves.toMatchObject({ ok: false })
     await expect(forge.getPullRequestDetail(1)).resolves.toMatchObject({ ok: false })
+  })
+
+  describe('getPullRequestReviewThreads (OSS-2403)', () => {
+    it('is an explicit unsupported stub for GitLab', async () => {
+      const forge = getForgeActions('gitlab', { gitlabPath: 'g/p' })
+      const result = await forge.getPullRequestReviewThreads(1)
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('expected ok:false')
+      expect(result.message).toContain('not supported for GitLab yet')
+    })
+
+    it('is an explicit unsupported stub for Bitbucket', async () => {
+      const forge = getForgeActions('bitbucket', { bitbucketPath: 'ws/repo' })
+      const result = await forge.getPullRequestReviewThreads(1)
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('expected ok:false')
+      expect(result.message).toContain('not supported for Bitbucket yet')
+    })
+
+    it('is an explicit unsupported stub for Bitbucket Server', async () => {
+      const forge = getForgeActions('bitbucket-server', { bitbucketServerPath: 'TEAM/repo' })
+      const result = await forge.getPullRequestReviewThreads(1)
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('expected ok:false')
+      expect(result.message).toContain('not supported for Bitbucket Server yet')
+    })
+
+    it('is an explicit unsupported stub for Gitea', async () => {
+      const forge = getForgeActions('gitea', { giteaPath: 'o/r', giteaHost: 'codeberg.org' })
+      const result = await forge.getPullRequestReviewThreads(1)
+      expect(result.ok).toBe(false)
+      if (result.ok) throw new Error('expected ok:false')
+      expect(result.message).toContain('not supported for Gitea yet')
+    })
   })
 })

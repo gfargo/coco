@@ -21,6 +21,7 @@ import type { IssueListItem } from './issuesListData'
 import type { PullRequestDetail, PullRequestStatusCheck } from './pullRequestDetailData'
 import type { IssueComment, IssueDetail } from './issueDetailData'
 import type { PullRequestInfo, PullRequestReviewInfo } from './pullRequestData'
+import type { PullRequestReviewThread } from './pullRequestReviewThreadsData'
 
 function isControl(codePoint: number, keepNewline: boolean): boolean {
   if (keepNewline && codePoint === 0x0a) return false
@@ -112,6 +113,19 @@ export function sanitizeIssueDetail(detail: IssueDetail): IssueDetail {
     body: stripControlMultiline(detail.body),
     comments: detail.comments.map(sanitizeComment),
   }
+}
+
+export function sanitizePullRequestReviewThreads(threads: PullRequestReviewThread[]): PullRequestReviewThread[] {
+  return threads.map((thread) => ({
+    ...thread,
+    path: stripControl(thread.path),
+    diffHunk: thread.diffHunk === undefined ? undefined : stripControlMultiline(thread.diffHunk),
+    comments: thread.comments.map((comment) => ({
+      ...comment,
+      author: clean(comment.author),
+      body: stripControlMultiline(comment.body),
+    })),
+  }))
 }
 
 export function sanitizePullRequestInfo(info: PullRequestInfo): PullRequestInfo {
