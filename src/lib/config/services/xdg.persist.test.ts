@@ -42,4 +42,20 @@ describe('persistUsagePreference (#0.69)', () => {
     expect(onDisk.telemetry.usage).toBe(false)
     expect(onDisk.logTui.theme.preset).toBe('dracula')
   })
+
+  it('writes the file 0600 (owner-only), not world-readable (#1874)', () => {
+    expect(persistUsagePreference(true)).toBe(true)
+    const mode = fs.statSync(getXdgConfigPath()).mode & 0o777
+    expect(mode).toBe(0o600)
+  })
+
+  it('re-hardens an existing world-readable file back to 0600, not just merges content', () => {
+    fs.mkdirSync(path.dirname(getXdgConfigPath()), { recursive: true })
+    fs.writeFileSync(getXdgConfigPath(), '{}', { mode: 0o644 })
+
+    expect(persistUsagePreference(true)).toBe(true)
+
+    const mode = fs.statSync(getXdgConfigPath()).mode & 0o777
+    expect(mode).toBe(0o600)
+  })
 })

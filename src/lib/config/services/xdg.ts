@@ -3,6 +3,7 @@ import * as os from 'os'
 import * as path from 'path'
 import { LLMService } from '../../langchain/types'
 import { Config } from '../types'
+import { writeFileAtomic } from '../../utils/atomicFileWrite'
 
 /** Path to the global XDG config (`$XDG_CONFIG_HOME/coco/config.json`). */
 export function getXdgConfigPath(): string {
@@ -59,7 +60,7 @@ export function persistUsagePreference(usage: boolean): boolean {
     config.telemetry = { ...telemetry, usage }
 
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`)
+    writeFileAtomic(file, `${JSON.stringify(config, null, 2)}\n`)
     return true
   } catch {
     return false
