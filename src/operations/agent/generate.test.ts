@@ -298,6 +298,90 @@ describe('agent generate progress reporting', () => {
     })
   })
 
+  describe('truncation warnings surface in the envelope (#1843)', () => {
+    // The core bug: executeStructured computed budgeted.truncated and threw
+    // it away, so a review/changelog/recap that silently analyzed only a
+    // fraction of the diff reported ok: true with no warning at all — an
+    // agent or CI --severity gate had no signal to distinguish "clean" from
+    // "only saw half the diff".
+    //
+    // 2500 is comfortably above every prompt template's fixed overhead
+    // (~1100-1600 chars observed) so budgeting never throws before even
+    // adding the change text, and a 5000-char mocked diff is comfortably
+    // larger than that budget so truncation reliably engages for all three
+    // operations regardless of their differing template overhead.
+    const TRUNCATING_TOKEN_LIMIT = 2500
+
+    function mockTruncatingBudget() {
+      mockLoadConfig.mockReturnValue({
+        service: {
+          tokenLimit: TRUNCATING_TOKEN_LIMIT,
+          authentication: { type: 'None' },
+          streaming: { enabled: false },
+          provider: 'test-provider',
+        },
+        prompt: undefined,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any)
+      mockResolveChangeSource.mockResolvedValue({
+        text: 'x'.repeat(5000),
+        warnings: [],
+        meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
+      })
+    }
+
+    it('adds a truncation warning to the review envelope when the budget is exceeded', async () => {
+      mockTruncatingBudget()
+      const result = await generateAgentReview(baseInput, makeContext(undefined))
+
+      if (result.status !== 'completed') throw new Error('expected a completed envelope')
+      expect(result.warnings.some((w) => w.includes('truncated'))).toBe(true)
+    })
+
+    it('adds a truncation warning to the changelog envelope when the budget is exceeded', async () => {
+      mockTruncatingBudget()
+      mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+      const result = await generateAgentChangelog(baseInput, makeContext(undefined))
+
+      if (result.status !== 'completed') throw new Error('expected a completed envelope')
+      expect(result.warnings.some((w) => w.includes('truncated'))).toBe(true)
+    })
+
+    it('adds a truncation warning to the recap envelope when the budget is exceeded', async () => {
+      mockTruncatingBudget()
+      mockExecuteChain.mockResolvedValueOnce({ title: 't', summary: 's' } as never)
+      const result = await generateAgentRecap(baseInput, makeContext(undefined))
+
+      if (result.status !== 'completed') throw new Error('expected a completed envelope')
+      expect(result.warnings.some((w) => w.includes('truncated'))).toBe(true)
+    })
+
+    it('does not add a truncation warning when the budget is not exceeded', async () => {
+      const result = await generateAgentReview(baseInput, makeContext(undefined))
+
+      if (result.status !== 'completed') throw new Error('expected a completed envelope')
+      expect(result.warnings.some((w) => w.includes('truncated'))).toBe(false)
+    })
+
+    it('preserves resolveChangeSource warnings alongside the truncation warning', async () => {
+      // mockTruncatingBudget() sets up the long diff text needed to force
+      // truncation — set the extra warning after it, not before, or this
+      // override wipes that text back to the short default.
+      mockTruncatingBudget()
+      mockResolveChangeSource.mockResolvedValue({
+        text: 'x'.repeat(5000),
+        warnings: ['some other warning'],
+        meta: { kind: 'summary', digest: 'sha256:test', verification: 'provided-unverified' },
+      })
+
+      const result = await generateAgentReview(baseInput, makeContext(undefined))
+
+      if (result.status !== 'completed') throw new Error('expected a completed envelope')
+      expect(result.warnings).toContain('some other warning')
+      expect(result.warnings.some((w) => w.includes('truncated'))).toBe(true)
+    })
+  })
+
   describe('generateAgentCommitDraft', () => {
     beforeEach(() => {
       mockGenerateCommitDraft.mockResolvedValue({
