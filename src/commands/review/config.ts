@@ -35,6 +35,8 @@ export const ReviewFeedbackItemSchema = z.object({
   ]),
   category: z.string(),
   filePath: z.string(),
+  line: z.number().optional(),
+  side: z.enum(['LEFT', 'RIGHT']).default('RIGHT'),
 })
 
 // Array schema for review feedback items

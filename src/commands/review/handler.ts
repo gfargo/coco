@@ -304,7 +304,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const parser: any = createSchemaParser(ReviewFeedbackResponseSchema)
 
       const formatInstructions =
-        "Respond with a valid JSON object, containing four fields:'title' a string, 'summary' a short summary of the problem (include line number if big file), 'severity' a numeric enum up to ten, 'category' an enum string, and 'filePath' a relative filepath to file as string."
+        "Respond with a valid JSON object, containing these fields: 'title' a string, 'summary' a short summary of the problem, 'severity' a numeric enum up to ten, 'category' an enum string, 'filePath' a relative filepath to file as string, and 'line' the 1-based line number in the file the finding refers to (optional; omit if not applicable)."
 
       const prompt = getPrompt({
         template: options.prompt,
