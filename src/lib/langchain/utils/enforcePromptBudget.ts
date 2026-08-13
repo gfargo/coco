@@ -76,6 +76,21 @@ function stripTrailingHighSurrogate(value: string): string {
 }
 
 /**
+ * A character-prefix binary search finds the largest slice that fits the
+ * token budget with no regard for where that lands — typically mid-line,
+ * mid-identifier. Snap back to the end of the last complete line so a
+ * truncated summary is always well-formed instead of handing the model
+ * (and any caller reading the result) a syntactically broken tail (#1843).
+ * Safe to call on an already-fitting slice: removing more characters only
+ * reduces the token count, never increases it. No newline at all means no
+ * complete line survives — degrade to empty rather than a garbled partial.
+ */
+function snapToLineBoundary(text: string): string {
+  const lastNewline = text.lastIndexOf('\n')
+  return lastNewline === -1 ? '' : text.slice(0, lastNewline + 1)
+}
+
+/**
  * Trim a summary composed of whole directory blocks (see
  * `DIRECTORY_BLOCK_SEPARATOR`) by dropping entire blocks rather than
  * slicing through arbitrary characters. Blocks are dropped largest-first,
@@ -135,19 +150,31 @@ async function trimSummaryByBlocks(
   let high = lastBlock.text.length
   let bestSummary = `${DIRECTORY_BLOCK_SEPARATOR}${marker}`
   let bestTokenCount = await render(bestSummary)
+  let bestSlice = ''
 
   while (low <= high) {
     const mid = Math.floor((low + high) / 2)
-    const candidateSummary = `${DIRECTORY_BLOCK_SEPARATOR}${stripTrailingHighSurrogate(lastBlock.text.slice(0, mid))}${marker}`
+    const candidateSlice = stripTrailingHighSurrogate(lastBlock.text.slice(0, mid))
+    const candidateSummary = `${DIRECTORY_BLOCK_SEPARATOR}${candidateSlice}${marker}`
     const candidateTokenCount = await render(candidateSummary)
 
     if (candidateTokenCount <= tokenBudget) {
       bestSummary = candidateSummary
       bestTokenCount = candidateTokenCount
+      bestSlice = candidateSlice
       low = mid + 1
     } else {
       high = mid - 1
     }
+  }
+
+  // Snap the winning slice to the last complete line (#1843); only the
+  // trimmed slice itself, not the separator/marker wrapped around it.
+  // Re-render once more only if snapping actually removed anything.
+  const snappedSlice = snapToLineBoundary(bestSlice)
+  if (snappedSlice !== bestSlice) {
+    bestSummary = `${DIRECTORY_BLOCK_SEPARATOR}${snappedSlice}${marker}`
+    bestTokenCount = await render(bestSummary)
   }
 
   if (bestTokenCount > tokenBudget) {
@@ -193,7 +220,14 @@ async function trimSummaryByCharSlice(
     }
   }
 
-  return { summary: bestSummary.trimEnd(), tokenCount: bestTokenCount }
+  // Snap to the last complete line (#1843); re-render only if it changed.
+  const snappedSummary = snapToLineBoundary(bestSummary)
+  if (snappedSummary !== bestSummary) {
+    const snappedVariables = { ...variables, [summaryKey]: snappedSummary }
+    bestTokenCount = tokenizer(await renderPrompt(prompt, snappedVariables))
+  }
+
+  return { summary: snappedSummary.trimEnd(), tokenCount: bestTokenCount }
 }
 
 /**

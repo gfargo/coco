@@ -325,6 +325,15 @@ function plannedEnvelope(
   }
 }
 
+/**
+ * Result plus whether the prompt-budget guard had to truncate the change
+ * context to fit. Previously `executeStructured` returned only the parsed
+ * result, discarding `budgeted.truncated` — so a review/changelog/recap
+ * that silently analyzed a fraction of the diff had no way to tell its
+ * caller, and reported `ok: true` with no warning (#1843).
+ */
+type StructuredCallResult<T> = { result: T; truncated: boolean }
+
 async function executeStructured<T>(input: {
   operation: AgentOperation
   task: SupportedTask
@@ -334,7 +343,7 @@ async function executeStructured<T>(input: {
   promptTemplate: typeof REVIEW_PROMPT
   variables: Record<string, string>
   summaryKey: string
-}): Promise<T> {
+}): Promise<StructuredCallResult<T>> {
   const runtime = await createRuntime(input.task, input.options, input.context)
   const { prompt, budgeted } = await prepareStructuredCall({
     runtime,
@@ -357,7 +366,7 @@ async function executeStructured<T>(input: {
   const streamingEnabled = Boolean(input.context.onProgress && runtime.config.service.streaming?.enabled)
   if (streamingEnabled) {
     try {
-      return await executeChainStreaming<T>({
+      const result = await executeChainStreaming<T>({
         llm: runtime.llm,
         prompt,
         variables: budgeted.variables,
@@ -371,6 +380,7 @@ async function executeStructured<T>(input: {
         signal: input.context.signal,
         metadata,
       })
+      return { result, truncated: budgeted.truncated }
     } catch (error) {
       if (error instanceof LangChainCancelledError) throw error
       // Streaming failed for a non-cancellation reason (unsupported
@@ -385,7 +395,7 @@ async function executeStructured<T>(input: {
     }
   }
 
-  return executeChain<T>({
+  const result = await executeChain<T>({
     llm: runtime.llm,
     prompt,
     variables: budgeted.variables,
@@ -395,6 +405,20 @@ async function executeStructured<T>(input: {
     signal: input.context.signal,
     metadata,
   })
+  return { result, truncated: budgeted.truncated }
+}
+
+/**
+ * Build the "context was truncated" warning appended to an operation's
+ * envelope when `executeStructured` had to trim the change context to fit
+ * the model's token budget (#1843). Kept as one shared message so all
+ * three affected operations (review/changelog/recap) read identically.
+ */
+function truncationWarning(): string {
+  return (
+    'Change context exceeded the model\'s token budget and was truncated to fit — ' +
+    'this result may be based on an incomplete view of the changes.'
+  )
 }
 
 function envelope<T>(
@@ -539,7 +563,7 @@ export async function generateAgentReview(
     return plannedEnvelope('review', plan, resolved.warnings, resolved.meta)
   }
   report(context, 'Generating review…', 0.4)
-  const findings = await executeStructured<ReviewFeedbackItem[]>({
+  const { result: findings, truncated } = await executeStructured<ReviewFeedbackItem[]>({
     operation: 'review',
     task: 'review',
     context,
@@ -551,7 +575,8 @@ export async function generateAgentReview(
   })
   findings.sort((a, b) => b.severity - a.severity)
   report(context, 'Completed', 1)
-  return envelope('review', { findings }, resolved.warnings, resolved.meta, conventions.provenance)
+  const warnings = truncated ? [...resolved.warnings, truncationWarning()] : resolved.warnings
+  return envelope('review', { findings }, warnings, resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentChangelog(
@@ -587,7 +612,7 @@ export async function generateAgentChangelog(
     return plannedEnvelope('changelog', plan, resolved.warnings, resolved.meta)
   }
   report(context, 'Generating changelog…', 0.4)
-  const result = await executeStructured<ChangelogResponse>({
+  const { result, truncated } = await executeStructured<ChangelogResponse>({
     operation: 'changelog',
     task: 'changelog',
     context,
@@ -598,7 +623,8 @@ export async function generateAgentChangelog(
     variables,
   })
   report(context, 'Completed', 1)
-  return envelope('changelog', result, resolved.warnings, resolved.meta, conventions.provenance)
+  const warnings = truncated ? [...resolved.warnings, truncationWarning()] : resolved.warnings
+  return envelope('changelog', result, warnings, resolved.meta, conventions.provenance)
 }
 
 export async function generateAgentRecap(
@@ -632,7 +658,7 @@ export async function generateAgentRecap(
     return plannedEnvelope('recap', plan, resolved.warnings, resolved.meta)
   }
   report(context, 'Generating recap…', 0.4)
-  const result = await executeStructured<RecapData>({
+  const { result, truncated } = await executeStructured<RecapData>({
     operation: 'recap',
     task: 'recap',
     context,
@@ -643,7 +669,8 @@ export async function generateAgentRecap(
     variables,
   })
   report(context, 'Completed', 1)
-  return envelope('recap', result, resolved.warnings, resolved.meta, conventions.provenance)
+  const warnings = truncated ? [...resolved.warnings, truncationWarning()] : resolved.warnings
+  return envelope('recap', result, warnings, resolved.meta, conventions.provenance)
 }
 
 export async function runAgentOperation(
