@@ -6,6 +6,7 @@ import {
   dropEmptyGroups,
   formatPlanValidationFeedback,
   formatPlanValidationIssuesError,
+  getPlanCommitlintFailures,
   getPlanValidationIssues,
   hasPlanValidationIssues,
   HunkInventoryLike,
@@ -139,6 +140,77 @@ describe('splitPlanValidation', () => {
     })
   })
 
+  // CMD-12: getPlanValidationIssues itself stays structural-only/sync;
+  // commitlint validation is async, so it's a separate function whose
+  // result callers merge into `issues.commitlintFailures`.
+  describe('getPlanCommitlintFailures', () => {
+    it('returns no failures when every group passes', async () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['a.ts'], hunks: [] },
+          { title: 'fix: b', files: ['b.ts'], hunks: [] },
+        ],
+      }
+      const validate = jest.fn(async () => ({ valid: true, errors: [] }))
+
+      const failures = await getPlanCommitlintFailures(plan, validate)
+
+      expect(failures).toEqual([])
+      expect(validate).toHaveBeenCalledWith('feat: a')
+      expect(validate).toHaveBeenCalledWith('fix: b')
+    })
+
+    it('reports the group index, title, and validator errors for a failing group', async () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: 'feat: a', files: ['a.ts'], hunks: [] },
+          { title: 'Bad Title', files: ['b.ts'], hunks: [] },
+        ],
+      }
+      const validate = jest.fn(async (message: string) =>
+        message === 'Bad Title'
+          ? { valid: false, errors: ['subject-case must be lower-case', 'type-empty may not be empty'] }
+          : { valid: true, errors: [] }
+      )
+
+      const failures = await getPlanCommitlintFailures(plan, validate)
+
+      expect(failures).toEqual([
+        {
+          index: 1,
+          title: 'Bad Title',
+          errors: ['subject-case must be lower-case', 'type-empty may not be empty'],
+        },
+      ])
+    })
+
+    it('joins title and body into a single message before validating', async () => {
+      const plan: CommitSplitPlan = {
+        groups: [{ title: 'feat: a', body: 'Some detail.', files: ['a.ts'], hunks: [] }],
+      }
+      const validate = jest.fn(async () => ({ valid: true, errors: [] }))
+
+      await getPlanCommitlintFailures(plan, validate)
+
+      expect(validate).toHaveBeenCalledWith('feat: a\n\nSome detail.')
+    })
+
+    it('skips unclaimed groups (never committed) and groups with no title', async () => {
+      const plan: CommitSplitPlan = {
+        groups: [
+          { title: '', files: ['a.ts'], hunks: [], unclaimed: true },
+          { title: 'feat: b', files: ['b.ts'], hunks: [] },
+        ],
+      }
+      const validate = jest.fn(async () => ({ valid: true, errors: [] }))
+
+      await getPlanCommitlintFailures(plan, validate)
+
+      expect(validate).toHaveBeenCalledTimes(1)
+      expect(validate).toHaveBeenCalledWith('feat: b')
+    })
+  })
+
   describe('formatPlanValidationFeedback', () => {
     it('returns an empty string when there are no issues', () => {
       const feedback = formatPlanValidationFeedback({
@@ -149,6 +221,7 @@ describe('splitPlanValidation', () => {
         mixedFiles: [],
         partiallyCoveredFiles: [],
         missingFiles: [],
+        commitlintFailures: [],
       })
 
       expect(feedback).toBe('')
@@ -163,6 +236,7 @@ describe('splitPlanValidation', () => {
         mixedFiles: ['b.ts'],
         partiallyCoveredFiles: ['c.ts'],
         missingFiles: ['d.ts'],
+        commitlintFailures: [{ index: 0, title: 'bad title', errors: ['type-empty'] }],
       })
 
       expect(feedback).toContain('- Files referenced that are NOT in the staged file inventory')
@@ -177,6 +251,9 @@ describe('splitPlanValidation', () => {
       expect(feedback).toContain('c.ts')
       expect(feedback).toContain('Staged files missing from every group')
       expect(feedback).toContain('d.ts')
+      expect(feedback).toContain('Group titles/bodies that fail commitlint validation')
+      expect(feedback).toContain('bad title')
+      expect(feedback).toContain('type-empty')
     })
   })
 
@@ -190,6 +267,7 @@ describe('splitPlanValidation', () => {
         mixedFiles: [],
         partiallyCoveredFiles: [],
         missingFiles: [],
+        commitlintFailures: [],
       })
 
       expect(message).toBe('unknown files: ghost.ts; duplicate files: a.ts')

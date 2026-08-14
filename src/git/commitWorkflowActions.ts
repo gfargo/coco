@@ -382,6 +382,7 @@ export async function runCommitSplitApplyWorkflow(input: {
       logger,
       noVerify: input.noVerify || false,
       fallback: input.fallback,
+      validateGroupMessage: input.planContext.validateGroupMessage,
     })
     return {
       ok: true,
