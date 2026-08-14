@@ -33,6 +33,27 @@ const mockOpenMr = openMergeRequest as jest.MockedFunction<typeof openMergeReque
 const mockCreateBitbucketPr = createBitbucketPullRequest as jest.MockedFunction<typeof createBitbucketPullRequest>
 const mockOpenBitbucketPr = openBitbucketPullRequest as jest.MockedFunction<typeof openBitbucketPullRequest>
 
+const spyStdout = () => {
+  const writes: string[] = []
+  const spy = jest.spyOn(process.stdout, 'write').mockImplementation(((chunk: string) => {
+    writes.push(String(chunk))
+    return true
+  }) as never)
+  return { writes, restore: () => spy.mockRestore() }
+}
+
+function findJson(writes: string[]): unknown {
+  const raw = writes.find((w) => {
+    try {
+      JSON.parse(w)
+      return true
+    } catch {
+      return false
+    }
+  })
+  return raw === undefined ? undefined : JSON.parse(raw)
+}
+
 function okOverview(over: Record<string, unknown> = {}) {
   return {
     repository: { provider: 'github', remote: 'origin', defaultBranch: 'main' },
@@ -195,6 +216,49 @@ describe('pr create command', () => {
     mockBodyWorkflow.mockResolvedValue({ ok: false, message: 'no commits ahead of base' })
     await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
     expect(mockCreatePr).not.toHaveBeenCalled()
+  })
+
+  // CMD-11: every commandExit(1) failure branch reachable before the
+  // --json preview-return must emit a { error } payload, not empty
+  // stdout — a machine caller shouldn't have to scrape stderr.
+  describe('--json failure payloads (CMD-11)', () => {
+    it('emits a JSON error when not authenticated', async () => {
+      argv.json = true
+      mockOverview.mockResolvedValue(okOverview({ authenticated: false, message: 'run gh auth login' }))
+      const { writes, restore } = spyStdout()
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      } finally {
+        restore()
+      }
+      expect(findJson(writes)).toEqual({ error: 'run gh auth login' })
+    })
+
+    it('emits a JSON error when on the base branch', async () => {
+      argv.json = true
+      mockOverview.mockResolvedValue(okOverview({ currentBranch: 'main' }))
+      const { writes, restore } = spyStdout()
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      } finally {
+        restore()
+      }
+      expect(findJson(writes)).toEqual({
+        error: expect.stringContaining("You're on the base branch"),
+      })
+    })
+
+    it('emits a JSON error when body generation fails', async () => {
+      argv.json = true
+      mockBodyWorkflow.mockResolvedValue({ ok: false, message: 'no commits ahead of base' })
+      const { writes, restore } = spyStdout()
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      } finally {
+        restore()
+      }
+      expect(findJson(writes)).toEqual({ error: 'no commits ahead of base' })
+    })
   })
 
   it('renders the curated no-commits message, never the generic exit sentinel text (#1604)', async () => {

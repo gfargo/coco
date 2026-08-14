@@ -21,7 +21,7 @@ import { getProviderRepositoryForGit } from '../../git/providerData'
 import { getPullRequestList } from '../../git/pullRequestListData'
 import { getMergeRequestList } from '../../git/gitlabListData'
 import { getBitbucketPullRequestList } from '../../git/bitbucketListData'
-import { emitJson } from '../../lib/ui/emitJson'
+import { emitJson, emitJsonError } from '../../lib/ui/emitJson'
 import { Logger } from '../../lib/utils/logger'
 
 const applyRepoFlagMock = applyRepoFlag as jest.MockedFunction<typeof applyRepoFlag>
@@ -32,6 +32,7 @@ const getMergeRequestListMock = getMergeRequestList as jest.MockedFunction<typeo
 const getBitbucketPullRequestListMock =
   getBitbucketPullRequestList as jest.MockedFunction<typeof getBitbucketPullRequestList>
 const emitJsonMock = emitJson as jest.MockedFunction<typeof emitJson>
+const emitJsonErrorMock = emitJsonError as jest.MockedFunction<typeof emitJsonError>
 
 const fakeGit = {} as SimpleGit
 
@@ -163,5 +164,31 @@ describe('coco prs — --json contract', () => {
 
     expect(emitJsonMock).toHaveBeenCalledWith(overview.pullRequests)
     expect(logger.log).not.toHaveBeenCalled()
+  })
+
+  // CMD-11: forge/availability failures used to exit 1 with empty
+  // stdout under --json — a machine caller had to scrape stderr.
+  it('emits a JSON error instead of empty stdout when the forge is unavailable', async () => {
+    getPullRequestListMock.mockResolvedValue({
+      available: false,
+      authenticated: false,
+      message: 'No supported remote detected.',
+    } as never)
+
+    await expect(handler(baseArgv({ json: true }), createLogger())).rejects.toMatchObject({ code: 1 })
+
+    expect(emitJsonErrorMock).toHaveBeenCalledWith('No supported remote detected.')
+  })
+
+  it('emits a JSON error instead of empty stdout when not authenticated', async () => {
+    getPullRequestListMock.mockResolvedValue({
+      available: true,
+      authenticated: false,
+      message: 'gh not authenticated',
+    } as never)
+
+    await expect(handler(baseArgv({ json: true }), createLogger())).rejects.toMatchObject({ code: 1 })
+
+    expect(emitJsonErrorMock).toHaveBeenCalledWith('gh not authenticated')
   })
 })

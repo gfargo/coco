@@ -21,7 +21,7 @@ import { applyRepoCwd, applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
 import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { handleResult } from '../../lib/ui/handleResult'
-import { emitJson } from '../../lib/ui/emitJson'
+import { emitJson, emitJsonError } from '../../lib/ui/emitJson'
 import { LOGO, isInteractive } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { getDiffForBranch } from '../../lib/simple-git/getDiffForBranch'
@@ -107,7 +107,9 @@ export async function generateChangelogResult(
   ].filter(Boolean)
 
   if (exclusiveOptions.length > 1) {
-    logger.error(`Options ${exclusiveOptions.join(', ')} cannot be used together.`, { color: 'red' })
+    const message = `Options ${exclusiveOptions.join(', ')} cannot be used together.`
+    logger.error(message, { color: 'red' })
+    if (argv.json) emitJsonError(message)
     commandExit(1)
   }
 
@@ -119,7 +121,9 @@ export async function generateChangelogResult(
     ].filter(Boolean)
 
     if (ignoredByOnlyDiff.length > 0) {
-      logger.error(`--only-diff cannot be combined with ${ignoredByOnlyDiff.join(', ')}.`, { color: 'red' })
+      const message = `--only-diff cannot be combined with ${ignoredByOnlyDiff.join(', ')}.`
+      logger.error(message, { color: 'red' })
+      if (argv.json) emitJsonError(message)
       commandExit(1)
     }
   }
@@ -171,7 +175,9 @@ export async function generateChangelogResult(
       // mode with no warning (#1590).
       const [from, to] = config.range.split(/:|\.{2,3}/)
       if (!from || !to) {
-        logger.error(`Invalid range provided. Expected format is <from>:<to> (or <from>..<to>)`, { color: 'red' })
+        const message = `Invalid range provided. Expected format is <from>:<to> (or <from>..<to>)`
+        logger.error(message, { color: 'red' })
+        if (argv.json) emitJsonError(message)
         commandExit(1)
       }
       commits = await getCommitLogRangeDetails(from, to, { git, noMerges: true })

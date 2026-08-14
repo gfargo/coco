@@ -211,6 +211,27 @@ describe('amend command', () => {
     expect(mockCreateCommit).not.toHaveBeenCalled()
   })
 
+  it('emits a JSON error payload (not empty stdout) when --json and there is no commit to amend (CMD-11)', async () => {
+    argv.json = true
+    git.revparse.mockRejectedValue(new Error('fatal: needed a single revision'))
+    const { writes, restore } = spyStdout()
+    try {
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+    } finally {
+      restore()
+    }
+    const json = writes.find((w) => {
+      try {
+        JSON.parse(w)
+        return true
+      } catch {
+        return false
+      }
+    })
+    expect(json).toBeDefined()
+    expect(JSON.parse(json as string)).toEqual({ error: expect.stringContaining('No commit to amend') })
+  })
+
   it('forwards argv.language to generateCommitDraft as a per-invocation override (OSS-2217)', async () => {
     ;(argv as unknown as { language?: string }).language = 'French'
     const { restore } = spyStdout()
@@ -233,5 +254,57 @@ describe('amend command', () => {
     })
     await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
     expect(mockCreateCommit).not.toHaveBeenCalled()
+  })
+
+  it('emits a JSON error payload when --json and draft generation fails (CMD-11)', async () => {
+    argv.json = true
+    mockGenerate.mockResolvedValue({
+      ok: false,
+      draft: '',
+      warnings: [],
+      validationErrors: ['Generated message failed commitlint validation.'],
+    })
+    const { writes, restore } = spyStdout()
+    try {
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+    } finally {
+      restore()
+    }
+    const json = writes.find((w) => {
+      try {
+        JSON.parse(w)
+        return true
+      } catch {
+        return false
+      }
+    })
+    expect(json).toBeDefined()
+    expect(JSON.parse(json as string)).toEqual({
+      error: 'Generated message failed commitlint validation.',
+    })
+  })
+
+  it('emits a JSON error payload when --json and there are no changes to summarize (CMD-11)', async () => {
+    argv.json = true
+    mockGetChangesByCommit.mockResolvedValue([])
+    mockGetChanges.mockResolvedValue({ staged: [], unstaged: [], untracked: [] })
+    const { writes, restore } = spyStdout()
+    try {
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+    } finally {
+      restore()
+    }
+    const json = writes.find((w) => {
+      try {
+        JSON.parse(w)
+        return true
+      } catch {
+        return false
+      }
+    })
+    expect(json).toBeDefined()
+    expect(JSON.parse(json as string)).toEqual({
+      error: 'Nothing to summarize for the last commit.',
+    })
   })
 })
