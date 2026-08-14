@@ -122,6 +122,16 @@ export function useChangelogActions(
   // in the finally block only when it still points at OUR controller.
   const changelogAbortRef = React.useRef<AbortController | null>(null)
 
+  // Abort an in-flight generation on unmount (WS-3) — otherwise `q`
+  // mid-generation leaves the LLM HTTP request pending and the Node
+  // event loop won't drain until the provider responds.
+  React.useEffect(() => {
+    return () => {
+      changelogAbortRef.current?.abort()
+      changelogAbortRef.current = null
+    }
+  }, [])
+
   const startChangelogView = React.useCallback(async (options: { force?: boolean } = {}) => {
     const head = context.branches?.currentBranch || context.provider?.currentBranch
     if (!head) {

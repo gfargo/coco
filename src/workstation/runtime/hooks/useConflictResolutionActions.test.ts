@@ -28,12 +28,31 @@ const getConflictFileRegionsMock = getConflictFileRegions as jest.MockedFunction
   typeof getConflictFileRegions
 >
 
-/** Fake React: `useCallback` returns the callback itself; `useRef` is a plain box. */
+/**
+ * Fake React: `useCallback` returns the callback itself; `useRef` is a plain
+ * box; `useEffect` runs its setup synchronously once (mirroring mount) since
+ * most of these tests don't simulate a render/unmount cycle.
+ */
 function fakeReact(): typeof import('react') {
   return {
     useCallback: (fn: unknown) => fn,
     useRef: (initial: unknown) => ({ current: initial }),
+    useEffect: (setup: () => void | (() => void)) => setup(),
   } as unknown as typeof import('react')
+}
+
+/** Same as `fakeReact`, but captures the `useEffect` cleanup for manual invocation. */
+function fakeReactWithUnmount(): { react: typeof import('react'); unmount: () => void } {
+  let cleanup: (() => void) | undefined
+  const react = {
+    useCallback: (fn: unknown) => fn,
+    useRef: (initial: unknown) => ({ current: initial }),
+    useEffect: (setup: () => void | (() => void)) => {
+      const result = setup()
+      if (typeof result === 'function') cleanup = result
+    },
+  } as unknown as typeof import('react')
+  return { react, unmount: () => cleanup?.() }
 }
 
 function baseDeps(
@@ -82,5 +101,43 @@ describe('useConflictResolutionActions — defensive catch for an unexpected wor
     expect(dispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'setStatus', kind: 'error' })
     )
+  })
+})
+
+/**
+ * Regression coverage for WS-3 (#1857): `abortRef` had no unmount cleanup,
+ * so quitting (`q`) while a resolution request was in flight left the LLM
+ * HTTP request pending — the Node event loop wouldn't drain until the
+ * provider responded.
+ */
+describe('useConflictResolutionActions — aborts an in-flight request on unmount (WS-3)', () => {
+  beforeEach(() => {
+    runConflictResolutionWorkflowMock.mockReset()
+    getConflictFileRegionsMock.mockReset()
+    getConflictFileRegionsMock.mockResolvedValue({
+      ok: true,
+      regions: [{ index: 0 } as never],
+    } as never)
+  })
+
+  it('aborts the signal passed to runConflictResolutionWorkflow when the component unmounts mid-request', async () => {
+    let capturedSignal: AbortSignal | undefined
+    runConflictResolutionWorkflowMock.mockImplementation(({ signal }) => {
+      capturedSignal = signal
+      return new Promise(() => {}) // never resolves — simulates an in-flight request
+    })
+
+    const { react, unmount } = fakeReactWithUnmount()
+    const { startConflictResolution } = useConflictResolutionActions(react, baseDeps())
+
+    void startConflictResolution()
+    // Two ticks: one for the `getConflictFileRegions` await to settle,
+    // one for the controller assignment that follows it.
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(capturedSignal?.aborted).toBe(false)
+    unmount()
+    expect(capturedSignal?.aborted).toBe(true)
   })
 })
