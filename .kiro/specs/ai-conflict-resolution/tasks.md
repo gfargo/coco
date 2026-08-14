@@ -43,13 +43,13 @@ off `main`, running the full validation suite (`lint` + `tsc --noEmit` + `test:j
   - [ ] 4.7 Write unit tests: multi-batch reassembly, single-oversized-region skip, single-batch passthrough (no chunking needed)
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 5. Add the explain workflow (`runConflictExplanationWorkflow`)
-  - [ ] 5.1 Create the explain prompt template in `src/commands/resolve/prompt.ts` — per-region explanation without resolution text (CLI-only for now; a TUI "explain mode" panel is a future enhancement)
-  - [ ] 5.2 Define `ConflictExplanation` and `ConflictExplanationResult` types in `src/git/conflictAiActions.ts`
-  - [ ] 5.3 Define the zod schema: array of `{ region, oursIntent, theirsIntent, conflictNature }`
-  - [ ] 5.4 Implement `runConflictExplanationWorkflow({ path, regions, operation, signal })` in `src/git/conflictAiActions.ts` following the same pattern as `runConflictResolutionWorkflow`
-  - [ ] 5.5 Reuse the chunking logic from task 4 (extract shared `chunkRegions` helper if needed)
-  - [ ] 5.6 Write unit tests: explanation generation, empty-regions early return, cancellation
+- [x] 5. Add the explain workflow (`runConflictExplanationWorkflow`)
+  - [x] 5.1 Create the explain prompt template in `src/commands/resolve/prompt.ts` — per-region explanation without resolution text (CLI-only for now; a TUI "explain mode" panel is a future enhancement)
+  - [x] 5.2 Define `ConflictExplanation` and `ConflictExplanationResult` types in `src/git/conflictAiActions.ts`
+  - [x] 5.3 Define the zod schema: array of `{ region, oursIntent, theirsIntent, conflictNature }`
+  - [x] 5.4 Implement `runConflictExplanationWorkflow({ path, regions, operation, signal })` in `src/git/conflictAiActions.ts` following the same pattern as `runConflictResolutionWorkflow`
+  - [ ] 5.5 Reuse the chunking logic from task 4 (extract shared `chunkRegions` helper if needed) — skipped: explain has no apply step, so a single call per file is sufficient; can revisit if large files need it
+  - [x] 5.6 Write unit tests: explanation generation, empty-regions early return, cancellation
   - _Requirements: 2.1, 2.2, 2.7_
 
 - [ ] 6. Scaffold `coco resolve` command structure
@@ -69,15 +69,15 @@ off `main`, running the full validation suite (`lint` + `tsc --noEmit` + `test:j
   - [ ] 7.6 Write unit tests: no-operation path, conflicts-present path, JSON output shape
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
 
-- [ ] 8. Implement `coco resolve explain`
-  - [ ] 8.1 Create `src/commands/resolve/explainHandler.ts`
-  - [ ] 8.2 Resolve model via `resolveDynamicService(config, 'conflictResolve')`
-  - [ ] 8.3 For each conflicted file (or `--file` target): parse regions, call `runConflictExplanationWorkflow`
-  - [ ] 8.4 Render explanations to stdout: file path, line range, ours intent, theirs intent, conflict nature
-  - [ ] 8.5 Support `--json`: array of explanation objects
-  - [ ] 8.6 Handle no-conflicts case: print "No conflicts to explain", exit 0
-  - [ ] 8.7 Handle `--file` pointing to a non-conflicted file: error + exit 1
-  - [ ] 8.8 Write unit tests: mocked LLM responses, `--file` scoping, empty-state, JSON shape
+- [x] 8. Implement `coco resolve explain`
+  - [x] 8.1 Create `src/commands/resolve/explainHandler.ts`
+  - [x] 8.2 Resolve model via `resolveDynamicService(config, 'conflictResolve')`
+  - [x] 8.3 For each conflicted file (or `--file` target): parse regions, call `runConflictExplanationWorkflow`
+  - [x] 8.4 Render explanations to stdout: file path, line range, ours intent, theirs intent, conflict nature
+  - [x] 8.5 Support `--json`: array of explanation objects
+  - [x] 8.6 Handle no-conflicts case: print "No conflicts to explain", exit 0
+  - [x] 8.7 Handle `--file` pointing to a non-conflicted file: error + exit 1
+  - [x] 8.8 Write unit tests: mocked LLM responses, `--file` scoping, empty-state, JSON shape
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7_
 
 - [ ] 9. Implement `coco resolve` (interactive mode)
