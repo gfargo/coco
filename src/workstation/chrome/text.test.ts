@@ -101,6 +101,36 @@ describe('log Ink text helpers', () => {
     expect(truncateCells('hello world', 8, { ascii: true })).toBe('hello...')
   })
 
+  // WS-14: a budget exactly equal to (or narrower than, in ascii mode) the
+  // ellipsis's own width used to drop the marker entirely — the old
+  // `width > cellWidth(ellipsis)` strict inequality returned a bare,
+  // silently-clipped value with no indication truncation happened at all.
+  describe('truncateCells always shows a marker when truncating, even at a narrow budget (WS-14)', () => {
+    it('shows the unicode ellipsis alone when the budget exactly equals its width', () => {
+      expect(truncateCells('feature/a', 1)).toBe('…')
+    })
+
+    it('shows the ascii ellipsis alone when the budget exactly equals its width', () => {
+      expect(truncateCells('feature/a', 3, { ascii: true })).toBe('...')
+    })
+
+    it('falls back to the compact unicode ellipsis in ascii mode when the 3-cell marker cannot fit', () => {
+      expect(truncateCells('feature/a', 1, { ascii: true })).toBe('…')
+      expect(truncateCells('feature/a', 2, { ascii: true })).toBe('f…')
+    })
+
+    it('never returns a value indistinguishable from an untruncated one at any narrow width', () => {
+      const value = 'feature/a-long-branch-name'
+      for (let width = 1; width <= 5; width++) {
+        for (const ascii of [false, true]) {
+          const truncated = truncateCells(value, width, { ascii })
+          expect(truncated).not.toBe(value.slice(0, width))
+          expect(cellWidth(truncated)).toBeLessThanOrEqual(width)
+        }
+      }
+    })
+  })
+
   describe('wrapCells', () => {
     it('never hangs when the budget is narrower than one wide character', () => {
       // Regression: an empty chunk never shrank `remaining`, spinning
