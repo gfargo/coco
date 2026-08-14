@@ -11,6 +11,7 @@ import { CHANGELOG_PROMPT } from '../commands/changelog/prompt'
 import { COMMIT_PROMPT, CONVENTIONAL_COMMIT_PROMPT } from '../commands/commit/prompt'
 import { RECAP_PROMPT } from '../commands/recap/prompt'
 import { REVIEW_PROMPT } from '../commands/review/prompt'
+import { armNonInteractiveUsageTelemetry } from '../commands/utils/usageTelemetry'
 import { BUILD_VERSION } from '../lib/buildInfo'
 import { getPrompt } from '../lib/langchain/utils/getPrompt'
 import { getLanguageContext } from '../lib/langchain/utils/languageContext'
@@ -123,6 +124,33 @@ async function assertClientAllowsRoot(server: McpServer, repoRoot: string): Prom
 }
 
 /**
+ * Usage-ledger arming for deferred-binding mode (#1825). Bound mode arms the
+ * ledger at startup (`commands/mcp/handler.ts`), against the explicit
+ * `--repo`. Deferred mode has no repository at startup, so there's nothing
+ * to arm against — arming instead happens lazily, once, against the first
+ * repository a tool call actually resolves. Reading config against that
+ * real root (rather than the server's ambiguous startup cwd) also means a
+ * repo-local `telemetry.usage` override is honored, not just a global one.
+ *
+ * A process-global tag set once is the same tradeoff the ledger's arming
+ * functions already make for bound/CLI mode: a deferred server that later
+ * resolves a second, different repository keeps the first one's tag rather
+ * than re-tagging every call.
+ */
+let deferredUsageTelemetryArmed = false
+
+async function armDeferredUsageTelemetryOnce(repoRoot: string): Promise<void> {
+  if (deferredUsageTelemetryArmed) return
+  deferredUsageTelemetryArmed = true
+  await armNonInteractiveUsageTelemetry({}, repoRoot)
+}
+
+/** Test-only: reset the "armed once" latch between deferred-mode test cases. */
+export function resetDeferredUsageTelemetryArmedForTests(): void {
+  deferredUsageTelemetryArmed = false
+}
+
+/**
  * Resolve the effective repository root for a tool call. In bound mode
  * (explicit `--repo`), the server enforces single-repo confinement. In
  * deferred mode (no `--repo`), the repo is resolved per-call from:
@@ -149,11 +177,16 @@ async function resolveEffectiveRepoRoot(
 
   // Deferred mode: resolve from input.repo or client roots.
   if (inputRepo) {
-    return resolveAgentRepoRoot(inputRepo, undefined, signal)
+    const repoRoot = await resolveAgentRepoRoot(inputRepo, undefined, signal)
+    await armDeferredUsageTelemetryOnce(repoRoot)
+    return repoRoot
   }
 
   const fromRoots = await resolveRepoFromClientRoots(server)
-  if (fromRoots) return fromRoots
+  if (fromRoots) {
+    await armDeferredUsageTelemetryOnce(fromRoots)
+    return fromRoots
+  }
 
   throw new AgentOperationError(
     'INVALID_REPOSITORY',
