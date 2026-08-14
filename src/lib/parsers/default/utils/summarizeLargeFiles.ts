@@ -309,8 +309,14 @@ async function summarizeFileDiff(
       tokenCount: newTokenCount,
     }
   } catch (error) {
-    // On error, return original diff unchanged
-    console.error(`Failed to summarize file ${fileDiff.file}:`, error)
+    // On error, return original diff unchanged. Routed through the
+    // logger (not console.error) so it respects --quiet and reaches the
+    // same channel the rest of the run's output does — silently, this
+    // returns the UNSUMMARIZED diff, which is exactly what blows the
+    // token budget the summarizer exists to protect (LIB-11).
+    logger.error(
+      `Failed to summarize file ${fileDiff.file}: ${error instanceof Error ? error.message : String(error)}`,
+    )
     return fileDiff
   }
 }

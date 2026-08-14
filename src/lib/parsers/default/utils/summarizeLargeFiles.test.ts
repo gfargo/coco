@@ -27,6 +27,7 @@ describe('summarizeLargeFiles', () => {
   const mockLogger = {
     verbose: jest.fn().mockReturnThis(),
     log: jest.fn().mockReturnThis(),
+    error: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),
     stopSpinner: jest.fn().mockReturnThis(),
     startTimer: jest.fn().mockReturnThis(),
@@ -382,7 +383,6 @@ describe('summarizeLargeFiles', () => {
   })
 
   it('keeps the raw diff when summarize() rejects with an empty-summary error (#1700)', async () => {
-    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
     mockSummarize.mockRejectedValueOnce(
       new Error('summarize: chain returned an empty summary')
     )
@@ -408,6 +408,36 @@ describe('summarizeLargeFiles', () => {
 
     // Raw diff preserved, not overwritten with an empty summary.
     expect(result[0]).toEqual(diffs[0])
+  })
+
+  // LIB-11: this failure used to go to bare console.error, bypassing the
+  // logger entirely (invisible under --quiet, untestable, and on a
+  // different channel than the rest of the run's output).
+  it('reports a per-file summarization failure through the logger, not console.error (LIB-11)', async () => {
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    mockSummarize.mockRejectedValueOnce(new Error('provider timed out'))
+
+    const diffs: FileDiff[] = [
+      { file: 'large.ts', diff: 'a'.repeat(2000), summary: 'large.ts', tokenCount: 600 },
+    ]
+
+    await summarizeLargeFiles(diffs, {
+      maxFileTokens: 500,
+      minTokensForSummary: 400,
+      maxConcurrent: 4,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+    })
+
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('large.ts')
+    )
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('provider timed out')
+    )
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
     consoleErrorSpy.mockRestore()
   })
 
@@ -442,6 +472,7 @@ describe('diff-summary cache hit/miss reporting (#1958)', () => {
   const mockLogger = {
     verbose: jest.fn().mockReturnThis(),
     log: jest.fn().mockReturnThis(),
+    error: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),
     stopSpinner: jest.fn().mockReturnThis(),
     startTimer: jest.fn().mockReturnThis(),
@@ -551,6 +582,7 @@ describe('preprocessLargeFiles', () => {
   const mockLogger = {
     verbose: jest.fn().mockReturnThis(),
     log: jest.fn().mockReturnThis(),
+    error: jest.fn().mockReturnThis(),
     startSpinner: jest.fn().mockReturnThis(),
     stopSpinner: jest.fn().mockReturnThis(),
     startTimer: jest.fn().mockReturnThis(),
