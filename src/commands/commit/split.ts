@@ -33,7 +33,6 @@ import {
 import {
     DuplicateRescueNote,
     formatPlanValidationIssuesError,
-    getPlanCommitlintFailures,
     getPlanValidationIssues,
     hasPlanValidationIssues,
 } from './splitPlanValidation'
