@@ -10,7 +10,7 @@ import { getChangesByCommit } from '../../lib/simple-git/getChangesByCommit'
 import { getChanges } from '../../lib/simple-git/getChanges'
 import { createCommit, PreCommitHookError } from '../../lib/simple-git/createCommit'
 import { commandExit } from '../../lib/utils/commandExit'
-import { emitJson } from '../../lib/ui/emitJson'
+import { emitJson, emitJsonError } from '../../lib/ui/emitJson'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { logSuccess } from '../../lib/ui/logSuccess'
 import { selectPrompt, editorPrompt } from '../../lib/ui/inquirerPrompts'
@@ -30,6 +30,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
     await git.revparse(['--verify', 'HEAD'])
   } catch {
     logger.error('No commit to amend — the repository has no commits yet.', { color: 'red' })
+    if (argv.json) emitJsonError('No commit to amend — the repository has no commits yet.')
     commandExit(1)
     return
   }
@@ -59,6 +60,7 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
 
   if (changes.length === 0) {
     logger.log('Nothing to summarize for the last commit.', { color: 'yellow' })
+    if (argv.json) emitJsonError('Nothing to summarize for the last commit.')
     commandExit(1)
     return
   }
@@ -80,6 +82,9 @@ export const handler: CommandHandler<AmendArgv> = async (argv, logger) => {
   if (!result.ok || !result.draft) {
     for (const warning of result.warnings) logger.log(warning, { color: 'yellow' })
     for (const error of result.validationErrors) logger.error(error, { color: 'red' })
+    if (argv.json) {
+      emitJsonError(result.validationErrors[0] || 'Failed to generate a commit message draft.')
+    }
     commandExit(1)
     return
   }

@@ -354,3 +354,162 @@ describe('applyCommitSplitPlan onHookFailure recovery (OSS-662)', () => {
     expect(result.message).not.toContain('aborted')
   })
 })
+
+/**
+ * CMD-12: the split path committed every group's `${title}\n\n${body}`
+ * verbatim with no commitlint check anywhere — in a commitlint-configured
+ * repo this could (and did) produce commits that violated the project's
+ * own rules. `applyCommitSplitPlan` now re-validates each group right
+ * before any index mutation, using the SAME validator the plan was
+ * generated against: pass through unchanged, mechanically repair and
+ * commit the repaired message, or refuse to touch the index at all.
+ */
+describe('applyCommitSplitPlan — commitlint hard gate (CMD-12)', () => {
+  const logger = new Logger({ silent: true })
+
+  afterEach(() => jest.clearAllMocks())
+
+  it('does nothing when no validator is supplied (bound-mode-off / repo has no commitlint config)', async () => {
+    const { git } = makeFakeGit.staged(['a.ts'])
+    mockedCreateCommit.mockImplementation(async () => {
+      git.advanceHead()
+      return {} as never
+    })
+    const plan = makePlan([{ title: 'not-conventional at all', files: ['a.ts'] }])
+
+    const result = await applyCommitSplitPlan({
+      plan,
+      changes: { staged: [fileChange('a.ts')], unstaged: [], untracked: [] },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+    })
+
+    expect(mockedCreateCommit).toHaveBeenCalledWith(
+      'not-conventional at all',
+      expect.anything(),
+      undefined,
+      expect.anything()
+    )
+    expect(result.commitHashes).toEqual(['head-1'])
+  })
+
+  it('commits unchanged when every group already passes validation', async () => {
+    const { git } = makeFakeGit.staged(['a.ts'])
+    mockedCreateCommit.mockImplementation(async () => {
+      git.advanceHead()
+      return {} as never
+    })
+    const plan = makePlan([{ title: 'feat: add thing', files: ['a.ts'] }])
+    const validateGroupMessage = jest.fn(async () => ({ valid: true, errors: [] }))
+
+    const result = await applyCommitSplitPlan({
+      plan,
+      changes: { staged: [fileChange('a.ts')], unstaged: [], untracked: [] },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+      validateGroupMessage,
+    })
+
+    expect(validateGroupMessage).toHaveBeenCalledWith('feat: add thing')
+    expect(mockedCreateCommit).toHaveBeenCalledWith(
+      'feat: add thing',
+      expect.anything(),
+      undefined,
+      expect.anything()
+    )
+    expect(result.commitHashes).toEqual(['head-1'])
+  })
+
+  it('commits the mechanically-repaired message when repair fixes the violation', async () => {
+    const { git } = makeFakeGit.staged(['a.ts'])
+    mockedCreateCommit.mockImplementation(async () => {
+      git.advanceHead()
+      return {} as never
+    })
+    // Uppercase-subject violation (lowercase `feat:` prefix, capitalized
+    // subject) — repairDraftAgainstValidationErrors lower-cases the
+    // subject's first letter, same repair plain `coco commit` applies.
+    const plan = makePlan([{ title: 'feat: Add Thing', files: ['a.ts'] }])
+    const validateGroupMessage = jest.fn(async (message: string) =>
+      message === 'feat: Add Thing'
+        ? { valid: false, errors: ['subject-case must be lower-case'] }
+        : { valid: true, errors: [] }
+    )
+
+    const result = await applyCommitSplitPlan({
+      plan,
+      changes: { staged: [fileChange('a.ts')], unstaged: [], untracked: [] },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+      validateGroupMessage,
+    })
+
+    expect(mockedCreateCommit).toHaveBeenCalledWith(
+      'feat: add Thing',
+      expect.anything(),
+      undefined,
+      expect.anything()
+    )
+    expect(result.commitHashes).toEqual(['head-1'])
+  })
+
+  it('refuses to touch the index when a group still fails validation after repair', async () => {
+    const { git, ops } = makeFakeGit.staged(['a.ts'])
+    const plan = makePlan([{ title: 'Bad Title', files: ['a.ts'] }])
+    const validateGroupMessage = jest.fn(async () => ({
+      valid: false,
+      errors: ['type-empty may not be empty'],
+    }))
+
+    await expect(
+      applyCommitSplitPlan({
+        plan,
+        changes: { staged: [fileChange('a.ts')], unstaged: [], untracked: [] },
+        hunkInventory: emptyHunkInventory,
+        git: git as never,
+        logger,
+        noVerify: false,
+        validateGroupMessage,
+      })
+    ).rejects.toThrow(/commitlint validation/)
+
+    // Nothing was staged, reset, or committed — the check runs before any
+    // index mutation begins.
+    expect(ops).toEqual([])
+    expect(mockedCreateCommit).not.toHaveBeenCalled()
+  })
+
+  it('skips unclaimed groups (never committed) when validating', async () => {
+    const { git } = makeFakeGit.staged(['a.ts', 'c.ts'])
+    mockedCreateCommit.mockImplementation(async () => {
+      git.advanceHead()
+      return {} as never
+    })
+    const plan = {
+      groups: [
+        { title: 'feat: a', files: ['a.ts'], body: '' },
+        { title: '', files: ['c.ts'], body: '', unclaimed: true },
+      ],
+    } as CommitSplitPlan
+    const validateGroupMessage = jest.fn(async () => ({ valid: true, errors: [] }))
+
+    await applyCommitSplitPlan({
+      plan,
+      changes: { staged: [fileChange('a.ts'), fileChange('c.ts')], unstaged: [], untracked: [] },
+      hunkInventory: emptyHunkInventory,
+      git: git as never,
+      logger,
+      noVerify: false,
+      validateGroupMessage,
+    })
+
+    expect(validateGroupMessage).toHaveBeenCalledTimes(1)
+    expect(validateGroupMessage).toHaveBeenCalledWith('feat: a')
+  })
+})

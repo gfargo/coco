@@ -4,6 +4,7 @@ import {
     getLogInkWorkflowActions,
     getLogInkWorkflowSections,
 } from './inkWorkflows'
+import { HISTORY_REWRITE_WORKFLOW_IDS } from './hooks/useWorkflowAction'
 
 describe('log Ink workflows', () => {
   it('builds workflow sections from available repository context', () => {
@@ -55,6 +56,40 @@ describe('log Ink workflows', () => {
     expect(ai.every((action) => action.requiresConfirmation && action.estimatedTokens)).toBe(true)
     expect(getLogInkWorkflowActionByKey('D')?.id).toBe('delete-branch')
     expect(getLogInkWorkflowActionById('ai-commit-summary')?.key).toBe('I')
+  })
+
+  // WS-18: reword-head is the sole entry in HISTORY_REWRITE_WORKFLOW_IDS
+  // without requiresConfirmation. That's intentional, not an oversight —
+  // its handler (useWorkflowAction.ts) opens an input prompt pre-seeded
+  // with the current subject, and submitting that prompt is treated as
+  // the confirmation step (see the comment on this entry in
+  // inkWorkflows.ts). Every other history-rewriting workflow goes
+  // straight from keystroke/selection to execution with no interstitial
+  // step, so it needs requiresConfirmation as its only safety gate.
+  //
+  // This test doesn't take a position on whether the asymmetry is
+  // correct UX (that's a product call — see #1872) — it only pins down
+  // the CURRENT documented rule so a future history-rewriting workflow
+  // added with neither an explicit confirm nor a documented prompt gate
+  // fails loudly instead of silently shipping unprotected.
+  describe('history-rewrite workflows require an explicit safety gate (WS-18)', () => {
+    const PROMPT_GATED_EXCEPTIONS = new Set(['reword-head'])
+
+    it('requires confirmation for every history-rewrite workflow, unless documented as prompt-gated', () => {
+      const ungated = [...HISTORY_REWRITE_WORKFLOW_IDS].filter((id) => {
+        if (PROMPT_GATED_EXCEPTIONS.has(id)) return false
+        return !getLogInkWorkflowActionById(id)?.requiresConfirmation
+      })
+
+      expect(ungated).toEqual([])
+    })
+
+    it('keeps the prompt-gated exception list accurate: only real, registered workflow ids', () => {
+      for (const id of PROMPT_GATED_EXCEPTIONS) {
+        expect(HISTORY_REWRITE_WORKFLOW_IDS.has(id)).toBe(true)
+        expect(getLogInkWorkflowActionById(id)).toBeDefined()
+      }
+    })
   })
 
   // Regression: arrow keys (left/right) and other unbound keystrokes

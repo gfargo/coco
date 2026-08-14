@@ -11,6 +11,13 @@ export type HunkInventoryLike = {
   byFile: Map<string, StagedHunkLike[]>
 }
 
+/** One group's `${title}\n\n${body}` failing commitlint validation (CMD-12). */
+export interface CommitlintGroupFailure {
+  index: number
+  title: string
+  errors: string[]
+}
+
 export interface PlanValidationIssues {
   unknownFiles: string[]
   duplicateFiles: string[]
@@ -19,6 +26,14 @@ export interface PlanValidationIssues {
   mixedFiles: string[]
   partiallyCoveredFiles: string[]
   missingFiles: string[]
+  /**
+   * Populated by `getPlanCommitlintFailures` (CMD-12), not by
+   * `getPlanValidationIssues` itself — commitlint validation is async
+   * (it can shell out / load a config file), while the structural
+   * checks here stay synchronous. Always `[]` unless a caller merges
+   * commitlint results in.
+   */
+  commitlintFailures: CommitlintGroupFailure[]
 }
 
 const getGroupFiles = (group: CommitSplitGroup): string[] => group.files || []
@@ -90,7 +105,33 @@ export function getPlanValidationIssues(
     mixedFiles,
     partiallyCoveredFiles,
     missingFiles,
+    commitlintFailures: [],
   }
+}
+
+/**
+ * Check each group's `${title}\n\n${body}` against the given validator
+ * (CMD-12) — the same `validateCommitMessage`/`validateConventionalCommitMessage`
+ * plain `coco commit` uses. Skips `unclaimed` groups (never committed) and
+ * groups with no title. Async and separate from `getPlanValidationIssues`
+ * since commitlint validation can shell out / load a config file.
+ */
+export async function getPlanCommitlintFailures(
+  plan: CommitSplitPlan,
+  validate: (message: string) => Promise<{ valid: boolean; errors: string[] }>
+): Promise<CommitlintGroupFailure[]> {
+  const failures: CommitlintGroupFailure[] = []
+  for (let index = 0; index < plan.groups.length; index++) {
+    const group = plan.groups[index]
+    if (group.unclaimed || !group.title) continue
+    const body = group.body ? `\n\n${group.body}` : ''
+    const message = `${group.title}${body}`.trim()
+    const result = await validate(message)
+    if (!result.valid) {
+      failures.push({ index, title: group.title, errors: result.errors })
+    }
+  }
+  return failures
 }
 
 export function hasPlanValidationIssues(issues: PlanValidationIssues): boolean {
@@ -101,7 +142,8 @@ export function hasPlanValidationIssues(issues: PlanValidationIssues): boolean {
     issues.duplicateHunks.length > 0 ||
     issues.mixedFiles.length > 0 ||
     issues.partiallyCoveredFiles.length > 0 ||
-    issues.missingFiles.length > 0
+    issues.missingFiles.length > 0 ||
+    issues.commitlintFailures.length > 0
   )
 }
 
@@ -122,6 +164,11 @@ export function formatPlanValidationIssuesError(issues: PlanValidationIssues): s
       ? `files with only some hunks assigned: ${issues.partiallyCoveredFiles.join(', ')}`
       : undefined,
     issues.missingFiles.length ? `missing files: ${issues.missingFiles.join(', ')}` : undefined,
+    issues.commitlintFailures.length
+      ? `commitlint violations: ${issues.commitlintFailures
+          .map((f) => `"${f.title}" (${f.errors.join('; ')})`)
+          .join(', ')}`
+      : undefined,
   ]
     .filter(Boolean)
     .join('; ')
@@ -613,6 +660,14 @@ export function formatPlanValidationFeedback(issues: PlanValidationIssues): stri
   if (issues.missingFiles.length) {
     sections.push(
       `Staged files missing from every group (must appear exactly once): ${issues.missingFiles.join(', ')}`
+    )
+  }
+
+  if (issues.commitlintFailures.length) {
+    sections.push(
+      `Group titles/bodies that fail commitlint validation (fix the message, not the file/hunk assignment):\n${issues.commitlintFailures
+        .map((f) => `  - "${f.title}": ${f.errors.join('; ')}`)
+        .join('\n')}`
     )
   }
 

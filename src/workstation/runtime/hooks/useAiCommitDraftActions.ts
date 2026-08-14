@@ -88,6 +88,17 @@ export function useAiCommitDraftActions(
   // so a stale controller can't cancel a future draft.
   const aiDraftAbortRef = React.useRef<AbortController | null>(null)
 
+  // Abort an in-flight draft on unmount (WS-3) — otherwise `q` mid-
+  // generation leaves the LLM HTTP request pending and the Node event
+  // loop won't drain until the provider responds, so the shell prompt
+  // doesn't come back for the duration of the request.
+  React.useEffect(() => {
+    return () => {
+      aiDraftAbortRef.current?.abort()
+      aiDraftAbortRef.current = null
+    }
+  }, [])
+
   const runAiCommitDraft = React.useCallback(async () => {
     // Tear down any controller from a previous draft (defensive — a
     // settled call should have cleared it in the finally block, but

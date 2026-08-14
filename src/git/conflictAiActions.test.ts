@@ -1,6 +1,11 @@
-import { conflictAiTestInternals, runConflictResolutionWorkflow } from './conflictAiActions'
+import {
+  conflictAiTestInternals,
+  runConflictExplanationWorkflow,
+  runConflictResolutionWorkflow,
+} from './conflictAiActions'
 import type { ConflictRegion } from './conflictRegionActions'
 import { Config } from '../commands/types'
+import { LangChainCancelledError } from '../lib/langchain/errors'
 import { loadConfig } from '../lib/config/utils/loadConfig'
 import { getApiKeyForModel, getModelAndProviderFromConfig } from '../lib/langchain/utils'
 import { resolveDynamicService } from '../lib/langchain/utils/dynamicModels'
@@ -244,6 +249,105 @@ describe('runConflictResolutionWorkflow chunking (OSS-2269)', () => {
           confidence: 'low',
         },
       ])
+    }
+  })
+})
+
+describe('runConflictExplanationWorkflow (OSS-2268)', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+
+    mockLoadConfig.mockReturnValue({
+      service: {
+        authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+        provider: 'openai',
+        model: 'gpt-4o',
+        tokenLimit: 4096,
+      },
+    } as unknown as Config)
+    mockGetApiKeyForModel.mockReturnValue('mock-api-key')
+    mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'openai', model: 'gpt-4o' })
+    mockResolveDynamicService.mockReturnValue({
+      model: 'gpt-4o',
+    } as unknown as ReturnType<typeof resolveDynamicService>)
+    mockGetLlm.mockResolvedValue({} as Awaited<ReturnType<typeof getLlm>>)
+  })
+
+  it('returns a failure without calling the model when there are no regions', async () => {
+    const result = await runConflictExplanationWorkflow({
+      path: 'src/index.ts',
+      regions: [],
+      operation: 'merge',
+    })
+
+    expect(mockExecuteChain).not.toHaveBeenCalled()
+    expect(result.ok).toBe(false)
+  })
+
+  it('resolves the model via the dedicated conflictResolve dynamic-model task', async () => {
+    mockExecuteChain.mockResolvedValue({
+      explanations: [
+        {
+          region: 0,
+          oursIntent: 'renamed the helper',
+          theirsIntent: 'added a parameter',
+          conflictNature: 'both sides changed the signature',
+        },
+      ],
+    })
+
+    await runConflictExplanationWorkflow({
+      path: 'src/index.ts',
+      regions: [buildRegion()],
+      operation: 'merge',
+    })
+
+    expect(mockResolveDynamicService).toHaveBeenCalledWith(expect.anything(), 'conflictResolve')
+  })
+
+  it('parses and passes explanation fields through to the returned result', async () => {
+    mockExecuteChain.mockResolvedValue({
+      explanations: [
+        {
+          region: 0,
+          oursIntent: 'renamed the helper',
+          theirsIntent: 'added a parameter',
+          conflictNature: 'both sides changed the signature',
+        },
+      ],
+    })
+
+    const result = await runConflictExplanationWorkflow({
+      path: 'src/index.ts',
+      regions: [buildRegion()],
+      operation: 'merge',
+    })
+
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.explanations).toEqual([
+        {
+          regionIndex: 0,
+          oursIntent: 'renamed the helper',
+          theirsIntent: 'added a parameter',
+          conflictNature: 'both sides changed the signature',
+        },
+      ])
+    }
+  })
+
+  it('surfaces cancellation from executeChain as a cancelled result', async () => {
+    mockExecuteChain.mockRejectedValue(new LangChainCancelledError('cancelled'))
+
+    const result = await runConflictExplanationWorkflow({
+      path: 'src/index.ts',
+      regions: [buildRegion()],
+      operation: 'merge',
+    })
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.cancelled).toBe(true)
     }
   })
 })

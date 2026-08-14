@@ -193,8 +193,17 @@ export function truncateCells(
   // Unicode `…` is 1 cell vs. ASCII `...` at 3 — matches `truncatePathCells`'s
   // dialect so a path elision and a plain truncation never mix markers
   // (#1366). `theme.ascii` opts back into the 3-cell ASCII form.
-  const ellipsis = options.ascii ? '...' : '…'
-  const suffix = width > cellWidth(ellipsis) ? ellipsis : ''
+  //
+  // WS-14: the old `width > cellWidth(ellipsis)` strict inequality meant a
+  // budget exactly equal to the ellipsis's width (1 for unicode, or any of
+  // 1-3 in ascii mode) got NO marker at all — just a silently clipped
+  // value indistinguishable from a complete one. `<=` admits the
+  // budget-equals-ellipsis case (marker alone, zero content), and falling
+  // back to the compact 1-cell `…` when even the 3-cell ascii form can't
+  // fit means a narrow ascii-mode budget still gets a visible marker
+  // instead of none.
+  const dialectEllipsis = options.ascii ? '...' : '…'
+  const suffix = cellWidth(dialectEllipsis) <= width ? dialectEllipsis : '…'
   const available = width - cellWidth(suffix)
   let used = 0
   let output = ''

@@ -20,6 +20,7 @@ import {
     promptHookFailureRecovery,
 } from '../../lib/ui/hookFailurePrompt'
 import { CommitOptions } from './config'
+import { repairDraftAgainstValidationErrors } from './generateCommitDraft'
 import {
     DEFAULT_MAX_PLAN_ATTEMPTS,
     generateValidatedCommitSplitPlan,
@@ -35,6 +36,9 @@ import {
     getPlanValidationIssues,
     hasPlanValidationIssues,
 } from './splitPlanValidation'
+
+/** Per-group commitlint validator (CMD-12) — mirrors `generateCommitDraft`'s choice between repo-configured and built-in conventional rules. */
+export type ValidateGroupMessage = (message: string) => Promise<{ valid: boolean; errors: string[] }>
 
 export { CommitSplitPlanSchema }
 export type { CommitSplitPlan, CommitSplitGroup }
@@ -176,6 +180,14 @@ export type HunkInventory = {
 export type CommitSplitPlanContext = {
   changes: Awaited<ReturnType<typeof getChanges>>
   hunkInventory: HunkInventory
+  /**
+   * Per-group commitlint validator (CMD-12), carried alongside the
+   * staged-state snapshot so a caller that holds the plan between
+   * preview and apply (the workstation's `S` → `y` flow) re-validates
+   * at apply time with the SAME validator the plan was generated
+   * against, without needing to re-derive it.
+   */
+  validateGroupMessage?: ValidateGroupMessage
 }
 
 function getGroupFiles(group: CommitSplitGroup): string[] {
@@ -436,6 +448,7 @@ export async function applyCommitSplitPlan({
   noVerify,
   fallback,
   onHookFailure,
+  validateGroupMessage,
 }: {
   plan: CommitSplitPlan
   changes: Awaited<ReturnType<typeof getChanges>>
@@ -461,6 +474,16 @@ export async function applyCommitSplitPlan({
    * pre-existing behavior.
    */
   onHookFailure?: (info: { title: string; hookOutput: string }) => Promise<HookFailureRecoveryChoice>
+  /**
+   * Optional per-group commitlint validator (CMD-12) — the same one the
+   * plan was generated against. Re-checked here, before any index
+   * mutation, so a group whose message still violates the project's
+   * rules is caught and mechanically repaired (or hard-rejected) rather
+   * than committed verbatim. Mainly catches the planner's single-group
+   * fallback, whose hardcoded title was never validated against a
+   * specific repo's rules.
+   */
+  validateGroupMessage?: ValidateGroupMessage
 }): Promise<CommitSplitApplyResult> {
   validatePlanForStagedFiles(plan, changes.staged, hunkInventory)
   assertNoUnstagedOverlap(plan, changes, hunkInventory)
@@ -488,6 +511,43 @@ export async function applyCommitSplitPlan({
   })
   if (applicableGroups.length === 0) {
     throw new Error('Split plan has no applicable groups (every group was empty).')
+  }
+
+  // CMD-12: last line of defense, before any index mutation. The plan
+  // generator already retries against `validateGroupMessage` when one is
+  // supplied, so a fresh multi-group plan should pass here too — this
+  // mainly catches the planner's single-group fallback, whose hardcoded
+  // title was never checked against a specific repo's commitlint rules,
+  // and any group whose message a caller mutated between generation and
+  // apply. A group that still fails after the same mechanical repair
+  // plain `coco commit` uses is a hard error: better to refuse than to
+  // commit a message the project's own rules reject.
+  const resolvedGroupMessages = new Map<CommitSplitGroup, string>()
+  if (validateGroupMessage) {
+    const hardFailures: { title: string; errors: string[] }[] = []
+    for (const group of applicableGroups) {
+      const body = group.body ? `\n\n${group.body}` : ''
+      const message = `${group.title}${body}`.trim()
+      const result = await validateGroupMessage(message)
+      if (result.valid) continue
+
+      const repaired = repairDraftAgainstValidationErrors(message, result.errors)
+      if (repaired !== message) {
+        const repairedResult = await validateGroupMessage(repaired)
+        if (repairedResult.valid) {
+          resolvedGroupMessages.set(group, repaired)
+          continue
+        }
+      }
+      hardFailures.push({ title: group.title, errors: result.errors })
+    }
+    if (hardFailures.length > 0) {
+      throw new Error(
+        `Cannot apply split plan: commit message(s) fail commitlint validation:\n${hardFailures
+          .map((f) => `- "${f.title}": ${f.errors.join('; ')}`)
+          .join('\n')}`
+      )
+    }
   }
 
   // Capture HEAD up-front so we can verify each commit actually
@@ -594,9 +654,12 @@ export async function applyCommitSplitPlan({
         }
 
         // Avoid the literal string "undefined" in the commit body when
-        // the LLM omitted the body field — fall back to title-only.
+        // the LLM omitted the body field — fall back to title-only. Use
+        // the commitlint-repaired message (CMD-12) when the pre-flight
+        // check above had to fix one up.
         const body = group.body ? `\n\n${group.body}` : ''
-        await createCommit(`${group.title}${body}`.trim(), git, undefined, { noVerify: groupNoVerify })
+        const commitMessage = resolvedGroupMessages.get(group) ?? `${group.title}${body}`.trim()
+        await createCommit(commitMessage, git, undefined, { noVerify: groupNoVerify })
 
         // Verify the commit actually advanced HEAD. Some hooks can
         // exit success without committing (e.g. `--no-verify`-mode
@@ -871,21 +934,36 @@ export async function prepareCommitSplitPlan({
     : ''
 
   let commitlintRulesContext = ''
+  // CMD-12: the split path used to only inject the rules into the prompt
+  // and never actually validate a group's title/body against them, unlike
+  // plain `coco commit` — so a produced plan could (and did) violate the
+  // project's own commitlint config. `validateGroupMessage` closes that
+  // gap: same repo-configured-vs-built-in choice as `generateCommitDraft`,
+  // reused for both the plan generator's self-correcting retry (below) and
+  // the apply-time hard gate in `applyCommitSplitPlan`.
+  let validateGroupMessage: ValidateGroupMessage | undefined
   const hasCommitLintConfig = await hasCommitlintConfig()
   if (useConventional || hasCommitLintConfig) {
     try {
-      const { getCommitlintRulesContext, checkCommitlintAvailability } = await import(
-        '../../lib/utils/commitlintValidator'
-      )
+      const {
+        getCommitlintRulesContext,
+        checkCommitlintAvailability,
+        validateCommitMessage,
+        validateConventionalCommitMessage,
+      } = await import('../../lib/utils/commitlintValidator')
       const availability = checkCommitlintAvailability()
       if (availability.available) {
         commitlintRulesContext = await getCommitlintRulesContext()
+        validateGroupMessage = hasCommitLintConfig
+          ? (message: string) => validateCommitMessage(message)
+          : (message: string) => validateConventionalCommitMessage(message)
       }
     } catch {
       // Commitlint integration is best-effort — a missing dep or a
       // bad config file shouldn't block the split. The model gets
       // the rules when we can pass them; otherwise it falls back to
-      // the conventional-commits ruleset (or generic style).
+      // the conventional-commits ruleset (or generic style), and group
+      // messages go unchecked rather than blocking the split entirely.
     }
   }
 
@@ -922,6 +1000,7 @@ export async function prepareCommitSplitPlan({
     // exhaustion instead of returning the single-group fallback.
     strict: Boolean(argv.strictSplit ?? config.strictSplit),
     signal,
+    validateGroupMessage,
   })
 
   const groupCount = plan.groups.filter((g) => !g.unclaimed).length
@@ -930,7 +1009,12 @@ export async function prepareCommitSplitPlan({
     { mode: 'succeed', color: 'green' }
   )
 
-  return { plan, context: { changes, hunkInventory }, fallback, dedupeWarnings }
+  return {
+    plan,
+    context: { changes, hunkInventory, validateGroupMessage },
+    fallback,
+    dedupeWarnings,
+  }
 }
 
 export async function handleCommitSplit({
@@ -1028,6 +1112,7 @@ export async function handleCommitSplit({
       noVerify: config.noVerify || false,
       fallback,
       onHookFailure,
+      validateGroupMessage: context.validateGroupMessage,
     })
     if (applied.fallback) {
       return [
@@ -1077,6 +1162,7 @@ export async function handleCommitSplit({
     noVerify: config.noVerify || false,
     fallback,
     onHookFailure,
+    validateGroupMessage: context.validateGroupMessage,
   })
   if (applied.fallback) {
     return [

@@ -6,9 +6,10 @@ import {
   createMcpAgentInputJsonSchema,
   createMcpCondenseDiffInputJsonSchema,
 } from '../operations/agent/schemas'
-import { createCocoMcpServer } from './server'
+import { createCocoMcpServer, resetDeferredUsageTelemetryArmedForTests } from './server'
 
 const mockResolveAgentRepoRoot = jest.fn()
+const mockArmNonInteractiveUsageTelemetry = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
 const mockGetRepoStatus = jest.fn()
@@ -112,6 +113,10 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
 jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: class MockStdioServerTransport {},
 }))
+jest.mock('../commands/utils/usageTelemetry', () => ({
+  armNonInteractiveUsageTelemetry: (...args: unknown[]) =>
+    Promise.resolve(mockArmNonInteractiveUsageTelemetry(...args)),
+}))
 jest.mock('../operations/agent', () => {
   const schemas = jest.requireActual('../operations/agent/schemas') as typeof import('../operations/agent/schemas')
   const errors = jest.requireActual('../operations/agent/errors') as typeof import('../operations/agent/errors')
@@ -179,6 +184,7 @@ describe('createCocoMcpServer', () => {
     resourceRegistrations.clear()
     promptRegistrations.clear()
     serverOptions.length = 0
+    resetDeferredUsageTelemetryArmedForTests()
     mockResolveAgentRepoRoot.mockResolvedValue('/repo')
     mockCreateAgentOperationContext.mockResolvedValue({ signal: undefined } as never)
     mockRunAgentOperation.mockResolvedValue(reviewSuccess)
@@ -442,6 +448,49 @@ describe('createCocoMcpServer', () => {
     expect(mockCreateAgentOperationContext).toHaveBeenCalledWith(
       expect.objectContaining({ requireRepository: false }),
     )
+  })
+
+  describe('deferred-binding usage-telemetry arming (#1825)', () => {
+    it('arms the usage ledger against the first repository a deferred-mode call resolves', async () => {
+      createCocoMcpServer() // deferred mode: no bound root
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/deferred/repo')
+
+      await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+        repo: '/deferred/repo',
+      }, makeExtra())
+
+      expect(mockArmNonInteractiveUsageTelemetry).toHaveBeenCalledWith({}, '/deferred/repo')
+    })
+
+    it('arms only once across multiple deferred-mode calls, even against a different resolved repo', async () => {
+      createCocoMcpServer()
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/deferred/repo-a')
+
+      await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+        repo: '/deferred/repo-a',
+      }, makeExtra())
+
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/deferred/repo-b')
+      await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+        repo: '/deferred/repo-b',
+      }, makeExtra())
+
+      expect(mockArmNonInteractiveUsageTelemetry).toHaveBeenCalledTimes(1)
+      expect(mockArmNonInteractiveUsageTelemetry).toHaveBeenCalledWith({}, '/deferred/repo-a')
+    })
+
+    it('does not arm telemetry from resolveEffectiveRepoRoot in bound mode (handler.ts already arms it at startup)', async () => {
+      createServer() // bound mode: repoRoot = '/repo'
+
+      await tool('coco_review').handler({
+        source: { kind: 'summary', summary: 'changed' },
+      }, makeExtra())
+
+      expect(mockArmNonInteractiveUsageTelemetry).not.toHaveBeenCalled()
+    })
   })
 
   it('emits a commit-draft-specific INVALID_REPOSITORY message when no repository resolves', async () => {

@@ -96,6 +96,95 @@ describe('generateValidatedCommitSplitPlan', () => {
     expect(String(secondCallVars.previous_attempt_feedback)).toContain('ghost.ts')
   })
 
+  // CMD-12: the split path never validated group titles against
+  // commitlint, unlike plain `coco commit`. `validateGroupMessage` closes
+  // that gap by reusing the same self-correcting retry loop the
+  // structural validator already drives.
+  describe('validateGroupMessage (CMD-12)', () => {
+    it('accepts a structurally-valid plan on the first attempt without calling the validator when none is supplied', async () => {
+      const validPlan: CommitSplitPlan = {
+        groups: [{ title: 'feat: add thing', files: ['a.ts', 'b.ts'], hunks: [] }],
+      }
+      mockExecuteChainWithSchema.mockResolvedValueOnce(validPlan)
+
+      const result = await generateValidatedCommitSplitPlan(baseArgs())
+
+      expect(result.attempts).toBe(1)
+    })
+
+    it('feeds a commitlint failure back into a retry attempt and succeeds once the title passes', async () => {
+      const badTitlePlan: CommitSplitPlan = {
+        groups: [{ title: 'Bad Title', files: ['a.ts', 'b.ts'], hunks: [] }],
+      }
+      const goodTitlePlan: CommitSplitPlan = {
+        groups: [{ title: 'feat: add thing', files: ['a.ts', 'b.ts'], hunks: [] }],
+      }
+      mockExecuteChainWithSchema
+        .mockResolvedValueOnce(badTitlePlan)
+        .mockResolvedValueOnce(goodTitlePlan)
+
+      const validateGroupMessage = jest.fn(async (message: string) =>
+        message.startsWith('feat:')
+          ? { valid: true, errors: [] }
+          : { valid: false, errors: ['type-empty'] }
+      )
+
+      const result = await generateValidatedCommitSplitPlan({
+        ...baseArgs(),
+        validateGroupMessage,
+      })
+
+      expect(result.attempts).toBe(2)
+      expect(result.plan).toStrictEqual(goodTitlePlan)
+      expect(validateGroupMessage).toHaveBeenCalledWith('Bad Title')
+      expect(validateGroupMessage).toHaveBeenCalledWith('feat: add thing')
+
+      const secondCallVars = mockExecuteChainWithSchema.mock.calls[1][3] as Record<string, unknown>
+      expect(String(secondCallVars.previous_attempt_feedback)).toContain(
+        'Group titles/bodies that fail commitlint validation'
+      )
+      expect(String(secondCallVars.previous_attempt_feedback)).toContain('Bad Title')
+      expect(String(secondCallVars.previous_attempt_feedback)).toContain('type-empty')
+    })
+
+    it('falls back to the single-group plan after exhausting attempts on a persistent commitlint failure', async () => {
+      const badTitlePlan: CommitSplitPlan = {
+        groups: [{ title: 'Bad Title', files: ['a.ts', 'b.ts'], hunks: [] }],
+      }
+      mockExecuteChainWithSchema.mockResolvedValue(badTitlePlan)
+
+      const validateGroupMessage = jest.fn(async () => ({ valid: false, errors: ['type-empty'] }))
+
+      const result = await generateValidatedCommitSplitPlan({
+        ...baseArgs(),
+        maxAttempts: 2,
+        validateGroupMessage,
+      })
+
+      expect(result.attempts).toBe(2)
+      expect(result.fallback).toBeDefined()
+      expect(result.fallback?.lastIssues.commitlintFailures).toEqual([
+        { index: 0, title: 'Bad Title', errors: ['type-empty'] },
+      ])
+    })
+
+    it('does not spend a commitlint check on a plan that still has structural issues', async () => {
+      const structurallyInvalidPlan: CommitSplitPlan = {
+        groups: [{ title: 'feat: thing', files: ['ghost.ts'], hunks: [] }],
+      }
+      mockExecuteChainWithSchema.mockResolvedValue(structurallyInvalidPlan)
+      const validateGroupMessage = jest.fn(async () => ({ valid: true, errors: [] }))
+
+      await generateValidatedCommitSplitPlan({
+        ...baseArgs(),
+        maxAttempts: 1,
+        validateGroupMessage,
+      })
+
+      expect(validateGroupMessage).not.toHaveBeenCalled()
+    })
+  })
+
   it('rescues phantom hunks before validation when the inventory is empty', async () => {
     // Regression for the #916 failure pattern: LLM emits hunk IDs
     // against an empty inventory (all staged files are new/added),
