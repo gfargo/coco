@@ -20,7 +20,7 @@ import { getCurrentBranchName } from '../../lib/simple-git/getCurrentBranchName'
 import { CommandHandler } from '../../lib/types'
 import { applyRepoFlag } from '../utils/applyRepoFlag'
 import { generateAndReviewLoop } from '../../lib/ui/generateAndReviewLoop'
-import { emitJson } from '../../lib/ui/emitJson'
+import { emitJson, emitJsonError } from '../../lib/ui/emitJson'
 import { handleMissingApiKey } from '../../lib/ui/handleMissingApiKey'
 import { isInteractive, LOGO, severityColor } from '../../lib/ui/helpers'
 import { TaskList } from '../../lib/ui/TaskList'
@@ -123,6 +123,7 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       const diffResult = await forge!.getPullRequestDiffByNumber(argv.pr)
       if (!diffResult.ok) {
         logger.error(diffResult.message, { color: 'red' })
+        if (argv.json) emitJsonError(diffResult.message)
         commandExit(1)
       }
       if (diffResult.lines.length === 0) {
@@ -390,6 +391,10 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
       // not report success when nothing was posted (permissions, closed
       // PR, gh not authenticated for that host, ...) (#1882).
       logger.error(postResult.message, { color: 'red' })
+      // The findings themselves were generated successfully — only the
+      // post failed — so a --json caller still gets them, alongside the
+      // error, instead of empty stdout (CMD-11).
+      if (argv.json) emitJson({ findings, error: postResult.message })
       commandExit(1)
     }
   }

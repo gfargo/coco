@@ -12,7 +12,7 @@ import {
 import type { IssueListFilter } from '../../git/issuesListData'
 import type { PullRequestListFilter } from '../../git/pullRequestListData'
 import { applyRepoFlag } from './applyRepoFlag'
-import { emitJson } from '../../lib/ui/emitJson'
+import { emitJson, emitJsonError } from '../../lib/ui/emitJson'
 
 /**
  * Shared shape behind `coco issues` and `coco prs`. The two commands were
@@ -142,24 +142,29 @@ export function createGitHubListHandler<
       const overview = await spec.fetch(git, filter, forge)
 
       if (!overview.available) {
-        logger.error(overview.message || 'No supported remote (GitHub or GitLab) detected.', { color: 'red' })
+        const message = overview.message || 'No supported remote (GitHub or GitLab) detected.'
+        logger.error(message, { color: 'red' })
+        if (argv.json) emitJsonError(message)
         commandExit(1)
         return
       }
 
       if (!overview.authenticated) {
-        logger.log(overview.message || 'No authenticated forge CLI detected.', { color: 'yellow' })
+        const message = overview.message || 'No authenticated forge CLI detected.'
+        logger.log(message, { color: 'yellow' })
         logger.log(
           chalk.dim(
             `Authenticate the matching CLI (GitHub \`gh\` or GitLab \`glab\`) to enable ${spec.triageLabel}.`
           )
         )
+        if (argv.json) emitJsonError(message)
         commandExit(1)
         return
       }
 
       if (overview.message) {
         logger.error(overview.message, { color: 'red' })
+        if (argv.json) emitJsonError(overview.message)
         commandExit(1)
         return
       }

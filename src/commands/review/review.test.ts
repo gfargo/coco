@@ -571,6 +571,37 @@ describe('review command', () => {
       expect(logger.error).toHaveBeenCalledWith('PR #42 not found.', { color: 'red' })
     })
 
+    // CMD-11: a --json caller used to get empty stdout on this failure,
+    // exit code 1 and nothing parseable to explain why.
+    it('emits a JSON error payload (not empty stdout) when the PR diff cannot be retrieved', async () => {
+      argv.pr = 42
+      mockGetPullRequestDiffByNumber.mockResolvedValue({ ok: false, message: 'PR #42 not found.' })
+
+      const writes: string[] = []
+      const writeSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(((chunk: string) => {
+          writes.push(String(chunk))
+          return true
+        }) as never)
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      } finally {
+        writeSpy.mockRestore()
+      }
+
+      const jsonCall = writes.find((message) => {
+        try {
+          JSON.parse(message)
+          return true
+        } catch {
+          return false
+        }
+      })
+      expect(jsonCall).toBeDefined()
+      expect(JSON.parse(jsonCall as string)).toEqual({ error: 'PR #42 not found.' })
+    })
+
     it('posts a plain comment when findings stay below --severity', async () => {
       argv.pr = 42
       argv.comment = true
@@ -602,6 +633,42 @@ describe('review command', () => {
 
       await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
       expect(logger.error).toHaveBeenCalledWith('Permission denied.', { color: 'red' })
+    })
+
+    // CMD-11: findings were already generated successfully by this point —
+    // only the forge post failed — so a --json caller should still get
+    // them, alongside the error, instead of empty stdout.
+    it('still emits the generated findings as JSON, alongside the error, when the post fails', async () => {
+      argv.pr = 42
+      argv.comment = true
+      mockCommentPullRequestByNumber.mockResolvedValue({ ok: false, message: 'Permission denied.' })
+
+      const writes: string[] = []
+      const writeSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(((chunk: string) => {
+          writes.push(String(chunk))
+          return true
+        }) as never)
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      } finally {
+        writeSpy.mockRestore()
+      }
+
+      const jsonCall = writes.find((message) => {
+        try {
+          JSON.parse(message)
+          return true
+        } catch {
+          return false
+        }
+      })
+      expect(jsonCall).toBeDefined()
+      const parsed = JSON.parse(jsonCall as string)
+      expect(parsed.error).toBe('Permission denied.')
+      expect(Array.isArray(parsed.findings)).toBe(true)
+      expect(parsed.findings[0]).toMatchObject({ title: 'Review finding' })
     })
 
     it('keeps the posted markdown unchanged when a finding carries line/side data (OSS-2405)', async () => {

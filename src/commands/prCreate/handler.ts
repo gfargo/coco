@@ -7,7 +7,7 @@ import { runPullRequestBodyWorkflow } from '../../git/aiActions'
 import { getForgeActions } from '../../git/forgeActions'
 import { forgeNouns } from '../../workstation/chrome/forgeNouns'
 import { commandExit } from '../../lib/utils/commandExit'
-import { emitJson } from '../../lib/ui/emitJson'
+import { emitJson, emitJsonError } from '../../lib/ui/emitJson'
 import { isInteractive, LOGO } from '../../lib/ui/helpers'
 import { selectPrompt, editorPrompt } from '../../lib/ui/inquirerPrompts'
 import { PrCreateArgv, PrCreateOptions } from './config'
@@ -39,11 +39,11 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
     provider !== 'bitbucket-server' &&
     provider !== 'gitea'
   ) {
-    logger.error(
+    const message =
       overview.repository.message ||
-        'No supported remote (GitHub, GitLab, Bitbucket, Bitbucket Server, or Gitea) detected.',
-      { color: 'red' }
-    )
+      'No supported remote (GitHub, GitLab, Bitbucket, Bitbucket Server, or Gitea) detected.'
+    logger.error(message, { color: 'red' })
+    if (argv.json) emitJsonError(message)
     commandExit(1)
     return
   }
@@ -51,24 +51,27 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   if (!overview.authenticated) {
     // `getProviderOverview` already routes through the forge's auth probe, so
     // this is the curated "install / authenticate the CLI" recovery hint.
-    logger.log(overview.message || 'The forge CLI is unavailable.', { color: 'yellow' })
+    const message = overview.message || 'The forge CLI is unavailable.'
+    logger.log(message, { color: 'yellow' })
+    if (argv.json) emitJsonError(message)
     commandExit(1)
     return
   }
 
   const head = overview.currentBranch
   if (!head) {
-    logger.error('Could not determine the current branch (detached HEAD?).', { color: 'red' })
+    const message = 'Could not determine the current branch (detached HEAD?).'
+    logger.error(message, { color: 'red' })
+    if (argv.json) emitJsonError(message)
     commandExit(1)
     return
   }
 
   const base = argv.base || overview.repository.defaultBranch || 'main'
   if (head === base) {
-    logger.log(
-      `You're on the base branch ('${base}'). Check out a feature branch before creating a ${nouns.abbrev}.`,
-      { color: 'yellow' }
-    )
+    const message = `You're on the base branch ('${base}'). Check out a feature branch before creating a ${nouns.abbrev}.`
+    logger.log(message, { color: 'yellow' })
+    if (argv.json) emitJsonError(message)
     commandExit(1)
     return
   }
@@ -94,7 +97,9 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   if (!title || !body) {
     const generated = await runPullRequestBodyWorkflow({ baseBranch: base })
     if (!generated.ok) {
-      logger.error(generated.message || `Failed to generate a ${nouns.singularLower} body.`, { color: 'red' })
+      const message = generated.message || `Failed to generate a ${nouns.singularLower} body.`
+      logger.error(message, { color: 'red' })
+      if (argv.json) emitJsonError(message)
       commandExit(1)
       return
     }
@@ -103,7 +108,9 @@ export const handler: CommandHandler<PrCreateArgv> = async (argv, logger) => {
   }
 
   if (!title) {
-    logger.error(`Could not produce a ${nouns.singularLower} title.`, { color: 'red' })
+    const message = `Could not produce a ${nouns.singularLower} title.`
+    logger.error(message, { color: 'red' })
+    if (argv.json) emitJsonError(message)
     commandExit(1)
     return
   }

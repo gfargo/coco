@@ -428,6 +428,50 @@ describe('changelog command', () => {
       expect(mockGetCommitLogRangeDetails).not.toHaveBeenCalled()
     })
 
+    // CMD-11: a --json caller used to get empty stdout on this failure.
+    it('emits a JSON error payload when --json and the range has no recognizable separator', async () => {
+      argv.json = true
+      mockLoadConfig.mockReturnValue({
+        service: {
+          authentication: { type: 'APIKey', credentials: { apiKey: 'mock-api-key' } },
+          provider: 'openai',
+          model: 'gpt-4o',
+          tokenLimit: 4096,
+          temperature: 0.2,
+          maxConcurrent: 1,
+        },
+        defaultBranch: 'main',
+        mode: 'stdout',
+        range: 'not-a-valid-range',
+      } as unknown as Config)
+
+      const writes: string[] = []
+      const writeSpy = jest
+        .spyOn(process.stdout, 'write')
+        .mockImplementation(((chunk: string) => {
+          writes.push(String(chunk))
+          return true
+        }) as never)
+      try {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ name: 'CommandExitError', code: 1 })
+      } finally {
+        writeSpy.mockRestore()
+      }
+
+      const jsonCall = writes.find((message) => {
+        try {
+          JSON.parse(message)
+          return true
+        } catch {
+          return false
+        }
+      })
+      expect(jsonCall).toBeDefined()
+      expect(JSON.parse(jsonCall as string)).toEqual({
+        error: expect.stringContaining('Invalid range provided'),
+      })
+    })
+
     it('rejects --range combined with --branch instead of silently ignoring --branch', async () => {
       argv.branch = 'develop'
       mockLoadConfig.mockReturnValue({
