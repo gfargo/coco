@@ -13,6 +13,7 @@ import {
   dropEmptyGroups,
   formatPlanValidationFeedback,
   formatPlanValidationIssuesError,
+  getPlanCommitlintFailures,
   getPlanValidationIssues,
   hasPlanValidationIssues,
   HunkInventoryLike,
@@ -53,6 +54,15 @@ export interface GenerateSplitPlanArgs {
    * request down (surfaces as `LangChainCancelledError`).
    */
   signal?: AbortSignal
+  /**
+   * Optional per-group commitlint check (CMD-12). When provided, each
+   * group's `${title}\n\n${body}` is validated the same way plain
+   * `coco commit` validates its draft. Failures feed back through the
+   * same `previous_attempt_feedback` retry slot the structural
+   * validator uses, so the model gets a chance to fix its own titles
+   * before the attempt budget is exhausted.
+   */
+  validateGroupMessage?: (message: string) => Promise<{ valid: boolean; errors: string[] }>
 }
 
 /**
@@ -114,6 +124,7 @@ export async function generateValidatedCommitSplitPlan({
   maxAttempts = DEFAULT_MAX_PLAN_ATTEMPTS,
   strict = false,
   signal,
+  validateGroupMessage,
 }: GenerateSplitPlanArgs): Promise<GenerateSplitPlanResult> {
   let lastIssues: PlanValidationIssues | null = null
   let attempt = 0
@@ -189,6 +200,13 @@ export async function generateValidatedCommitSplitPlan({
     const plan = dropEmptyGroups(missingRescued)
 
     const issues = getPlanValidationIssues(plan, staged, hunkInventory)
+    // Commitlint validation can shell out / load a config file — only
+    // pay for it once the cheap structural checks above already pass,
+    // so a plan that's getting re-rolled for file/hunk reasons anyway
+    // doesn't also wait on it (CMD-12).
+    if (!hasPlanValidationIssues(issues) && validateGroupMessage) {
+      issues.commitlintFailures = await getPlanCommitlintFailures(plan, validateGroupMessage)
+    }
     if (!hasPlanValidationIssues(issues)) {
       if (attempt > 1 && logger) {
         logger.verbose(`Plan validated after ${attempt} attempts.`, { color: 'green' })
@@ -253,6 +271,7 @@ export async function generateValidatedCommitSplitPlan({
         mixedFiles: [],
         partiallyCoveredFiles: [],
         missingFiles: [],
+        commitlintFailures: [],
       },
     },
   }
