@@ -137,6 +137,16 @@ export function useCommitSplitActions(
   // from whatever the user had moved on to.
   const planAbortRef = React.useRef<AbortController | null>(null)
 
+  // Abort an in-flight plan generation on unmount (WS-3) — otherwise
+  // `q` mid-generation leaves the LLM HTTP request pending and the
+  // Node event loop won't drain until the provider responds.
+  React.useEffect(() => {
+    return () => {
+      planAbortRef.current?.abort()
+      planAbortRef.current = null
+    }
+  }, [])
+
   // `S` keystroke — start the `coco commit --split` flow (#907).
   // Pre-flight refuses cleanly when:
   //   - Nothing is staged (suggests `g s` to pick files)

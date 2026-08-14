@@ -173,6 +173,49 @@ describe('useCommitSplitActions — recentCommits timer ownership (#1627)', () =
     })
     const dispatch = jest.fn()
     const deps = baseDeps({ dispatch, splitPlan: splitPlan as never })
+    // The hook now registers two unmount effects (the recentCommits timer
+    // and, since WS-3, the plan AbortController) — collect and run both,
+    // as a real unmount would.
+    const cleanups: Array<() => void> = []
+    const react = {
+      useCallback: (fn: unknown) => fn,
+      useRef: (initial: unknown) => ({ current: initial }),
+      useEffect: (setup: () => void | (() => void)) => {
+        const cleanup = setup()
+        if (typeof cleanup === 'function') {
+          cleanups.push(cleanup)
+        }
+      },
+    } as unknown as typeof import('react')
+    const { applyCommitSplit } = useCommitSplitActions(react, deps)
+
+    await applyCommitSplit()
+    cleanups.forEach((cleanup) => cleanup())
+
+    expect(jest.getTimerCount()).toBe(0)
+    jest.advanceTimersByTime(5000)
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'clearRecentCommits' }))
+  })
+})
+
+/**
+ * Regression coverage for WS-3 (#1857): `planAbortRef` had no unmount
+ * cleanup, so quitting (`q`) while a split-plan generation was in flight
+ * left the LLM HTTP request pending — the Node event loop wouldn't drain
+ * until the provider responded.
+ */
+describe('useCommitSplitActions — aborts an in-flight plan generation on unmount (WS-3)', () => {
+  beforeEach(() => {
+    runCommitSplitPlanWorkflowMock.mockReset()
+  })
+
+  it('aborts the signal passed to runCommitSplitPlanWorkflow when the component unmounts mid-request', async () => {
+    let capturedSignal: AbortSignal | undefined
+    runCommitSplitPlanWorkflowMock.mockImplementation((input) => {
+      capturedSignal = input?.signal
+      return new Promise(() => {}) // never resolves — simulates an in-flight request
+    })
+
     let unmount: (() => void) | undefined
     const react = {
       useCallback: (fn: unknown) => fn,
@@ -184,13 +227,13 @@ describe('useCommitSplitActions — recentCommits timer ownership (#1627)', () =
         }
       },
     } as unknown as typeof import('react')
-    const { applyCommitSplit } = useCommitSplitActions(react, deps)
+    const { startCommitSplit } = useCommitSplitActions(react, baseDeps())
 
-    await applyCommitSplit()
+    void startCommitSplit()
+    await Promise.resolve()
+
+    expect(capturedSignal?.aborted).toBe(false)
     unmount?.()
-
-    expect(jest.getTimerCount()).toBe(0)
-    jest.advanceTimersByTime(5000)
-    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'clearRecentCommits' }))
+    expect(capturedSignal?.aborted).toBe(true)
   })
 })

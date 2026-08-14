@@ -64,6 +64,16 @@ export function useConflictResolutionActions(
   // `aiDraftAbortRef` in useAiCommitDraftActions.
   const abortRef = React.useRef<AbortController | null>(null)
 
+  // Abort an in-flight resolution request on unmount (WS-3) —
+  // otherwise `q` mid-generation leaves the LLM HTTP request pending
+  // and the Node event loop won't drain until the provider responds.
+  React.useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+      abortRef.current = null
+    }
+  }, [])
+
   const startConflictResolution = React.useCallback(async () => {
     const { git, state, context, dispatch, mountedRef } = depsRef.current
     const files = context.operation?.conflictedFiles || []
