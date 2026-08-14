@@ -496,7 +496,7 @@ describe('commit command', () => {
       expect(mockHandleResult).not.toHaveBeenCalled()
     })
 
-    it('exits non-zero without printing anything when there are no staged changes', async () => {
+    it('exits non-zero without printing anything to stdout when there are no staged changes', async () => {
       mockGetChanges.mockResolvedValue({ staged: [], unstaged: [], untracked: [] })
 
       const writes: string[] = []
@@ -513,6 +513,43 @@ describe('commit command', () => {
       }
 
       expect(writes).toHaveLength(0)
+    })
+
+    // CMD-15: this path used to report failures via logger.verbose, which
+    // no-ops unless --verbose is set — the exact non-interactive command
+    // the installed prepare-commit-msg hook runs would fail with zero
+    // output anywhere, stdout or stderr.
+    it('surfaces a failure reason via logger.error (not logger.verbose) even without --verbose', async () => {
+      mockGetChanges.mockResolvedValue({ staged: [], unstaged: [], untracked: [] })
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('No staged changes detected'),
+        expect.anything()
+      )
+      expect(logger.verbose).not.toHaveBeenCalledWith(
+        expect.stringContaining('No staged changes detected'),
+        expect.anything()
+      )
+    })
+
+    it('surfaces the curated missing-API-key hint instead of a bare validation error', async () => {
+      mockGetApiKeyForModel.mockReturnValue('')
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Missing API key'),
+        expect.anything()
+      )
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('OPENAI_API_KEY'),
+        expect.anything()
+      )
+      // The rich hint pre-empts generateCommitDraft entirely — no reason
+      // to run diff summarization just to fail on the same missing key.
+      expect(mockGetChanges).not.toHaveBeenCalled()
     })
   })
 
@@ -573,6 +610,21 @@ describe('commit command', () => {
 
     it('emits a parseable { error } payload and exits non-zero when there are no staged changes', async () => {
       mockGetChanges.mockResolvedValue({ staged: [], unstaged: [], untracked: [] })
+
+      const output = await captureStdout(async () => {
+        await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      })
+
+      const parsed = JSON.parse(output)
+      expect(typeof parsed.error).toBe('string')
+      expect(parsed.error.length).toBeGreaterThan(0)
+    })
+
+    // CMD-15: --json keeps its own contract — a missing key must still
+    // reach the caller as a parseable stdout payload, not the human-
+    // formatted handleMissingApiKey lines (which --print-message gets).
+    it('still emits a parseable { error } payload for a missing API key, not the human-formatted hint', async () => {
+      mockGetApiKeyForModel.mockReturnValue('')
 
       const output = await captureStdout(async () => {
         await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })

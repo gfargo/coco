@@ -63,13 +63,29 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
   }
 
   if (argv.printMessage || argv.json) {
+    // Plain --print-message has no JSON contract to preserve, so give it
+    // the same curated "set OPENAI_API_KEY / run coco init" recovery copy
+    // every other command gets, instead of letting a missing key surface
+    // only as a generic validationError further down (CMD-15). --json
+    // skips this: it needs a parseable stdout payload on failure, which
+    // the validationErrors branch below already provides via emitJson.
+    if (!argv.json) {
+      const draftConfig = loadConfig<CommitOptions, CommitArgv>(argv)
+      if (draftConfig.service.authentication.type !== 'None' && !getApiKeyForModel(draftConfig)) {
+        handleMissingApiKey(logger, draftConfig, { command: 'commit' })
+      }
+    }
+
     const result = await generateCommitDraft({ git, argv, logger })
     if (!result.ok || !result.draft) {
+      // logger.verbose no-ops unless --verbose is set, which made this
+      // path exit 1 with zero output for the exact non-interactive
+      // command the installed prepare-commit-msg hook runs (CMD-15).
       for (const warning of result.warnings) {
-        logger.verbose(warning, { color: 'yellow' })
+        logger.error(warning, { color: 'yellow' })
       }
       for (const validationError of result.validationErrors) {
-        logger.verbose(validationError, { color: 'red' })
+        logger.error(validationError, { color: 'red' })
       }
       if (argv.json) {
         // Machine consumers get a parseable error payload on stdout
