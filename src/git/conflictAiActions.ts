@@ -15,6 +15,7 @@ import { executeChain } from '../lib/langchain/utils/executeChain'
 import { getLlm } from '../lib/langchain/utils/getLlm'
 import { loadConfig } from '../lib/config/utils/loadConfig'
 import { Logger } from '../lib/utils/logger'
+import { EXPLAIN_PROMPT_TEMPLATE } from '../commands/resolve/prompt'
 import type { ConflictRegion } from './conflictRegionActions'
 
 /**
@@ -344,9 +345,131 @@ export async function runConflictResolutionWorkflow(input: {
   }
 }
 
+export type ConflictExplanation = {
+  /** Ordinal of the region (at parse time) this explanation targets. */
+  regionIndex: number
+  /** What the "ours" side was trying to accomplish. */
+  oursIntent: string
+  /** What the "theirs" side was trying to accomplish. */
+  theirsIntent: string
+  /** Why the two sides conflict. */
+  conflictNature: string
+}
+
+export type ConflictExplanationResult =
+  | { ok: true; explanations: ConflictExplanation[]; message: string }
+  | { ok: false; message: string; details?: string[]; cancelled?: boolean }
+
+const ExplanationsSchema = z.object({
+  explanations: z.array(
+    z.object({
+      region: z.number().describe('The region number this explanation is for'),
+      oursIntent: z.string().describe('What the ours side was trying to accomplish'),
+      theirsIntent: z.string().describe('What the theirs side was trying to accomplish'),
+      conflictNature: z.string().describe('Why the two sides conflict'),
+    })
+  ),
+})
+
+/**
+ * AI conflict explanation — the read-only counterpart to
+ * {@link runConflictResolutionWorkflow}. Describes each region's ours/theirs
+ * intent and why they conflict, without proposing or applying any
+ * resolution. Regions are sent to the model in a single call; explain has no
+ * apply step, so there's no need for the resolution workflow's token-budget
+ * batching.
+ */
+export async function runConflictExplanationWorkflow(input: {
+  git?: SimpleGit
+  path: string
+  regions: ConflictRegion[]
+  /** In-progress operation label ('merge' / 'rebase' / …) for the prompt. */
+  operation: string
+  signal?: AbortSignal
+}): Promise<ConflictExplanationResult> {
+  if (input.regions.length === 0) {
+    return { ok: false, message: 'No conflict regions to explain.' }
+  }
+
+  const config = loadConfig<CommitOptions, ConflictWorkflowArgv>(createConflictWorkflowArgv())
+  const key = getApiKeyForModel(config)
+  const { provider } = getModelAndProviderFromConfig(config)
+  const service = resolveDynamicService(config, 'conflictResolve')
+
+  if (config.service.authentication.type !== 'None' && !key) {
+    return {
+      ok: false,
+      message: 'No API key configured. Set one via env or .coco.config.json first.',
+    }
+  }
+
+  try {
+    const llm = await getLlm(provider, service.model as LLMModel, { ...config, service })
+    // `any`: see the identical workaround in `runConflictResolutionWorkflow` above.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parser: any = createSchemaParser(ExplanationsSchema)
+    const prompt = PromptTemplate.fromTemplate(EXPLAIN_PROMPT_TEMPLATE)
+
+    const raw = await executeChain<z.infer<typeof ExplanationsSchema>>({
+      llm,
+      prompt,
+      variables: {
+        path: input.path,
+        operation: input.operation === 'none' ? 'merge' : input.operation,
+        conflicts: formatRegions(input.regions),
+        format_instructions: parser.getFormatInstructions(),
+      },
+      parser,
+      logger: new Logger({ silent: true }),
+      signal: input.signal,
+      metadata: {
+        task: 'conflict-explanation',
+        command: 'workstation',
+        provider,
+        model: String(service.model),
+      },
+    })
+
+    const byRegion = new Map<number, ConflictExplanation>()
+    for (const explanation of raw.explanations) {
+      const region = input.regions.find((candidate) => candidate.index === explanation.region)
+      if (!region || byRegion.has(region.index)) continue
+      byRegion.set(region.index, {
+        regionIndex: region.index,
+        oursIntent: explanation.oursIntent,
+        theirsIntent: explanation.theirsIntent,
+        conflictNature: explanation.conflictNature,
+      })
+    }
+
+    const explanations = [...byRegion.values()].sort((a, b) => a.regionIndex - b.regionIndex)
+    if (explanations.length === 0) {
+      return { ok: false, message: 'The model returned no usable explanations — try again.' }
+    }
+    return {
+      ok: true,
+      explanations,
+      message: `${explanations.length} of ${input.regions.length} region${
+        input.regions.length === 1 ? '' : 's'
+      } explained`,
+    }
+  } catch (error) {
+    if (error instanceof LangChainCancelledError) {
+      return { ok: false, cancelled: true, message: 'Conflict explanation cancelled.' }
+    }
+    const lines = (error as Error).message.split('\n').map((line) => line.trim()).filter(Boolean)
+    return {
+      ok: false,
+      message: lines[0] || 'Conflict explanation failed.',
+      details: lines.slice(1, 5),
+    }
+  }
+}
+
 export const conflictAiTestInternals = {
   formatRegions,
   ProposalsSchema,
   estimateRegionTokens,
   chunkRegions,
+  ExplanationsSchema,
 }
