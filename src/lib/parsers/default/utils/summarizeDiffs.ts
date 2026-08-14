@@ -143,7 +143,15 @@ export async function summarizeDirectoryDiff(
       tokenCount: newTokenTotal,
     }
   } catch (error) {
-    console.error(error)
+    // On error, return the original directory diff unchanged. Routed
+    // through the logger (not console.error) so it respects --quiet and
+    // reaches the same channel the rest of the run's output does —
+    // silently, this returns the UNSUMMARIZED diff, which is exactly
+    // what blows the token budget the summarizer exists to protect
+    // (LIB-11).
+    logger?.error?.(
+      `Failed to summarize directory "${directory.path}": ${error instanceof Error ? error.message : String(error)}`,
+    )
     return directory
   }
 }

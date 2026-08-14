@@ -112,6 +112,65 @@ describe('summarizeDirectoryDiff', () => {
     expect(result.diffs).toEqual(directory.diffs) // Original diffs preserved
   })
 
+  // LIB-11: this failure used to go to bare console.error, bypassing the
+  // logger entirely (invisible under --quiet, untestable, and on a
+  // different channel than the rest of the run's output).
+  it('reports a directory summarization failure through the logger, not console.error (LIB-11)', async () => {
+    const summarizeMock = jest.requireMock('../../../langchain/chains/summarize').summarize
+    summarizeMock.mockRejectedValueOnce(new Error('provider timed out'))
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+    const mockLogger = { verbose: jest.fn(), error: jest.fn() }
+
+    const directory = {
+      path: 'src/components',
+      diffs: [{ file: 'src/components/A.tsx', diff: 'a'.repeat(400), summary: 'A', tokenCount: 100 }],
+      tokenCount: 100,
+    }
+
+    const result = await summarizeDirectoryDiff(directory, {
+      chain: mockChain,
+      textSplitter: mockTextSplitter,
+      tokenizer: mockTokenizer,
+      logger: mockLogger as never,
+    })
+
+    // Original directory diff preserved on failure.
+    expect(result).toEqual(directory)
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('src/components')
+    )
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.stringContaining('provider timed out')
+    )
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+
+    consoleErrorSpy.mockRestore()
+    summarizeMock.mockImplementation(async (docs: unknown[]) => `Summary of ${docs.length} file(s)`)
+  })
+
+  it('does not throw when the failure occurs and no logger was supplied', async () => {
+    const summarizeMock = jest.requireMock('../../../langchain/chains/summarize').summarize
+    summarizeMock.mockRejectedValueOnce(new Error('provider timed out'))
+    const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined)
+
+    const directory = {
+      path: 'src/components',
+      diffs: [{ file: 'src/components/A.tsx', diff: 'a'.repeat(400), summary: 'A', tokenCount: 100 }],
+      tokenCount: 100,
+    }
+
+    await expect(
+      summarizeDirectoryDiff(directory, {
+        chain: mockChain,
+        textSplitter: mockTextSplitter,
+        tokenizer: mockTokenizer,
+      })
+    ).resolves.toEqual(directory)
+
+    consoleErrorSpy.mockRestore()
+    summarizeMock.mockImplementation(async (docs: unknown[]) => `Summary of ${docs.length} file(s)`)
+  })
+
   describe('diff-summary cache hit/miss reporting (#1958)', () => {
     const summarizeMock = jest.requireMock('../../../langchain/chains/summarize').summarize
     const cacheHitLogger = { verbose: jest.fn() }
