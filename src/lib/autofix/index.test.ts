@@ -1,4 +1,4 @@
-import { runAutoFix } from './index'
+import { runAutoFix, prepareAutoFix } from './index'
 import { ReviewFeedbackItem } from '../../commands/review/config'
 import { AutoFixConfig } from './types'
 
@@ -12,24 +12,45 @@ jest.mock('./buildPrompt', () => ({
 
 jest.mock('./adapters/codex', () => {
   const run = jest.fn().mockResolvedValue(undefined)
+  const buildArgs = jest.fn().mockReturnValue(['exec', '--full-auto'])
   return {
-    CodexAdapter: jest.fn().mockImplementation(() => ({ vendor: 'openai', envVar: 'OPENAI_API_KEY', run })),
+    CodexAdapter: jest.fn().mockImplementation(() => ({
+      vendor: 'openai',
+      envVar: 'OPENAI_API_KEY',
+      binary: 'codex',
+      buildArgs,
+      run,
+    })),
     __mockRun: run,
   }
 })
 
 jest.mock('./adapters/claude', () => {
   const run = jest.fn().mockResolvedValue(undefined)
+  const buildArgs = jest.fn().mockReturnValue(['--print'])
   return {
-    ClaudeAdapter: jest.fn().mockImplementation(() => ({ vendor: 'anthropic', envVar: 'ANTHROPIC_API_KEY', run })),
+    ClaudeAdapter: jest.fn().mockImplementation(() => ({
+      vendor: 'anthropic',
+      envVar: 'ANTHROPIC_API_KEY',
+      binary: 'claude',
+      buildArgs,
+      run,
+    })),
     __mockRun: run,
   }
 })
 
 jest.mock('./adapters/gemini', () => {
   const run = jest.fn().mockResolvedValue(undefined)
+  const buildArgs = jest.fn().mockReturnValue([])
   return {
-    GeminiAdapter: jest.fn().mockImplementation(() => ({ vendor: 'google', envVar: 'GEMINI_API_KEY', run })),
+    GeminiAdapter: jest.fn().mockImplementation(() => ({
+      vendor: 'google',
+      envVar: 'GEMINI_API_KEY',
+      binary: 'gemini',
+      buildArgs,
+      run,
+    })),
     __mockRun: run,
   }
 })
@@ -373,5 +394,59 @@ describe('runAutoFix', () => {
         consoleWarnSpy.mockRestore()
       }
     )
+  })
+})
+
+describe('prepareAutoFix (#1840)', () => {
+  let codexRun: jest.Mock
+
+  beforeEach(async () => {
+    jest.clearAllMocks()
+    const codexModule = (await import('./adapters/codex')) as unknown as { __mockRun: jest.Mock }
+    codexRun = codexModule.__mockRun
+    codexRun.mockResolvedValue(undefined)
+  })
+
+  it('returns undefined without building a prompt when autoFixTool is unset', async () => {
+    const config: AutoFixConfig = {}
+
+    await expect(prepareAutoFix(item, config, '/fake/repo')).resolves.toBeUndefined()
+  })
+
+  it('throws on unrecognized autoFixTool before building a prompt', async () => {
+    const config: AutoFixConfig = { autoFixTool: 'unknown-tool' }
+
+    await expect(prepareAutoFix(item, config, '/fake/repo')).rejects.toThrow('Unknown autoFixTool: "unknown-tool"')
+  })
+
+  it('resolves the binary and the adapter-built argv for the configured tool', async () => {
+    const options = { model: 'o4-mini' }
+    const config: AutoFixConfig = { autoFixTool: 'codex', autoFixToolOptions: options }
+
+    const prepared = await prepareAutoFix(item, config, '/fake/repo')
+
+    expect(prepared).toBeDefined()
+    expect(prepared?.binary).toBe('codex')
+    expect(prepared?.args).toEqual(['exec', '--full-auto'])
+  })
+
+  it('does not execute the adapter until execute() is called', async () => {
+    const config: AutoFixConfig = { autoFixTool: 'codex' }
+
+    const prepared = await prepareAutoFix(item, config, '/fake/repo')
+
+    expect(codexRun).not.toHaveBeenCalled()
+
+    await prepared?.execute()
+
+    expect(codexRun).toHaveBeenCalledWith('mocked prompt', undefined, undefined, undefined)
+  })
+
+  it('runAutoFix is equivalent to prepareAutoFix().execute()', async () => {
+    const config: AutoFixConfig = { autoFixTool: 'codex', autoFixToolOptions: { model: 'o4-mini' } }
+
+    await runAutoFix(item, config, '/fake/repo')
+
+    expect(codexRun).toHaveBeenCalledWith('mocked prompt', { model: 'o4-mini' }, undefined, undefined)
   })
 })

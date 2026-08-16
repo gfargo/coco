@@ -1,9 +1,32 @@
 import { spawn } from 'child_process'
 import { BaseAdapter, AutoFixVendor } from '../types'
+import { filterAllowedOptions } from '../optionAllowlist'
+
+/**
+ * Tuning flags this adapter forwards to `claude --print`. Deliberately
+ * excludes `--permission-mode` / `--dangerously-skip-permissions` — flags
+ * whose entire purpose is disabling the CLI's own confirmation gates, the
+ * exact class of flag #1840 is about keeping out of autoFixToolOptions.
+ */
+const ALLOWED_OPTIONS = new Set(['model', 'fallback-model', 'max-turns', 'output-format', 'append-system-prompt'])
 
 export class ClaudeAdapter implements BaseAdapter {
   readonly vendor: AutoFixVendor = 'anthropic'
   readonly envVar = 'ANTHROPIC_API_KEY'
+  readonly binary = 'claude'
+
+  buildArgs(options?: Record<string, string>): string[] {
+    const args: string[] = ['--print']
+
+    const allowedOptions = filterAllowedOptions(options, ALLOWED_OPTIONS, 'claude')
+    if (allowedOptions) {
+      for (const [key, value] of Object.entries(allowedOptions)) {
+        args.push(`--${key}`, value)
+      }
+    }
+
+    return args
+  }
 
   async run(
     prompt: string,
@@ -11,15 +34,7 @@ export class ClaudeAdapter implements BaseAdapter {
     apiKey?: string,
     forceApiKey?: string
   ): Promise<void> {
-    const args: string[] = ['--print']
-
-    if (options) {
-      for (const [key, value] of Object.entries(options)) {
-        args.push(`--${key}`, value)
-      }
-    }
-
-    args.push(prompt)
+    const args = [...this.buildArgs(options), prompt]
 
     // Build the child environment:
     //   - forceApiKey (explicit per-tool credential) always wins, even if an
@@ -34,7 +49,7 @@ export class ClaudeAdapter implements BaseAdapter {
     }
 
     return new Promise((resolve, reject) => {
-      const child = spawn('claude', args, { stdio: 'inherit', env })
+      const child = spawn(this.binary, args, { stdio: 'inherit', env })
 
       child.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'ENOENT') {

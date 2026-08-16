@@ -21,8 +21,10 @@ import {
 } from './inkWorkflows'
 import { sidebarTabHasSelectableItems } from '../chrome/sidebarSelection'
 import { handleBisectInput } from '../surfaces/bisect/input'
+import { handleBlameInput } from '../surfaces/blame/input'
 import { handleChangelogInput } from '../surfaces/changelog/input'
 import { handleConflictsInput } from '../surfaces/conflicts/input'
+import { handleFileHistoryInput } from '../surfaces/fileHistory/input'
 import { handleRebaseInput } from '../surfaces/rebase/input'
 import { handleOverlayInput } from './overlayInput'
 
@@ -2187,26 +2189,17 @@ export function getLogInkInputEvents(
       // View-local top jumps (#1387): blame / file-history / changelog
       // advertise gg in the footer, but the generic moveToTop below
       // only touches the HISTORY cursor — the visible list stayed put
-      // while the hidden selection silently relocated.
-      if (state.activeView === 'blame') {
-        return context.blameLineCount
-          ? [
-            action({ type: 'moveBlame', delta: -context.blameLineCount, count: context.blameLineCount }),
-            action({ type: 'setStatus', value: 'jumped to first line', ttl: 'echo' }),
-          ]
-          : []
+      // while the hidden selection silently relocated. Blame and
+      // file-history are extracted to `surfaces/blame/input.ts` /
+      // `surfaces/fileHistory/input.ts` (#1722); changelog stays inline
+      // (see the note on `handleChangelogInput` above).
+      const blameJumpTopEvents = handleBlameInput(state, inputValue, key, context, 'jump-top')
+      if (blameJumpTopEvents) {
+        return blameJumpTopEvents
       }
-      if (state.activeView === 'file-history') {
-        return context.fileHistoryCommitCount
-          ? [
-            action({
-              type: 'moveFileHistory',
-              delta: -context.fileHistoryCommitCount,
-              count: context.fileHistoryCommitCount,
-            }),
-            action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
-          ]
-          : []
+      const fileHistoryJumpTopEvents = handleFileHistoryInput(state, inputValue, key, context, 'jump-top')
+      if (fileHistoryJumpTopEvents) {
+        return fileHistoryJumpTopEvents
       }
       if (state.activeView === 'changelog') {
         return context.changelogLineCount
@@ -2272,25 +2265,13 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'G') {
     // View-local bottom jumps (#1387) — see the gg mirror above.
-    if (state.activeView === 'blame') {
-      return context.blameLineCount
-        ? [
-          action({ type: 'moveBlame', delta: context.blameLineCount, count: context.blameLineCount }),
-          action({ type: 'setStatus', value: 'jumped to last line', ttl: 'echo' }),
-        ]
-        : []
+    const blameJumpBottomEvents = handleBlameInput(state, inputValue, key, context, 'jump-bottom')
+    if (blameJumpBottomEvents) {
+      return blameJumpBottomEvents
     }
-    if (state.activeView === 'file-history') {
-      return context.fileHistoryCommitCount
-        ? [
-          action({
-            type: 'moveFileHistory',
-            delta: context.fileHistoryCommitCount,
-            count: context.fileHistoryCommitCount,
-          }),
-          action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
-        ]
-        : []
+    const fileHistoryJumpBottomEvents = handleFileHistoryInput(state, inputValue, key, context, 'jump-bottom')
+    if (fileHistoryJumpBottomEvents) {
+      return fileHistoryJumpBottomEvents
     }
     if (state.activeView === 'changelog') {
       return context.changelogLineCount
@@ -2685,12 +2666,14 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'blame' && context.blameLineCount) {
-      return [action({ type: 'moveBlame', delta: -1, count: context.blameLineCount })]
+    const blameMoveUpEvents = handleBlameInput(state, inputValue, key, context, 'move-up')
+    if (blameMoveUpEvents) {
+      return blameMoveUpEvents
     }
 
-    if (state.activeView === 'file-history' && context.fileHistoryCommitCount) {
-      return [action({ type: 'moveFileHistory', delta: -1, count: context.fileHistoryCommitCount })]
+    const fileHistoryMoveUpEvents = handleFileHistoryInput(state, inputValue, key, context, 'move-up')
+    if (fileHistoryMoveUpEvents) {
+      return fileHistoryMoveUpEvents
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
@@ -2860,12 +2843,14 @@ export function getLogInkInputEvents(
       })]
     }
 
-    if (state.activeView === 'blame' && context.blameLineCount) {
-      return [action({ type: 'moveBlame', delta: 1, count: context.blameLineCount })]
+    const blameMoveDownEvents = handleBlameInput(state, inputValue, key, context, 'move-down')
+    if (blameMoveDownEvents) {
+      return blameMoveDownEvents
     }
 
-    if (state.activeView === 'file-history' && context.fileHistoryCommitCount) {
-      return [action({ type: 'moveFileHistory', delta: 1, count: context.fileHistoryCommitCount })]
+    const fileHistoryMoveDownEvents = handleFileHistoryInput(state, inputValue, key, context, 'move-down')
+    if (fileHistoryMoveDownEvents) {
+      return fileHistoryMoveDownEvents
     }
 
     if (isSubmodulesActionTarget(state) && context.submoduleCount) {
@@ -2950,15 +2935,13 @@ export function getLogInkInputEvents(
 
     // View-local paging (#1387) — the generic `page` fallback below
     // moves the HIDDEN history cursor beneath these surfaces.
-    if (state.activeView === 'blame') {
-      return context.blameLineCount
-        ? [action({ type: 'moveBlame', delta: -10, count: context.blameLineCount })]
-        : []
+    const blamePageUpEvents = handleBlameInput(state, inputValue, key, context, 'page-up')
+    if (blamePageUpEvents) {
+      return blamePageUpEvents
     }
-    if (state.activeView === 'file-history') {
-      return context.fileHistoryCommitCount
-        ? [action({ type: 'moveFileHistory', delta: -10, count: context.fileHistoryCommitCount })]
-        : []
+    const fileHistoryPageUpEvents = handleFileHistoryInput(state, inputValue, key, context, 'page-up')
+    if (fileHistoryPageUpEvents) {
+      return fileHistoryPageUpEvents
     }
 
     return [action({ type: 'page', delta: -10 })]
@@ -2991,15 +2974,13 @@ export function getLogInkInputEvents(
     }
 
     // View-local paging (#1387) — mirror of the pageUp branch above.
-    if (state.activeView === 'blame') {
-      return context.blameLineCount
-        ? [action({ type: 'moveBlame', delta: 10, count: context.blameLineCount })]
-        : []
+    const blamePageDownEvents = handleBlameInput(state, inputValue, key, context, 'page-down')
+    if (blamePageDownEvents) {
+      return blamePageDownEvents
     }
-    if (state.activeView === 'file-history') {
-      return context.fileHistoryCommitCount
-        ? [action({ type: 'moveFileHistory', delta: 10, count: context.fileHistoryCommitCount })]
-        : []
+    const fileHistoryPageDownEvents = handleFileHistoryInput(state, inputValue, key, context, 'page-down')
+    if (fileHistoryPageDownEvents) {
+      return fileHistoryPageDownEvents
     }
 
     return [action({ type: 'page', delta: 10 })]
@@ -3176,22 +3157,10 @@ export function getLogInkInputEvents(
   }
 
   // Enter on a file-history row drills into the diff for that commit
-  // (#COCO-14). Mirrors the reflog drill-in: find the sha in
-  // `filteredCommits` first, fall back to `state.selectedIndex` if the
-  // commit isn't in the currently-loaded history window. The hash is
-  // resolved in `useInputHandler.ts` (from the cached `FileHistoryResult`)
-  // and carried here as `context.fileHistorySelectedHash`.
-  if (key.return && state.activeView === 'file-history' && context.fileHistorySelectedHash) {
-    const sha = context.fileHistorySelectedHash
-    const fallbackIndex = state.commits.findIndex((commit) => commit.hash === sha)
-    return [
-      action({
-        type: 'navigateOpenDiffForCommit',
-        sha,
-        commitIndex: fallbackIndex >= 0 ? fallbackIndex : state.selectedIndex,
-      }),
-      action({ type: 'setStatus', value: `viewing diff for ${sha.slice(0, 7)}` }),
-    ]
+  // (#COCO-14), extracted to `surfaces/fileHistory/input.ts` (#1722).
+  const fileHistoryEnterEvents = handleFileHistoryInput(state, inputValue, key, context, 'enter')
+  if (fileHistoryEnterEvents) {
+    return fileHistoryEnterEvents
   }
 
   // Inspector Actions tab: Enter on the cursored action fires its
@@ -3826,8 +3795,9 @@ export function getLogInkInputEvents(
   ) {
     return [action({ type: 'navigateOpenFileHistoryForPath', path: context.worktreeSelectedPath })]
   }
-  if (inputValue === 'L' && state.activeView === 'blame' && state.blamePath) {
-    return [action({ type: 'navigateOpenFileHistoryForPath', path: state.blamePath })]
+  const blameOpenFileHistoryEvents = handleBlameInput(state, inputValue, key, context, 'open-file-history')
+  if (blameOpenFileHistoryEvents) {
+    return blameOpenFileHistoryEvents
   }
   if (inputValue === 'o' && isWorktreeDiffTarget(state) && context.worktreeSelectedPath) {
     return [{ type: 'openFileInEditor', path: context.worktreeSelectedPath }]

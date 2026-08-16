@@ -59,9 +59,56 @@ export const TRUSTED_PROJECT_SERVICE_KEYS = [
  * with permission checks disabled the moment a user accepts an auto-fix
  * (#1840). `autoFixToolApiKey` is a bare credential and has no legitimate
  * reason to live in a repo-committed file at all.
+ *
+ * This stayed a blocklist rather than flipping to an allowlist (a real
+ * attempt at the flip broke `noVerify` and likely other per-command flags —
+ * `commit`/`amend`/`split`/etc. each define their own top-level option keys
+ * that were never part of `Config`/`schema.json` and are legitimately
+ * project-tunable; hand-enumerating that whole surface risks silently
+ * breaking more of them). What actually caused #1840 — a new key added to
+ * the schema-visible `Config` shape without anyone updating this list — is
+ * instead caught by `projectConfig.completeness.test.ts`, which fails the
+ * build the moment `schema.json` gains a top-level key not explicitly
+ * triaged into this list or `TRUSTED_PROJECT_TOP_LEVEL_KEYS` below.
  */
 export const UNTRUSTED_PROJECT_TOP_LEVEL_KEYS = [
   'autoFixTool',
   'autoFixToolOptions',
   'autoFixToolApiKey',
+] as const
+
+/**
+ * Every other top-level key currently in the schema-visible `Config` shape
+ * (i.e. `schema.json`'s `ConfigWithServiceObject`, minus `service` — that's
+ * governed separately by `TRUSTED_PROJECT_SERVICE_KEYS`). Each one is a
+ * presentational or workflow-tuning knob — it changes what coco prints,
+ * which files it walks, or how it phrases a prompt — never what process it
+ * spawns or what credentials that process receives. This list isn't
+ * consulted by the runtime filter (which still just checks
+ * `UNTRUSTED_PROJECT_TOP_LEVEL_KEYS` above); it exists so the completeness
+ * test has something to diff the schema against.
+ */
+export const TRUSTED_PROJECT_TOP_LEVEL_KEYS = [
+  'mode',
+  'conventionalCommits',
+  'verbose',
+  'openInEditor',
+  'prompt',
+  'summarizePrompt',
+  'ignoredFiles',
+  'ignoredExtensions',
+  'defaultBranch',
+  'includeBranchName',
+  'language',
+  'logTui',
+  'workspace',
+  'telemetry',
+  'forgeHosts',
+  'updateCheck',
+  'interactive',
+  'version',
+  'help',
+  'repo',
+  'quiet',
+  'json',
 ] as const

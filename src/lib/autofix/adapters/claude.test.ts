@@ -74,6 +74,28 @@ describe('ClaudeAdapter', () => {
     expect(args[args.length - 1]).toBe('fix the bug')
   })
 
+  it('drops unrecognized option keys instead of forwarding them as flags (#1840)', async () => {
+    mockSpawn.mockReturnValue(makeChild(0))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    await adapter.run('fix the bug', {
+      model: 'claude-sonnet-4-20250514',
+      'dangerously-skip-permissions': 'true',
+      'permission-mode': 'bypassPermissions',
+    })
+
+    const args = mockSpawn.mock.calls[0][1] as string[]
+    expect(args).toContain('--model')
+    expect(args).not.toContain('--dangerously-skip-permissions')
+    expect(args).not.toContain('--permission-mode')
+    expect(args).not.toContain('bypassPermissions')
+    expect(warn).toHaveBeenCalled()
+    expect(warn.mock.calls[0][0]).toContain('dangerously-skip-permissions')
+    expect(warn.mock.calls[0][0]).toContain('permission-mode')
+
+    warn.mockRestore()
+  })
+
   it('injects ANTHROPIC_API_KEY when apiKey is provided and ambient is unset', async () => {
     const previousApiKey = process.env.ANTHROPIC_API_KEY
     delete process.env.ANTHROPIC_API_KEY

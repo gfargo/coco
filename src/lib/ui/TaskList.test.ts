@@ -3,7 +3,7 @@ import { AutoFixConfig } from '../autofix/types'
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-jest.mock('../autofix', () => ({ runAutoFix: jest.fn() }))
+jest.mock('../autofix', () => ({ prepareAutoFix: jest.fn() }))
 jest.mock('../../git/providerData', () => ({ getProviderOverview: jest.fn() }))
 jest.mock('../../git/forgeActions', () => ({ getForgeActions: jest.fn() }))
 jest.mock('./inquirerPrompts', () => ({ confirmPrompt: jest.fn() }))
@@ -54,12 +54,18 @@ Object.defineProperty(process, 'stdin', {
 // ── Imports after mocks ───────────────────────────────────────────────────────
 
 import { TaskList } from './TaskList'
-import { runAutoFix } from '../autofix'
+import { prepareAutoFix } from '../autofix'
 import { getProviderOverview } from '../../git/providerData'
 import { getForgeActions } from '../../git/forgeActions'
 import { confirmPrompt } from './inquirerPrompts'
 
-const mockRunAutoFix = runAutoFix as jest.Mock
+const mockPrepareAutoFix = prepareAutoFix as jest.Mock
+/** Builds a resolved `prepareAutoFix` return value for a passing auto-fix run. */
+const makePrepared = (overrides?: { binary?: string; args?: string[]; execute?: jest.Mock }) => ({
+  binary: overrides?.binary ?? 'codex',
+  args: overrides?.args ?? ['exec', '--full-auto'],
+  execute: overrides?.execute ?? jest.fn().mockResolvedValue(undefined),
+})
 const mockGetProviderOverview = getProviderOverview as jest.Mock
 const mockGetForgeActions = getForgeActions as jest.Mock
 const mockConfirmPrompt = confirmPrompt as jest.Mock
@@ -134,7 +140,8 @@ describe('TaskList — getChoices()', () => {
 describe('TaskList — keyboard shortcut "a"', () => {
   it('triggers autofix when key "a" is pressed', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
-    mockRunAutoFix.mockResolvedValue(undefined)
+    mockPrepareAutoFix.mockResolvedValue(makePrepared())
+    mockConfirmPrompt.mockResolvedValue(true)
 
     const tl = new TaskList([makeItem()], config)
     const startPromise = tl.start()
@@ -142,7 +149,7 @@ describe('TaskList — keyboard shortcut "a"', () => {
     await press('a') // triggers autofix → markAsComplete → all done → exits
     await startPromise.catch(() => undefined)
 
-    expect(mockRunAutoFix).toHaveBeenCalledTimes(1)
+    expect(mockPrepareAutoFix).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -242,7 +249,8 @@ describe('TaskList — keyboard shortcuts', () => {
 
   it('moves to the next item when the right arrow key is pressed', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
-    mockRunAutoFix.mockResolvedValue(undefined)
+    mockPrepareAutoFix.mockResolvedValue(makePrepared())
+    mockConfirmPrompt.mockResolvedValue(true)
 
     const tl = new TaskList([makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })], config)
     const startPromise = tl.start()
@@ -252,7 +260,7 @@ describe('TaskList — keyboard shortcuts', () => {
     await press('q')
     await startPromise.catch(() => undefined)
 
-    expect(mockRunAutoFix).toHaveBeenCalledWith(
+    expect(mockPrepareAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 2' }),
       config,
       expect.any(String)
@@ -261,7 +269,8 @@ describe('TaskList — keyboard shortcuts', () => {
 
   it('moves to the previous item when the left arrow key is pressed', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
-    mockRunAutoFix.mockResolvedValue(undefined)
+    mockPrepareAutoFix.mockResolvedValue(makePrepared())
+    mockConfirmPrompt.mockResolvedValue(true)
 
     const tl = new TaskList([makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })], config)
     const startPromise = tl.start()
@@ -272,7 +281,7 @@ describe('TaskList — keyboard shortcuts', () => {
     await press('q')
     await startPromise.catch(() => undefined)
 
-    expect(mockRunAutoFix).toHaveBeenCalledWith(
+    expect(mockPrepareAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 1' }),
       config,
       expect.any(String)
@@ -287,7 +296,7 @@ describe('TaskList — keyboard shortcuts', () => {
     await press('q')
     await startPromise.catch(() => undefined)
 
-    expect(mockRunAutoFix).not.toHaveBeenCalled()
+    expect(mockPrepareAutoFix).not.toHaveBeenCalled()
     expect(mockExecFile).not.toHaveBeenCalled()
     expect(mockRlClose).toHaveBeenCalledTimes(1)
   })
@@ -323,7 +332,7 @@ describe('TaskList — keyboard shortcuts', () => {
 })
 
 describe('TaskList — autoFix() when autoFixTool is not configured', () => {
-  it('displays a message and does not call runAutoFix', async () => {
+  it('displays a message and does not call prepareAutoFix', async () => {
     const tl = new TaskList([makeItem()]) // no config
     const startPromise = tl.start()
 
@@ -331,7 +340,7 @@ describe('TaskList — autoFix() when autoFixTool is not configured', () => {
     await press('q') // exit
     await startPromise.catch(() => undefined)
 
-    expect(mockRunAutoFix).not.toHaveBeenCalled()
+    expect(mockPrepareAutoFix).not.toHaveBeenCalled()
     const logCalls = (console.log as jest.Mock).mock.calls.flat()
     const hasMsg = logCalls.some(
       (arg) => typeof arg === 'string' && arg.includes('No autoFixTool configured')
@@ -340,10 +349,51 @@ describe('TaskList — autoFix() when autoFixTool is not configured', () => {
   })
 })
 
-describe('TaskList — autoFix() on successful runAutoFix', () => {
-  it('calls runAutoFix with the current item and config', async () => {
+describe('TaskList — autoFix() shows the command and confirms before running (#1840)', () => {
+  it('prints the resolved binary and args before prompting for confirmation', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex', autoFixToolOptions: { model: 'o4-mini' } }
-    mockRunAutoFix.mockResolvedValue(undefined)
+    mockPrepareAutoFix.mockResolvedValue(makePrepared({ binary: 'codex', args: ['exec', '--model', 'o4-mini', '--full-auto'] }))
+    mockConfirmPrompt.mockResolvedValue(true)
+
+    const tl = new TaskList([makeItem()], config)
+    const startPromise = tl.start()
+
+    await press('a')
+    await startPromise.catch(() => undefined)
+
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    const hasCommand = logCalls.some(
+      (arg) => typeof arg === 'string' && arg.includes('codex exec --model o4-mini --full-auto')
+    )
+    expect(hasCommand).toBe(true)
+    expect(mockConfirmPrompt).toHaveBeenCalled()
+  })
+
+  it('cancels without executing when the confirm prompt is declined', async () => {
+    const config: AutoFixConfig = { autoFixTool: 'codex' }
+    const execute = jest.fn().mockResolvedValue(undefined)
+    mockPrepareAutoFix.mockResolvedValue(makePrepared({ execute }))
+    mockConfirmPrompt.mockResolvedValue(false)
+
+    const tl = new TaskList([makeItem()], config)
+    const startPromise = tl.start()
+
+    await press('a') // declines — stays pending
+    await press('q') // exit
+    await startPromise.catch(() => undefined)
+
+    expect(execute).not.toHaveBeenCalled()
+    const logCalls = (console.log as jest.Mock).mock.calls.flat()
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('Auto-fix cancelled.'))).toBe(true)
+    expect(logCalls.some((arg) => typeof arg === 'string' && arg.includes('pending: 1'))).toBe(true)
+  })
+})
+
+describe('TaskList — autoFix() on successful run', () => {
+  it('calls prepareAutoFix with the current item and config', async () => {
+    const config: AutoFixConfig = { autoFixTool: 'codex', autoFixToolOptions: { model: 'o4-mini' } }
+    mockPrepareAutoFix.mockResolvedValue(makePrepared())
+    mockConfirmPrompt.mockResolvedValue(true)
 
     const item = makeItem({ title: 'Fix me' })
     const tl = new TaskList([item], config)
@@ -352,16 +402,17 @@ describe('TaskList — autoFix() on successful runAutoFix', () => {
     await press('a')
     await startPromise.catch(() => undefined)
 
-    expect(mockRunAutoFix).toHaveBeenCalledWith(
+    expect(mockPrepareAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Fix me' }),
       config,
       expect.any(String)
     )
   })
 
-  it('marks item completed and advances after successful runAutoFix', async () => {
+  it('marks item completed and advances after a confirmed, successful run', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
-    mockRunAutoFix.mockResolvedValue(undefined)
+    mockPrepareAutoFix.mockResolvedValue(makePrepared())
+    mockConfirmPrompt.mockResolvedValue(true)
 
     const items = [makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })]
     const tl = new TaskList(items, config)
@@ -371,8 +422,8 @@ describe('TaskList — autoFix() on successful runAutoFix', () => {
     await press('q') // exit from item 2
     await startPromise.catch(() => undefined)
 
-    expect(mockRunAutoFix).toHaveBeenCalledTimes(1)
-    expect(mockRunAutoFix).toHaveBeenCalledWith(
+    expect(mockPrepareAutoFix).toHaveBeenCalledTimes(1)
+    expect(mockPrepareAutoFix).toHaveBeenCalledWith(
       expect.objectContaining({ title: 'Item 1' }),
       config,
       expect.any(String)
@@ -380,10 +431,13 @@ describe('TaskList — autoFix() on successful runAutoFix', () => {
   })
 })
 
-describe('TaskList — autoFix() when runAutoFix throws', () => {
+describe('TaskList — autoFix() when execute() throws', () => {
   it('displays the error message', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
-    mockRunAutoFix.mockRejectedValueOnce(new Error('codex exited with code 1'))
+    mockPrepareAutoFix.mockResolvedValue(
+      makePrepared({ execute: jest.fn().mockRejectedValueOnce(new Error('codex exited with code 1')) })
+    )
+    mockConfirmPrompt.mockResolvedValue(true)
 
     const tl = new TaskList([makeItem()], config)
     const startPromise = tl.start()
@@ -399,9 +453,12 @@ describe('TaskList — autoFix() when runAutoFix throws', () => {
     expect(hasErrorMsg).toBe(true)
   })
 
-  it('does not change item status when runAutoFix throws', async () => {
+  it('does not change item status when execute() throws', async () => {
     const config: AutoFixConfig = { autoFixTool: 'codex' }
-    mockRunAutoFix.mockRejectedValue(new Error('binary not found'))
+    mockPrepareAutoFix.mockResolvedValue(
+      makePrepared({ execute: jest.fn().mockRejectedValue(new Error('binary not found')) })
+    )
+    mockConfirmPrompt.mockResolvedValue(true)
 
     const items = [makeItem({ title: 'Item 1' }), makeItem({ title: 'Item 2' })]
     const tl = new TaskList(items, config)
@@ -412,9 +469,9 @@ describe('TaskList — autoFix() when runAutoFix throws', () => {
     await press('q') // exit
     await startPromise.catch(() => undefined)
 
-    expect(mockRunAutoFix).toHaveBeenCalledTimes(2)
-    expect(mockRunAutoFix).toHaveBeenNthCalledWith(1, expect.objectContaining({ title: 'Item 1' }), config, expect.any(String))
-    expect(mockRunAutoFix).toHaveBeenNthCalledWith(2, expect.objectContaining({ title: 'Item 1' }), config, expect.any(String))
+    expect(mockPrepareAutoFix).toHaveBeenCalledTimes(2)
+    expect(mockPrepareAutoFix).toHaveBeenNthCalledWith(1, expect.objectContaining({ title: 'Item 1' }), config, expect.any(String))
+    expect(mockPrepareAutoFix).toHaveBeenNthCalledWith(2, expect.objectContaining({ title: 'Item 1' }), config, expect.any(String))
   })
 })
 

@@ -26,9 +26,30 @@ const PROVIDER_TO_VENDOR: Partial<Record<string, AutoFixVendor>> = {
   gemini: 'google',
 }
 
-export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig, repoRoot: string): Promise<void> {
+/** A fully-resolved auto-fix, ready to preview before it runs. */
+export type PreparedAutoFix = {
+  /** The binary that `execute()` will spawn. */
+  binary: string
+  /** The resolved argv `execute()` will pass to `spawn`, excluding the trailing prompt (see `BaseAdapter.buildArgs`). */
+  args: string[]
+  /** Runs the adapter with the resolved prompt and credentials. */
+  execute: () => Promise<void>
+}
+
+/**
+ * Resolves which adapter/credentials/argv an auto-fix run would use,
+ * without running it. Split out from `runAutoFix` so callers (`TaskList`)
+ * can show the user the exact command before they confirm it (#1840) —
+ * `TaskList.autoFix()` used to print only the finding's title and file
+ * path, with no way to see what flags the spawned CLI would receive.
+ */
+export async function prepareAutoFix(
+  item: ReviewFeedbackItem,
+  config: AutoFixConfig,
+  repoRoot: string
+): Promise<PreparedAutoFix | undefined> {
   if (!config.autoFixTool) {
-    return
+    return undefined
   }
 
   const adapter = registry[config.autoFixTool]
@@ -79,5 +100,16 @@ export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig
   }
 
   const prompt = await buildPrompt(item, repoRoot)
-  await adapter.run(prompt, config.autoFixToolOptions, keyToInject, forceKeyToInject)
+
+  return {
+    binary: adapter.binary,
+    args: adapter.buildArgs(config.autoFixToolOptions),
+    execute: () => adapter.run(prompt, config.autoFixToolOptions, keyToInject, forceKeyToInject),
+  }
+}
+
+export async function runAutoFix(item: ReviewFeedbackItem, config: AutoFixConfig, repoRoot: string): Promise<void> {
+  const prepared = await prepareAutoFix(item, config, repoRoot)
+  if (!prepared) return
+  await prepared.execute()
 }

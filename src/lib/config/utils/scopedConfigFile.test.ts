@@ -7,6 +7,7 @@ import {
     resolveScopedConfigPath,
     writeScopedConfigFile,
 } from './scopedConfigFile'
+import { TRUSTED_PROJECT_TOP_LEVEL_KEYS } from '../constants/projectConfig'
 import { getXdgConfigPath } from '../services/xdg'
 import { resolveGitRepoRoot } from '../../utils/resolveGitRepoRoot'
 
@@ -142,5 +143,11 @@ describe('checkProjectScopeKeyTrust', () => {
     // must be caught too, not just the bare top-level key.
     expect(checkProjectScopeKeyTrust('autoFixToolOptions.gemini')).toBeDefined()
     expect(checkProjectScopeKeyTrust('autoFixToolApiKey')).toBeDefined()
+  })
+
+  it('allows every documented TRUSTED_PROJECT_TOP_LEVEL_KEYS entry (#1840)', () => {
+    for (const key of TRUSTED_PROJECT_TOP_LEVEL_KEYS) {
+      expect(checkProjectScopeKeyTrust(key)).toBeUndefined()
+    }
   })
 })
