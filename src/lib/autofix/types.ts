@@ -11,6 +11,17 @@ export interface BaseAdapter {
   readonly vendor: AutoFixVendor
   /** The environment-variable name this adapter reads its API key from. */
   readonly envVar: string
+  /** The binary `run` spawns — exposed so callers can preview the resolved command line. */
+  readonly binary: string
+  /**
+   * Builds the argv `run` will pass to `spawn`, filtered through this
+   * adapter's option allowlist — EXCLUDING the trailing prompt argument.
+   * The prompt is caller-supplied free text (often large, built from a
+   * diff) and isn't the part a caller needs to review before running;
+   * exposing just the flags lets `TaskList.autoFix()` show the user
+   * exactly what will execute before they confirm it (#1840).
+   */
+  buildArgs(options?: Record<string, string>): string[]
   /**
    * @param prompt         The prompt to pass to the auto-fix CLI.
    * @param options        Extra CLI flags forwarded to the tool.

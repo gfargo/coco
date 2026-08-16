@@ -74,6 +74,21 @@ describe('GeminiAdapter', () => {
     expect(args[args.length - 1]).toBe('fix the bug')
   })
 
+  it('drops unrecognized option keys instead of forwarding them as flags (#1840)', async () => {
+    mockSpawn.mockReturnValue(makeChild(0))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    await adapter.run('fix the bug', { model: 'gemini-2.5-pro', yolo: 'true' })
+
+    const args = mockSpawn.mock.calls[0][1] as string[]
+    expect(args).toContain('--model')
+    expect(args).not.toContain('--yolo')
+    expect(warn).toHaveBeenCalled()
+    expect(warn.mock.calls[0][0]).toContain('yolo')
+
+    warn.mockRestore()
+  })
+
   it('injects GEMINI_API_KEY when apiKey is provided and ambient is unset', async () => {
     const previousApiKey = process.env.GEMINI_API_KEY
     delete process.env.GEMINI_API_KEY

@@ -5,7 +5,7 @@ import { promisify } from 'util'
 import { SimpleGit } from 'simple-git'
 import { ReviewFeedbackItem } from '../../commands/review/config'
 import { findingToIssue } from '../../commands/issues/findingToIssue'
-import { runAutoFix } from '../autofix'
+import { prepareAutoFix } from '../autofix'
 import { AutoFixConfig } from '../autofix/types'
 import { getProviderOverview } from '../../git/providerData'
 import { getForgeActions } from '../../git/forgeActions'
@@ -117,16 +117,36 @@ export class TaskList {
     }
     const item = this.items[this.currentIndex]
     console.clear()
-    console.log(chalk.bold.cyan(`🤖 Running auto-fix: ${item.title}`))
-    console.log(chalk.dim(`File: ${item.filePath}\n`))
+    console.log(chalk.bold.cyan(`🤖 Auto-fix: ${item.title}`))
+    console.log(chalk.dim(`File: ${item.filePath}`))
 
-    // Fully release terminal control before handing off to child process
+    // Release raw mode so @inquirer/prompts (used for the confirm prompt below)
+    // and, once confirmed, the child process can both manage stdin themselves.
     process.stdin.setRawMode(false)
     process.stdin.pause()
-    await new Promise((r) => setTimeout(r, 50))
 
     try {
-      await runAutoFix(item, this.config, this.repoRoot)
+      const prepared = await prepareAutoFix(item, this.config, this.repoRoot)
+      if (!prepared) return
+
+      // Show the exact command before running it — previously only the
+      // finding's title and file path were printed, with no way to see
+      // which flags the spawned CLI would receive (#1840).
+      console.log(chalk.dim(`\nCommand: ${prepared.binary} ${prepared.args.join(' ')} <prompt>\n`))
+
+      const confirmed = await confirmPrompt({
+        message: `Run "${prepared.binary}" with the flags above? It can edit files in your working tree.`,
+        default: false,
+      })
+      if (!confirmed) {
+        console.log(chalk.yellow('Auto-fix cancelled.'))
+        await new Promise((r) => setTimeout(r, 900))
+        return
+      }
+
+      // Fully release terminal control before handing off to the child process.
+      await new Promise((r) => setTimeout(r, 50))
+      await prepared.execute()
       this.markAsComplete()
       console.log(chalk.green('\n✅ Auto-fix completed successfully.'))
       await new Promise((r) => setTimeout(r, 1200))

@@ -1,9 +1,33 @@
 import { spawn } from 'child_process'
 import { BaseAdapter, AutoFixVendor } from '../types'
+import { filterAllowedOptions } from '../optionAllowlist'
+
+/**
+ * Tuning flags this adapter forwards to `gemini`. Deliberately excludes
+ * `--yolo` (auto-accepts every action, no confirmation) and `--approval-mode`
+ * when set to its `yolo` value — the exact class of flag #1840 is about
+ * keeping out of autoFixToolOptions. `sandbox` stays allowed: it's a real
+ * tuning knob (and can also *restrict* execution), not solely a bypass.
+ */
+const ALLOWED_OPTIONS = new Set(['model', 'sandbox', 'checkpointing'])
 
 export class GeminiAdapter implements BaseAdapter {
   readonly vendor: AutoFixVendor = 'google'
   readonly envVar = 'GEMINI_API_KEY'
+  readonly binary = 'gemini'
+
+  buildArgs(options?: Record<string, string>): string[] {
+    const args: string[] = []
+
+    const allowedOptions = filterAllowedOptions(options, ALLOWED_OPTIONS, 'gemini')
+    if (allowedOptions) {
+      for (const [key, value] of Object.entries(allowedOptions)) {
+        args.push(`--${key}`, value)
+      }
+    }
+
+    return args
+  }
 
   async run(
     prompt: string,
@@ -11,15 +35,7 @@ export class GeminiAdapter implements BaseAdapter {
     apiKey?: string,
     forceApiKey?: string
   ): Promise<void> {
-    const args: string[] = []
-
-    if (options) {
-      for (const [key, value] of Object.entries(options)) {
-        args.push(`--${key}`, value)
-      }
-    }
-
-    args.push(prompt)
+    const args = [...this.buildArgs(options), prompt]
 
     // Build the child environment:
     //   - forceApiKey (explicit per-tool credential) always wins, even if an
@@ -34,7 +50,7 @@ export class GeminiAdapter implements BaseAdapter {
     }
 
     return new Promise((resolve, reject) => {
-      const child = spawn('gemini', args, { stdio: 'inherit', env })
+      const child = spawn(this.binary, args, { stdio: 'inherit', env })
 
       child.on('error', (err: NodeJS.ErrnoException) => {
         if (err.code === 'ENOENT') {

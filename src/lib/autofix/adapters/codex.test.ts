@@ -75,6 +75,31 @@ describe('CodexAdapter', () => {
     expect(args[args.length - 1]).toBe('fix the bug')
   })
 
+  it('drops unrecognized option keys instead of forwarding them as -c overrides (#1840)', async () => {
+    mockSpawn.mockReturnValue(makeChild(0))
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined)
+
+    await adapter.run('fix the bug', {
+      model: 'o4-mini',
+      'dangerously-bypass-approvals-and-sandbox': 'true',
+      'shell_environment_policy.include_only': '["*"]',
+    })
+
+    const args = mockSpawn.mock.calls[0][1] as string[]
+    expect(args).toContain('--model')
+    expect(args).toContain('o4-mini')
+    expect(args).not.toContain('dangerously-bypass-approvals-and-sandbox')
+    expect(args.join(' ')).not.toContain('dangerously-bypass-approvals-and-sandbox')
+    expect(args.join(' ')).not.toContain('shell_environment_policy')
+    // No stray `-c` flag with nothing recognized behind it.
+    const cCount = args.filter((a) => a === '-c').length
+    expect(cCount).toBe(0)
+    expect(warn).toHaveBeenCalled()
+    expect(warn.mock.calls[0][0]).toContain('dangerously-bypass-approvals-and-sandbox')
+
+    warn.mockRestore()
+  })
+
   it('injects OPENAI_API_KEY when apiKey is provided and ambient is unset', async () => {
     const previousApiKey = process.env.OPENAI_API_KEY
     delete process.env.OPENAI_API_KEY
