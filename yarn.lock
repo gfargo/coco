@@ -1548,9 +1548,9 @@
     langsmith ">=0.4.0 <1.0.0"
 
 "@langchain/core@^1.1.34":
-  version "1.2.5"
-  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-1.2.5.tgz#cef645914c2dbc6345ce2c8287b529634c62696e"
-  integrity sha512-4lXj3fTPQYGdEtOG9gWDnvmp6wpXNMo9MmWzfZxxPUxMcjulZJa93pYAZ90luFLg2YVdVuUl2tuwdD7tY5K9MA==
+  version "1.2.6"
+  resolved "https://registry.yarnpkg.com/@langchain/core/-/core-1.2.6.tgz#dbed59e5143669363f68bf153742aa375236b1df"
+  integrity sha512-4bjxSLx/w7rrIY0YmjIDfrvwwz4UQNHGccH3KGREvqIQkJbtfSDEGOaiA1jzyUwsNmhNu0Z2uqvWBt6RPVg3oQ==
   dependencies:
     "@cfworker/json-schema" "^4.0.2"
     "@standard-schema/spec" "^1.1.0"
