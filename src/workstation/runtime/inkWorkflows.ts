@@ -50,12 +50,13 @@ export type LogInkWorkflowAction = {
    * Target contract (#1361 multi-select). `'multi'` workflows resolve
    * their targets through the batch selector (range → marked set →
    * cursored single) and execute against every resolved item; the
-   * confirm panel pluralizes accordingly. Absent/`'single'` workflows
-   * always act on the one cursored item and ignore marks entirely —
-   * the plural contract is opt-in per workflow so a checkout can never
-   * accidentally become plural.
+   * confirm panel pluralizes accordingly. `'single'` workflows always
+   * act on the one cursored item and ignore marks entirely — the plural
+   * contract is opt-in per workflow so a checkout can never accidentally
+   * become plural. Required (not optional) so every registry entry is
+   * forced to declare its cardinality explicitly.
    */
-  targets?: 'single' | 'multi'
+  targets: 'single' | 'multi'
 }
 
 function countLabel(count: number, singular: string, plural = `${singular}s`): string {
@@ -148,6 +149,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Switch to the selected local or remote branch.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'create-pr',
@@ -156,6 +158,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Create a pull request from the current branch.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to the history view in inkInput so `c`
@@ -187,6 +190,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.',
+      targets: 'single',
     },
     {
       id: 'force-push-selected-branch',
@@ -196,6 +200,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.',
+      targets: 'single',
     },
     {
       // Divergence recovery pair — offered via choice prompt when
@@ -207,6 +212,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'git pull --rebase — replay local commits on top of the diverged remote.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'pull-merge-current',
@@ -215,6 +221,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'git pull --no-rebase — merge the diverged remote into the local branch.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // #1357 — fixup workflow. Scoped to the history view in inkInput
@@ -229,6 +236,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Commit the staged changes as a fixup! of the cursored commit (squashed on the next autosquash rebase).',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // Runs `rebase -i --autosquash` from the fixup target's parent with
@@ -242,6 +250,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Run git rebase --autosquash to fold fixup! commits into their targets (rewrites history).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to the commit-diff explore in inkInput.
@@ -255,6 +264,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Materialize the selected file from this commit into the working tree (after confirmation).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to the stash-diff explorer in inkInput.
@@ -266,6 +276,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Materialize the selected file from this stash into the working tree (after confirmation).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to commit-diff and stash-diff explores in
@@ -283,6 +294,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Extract the hunk under the cursor and apply it to the working tree via `git apply`.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Sibling of `apply-hunk-worktree` — same extraction path, but
@@ -294,6 +306,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Extract the hunk under the cursor and apply it to the index via `git apply --cached`.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'open-pr',
@@ -302,6 +315,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Open the current branch\'s pull request in the browser, or the repo page if there\'s no PR.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'fetch-remotes',
@@ -310,6 +324,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Run `git fetch --all --prune` and silently refresh context.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'pull-current-branch',
@@ -318,6 +333,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Run `git pull --ff-only` against the current branch.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'push-current-branch',
@@ -326,6 +342,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Run `git push` for the current branch.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     // Per-view variants of fetch / pull / push that act on the
     // cursored branch instead of the current one. Empty `key` keeps
@@ -341,6 +358,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Run `git fetch <remote> <branch>` for the cursored branch in the branches view / sidebar.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'pull-selected-branch',
@@ -349,6 +367,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Pull the cursored branch in the branches view / sidebar. Falls back to a fast-forward-only refspec fetch when the branch is not currently checked out; refuses non-FF.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'push-selected-branch',
@@ -357,6 +376,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Run `git push <remote> <branch>` for the cursored branch in the branches view / sidebar.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Branch-level workflows — merge, reset, sync. Bound to M / Z / S
@@ -371,6 +391,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
       warning: (state) => state.pendingConfirmationPayload
         || 'Merging into the current branch. Creates a merge commit (or fast-forwards if possible).',
+      targets: 'single',
     },
     {
       id: 'reset-to-branch',
@@ -380,6 +401,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'Rewrites local history. Use g u to undo if needed.',
+      targets: 'single',
     },
     {
       id: 'sync-branch',
@@ -388,6 +410,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Pull from remote then push local commits.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Per-view-only — the inkInput handler scopes this to the tags
@@ -400,6 +423,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Push :tag to origin to delete the selected tag remotely after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'stage-file',
@@ -408,6 +432,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Toggle the selected status file between staged and unstaged.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     // Status surface group-level batch ops (#791 follow-up). Triggered
     // by Enter when the cursor is on a status group header
@@ -421,6 +446,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Unstage every file currently in the staged group.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'stage-all-unstaged',
@@ -429,6 +455,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Stage every modified-but-not-staged file.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'stage-all-untracked',
@@ -437,6 +464,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Add every untracked file to the index.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'delete-branch',
@@ -490,6 +518,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       // is somehow absent.
       warning: (state) => state.pendingConfirmationPayload
         || 'Rebase rewrites the current branch\'s history. This cannot be undone by Coco.',
+      targets: 'single',
     },
     {
       id: 'delete-tag',
@@ -498,6 +527,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Delete the selected tag after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'drop-stash',
@@ -521,6 +551,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Stash just the staged (index) changes — `git stash push --staged`.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'stash-keep-index',
@@ -529,6 +560,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Stash everything but leave the index intact for an immediate commit — `git stash push --keep-index`.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'remove-worktree',
@@ -537,6 +569,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Remove the selected linked worktree after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // Per-view-only — the inkInput handler scopes this to the
@@ -550,6 +583,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Remove the selected worktree and delete the branch it was tracking after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'abort-operation',
@@ -558,6 +592,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Abort the in-progress Git operation after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     // #783 — full PR action panel. All five entries are palette-only
     // (`key: ''`) — actual dispatch is per-view scoped in inkInput so
@@ -573,6 +608,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Merge the current branch\'s pull request (prompts for merge / squash / rebase, then confirms).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'close-pr',
@@ -581,6 +617,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Close the current pull request without merging.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'approve-pr',
@@ -589,6 +626,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Submit an approving review on the current pull request.',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'request-changes-pr',
@@ -597,6 +635,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Submit a change-request review (prompts for the review body, then confirms).',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'comment-pr',
@@ -605,6 +644,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Add a comment to the current pull request (prompts for body).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     // OSS-1615 — CI-checks surface. Re-run is non-destructive (it just
     // re-triggers CI) so it fires straight from the key; auto-merge
@@ -617,6 +657,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Re-run the current pull request\'s failed CI checks.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'automerge-pr',
@@ -625,6 +666,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Merge the current pull request automatically once its checks pass (prompts for merge / squash / rebase).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // #1933 — the draft→ready promotion, gated like `approve-pr` /
@@ -636,6 +678,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Promote the current branch\'s draft pull request to ready for review.',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'reopen-pr',
@@ -644,6 +687,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Reopen the current branch\'s closed pull request.',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     // #882 phase 5 — triage-view destructive verbs. Each routed
     // through the y-confirm path so single-keystroke `x` / `a` /
@@ -658,6 +702,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Close the cursored issue on the triage list view.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'triage-issue-reopen',
@@ -666,6 +711,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Reopen the cursored issue on the triage list view.',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'triage-pr-merge',
@@ -674,6 +720,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Merge the cursored pull request on the triage list view (prompts for merge / squash / rebase, then confirms).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'triage-pr-close',
@@ -682,6 +729,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Close the cursored pull request on the triage list view without merging.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'triage-pr-approve',
@@ -690,6 +738,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Submit an approving review on the cursored pull request.',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'triage-pr-request-changes',
@@ -698,6 +747,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Submit a change-request review on the cursored pull request (prompts for body, then confirms).',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // OSS-1615 — CI-checks surface, triage-view siblings of
@@ -708,6 +758,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Re-run the cursored pull request\'s failed CI checks.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'triage-pr-automerge',
@@ -716,6 +767,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Merge the cursored pull request automatically once its checks pass (prompts for merge / squash / rebase).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // #1933 — triage counterpart of `ready-pr`.
@@ -725,6 +777,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Promote the cursored draft pull request to ready for review.',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'triage-pr-reopen',
@@ -733,6 +786,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Reopen the cursored closed pull request on the triage list view.',
       kind: 'normal',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // #1363 — review-locally in one key. Scoped to the triage view in
@@ -748,6 +802,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'gh pr checkout <n> — fetch the cursored pull request\'s branch and switch onto it.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to the history view in inkInput so `R`
@@ -760,6 +815,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Revert the cursored commit by adding an inverse commit on top of HEAD.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to the history view in inkInput. Triggers
@@ -771,6 +827,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Move the current branch tip to the cursored commit (prompts for soft / mixed / hard).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to the history view in inkInput (key `B`).
@@ -790,6 +847,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Create a branch pointed at the cursored commit (does not switch).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Follow-up action after a successful create-branch or
@@ -811,6 +869,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       warning: (state) => state.pendingConfirmationPayload
         ? `Branch '${state.pendingConfirmationPayload}' created — switch to it now?`
         : 'Branch created — switch to it now?',
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to the history view in inkInput via the
@@ -824,6 +883,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Create a lightweight tag at the cursored commit.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Per-view-only: scoped to the history view in inkInput. `i`
@@ -836,6 +896,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Execute the rebase plan built in the rebase view (rewrites history; conflicts route to the conflicts view).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'interactive-rebase',
@@ -844,6 +905,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Start an interactive rebase from the cursored commit (opens $GIT_EDITOR for the todo list).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // #0.67 — reflog "time machine". Scoped to the reflog view in
@@ -862,6 +924,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Check out the commit at the cursored reflog entry (detaches HEAD, after confirmation).',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // #1361 — global undo (lazygit's `z` safety blanket). Dispatched
@@ -877,6 +940,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       requiresConfirmation: true,
       warning: (state) => state.pendingConfirmationPayload
         || 'Undo the last git operation using the reflog.',
+      targets: 'single',
     },
     {
       // OSS-1606 — session-scoped undo stack, dispatched by the `gu`
@@ -895,6 +959,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Undo the most recent invertible destructive action from this session (branch delete, stash drop, reset, or tag delete).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // #0.71 — submodule maintenance actions. All three are scoped
@@ -909,6 +974,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Register the cursored submodule in .git/config from its .gitmodules entry.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'submodule-update',
@@ -917,6 +983,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Fetch and check out the cursored submodule at the pinned commit (init first if needed).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'submodule-sync',
@@ -925,6 +992,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Re-sync the cursored submodule’s remote URL from .gitmodules into config.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // #0.71 — remote management. All four are scoped per-view in
@@ -940,6 +1008,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Add a new remote (prompts for `name url`).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'remote-set-url',
@@ -948,6 +1017,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Repoint the cursored remote at a new URL (prompts for the URL).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'remote-remove',
@@ -956,6 +1026,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Remove the cursored remote and its tracking refs after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'remote-prune',
@@ -964,6 +1035,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Prune stale remote-tracking refs for the cursored remote after confirmation.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // #784 — bisect workflow actions. All four are scoped per-view in
@@ -979,6 +1051,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Mark the current bisect candidate as good and advance to the next one.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'bisect-bad',
@@ -987,6 +1060,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Mark the current bisect candidate as bad and advance to the next one.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'bisect-skip',
@@ -995,6 +1069,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Skip the current bisect candidate (e.g. it does not build) and advance.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'bisect-reset',
@@ -1003,6 +1078,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'End the bisect session and restore HEAD. Discards in-progress bisect state.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // #879 item 5 — `git bisect run <cmd>` integration. Empty `key`
@@ -1017,6 +1093,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Drive the bisect via `git bisect run sh -c <command>` — exit code marks good/bad/skip.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // #879 item 4 — in-TUI bisect start wizard. Empty `key` keeps
@@ -1031,6 +1108,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Run git bisect start with the bad/good commits picked from history (newline-separated payload).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // #1350 — amend staged changes into HEAD. Destructive: rewrites
@@ -1043,6 +1121,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'git commit --amend --no-edit — folds the staged changes into the head commit.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // #1350 — reword the HEAD commit message. Palette-only entry
@@ -1054,6 +1133,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'git commit --amend -m <message> — prompt seeded with the current subject.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Label honesty: despite the historical id, this action does NOT
@@ -1069,6 +1149,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'ai',
       requiresConfirmation: true,
       estimatedTokens: 800,
+      targets: 'single',
     },
     {
       // #1369 — upgraded from the explain-only stub: proposes a
@@ -1084,6 +1165,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'ai',
       requiresConfirmation: true,
       estimatedTokens: 1200,
+      targets: 'single',
     },
     // ── #1447 registry backfill: workflow ids that existed only as ──
     // ── handler implementations without a declarative entry. ──────────
@@ -1095,6 +1177,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Create a new local branch from the current HEAD (prompts for name).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'create-tag',
@@ -1103,6 +1186,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Create a lightweight tag at HEAD (prompts for name).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'push-tag',
@@ -1111,6 +1195,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Push the selected tag to origin.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'apply-stash',
@@ -1119,6 +1204,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Apply the selected stash without removing it from the stash list.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'apply-stash-index',
@@ -1127,6 +1213,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Apply the selected stash, reinstating the original index state.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'pop-stash',
@@ -1135,6 +1222,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Apply the selected stash and remove it from the stash list.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'undo-drop-stash',
@@ -1143,6 +1231,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Recover the last dropped stash from this session (uses the remembered commit hash).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'rename-stash',
@@ -1151,6 +1240,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Change the message of the selected stash entry (prompts for new message).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'stash-branch',
@@ -1159,6 +1249,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Create a new branch from the selected stash and drop the stash (prompts for branch name).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'create-stash',
@@ -1167,6 +1258,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Stash all changes (tracked + untracked) with an optional message.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'rename-branch',
@@ -1175,6 +1267,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Rename the selected branch (prompts for new name).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'set-upstream',
@@ -1183,6 +1276,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Set the tracking upstream for the selected branch (prompts for remote/branch ref).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'add-to-gitignore',
@@ -1191,6 +1285,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Append a pattern to the repository .gitignore file.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'stage-all',
@@ -1199,6 +1294,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Stage all changes in the working tree (git add -A).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'stage-pathspec',
@@ -1207,6 +1303,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Stage files matching a pathspec (prompts for pattern).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Conflicts view — per-file resolution verbs. Bound to U/u/a/o
@@ -1217,6 +1314,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Resolve the selected conflict by keeping the current branch version (ours during merge, theirs during rebase).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'resolve-conflict-theirs',
@@ -1225,6 +1323,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Resolve the selected conflict by keeping the incoming version (theirs during merge, ours during rebase).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'resolve-conflict-stage',
@@ -1233,6 +1332,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Mark the selected conflict as resolved by staging the file as-is.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'resolve-conflict-open-diff',
@@ -1241,6 +1341,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Open the diff view for the selected conflicted file to inspect markers.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'continue-operation',
@@ -1249,6 +1350,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Continue the in-progress git operation (rebase --continue, merge --continue, etc.).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       // Worktree-checkout conflict recovery — raised by the choice
@@ -1259,6 +1361,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Remove the conflicting worktree and retry the branch checkout.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       id: 'conflict-remove-worktree-branch',
@@ -1267,6 +1370,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Remove the conflicting worktree and force-delete its tracking branch.',
       kind: 'destructive',
       requiresConfirmation: true,
+      targets: 'single',
     },
     {
       // Dirty-worktree recovery — raised when a checkout is blocked
@@ -1277,6 +1381,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Stash all changes (including untracked) and retry the branch checkout.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'stash-and-checkout-pr',
@@ -1285,6 +1390,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Stash all changes (including untracked) and retry the PR checkout.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     // ── Triage-view non-destructive verbs (#882 phase 4). ──────────────
     // Comment / label / assign are additive — no confirmation needed.
@@ -1297,6 +1403,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Open the cursored issue URL in the default browser.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'triage-issue-comment',
@@ -1305,6 +1412,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Add a comment to the cursored issue (prompts for body).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'triage-issue-label',
@@ -1313,6 +1421,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Add a label to the cursored issue (prompts for label name).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'triage-issue-assign',
@@ -1321,6 +1430,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Assign the cursored issue to a user (prompts for login).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'triage-pr-open',
@@ -1329,6 +1439,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Open the cursored pull request URL in the default browser.',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'triage-pr-comment',
@@ -1337,6 +1448,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Add a comment to the cursored pull request (prompts for body).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'triage-pr-label',
@@ -1345,6 +1457,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Add a label to the cursored pull request (prompts for label name).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     {
       id: 'triage-pr-assign',
@@ -1353,6 +1466,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Assign the cursored pull request to a user (prompts for login).',
       kind: 'normal',
       requiresConfirmation: false,
+      targets: 'single',
     },
     // #1451 — mutation confirmations unified into the registry. These
     // were previously a separate `pendingMutationConfirmation` system;
@@ -1367,6 +1481,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'This discards local changes and cannot be undone by Coco.',
+      targets: 'single',
     },
     {
       id: 'revert-hunk',
@@ -1376,6 +1491,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'This discards local changes and cannot be undone by Coco.',
+      targets: 'single',
     },
     {
       id: 'discard-lines',
@@ -1385,6 +1501,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'This discards local changes and cannot be undone by Coco.',
+      targets: 'single',
     },
     {
       id: 'discard-draft',
@@ -1394,6 +1511,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'You have an unsaved commit draft. Press y to discard it and quit.',
+      targets: 'single',
     },
     {
       id: 'discard-rebase-plan',
@@ -1403,6 +1521,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       kind: 'destructive',
       requiresConfirmation: true,
       warning: 'You have an edited rebase plan. Press y to discard it and leave.',
+      targets: 'single',
     },
   ]
 }
