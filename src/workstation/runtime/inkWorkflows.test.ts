@@ -139,6 +139,44 @@ describe('log Ink workflows', () => {
     expect(getLogInkWorkflowActionById('cherry-pick-commit')?.targets).toBe('multi')
   })
 
+  // #OSS-674: `targets` is a required field on LogInkWorkflowAction, but
+  // the compiler only catches a missing field at the literal declaration
+  // site — a fixture built with `as any` (or a future refactor that
+  // stops constructing entries as object literals) would slip past
+  // `tsc` silently. This test is the runtime backstop the ticket names:
+  // every registered action must declare a cardinality.
+  it('declares targets on every registered workflow action', () => {
+    const untagged = getLogInkWorkflowActions().filter((action) => !action.targets)
+    expect(untagged).toEqual([])
+  })
+
+  // The `'multi'` set is deliberately closed: adding a batch-capable
+  // workflow means consciously updating this list, not just flipping a
+  // field. Keeps `targets: 'multi'` from drifting away from the actual
+  // batch-resolving branches of `resolvePendingItemAction`
+  // (delete-branch / force-delete-branch / drop-stash use
+  // getSelectedBranchBatch/getSelectedStashBatch; cherry-pick-commit
+  // resolves via the range half of the #1452 batch selector).
+  it('keeps the targets: multi set closed to exactly the four batch-capable workflows', () => {
+    const multiIds = getLogInkWorkflowActions()
+      .filter((action) => action.targets === 'multi')
+      .map((action) => action.id)
+      .sort()
+
+    expect(multiIds).toEqual([
+      'cherry-pick-commit',
+      'delete-branch',
+      'drop-stash',
+      'force-delete-branch',
+    ])
+  })
+
+  it('declares single-id workflows as targets: single', () => {
+    for (const id of ['checkout-branch', 'delete-tag', 'remove-worktree', 'triage-pr-checkout']) {
+      expect(getLogInkWorkflowActionById(id)?.targets).toBe('single')
+    }
+  })
+
   it('registers force-delete-branch as a keyless, confirmation-gated escalation', () => {
     // Raised by the runtime as a second confirm when `git branch -d`
     // rejects an unmerged branch; keyless so no keystroke fires it.

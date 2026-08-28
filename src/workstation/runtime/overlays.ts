@@ -121,8 +121,9 @@ export function describeConfirmationTarget(
 ): string | undefined {
   const id = state.pendingConfirmationId
   if (!id) return undefined
+  const action = getLogInkWorkflowActionById(id)
   const item = resolvePendingItemAction(id, state, context)
-  if (item && item.ids.length === 1) {
+  if (item && (action?.targets !== 'multi' || item.ids.length === 1)) {
     return `${item.kind}: ${item.ids[0]}`
   }
   if (item && item.ids.length > 1) {

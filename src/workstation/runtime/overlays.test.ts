@@ -240,6 +240,27 @@ describe('confirmation target naming', () => {
     const text = flattenText(renderConfirmationPanel(createElement, components, state, context, 100, theme, false))
     expect(text).toContain('2 stashes: stash@{0}, stash@{1}')
   })
+
+  // #OSS-674: `describeConfirmationTarget` gates the plural branch on the
+  // registry's `targets` field, not just on resolver output length —
+  // checkout-branch is `targets: 'single'`, so even with marks active on
+  // the branches view it must keep the singular "branch: <one>" line and
+  // never render a "N branches:" summary.
+  it('keeps the singular target line for a targets: single workflow even with marks active', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'checkout-branch',
+      selection: { view: 'branches' as const, anchorId: undefined, ids: new Set(['feat/a', 'feat/b', 'feat/c']) },
+    }
+    const text = flattenText(renderConfirmationPanel(
+      createElement, components, state, branchContext(['feat/a', 'feat/b', 'feat/c', 'main']), 100, theme, false,
+    ))
+    // No branch is marked `current`, so the name-sorted list puts
+    // `feat/a` at cursor index 0 — the point is that it's exactly one
+    // name, not which one.
+    expect(text).toContain('branch: feat/a')
+    expect(text).not.toContain('branches:')
+  })
 })
 
 describe('rebase-onto-branch confirmation panel (#0.71)', () => {
