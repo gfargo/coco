@@ -3,7 +3,6 @@
       "publish": true
     },
     "github": {
-      "publish": true,
       "release": true
     },
     "git": {
@@ -15,4 +14,3 @@
       "after:bump": ["node bin/verifyRelease.mjs", "npx auto-changelog -p"]
     }
   }
-  
