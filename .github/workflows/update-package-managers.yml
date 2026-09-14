@@ -77,6 +77,8 @@ jobs:
     needs: resolve-version
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      SCOOP_BUCKET_TOKEN: ${{ secrets.SCOOP_BUCKET_TOKEN }}
     steps:
       - name: Checkout coco
         uses: actions/checkout@v4
@@ -90,7 +92,7 @@ jobs:
         run: node bin/genManifests.mjs "${{ needs.resolve-version.outputs.version }}" --only=scoop
 
       - name: Checkout bucket repo
-        if: ${{ secrets.SCOOP_BUCKET_TOKEN != '' }}
+        if: ${{ env.SCOOP_BUCKET_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: gfargo/scoop-bucket
@@ -98,7 +100,7 @@ jobs:
           path: bucket-repo
 
       - name: Copy manifest into bucket & push
-        if: ${{ secrets.SCOOP_BUCKET_TOKEN != '' }}
+        if: ${{ env.SCOOP_BUCKET_TOKEN != '' }}
         working-directory: bucket-repo
         run: |
           mkdir -p bucket
@@ -117,6 +119,8 @@ jobs:
     needs: resolve-version
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      NIX_FLAKE_TOKEN: ${{ secrets.NIX_FLAKE_TOKEN }}
     steps:
       - name: Checkout coco
         uses: actions/checkout@v4
@@ -130,7 +134,7 @@ jobs:
         run: node bin/genManifests.mjs "${{ needs.resolve-version.outputs.version }}" --only=nix
 
       - name: Checkout flake repo
-        if: ${{ secrets.NIX_FLAKE_TOKEN != '' }}
+        if: ${{ env.NIX_FLAKE_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
           repository: gfargo/nix-coco
@@ -138,7 +142,7 @@ jobs:
           path: flake-repo
 
       - name: Copy flake & push
-        if: ${{ secrets.NIX_FLAKE_TOKEN != '' }}
+        if: ${{ env.NIX_FLAKE_TOKEN != '' }}
         working-directory: flake-repo
         run: |
           cp ../packaging/nix/flake.nix flake.nix
@@ -156,6 +160,8 @@ jobs:
     needs: resolve-version
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
     steps:
       - name: Checkout coco
         uses: actions/checkout@v4
@@ -169,7 +175,7 @@ jobs:
         run: node bin/genManifests.mjs "${{ needs.resolve-version.outputs.version }}" --only=aur
 
       - name: Configure SSH for aur.archlinux.org
-        if: ${{ secrets.AUR_SSH_KEY != '' }}
+        if: ${{ env.AUR_SSH_KEY != '' }}
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
@@ -183,7 +189,7 @@ jobs:
           } >> ~/.ssh/config
 
       - name: Push PKGBUILD + .SRCINFO to AUR
-        if: ${{ secrets.AUR_SSH_KEY != '' }}
+        if: ${{ env.AUR_SSH_KEY != '' }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
