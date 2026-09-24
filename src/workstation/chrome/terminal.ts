@@ -6,7 +6,7 @@ export type LogInkTerminalStreams = {
 
 export type LogInkRenderOptions = {
   alternateScreen: true
-  exitOnCtrlC: true
+  exitOnCtrlC: false
   patchConsole: false
   stdin: NodeJS.ReadStream
   stdout: NodeJS.WriteStream
@@ -25,7 +25,11 @@ export function getLogInkRenderOptions(
 ): LogInkRenderOptions {
   return {
     alternateScreen: true,
-    exitOnCtrlC: true,
+    // Ink's own useInput short-circuits Ctrl+C when this is true (it
+    // never reaches any listener — node_modules/ink/build/hooks/use-input.js),
+    // which bypasses the unsaved-draft / rebase-plan / split-apply quit
+    // guards in getLogInkInputEvents. We own the exit ourselves instead.
+    exitOnCtrlC: false,
     patchConsole: false,
     stdin: streams.input,
     stdout: streams.output,

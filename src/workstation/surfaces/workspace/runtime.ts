@@ -278,14 +278,12 @@ export async function startWorkspace(
     resumeRef,
   })
 
-  // Override exitOnCtrlC. Ink's default ctrl+c handler reaches into
-  // process.kill, which on some terminals races with stdin teardown
-  // and surfaces as TTY EIO. We handle ctrl+c in our own useInput
-  // handler so the quit path is the same as `q`.
-  const renderOptions = {
-    ...getLogInkRenderOptions({ input, output, error }),
-    exitOnCtrlC: false,
-  }
+  // getLogInkRenderOptions already sets exitOnCtrlC: false — Ink's
+  // default ctrl+c handler reaches into process.kill, which on some
+  // terminals races with stdin teardown and surfaces as TTY EIO. We
+  // handle ctrl+c in our own useInput handler so the quit path is the
+  // same as `q`.
+  const renderOptions = getLogInkRenderOptions({ input, output, error })
   const instance = ink.render(app, renderOptions)
 
   const lifecycle = installTerminalLifecycle({

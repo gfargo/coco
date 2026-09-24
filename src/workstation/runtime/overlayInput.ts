@@ -15,6 +15,7 @@ import {
   type LogInkInputEvent,
   type LogInkInputKey,
 } from './inkInput'
+import { resolveQuitEvents } from './quitGuard'
 
 /**
  * Modal overlay key handling — theme picker, gitignore picker, command
@@ -224,7 +225,7 @@ export function handleOverlayInput(
       return [action({ type: 'toggleHelp' })]
     }
     if (inputValue === 'q') {
-      return [{ type: 'exit' }]
+      return resolveQuitEvents(state)
     }
     if (key.downArrow || inputValue === 'j') {
       return [action({ type: 'scrollHelp', delta: 1 })]
@@ -257,7 +258,7 @@ export function handleOverlayInput(
       return [action({ type: 'toggleHelp' })]
     }
     if (inputValue === 'q') {
-      return [{ type: 'exit' }]
+      return resolveQuitEvents(state)
     }
     return []
   }

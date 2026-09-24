@@ -136,6 +136,191 @@ describe('log Ink input interactions', () => {
     expect(events.find((event) => event.type === 'exit')).toBeDefined()
   })
 
+  describe('Ctrl+C quit guard (OSS-2795)', () => {
+    it('Ctrl+C with a dirty compose draft raises the discard confirm instead of exiting', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+
+      const events = applyInput(state, 'c', { ctrl: true })
+      expect(events.pendingConfirmationId).toBe('discard-draft')
+    })
+
+    it('a second Ctrl+C while the discard confirm is open exits unconditionally', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyInput(state, 'c', { ctrl: true })
+      expect(state.pendingConfirmationId).toBe('discard-draft')
+
+      expect(getLogInkInputEvents(state, 'c', { ctrl: true })).toEqual([{ type: 'exit' }])
+    })
+
+    it('y confirms discard-draft raised by Ctrl+C and emits exit; n keeps the draft', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyInput(state, 'c', { ctrl: true })
+
+      const exitEvents = getLogInkInputEvents(state, 'y')
+      expect(exitEvents.find((event) => event.type === 'exit')).toBeDefined()
+
+      const kept = applyInput(state, 'n')
+      expect(kept.pendingConfirmationId).toBeUndefined()
+      expect(kept.commitCompose.summary).toBe('feat: in-flight summary')
+    })
+
+    it('Ctrl+C with no draft exits immediately (unchanged)', () => {
+      expect(getLogInkInputEvents(createLogInkState(rows), 'c', { ctrl: true })).toEqual([
+        { type: 'exit' },
+      ])
+    })
+
+    it('Ctrl+C while a split apply is in flight does not quit; a second Ctrl+C is the escape hatch', () => {
+      const mockPlan = {
+        groups: [{ title: 'feat: foo', files: ['src/foo.ts'], hunks: [] }],
+      }
+      const mockPlanContext = {
+        changes: { staged: [], unstaged: [], untracked: [] },
+        hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      state = applyLogInkAction(state, { type: 'setSplitPlanApplying' })
+
+      const first = getLogInkInputEvents(state, 'c', { ctrl: true })
+      expect(first.some((event) => event.type === 'exit')).toBe(false)
+
+      state = applyInput(state, 'c', { ctrl: true })
+      expect(state.pendingConfirmationId).toBe('quit-during-split-apply')
+
+      expect(getLogInkInputEvents(state, 'c', { ctrl: true })).toEqual([{ type: 'exit' }])
+    })
+
+    it('q from the help overlay with a dirty draft raises the discard confirm instead of exiting', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyInput(state, '?')
+      expect(state.showHelp).toBe(true)
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).not.toContainEqual({ type: 'exit' })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: 'discard-draft' },
+      })
+    })
+
+    it('q from the g? view-keys strip with a dirty draft raises the discard confirm instead of exiting', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyInput(state, 'g')
+      state = applyInput(state, '?')
+      expect(state.showViewKeys).toBe(true)
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).not.toContainEqual({ type: 'exit' })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: 'discard-draft' },
+      })
+    })
+
+    it('q from the split-plan overlay with a dirty draft raises the discard confirm instead of exiting', () => {
+      const mockPlan = {
+        groups: [{ title: 'feat: foo', files: ['src/foo.ts'], hunks: [] }],
+      }
+      const mockPlanContext = {
+        changes: { staged: [], unstaged: [], untracked: [] },
+        hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).not.toContainEqual({ type: 'exit' })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: 'discard-draft' },
+      })
+    })
+
+    it('q from the split-plan overlay on a clean state cancels the split and exits', () => {
+      const mockPlan = {
+        groups: [{ title: 'feat: foo', files: ['src/foo.ts'], hunks: [] }],
+      }
+      const mockPlanContext = {
+        changes: { staged: [], unstaged: [], untracked: [] },
+        hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      expect(getLogInkInputEvents(state, 'q')).toEqual([
+        { type: 'cancelCommitSplit' },
+        { type: 'exit' },
+      ])
+    })
+
+    it('q from the split-plan overlay mid-apply does not quit (parity with the pre-existing block)', () => {
+      const mockPlan = {
+        groups: [{ title: 'feat: foo', files: ['src/foo.ts'], hunks: [] }],
+      }
+      const mockPlanContext = {
+        changes: { staged: [], unstaged: [], untracked: [] },
+        hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      state = applyLogInkAction(state, { type: 'setSplitPlanApplying' })
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).not.toContainEqual({ type: 'cancelCommitSplit' })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'quit-during-split-apply' },
+        },
+      ])
+    })
+  })
+
   it('snaps promoted-view selection to 0 when the filter changes', () => {
     let state = createLogInkState(rows)
     state = applyLogInkAction(state, { type: 'moveBranch', delta: 5, count: 10 })
