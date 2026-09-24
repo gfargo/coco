@@ -289,7 +289,8 @@ No cherry-pick / hunk-apply / `$EDITOR` here — the patch's files live on the P
 | `D` | Delete (confirm) |
 | `u` | Set upstream (prompt) |
 | `F` / `U` / `P` | Fetch / pull / push the branch |
-| `r` | Rebase the current branch onto the cursored branch (confirm) |
+| `S` | Sync the current branch (pull + push) — branches **view** only, not the sidebar tab (#2155) |
+| `r` | Rebase the current branch onto the cursored branch (confirm) — branches **view** only, not the sidebar tab; the sidebar footer doesn't advertise it, so sidebar focus falls through to the global refresh instead (#2155) |
 | `s` | Cycle the branch sort mode |
 | `m` | Mark / unmark compare base |
 
@@ -413,7 +414,8 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve · compose → **amend HEAD** (confirm; #1350) |
 | `m` | branches/tags/history (compare flow) → mark compare base · PR/PR-triage → merge |
 | `i` | status → open `.gitignore` picker · history → interactive rebase |
-| `S` | status/diff/compose → commit-split flow · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
+| `S` | status/diff/compose → commit-split flow · branches **view** → sync (pull + push) cursored branch · blame/file-history/rebase → **unbound** (warns; #2155) · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
+| `r` | branches **view** → rebase current onto cursored branch (confirm) · elsewhere (including the branches sidebar tab) → global refresh (#2155) |
 | `P` | branches → push branch · tags → push tag (takes precedence over the global push) |
 | `D` | worktrees → remove worktree + branch · branches → delete branch |
 | `d` | diff → toggle unified/side-by-side · rebase plan → retag drop · PR/PR-triage → mark ready for review (#1933) |
@@ -559,9 +561,13 @@ flows too, not just where things are.
 
 ## Known risks (carried from the TUI audit)
 
-- **Negation-guarded globals** (`C` create-PR gated by `!== 'conflicts'`,
-  `S` create-stash gated away from the status/diff/compose triad). Each new view
-  must be checked against these.
+- **Explicit view allowlists, not negation guards** (`isCreatePrView`,
+  `isCreateStashView`, `isRemoteOpFallbackView` in `inkInput.ts`) gate `C`
+  create-PR, `S` create-stash, and the mutating `S`/`U`/`P` registry
+  fallback (sync/pull/push current branch) respectively. Each new view must
+  be added to (or deliberately left out of) these lists — a view that's
+  silently missing doesn't get the binding, so the failure mode is a
+  missing feature, not a surprise action (#2155).
 - **`[` / `]` is the most overloaded navigation key** — hunk vs. file vs. tab,
   decided by `activeView` + `diffSource` + `focus`. A wrong/stale focus value
   sends the keypress to the wrong axis.

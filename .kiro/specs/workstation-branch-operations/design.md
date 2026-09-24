@@ -336,6 +336,12 @@ The sync workflow handles conflicts specially: when the pull phase hits conflict
 
 The new keys are handled inside the existing `if (isBranchActionTarget(state) && context.branchCount)` block. Note: `isBranchActionTarget` returns true for BOTH the branches view proper (`activeView === 'branches' && focus === 'commits'`) AND the sidebar when `sidebarTab === 'branches'`. The new handlers inherit this dual-scope automatically — no extra handling needed, but be aware that the cursored branch may come from either context.
 
+> **Superseded (#2155):** `S` no longer inherits the sidebar dual-scope — it's
+> narrowed to the branches view proper (`isBranchesViewTarget`) because the
+> sidebar footer never advertised sync, and a sidebar-focused `S` on an
+> unrelated view was reaching it unconfirmed. `M`/`Z` are unaffected. See
+> `inkInput.ts` and `KEYMAP.md`.
+
 ```typescript
 if (inputValue === 'M') {
   // Guard: can't merge into self

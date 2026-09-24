@@ -4,6 +4,7 @@ import {
     getLogInkPaletteExecuteEvents,
     isCreatePrView,
     isCreateStashView,
+    isRemoteOpFallbackView,
     PUSH_SUB_CHOICE,
     RESET_TO_BRANCH_MODE_CHOICE,
 } from './inkInput'
@@ -793,6 +794,37 @@ describe('log Ink input interactions', () => {
         branchSelectedShortName: 'main',
       })).toEqual([{ type: 'refreshContext' }])
     })
+
+    it('refreshes instead of prompting rebase when the sidebar is focused on the Branches tab (#2155)', () => {
+      // Focusing the sidebar's Branches tab from ANY view used to also
+      // satisfy `isBranchActionTarget`, so pressing the global refresh key
+      // there silently became a rebase-onto confirmation. The sidebar
+      // footer never advertised `r rebase`, so this is now scoped to the
+      // dedicated branches view only.
+      const state = {
+        ...createLogInkState(rows),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+      }
+      expect(getLogInkInputEvents(state, 'r', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })).toEqual([{ type: 'refreshContext' }])
+    })
+
+    it('still refreshes when the branches view is active but focus is on the sidebar (#2155)', () => {
+      const state = {
+        ...createLogInkState(rows, { activeView: 'branches' }),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+      }
+      expect(getLogInkInputEvents(state, 'r', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })).toEqual([{ type: 'refreshContext' }])
+    })
   })
 
   describe('M merge-into-current on the branches view', () => {
@@ -894,6 +926,113 @@ describe('log Ink input interactions', () => {
           type: 'action',
           action: { type: 'setPendingChoice', value: PUSH_SUB_CHOICE },
         },
+      ])
+    })
+  })
+
+  describe('mutating registry fallback is view-scoped (#2155)', () => {
+    // blame / file-history / rebase bind none of S / U / P. Before this
+    // fix, an unbound key on these views fell through to the generic
+    // registry-by-key lookup and fired the global workflow anyway —
+    // `sync-branch` in particular has `requiresConfirmation: false`, so a
+    // stray `S` while reading blame silently pulled and pushed the
+    // current branch.
+    function rebaseState(): LogInkState {
+      return applyLogInkAction(createLogInkState(rows), {
+        type: 'openRebasePlan',
+        rows: [
+          { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', subject: 'feat: one', author: 'Coco', date: '2026-05-01', action: 'pick' as const },
+        ],
+      })
+    }
+
+    const orphanViews: Array<{ name: string, state: () => LogInkState }> = [
+      { name: 'blame', state: () => createLogInkState(rows, { activeView: 'blame' }) },
+      { name: 'file-history', state: () => createLogInkState(rows, { activeView: 'file-history' }) },
+      { name: 'rebase', state: () => rebaseState() },
+    ]
+
+    for (const { name, state: stateFactory } of orphanViews) {
+      for (const key of ['S', 'U', 'P']) {
+        it(`${key} on ${name} warns instead of dispatching a workflow`, () => {
+          const events = getLogInkInputEvents(stateFactory(), key)
+          expect(events.some((e) => 'type' in e && e.type === 'runWorkflowAction')).toBe(false)
+          expect(events).toEqual([
+            {
+              type: 'action',
+              action: {
+                type: 'setStatus',
+                value: `${key} isn't bound on the ${name} view`,
+                kind: 'warning',
+              },
+            },
+          ])
+        })
+      }
+    }
+
+    it('S with the branches sidebar focused still warns on blame (bypasses the per-branch S block, #2155)', () => {
+      // Regression for the ordering trap: the branch-target `S` handler
+      // runs BEFORE the registry fallback, so narrowing only the fallback
+      // would leave this path open whenever the sidebar happens to be on
+      // the Branches tab while blame/file-history/rebase is active.
+      const state = {
+        ...createLogInkState(rows, { activeView: 'blame' }),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+      }
+      const events = getLogInkInputEvents(state, 'S', {}, { branchCount: 3 })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setStatus',
+            value: "S isn't bound on the blame view",
+            kind: 'warning',
+          },
+        },
+      ])
+    })
+
+    it('S with the branches sidebar focused on the default history view still opens create-stash (unchanged)', () => {
+      const state = {
+        ...createLogInkState(rows),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+      }
+      const events = getLogInkInputEvents(state, 'S')
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'openInputPrompt',
+            kind: 'create-stash',
+            label: 'Stash message (empty = WIP)',
+          },
+        },
+      ])
+    })
+
+    it('S still syncs the cursored branch on the branches view (unchanged)', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'S', {}, { branchCount: 3 })
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'sync-branch' }])
+    })
+
+    it('U / P still fire the global pull/push-current-branch workflows on history (unchanged)', () => {
+      const state = createLogInkState(rows)
+      expect(getLogInkInputEvents(state, 'U')).toEqual([
+        { type: 'runWorkflowAction', id: 'pull-current-branch' },
+      ])
+      expect(getLogInkInputEvents(state, 'P')).toEqual([
+        { type: 'runWorkflowAction', id: 'push-current-branch' },
+      ])
+    })
+
+    it('F still reaches fetch-remotes on blame (gate is key-scoped, not a blanket fallback kill)', () => {
+      const state = createLogInkState(rows, { activeView: 'blame' })
+      expect(getLogInkInputEvents(state, 'F')).toEqual([
+        { type: 'runWorkflowAction', id: 'fetch-remotes' },
       ])
     })
   })
@@ -6686,23 +6825,34 @@ describe('triage filter cycling (#882 phase 6)', () => {
 const ALL_VIEWS: LogInkView[] = [
   'history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash',
   'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'conflicts',
-  'reflog', 'bisect', 'changelog', 'submodules',
+  'reflog', 'bisect', 'changelog', 'submodules', 'remotes', 'blame',
+  'file-history', 'rebase',
 ]
 
 describe('global key allowlists (negation-guard conversion)', () => {
-  it('C creates a PR in every view except conflicts and the PR triage list', () => {
+  it('C creates a PR in every view except conflicts, the PR triage list, and the three orphan views', () => {
     // conflicts → C marks the conflict resolved; pull-request-triage →
-    // C checks the cursored PR out locally (#1363).
-    const excluded: LogInkView[] = ['conflicts', 'pull-request-triage']
+    // C checks the cursored PR out locally (#1363); blame / file-history /
+    // rebase never opted in (#2155).
+    const excluded: LogInkView[] = ['conflicts', 'pull-request-triage', 'blame', 'file-history', 'rebase']
     for (const view of ALL_VIEWS) {
       expect(isCreatePrView(view)).toBe(!excluded.includes(view))
     }
   })
 
-  it('S creates a stash in every view except the commit triad (compose/status/diff) and branches (sync)', () => {
-    const excluded: LogInkView[] = ['compose', 'status', 'diff', 'branches']
+  it('S creates a stash in every view except the commit triad (compose/status/diff), branches (sync), and the three orphan views', () => {
+    const excluded: LogInkView[] = ['compose', 'status', 'diff', 'branches', 'blame', 'file-history', 'rebase']
     for (const view of ALL_VIEWS) {
       expect(isCreateStashView(view)).toBe(!excluded.includes(view))
+    }
+  })
+
+  it('S / U / P registry fallback fires everywhere except blame, file-history, and rebase (#2155)', () => {
+    // These three views bind none of S / U / P, so reaching them through
+    // the generic registry-by-key fallback is always a mistake.
+    const excluded: LogInkView[] = ['blame', 'file-history', 'rebase']
+    for (const view of ALL_VIEWS) {
+      expect(isRemoteOpFallbackView(view)).toBe(!excluded.includes(view))
     }
   })
 })
