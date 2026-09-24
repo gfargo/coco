@@ -285,6 +285,34 @@ describe('rebase-onto-branch confirmation panel (#0.71)', () => {
   })
 })
 
+describe('reset-to-commit confirmation panel (OSS-2796)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  it('names the hard-reset payload explicitly, distinct from soft/mixed', () => {
+    const state = {
+      ...createLogInkState([]),
+      pendingConfirmationId: 'reset-to-commit',
+      pendingConfirmationPayload: 'hard',
+    }
+    const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
+    expect(text).toContain('ALL uncommitted working-tree changes are discarded')
+    expect(text).not.toContain('Destructive Git action requires confirmation')
+  })
+
+  it('renders different copy for the non-destructive modes', () => {
+    for (const mode of ['soft', 'mixed'] as const) {
+      const state = {
+        ...createLogInkState([]),
+        pendingConfirmationId: 'reset-to-commit',
+        pendingConfirmationPayload: mode,
+      }
+      const text = flattenText(renderConfirmationPanel(createElement, components, state, {}, 80, theme, false))
+      expect(text).toContain(`git reset --${mode}`)
+      expect(text).not.toContain('ALL uncommitted working-tree changes are discarded')
+    }
+  })
+})
+
 describe('checkout-created-branch confirmation panel (#1326)', () => {
   const components: LogInkComponents = { Box, Text }
 

@@ -1361,6 +1361,25 @@ export function getLogInkInputEvents(
         ]
       }
       if (option.workflowId) {
+        // OSS-2796 — a `destructive: true` option must not run on the
+        // single keypress that selects it. `h` is vim's move-left; a
+        // reflexive Z→h discarded the working tree with no y-confirm,
+        // and `--hard` loses uncommitted work the undo stack (`gu`)
+        // can't recreate. Route the pick into the same y/n gate every
+        // other destructive workflow uses; the mode/strategy rides
+        // along as the confirmation payload, which the y-handler below
+        // forwards to runWorkflowAction. `setPendingConfirmation`
+        // clears pendingChoice itself (#1342), so the choice overlay
+        // closes without a separate setPendingChoice dispatch here.
+        if (option.destructive) {
+          return [
+            action({
+              type: 'setPendingConfirmation',
+              value: option.workflowId,
+              payload: option.payload,
+            }),
+          ]
+        }
         // The workflow runner owns the live context + clears any
         // conflict state once it resolves. Options may carry a payload
         // (#1351 — reset mode, merge strategy).
