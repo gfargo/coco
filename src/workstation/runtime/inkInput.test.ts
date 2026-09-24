@@ -66,6 +66,35 @@ describe('log Ink input interactions', () => {
     ])
   })
 
+  it('does not treat Ctrl+navigation keys as Ctrl+C', () => {
+    // Ink blanks `input` for every ctrl-modified non-alphanumeric key
+    // (use-input.js clears it when the keypress name is in
+    // nonAlphanumericKeys), so Ctrl+Left/Right/Up/Down, Ctrl+PageUp/Down,
+    // and Ctrl+Backspace/Delete/Tab/Return/Escape all arrive as
+    // `key.ctrl: true` with `inputValue === ''` — same shape as a bare
+    // ctrl byte. Only `inputValue === 'c'` may resolve the quit guard.
+    const navigationKeys = [
+      { leftArrow: true },
+      { rightArrow: true },
+      { upArrow: true },
+      { downArrow: true },
+      { pageUp: true },
+      { pageDown: true },
+      { backspace: true },
+      { delete: true },
+      { tab: true },
+      { return: true },
+      { escape: true },
+    ]
+    for (const navigationKey of navigationKeys) {
+      const events = getLogInkInputEvents(createLogInkState(rows), '', {
+        ctrl: true,
+        ...navigationKey,
+      })
+      expect(events).not.toEqual([{ type: 'exit' }])
+    }
+  })
+
   it('opens and edits search mode without handling meta/control text input', () => {
     let state = createLogInkState(rows)
 

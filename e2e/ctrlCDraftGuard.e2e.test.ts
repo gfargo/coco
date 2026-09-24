@@ -37,9 +37,14 @@ describe('Ctrl+C unsaved-draft guard', () => {
       tui.type('feat: wip commit message')
       tui.press('escape')
 
+      // The confirm panel truncates its warning line to fit the inspector
+      // width (renderConfirmationPanel → truncateCells(warning, width - 4)),
+      // so assert on a short fragment from the start of the copy rather
+      // than the full sentence — matching the other e2e suites' panel
+      // assertions.
       tui.press('ctrl+c')
-      const screen = await tui.waitForText('unsaved commit draft')
-      expect(screen).toContain('Press y to discard it and quit.')
+      const screen = await tui.waitForText('You have an unsaved')
+      expect(screen).toContain('You have an unsaved')
       expect(tui.exited).toBe(false)
     })
 

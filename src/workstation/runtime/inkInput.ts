@@ -1254,9 +1254,15 @@ export function getLogInkInputEvents(
   key: LogInkInputKey = {},
   context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
-  // A bare ctrl byte (no follow-on 'c') arrives on some terminals —
-  // mirrors the workspace surface's defensive check (workspace/runtime.ts).
-  if (key.ctrl && (inputValue === 'c' || inputValue === '')) {
+  // Ink's parseKeypress always resolves a raw Ctrl+C byte to name 'c'
+  // (see node_modules/ink/build/parse-keypress.js), so `inputValue === 'c'`
+  // is the only real Ctrl+C signal. Matching on `key.ctrl` with an empty
+  // `inputValue` looked like a defensive net for "some terminals", but
+  // Ink blanks `input` for every ctrl-modified non-alphanumeric key
+  // (Ctrl+Left/Right/Up/Down, Ctrl+Home/End, Ctrl+Delete, ...) too — that
+  // wider match resolved the quit guard on those keystrokes instead of
+  // letting them fall through to normal handling.
+  if (key.ctrl && inputValue === 'c') {
     return resolveQuitEvents(state)
   }
 
