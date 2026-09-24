@@ -293,7 +293,7 @@ describe('log Ink keymap', () => {
       showHelp: false,
     })).toEqual({
       contextual: ['enter apply', 'esc cancel', 'ctrl+u clear'],
-      global: ['q quit'],
+      global: [],
     })
 
     expect(getLogInkFooterHints({
@@ -316,7 +316,8 @@ describe('log Ink keymap', () => {
       // While typing a help filter, `? close` / `/ filter` / `j/k scroll`
       // no longer apply — the input swallows them (#1431).
       contextual: ['enter keep', 'esc clear', 'type to filter'],
-      global: ['q quit'],
+      // …and `q` types into the filter rather than quitting.
+      global: [],
     })
 
     expect(getLogInkFooterHints({
@@ -325,8 +326,10 @@ describe('log Ink keymap', () => {
       showCommandPalette: true,
       showHelp: false,
     })).toEqual({
-      contextual: [': close', 'D/T/X confirm', 'I/M AI'],
-      global: ['? help', 'q quit'],
+      // The palette filter owns printable keys: only the keys its
+      // handler actually reads are advertised.
+      contextual: ['↑/↓ move', 'enter run', 'ctrl+u clear', 'esc close'],
+      global: [],
     })
   })
 

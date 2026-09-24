@@ -963,6 +963,17 @@ export type GetLogInkFooterHintsOptions = {
   helpFilterMode?: boolean
   showCommandPalette?: boolean
   /**
+   * A keyboard-claiming prompt is open, in the resolver's precedence
+   * order: text input prompt > n-way choice > y/n confirmation. Each owns
+   * every keystroke, so the underlying view's hints would be a lie.
+   * `inputMultiline` switches the submit hint to Ctrl+D.
+   */
+  modalPrompt?: 'input' | 'choice' | 'confirm'
+  /** True when `v` anchors a range selection (history / branches /
+   *  stash lists) rather than peeking the sidebar on narrow terminals. */
+  vRangeAnchor?: boolean
+  inputMultiline?: boolean
+  /**
    * Split-plan overlay state (#907 / #919). When `'ready'`, the footer
    * surfaces overlay-local bindings (y apply / r regen / esc cancel /
    * scroll keys) instead of the underlying compose-view hints — the
@@ -1417,8 +1428,11 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     // peek over select was how line-staging silently vanished on
     // narrow terminals.
     const onWorktreeDiff = options.activeView === 'diff' && options.diffSource === 'worktree'
+    // Same for the range-select anchors (#1361): where `v` marks a range
+    // the input layer never peeks, so advertising it lied — pressing
+    // `v peek` on history set a cherry-pick anchor instead.
     const lead =
-      options.focus === 'sidebar' || onWorktreeDiff
+      options.focus === 'sidebar' || onWorktreeDiff || options.vRangeAnchor
         ? [singlePaneSwitcherHint(options.focus)]
         : [singlePaneSwitcherHint(options.focus), t(en, 'keymap.footer.peek')]
     return {
@@ -1440,6 +1454,29 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
 }
 
 function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
+  if (options.modalPrompt === 'input') {
+    return {
+      contextual: [
+        t(en, options.inputMultiline ? 'keymap.footer.ctrlDSubmit' : 'keymap.footer.enterSubmit'),
+        t(en, 'keymap.footer.ctrlUClear'),
+        t(en, 'keymap.footer.escCancel'),
+      ],
+      global: [],
+    }
+  }
+  if (options.modalPrompt === 'choice') {
+    return {
+      contextual: [t(en, 'keymap.footer.pickOption'), t(en, 'keymap.footer.nEscCancel')],
+      global: [],
+    }
+  }
+  if (options.modalPrompt === 'confirm') {
+    return {
+      contextual: [t(en, 'keymap.footer.yConfirm'), t(en, 'keymap.footer.nEscCancel')],
+      global: [],
+    }
+  }
+
   if (options.pendingKey) {
     const continuations = getLogInkChordContinuations(options.pendingKey)
     if (continuations.length > 0) {
@@ -1456,7 +1493,8 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
   if (options.filterMode) {
     return {
       contextual: [t(en, 'keymap.footer.enterApply'), t(en, 'keymap.footer.escCancel'), t(en, 'keymap.footer.ctrlUClear')],
-      global: [t(en, 'keymap.footer.qQuit')],
+      // No `q quit`: the filter input owns printable keys, so `q` types.
+      global: [],
     }
   }
 
@@ -1464,7 +1502,7 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
     if (options.helpFilterMode) {
       return {
         contextual: [t(en, 'keymap.footer.enterKeep'), t(en, 'keymap.footer.escClear'), t(en, 'keymap.footer.typeToFilter')],
-        global: [t(en, 'keymap.footer.qQuit')],
+        global: [],
       }
     }
     // Every key here is live inside the help handler — the old set
@@ -1479,8 +1517,15 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
 
   if (options.showCommandPalette) {
     return {
-      contextual: [t(en, 'keymap.footer.close2'), t(en, 'keymap.footer.dTXConfirm'), t(en, 'keymap.footer.iMAi')],
-      global: [t(en, 'keymap.footer.help'), t(en, 'keymap.footer.qQuit')],
+      // The palette's filter owns every printable key, so only the
+      // navigation / submit / clear keys it actually handles are listed.
+      contextual: [
+        t(en, 'keymap.footer.move'),
+        t(en, 'keymap.footer.enterRun'),
+        t(en, 'keymap.footer.ctrlUClear'),
+        t(en, 'keymap.footer.escClose'),
+      ],
+      global: [],
     }
   }
 

@@ -6706,3 +6706,90 @@ describe('global key allowlists (negation-guard conversion)', () => {
     }
   })
 })
+
+describe('modified letters and list jumps', () => {
+  it('swallows Ctrl/Alt+letter in normal mode instead of running the bare-letter binding', () => {
+    const stash = { ...createLogInkState(rows), activeView: 'stash' as const }
+    // Bare `p` pops the cursored stash; Ctrl+P must not.
+    expect(getLogInkInputEvents(stash, 'p', { ctrl: true }, { stashCount: 2 })).toEqual([])
+    expect(getLogInkInputEvents(createLogInkState(rows), 'q', { ctrl: true })).toEqual([])
+    expect(getLogInkInputEvents(createLogInkState(rows), 's', { meta: true })).toEqual([])
+  })
+
+  it('turns Ctrl+Z into a suspend instead of a revert/undo confirm', () => {
+    const status = { ...createLogInkState(rows), activeView: 'status' as const }
+    expect(getLogInkInputEvents(status, 'z', { ctrl: true }, { worktreeFileCount: 2 }))
+      .toEqual([{ type: 'suspend' }])
+  })
+
+  it('keeps Ctrl+C as quit and Ctrl+U as clear inside the filter', () => {
+    expect(getLogInkInputEvents(createLogInkState(rows), 'c', { ctrl: true })).toEqual([{ type: 'exit' }])
+    const filtering = applyLogInkAction(createLogInkState(rows), { type: 'toggleFilterMode' })
+    expect(getLogInkInputEvents(filtering, 'u', { ctrl: true }).length).toBeGreaterThan(0)
+  })
+
+  it('gg / G / PageUp / PageDown move the list cursor on the branches view', () => {
+    const base = { ...createLogInkState(rows), activeView: 'branches' as const, selectedBranchIndex: 3 }
+    const context = { branchCount: 8 }
+    const top = getLogInkInputEvents({ ...base, pendingKey: 'g' }, 'g', {}, context)
+    expect(top).toEqual([{ type: 'action', action: expect.objectContaining({ type: 'moveBranch', delta: -8, count: 8 }) }])
+    expect(applyInput({ ...base, pendingKey: 'g' }, 'g', {}, context).selectedBranchIndex).toBe(0)
+    expect(applyInput(base, 'G', {}, context).selectedBranchIndex).toBe(7)
+    expect(applyInput(base, '', { pageDown: true }, context).selectedBranchIndex).toBe(7)
+    expect(applyInput(base, '', { pageUp: true }, context).selectedBranchIndex).toBe(0)
+    // No "jumped to first commit" echo off the history view.
+    expect(applyInput(base, 'G', {}, context).statusMessage).toBeUndefined()
+  })
+
+  it('still jumps the history cursor with gg / G on history', () => {
+    const state = { ...createLogInkState(rows), selectedIndex: 1 }
+    const events = getLogInkInputEvents({ ...state, pendingKey: 'g' }, 'g')
+    expect(events).toContainEqual({ type: 'action', action: { type: 'moveToTop' } })
+    expect(events).toContainEqual({
+      type: 'action',
+      action: { type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' },
+    })
+  })
+
+  it('M on the conflicts view asks for AI resolution, not a merge', () => {
+    const conflicts = { ...createLogInkState(rows), activeView: 'conflicts' as const }
+    expect(getLogInkInputEvents(conflicts, 'M', {}, { conflictFileCount: 2, conflictSelectedPath: 'a.ts' }))
+      .toEqual([{ type: 'action', action: { type: 'setPendingConfirmation', value: 'ai-conflict-help' } }])
+    const none = getLogInkInputEvents(conflicts, 'M', {}, { conflictFileCount: 0 })
+    expect(none).not.toContainEqual(
+      expect.objectContaining({ action: expect.objectContaining({ value: 'merge-into-current' }) })
+    )
+  })
+})
+
+describe('palette entries for per-view bindings', () => {
+  const command = (id: string) => {
+    const found = getLogInkPaletteCommands().find((entry) => entry.id === id)
+    if (!found) throw new Error(`no palette command ${id}`)
+    return found
+  }
+
+  it('runs the same events as the bound key in its own view', () => {
+    const state = createLogInkState(rows)
+    expect(getLogInkPaletteExecuteEvents(command('viewCherryPick'), state))
+      .toEqual(getLogInkInputEvents(state, 'c'))
+    expect(getLogInkPaletteExecuteEvents(command('viewCherryPick'), state)).not.toEqual([])
+  })
+
+  it('points at the right view instead of replaying a letter that means something else here', () => {
+    // `y` is bisect-good on the bisect view but yank on history.
+    const events = getLogInkPaletteExecuteEvents(command('workflowBisectGood'), createLogInkState(rows))
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({
+      type: 'action',
+      action: { type: 'setStatus', kind: 'warning' },
+    })
+    expect(JSON.stringify(events)).toContain('bisect')
+  })
+
+  it('replays g-chord bindings with the chord armed', () => {
+    const state = createLogInkState(rows)
+    expect(getLogInkPaletteExecuteEvents(command('viewCreateTagHere'), state))
+      .toEqual(getLogInkInputEvents({ ...state, pendingKey: 'g' }, 'T'))
+  })
+})

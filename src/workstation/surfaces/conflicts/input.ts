@@ -123,6 +123,15 @@ export function handleConflictsInput(
       if (inputValue === 'U' && context.conflictFileCount && context.conflictSelectedPath) {
         return [{ type: 'runWorkflowAction', id: 'resolve-conflict-ours', payload: context.conflictSelectedPath }]
       }
+      // `M` asks the AI for per-region resolutions. Claimed here because the
+      // registry fallback resolves `M` to the first match, which is
+      // `merge-into-current` — a merge confirm mid-conflict.
+      if (inputValue === 'M' && context.conflictFileCount && context.conflictSelectedPath) {
+        return [action({ type: 'setPendingConfirmation', value: 'ai-conflict-help' })]
+      }
+      if (inputValue === 'M') {
+        return [action({ type: 'setStatus', value: 'Select a conflicted file for AI resolution', kind: 'warning' })]
+      }
       // `C` continues the in-progress operation (available when no conflicts remain).
       if (inputValue === 'C' && context.conflictFileCount === 0) {
         return [{ type: 'runWorkflowAction', id: 'continue-operation' }]

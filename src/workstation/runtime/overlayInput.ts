@@ -146,7 +146,7 @@ export function handleOverlayInput(
       return [
         action({ type: 'recordPaletteRecent', value: selected.id }),
         action({ type: 'toggleCommandPalette' }),
-        ...getLogInkPaletteExecuteEvents(selected, state),
+        ...getLogInkPaletteExecuteEvents(selected, state, context),
       ]
     }
 

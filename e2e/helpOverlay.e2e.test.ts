@@ -37,7 +37,7 @@ describe('help overlay with type-to-filter', () => {
     tui.type('stash')
     const screen = await tui.waitForText('filter: stash')
     // The gz navigation binding survives the filter…
-    expect(screen).toContain('Push the stash view')
+    expect(screen).toContain('Open the stash view')
     // …while unrelated movement bindings are filtered out.
     expect(screen).not.toContain('Move the current selection up.')
   })

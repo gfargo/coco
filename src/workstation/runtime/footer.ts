@@ -52,6 +52,7 @@ import type * as ReactTypes from 'react'
 import { pickSpinnerFrame } from '../chrome/spinner'
 import { cellWidth, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
+import { isHistoryRangeTarget } from './inkInput'
 import { getLogInkFooterHints } from '../../workstation/runtime/inkKeymap'
 import type { LogInkState } from '../../workstation/runtime/inkViewModel'
 import type { LogInkComponents, LogInkContext } from './types'
@@ -117,6 +118,19 @@ export function renderFooter(
     focus: state.focus,
     pendingKey: state.pendingKey,
     showCommandPalette: state.showCommandPalette,
+    modalPrompt: state.inputPrompt
+      ? 'input'
+      : state.pendingChoice
+        ? 'choice'
+        : state.pendingConfirmationId
+          ? 'confirm'
+          : undefined,
+    inputMultiline: Boolean(state.inputPrompt?.multiline),
+    // Mirrors the `v` gates in `inkInput.ts` (history / branch / stash
+    // range anchors) so the narrow footer never offers a peek `v` won't do.
+    vRangeAnchor:
+      isHistoryRangeTarget(state) ||
+      (state.focus === 'commits' && (state.activeView === 'branches' || state.activeView === 'stash')),
     showHelp: state.showHelp,
     helpFilterMode: state.helpFilterMode,
     sidebarTab: state.sidebarTab,
@@ -225,10 +239,13 @@ export function renderFooter(
     // Row 2: status / loading / idle tip / error. Empty Text keeps
     // the row reserved when nothing's set so the surrounding layout
     // doesn't shift as status flips on/off.
+    // Truncated to the row like row 1: a long git error that wrapped
+    // here overflowed the fixed 2-row footer and Ink squashed the hint
+    // row into leftover characters.
     h(Text, {
       color: statusColor,
       dimColor: statusDim,
       bold: statusBold,
-    }, statusBody)
+    }, width !== undefined ? truncateCells(statusBody.replace(/\s*\n\s*/g, ' '), Math.max(20, width - 2)) : statusBody)
   )
 }

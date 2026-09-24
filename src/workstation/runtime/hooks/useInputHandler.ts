@@ -614,6 +614,12 @@ export function useInputHandler(
     }).forEach((event) => {
       if (event.type === 'exit') {
         exit()
+      } else if (event.type === 'suspend') {
+        // Windows has no job control; elsewhere the terminal lifecycle's
+        // SIGTSTP handler leaves the alt screen before stopping.
+        if (process.platform !== 'win32') {
+          process.kill(process.pid, 'SIGTSTP')
+        }
       } else if (event.type === 'refreshContext') {
         // The user-initiated refresh (`r`) refreshes BOTH the metadata
         // context (branches/tags/worktree) AND the commit rows. Without

@@ -4,7 +4,7 @@ import {
     InspectorActionContext,
     getInspectorActions,
 } from '../chrome/inspectorActions'
-import { LogInkPaletteCommand } from './inkKeymap'
+import { LOG_INK_KEY_BINDINGS, LogInkPaletteCommand } from './inkKeymap'
 import {
     LogInkAction,
     LogInkCompareRef,
@@ -48,6 +48,7 @@ export type LogInkInputKey = {
 export type LogInkInputEvent =
   | { type: 'action'; action: LogInkAction }
   | { type: 'exit' }
+  | { type: 'suspend' }
   | { type: 'refreshContext' }
   | { type: 'toggleSelectedFileStage' }
   | { type: 'toggleSelectedHunkStage' }
@@ -528,7 +529,7 @@ function isStashActionTarget(state: LogInkState): boolean {
  * span an anchor would capture can't be trusted to name a real,
  * ordered run of commits — `getSelectedCommitRange` bails the same way.
  */
-function isHistoryRangeTarget(state: LogInkState): boolean {
+export function isHistoryRangeTarget(state: LogInkState): boolean {
   return state.activeView === 'history' &&
     state.focus === 'commits' &&
     state.filteredCommits.length > 0 &&
@@ -714,9 +715,57 @@ function getSidebarItemCount(
  * produced. Phase 6 makes `:` a real launcher: this is the single mapping
  * from palette IDs to dispatchable behavior.
  */
+/**
+ * Palette execution for per-view bindings that have no dedicated case
+ * below: replay the binding's own key through the resolver, so choosing
+ * "cherry-pick (c)" does exactly what pressing `c` would. These used to
+ * return `[]` — the palette closed and nothing happened. Gated on the
+ * binding's contexts: outside its view the replayed letter would mean
+ * something else (`y` is bisect-good on bisect but yank on history), so
+ * the user gets a pointer to the right view instead.
+ */
+function replayPaletteBindingKey(
+  command: LogInkPaletteCommand,
+  state: LogInkState,
+  context: LogInkInputContext
+): LogInkInputEvent[] {
+  const binding = LOG_INK_KEY_BINDINGS.find((entry) => entry.id === command.id)
+  if (!binding) return []
+  const focusContexts = ['sidebar', 'commits', 'detail']
+  const viewContexts = binding.contexts.filter(
+    (entry) => entry !== 'normal' && entry !== 'search' && !focusContexts.includes(entry)
+  )
+  const applies =
+    binding.contexts.includes('normal') ||
+    viewContexts.includes(state.activeView) ||
+    (viewContexts.length === 0 && binding.contexts.includes(state.focus))
+  if (!applies) {
+    return [action({
+      type: 'setStatus',
+      value: `${binding.label} is available in the ${viewContexts.join(' / ')} view`,
+      kind: 'warning',
+    })]
+  }
+  const key = binding.keys.find((entry) => /^g?\S$/u.test(entry))
+  if (!key) return []
+  const chord = key.length === 2
+  return getLogInkInputEvents(
+    {
+      ...state,
+      showCommandPalette: false,
+      paletteFilter: '',
+      pendingKey: chord ? 'g' : undefined,
+    },
+    chord ? key.slice(1) : key,
+    {},
+    context
+  )
+}
+
 export function getLogInkPaletteExecuteEvents(
   command: LogInkPaletteCommand,
-  state: LogInkState
+  state: LogInkState,
+  context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
   if (command.kind === 'workflow') {
     if (command.requiresConfirmation) {
@@ -944,9 +993,7 @@ export function getLogInkPaletteExecuteEvents(
     case 'workflowTriagePrOpen':
     case 'workflowTriageIssueOpen':
     case 'workflowRemoveWorktreeAndBranch':
-      // Individual workflow entries; actual dispatch handled by the
-      // workflow action lookup below.
-      return []
+      return replayPaletteBindingKey(command, state, context)
     case 'quit':
       if (hasUnsavedComposeDraft(state)) {
         return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
@@ -973,7 +1020,7 @@ export function getLogInkPaletteExecuteEvents(
       // surfaced by the runtime as a "Nothing to yank" status.
       return [{ type: 'yankFromActiveView' }]
     default:
-      return []
+      return replayPaletteBindingKey(command, state, context)
   }
 }
 
@@ -1262,6 +1309,43 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
     { type: 'runWorkflowAction', id, payload: value },
     action({ type: 'closeInputPrompt' }),
   ]
+}
+
+/**
+ * View-local jumps for the list views (branches, tags, stashes, reflog,
+ * worktrees, remotes, submodules, issues, PR triage, conflicts). Their
+ * `↑`/`↓` handlers each emit a `move*` action carrying the list `count`;
+ * `gg` / `G` / PageUp / PageDown reuse that resolution and just widen the
+ * delta, so every list gets top/bottom/page jumps without a parallel
+ * per-view chain. Returns undefined when `↓` doesn't resolve to a counted
+ * list move (history, diff, sidebar focus, detail scroll) so the caller
+ * keeps its own behavior. The id mirror is cleared — the reducer's clamp
+ * decides the landing row, and an undefined id makes the selector trust
+ * the index (same contract as `resetBranchSelection`).
+ */
+function resolveListJump(
+  state: LogInkState,
+  context: LogInkInputContext,
+  delta: number | 'top' | 'bottom'
+): LogInkInputEvent[] | undefined {
+  const probeKey: LogInkInputKey = delta === 'top' || (typeof delta === 'number' && delta < 0)
+    ? { upArrow: true }
+    : { downArrow: true }
+  const probe = getLogInkInputEvents({ ...state, pendingKey: undefined }, '', probeKey, context)
+  if (probe.length !== 1) return undefined
+  const [event] = probe
+  if (event.type !== 'action') return undefined
+  const moveAction = event.action as LogInkAction & { delta?: unknown; count?: unknown }
+  if (
+    moveAction.type === 'move' ||
+    typeof moveAction.delta !== 'number' ||
+    typeof moveAction.count !== 'number'
+  ) {
+    return undefined
+  }
+  const count = moveAction.count
+  const nextDelta = delta === 'top' ? -count : delta === 'bottom' ? count : delta
+  return [action({ ...moveAction, delta: nextDelta, id: undefined } as LogInkAction)]
 }
 
 export function getLogInkInputEvents(
@@ -1777,6 +1861,21 @@ export function getLogInkInputEvents(
     return overlayEvents
   }
 
+  // Ink delivers Ctrl+<letter> (and Alt+<letter>) as the bare letter with
+  // a modifier flag, and no normal-mode binding checks that flag — so
+  // without this guard Ctrl+P popped the cursored stash, Ctrl+Z opened a
+  // revert confirm, and Ctrl+Q quit. Normal mode binds no modified
+  // letters (Ctrl+C is handled at the top), so swallow them here. Raw
+  // mode also stops the kernel from turning Ctrl+Z into SIGTSTP, so
+  // raise the suspend explicitly — the terminal lifecycle's SIGTSTP
+  // handler restores the shell before the process stops.
+  if ((key.ctrl || key.meta) && /^[a-z]$/i.test(inputValue)) {
+    if (key.ctrl && inputValue.toLowerCase() === 'z') {
+      return [{ type: 'suspend' }]
+    }
+    return []
+  }
+
   // #1685 — while a g-chord is armed the footer advertises "esc cancel",
   // but the general chord-cancel rung sits BELOW the global Esc/q handlers.
   // Esc would popView / clearSelection / clearCompareBase / popRepoFrame and
@@ -2210,9 +2309,16 @@ export function getLogInkInputEvents(
           })]
           : []
       }
+      const listTopEvents = resolveListJump(state, context, 'top')
+      if (listTopEvents) {
+        return listTopEvents
+      }
       return [
         action({ type: 'moveToTop' }),
-        action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
+        // Only history's cursor is "a commit" — elsewhere the echo lied.
+        ...(state.activeView === 'history'
+          ? [action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' })]
+          : []),
       ]
     }
 
@@ -2282,9 +2388,15 @@ export function getLogInkInputEvents(
         })]
         : []
     }
+    const listBottomEvents = resolveListJump(state, context, 'bottom')
+    if (listBottomEvents) {
+      return listBottomEvents
+    }
     return [
       action({ type: 'moveToBottom' }),
-      action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
+      ...(state.activeView === 'history'
+        ? [action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' })]
+        : []),
     ]
   }
 
@@ -2944,6 +3056,11 @@ export function getLogInkInputEvents(
       return fileHistoryPageUpEvents
     }
 
+    const listPageUpEvents = resolveListJump(state, context, -10)
+    if (listPageUpEvents) {
+      return listPageUpEvents
+    }
+
     return [action({ type: 'page', delta: -10 })]
   }
 
@@ -2981,6 +3098,11 @@ export function getLogInkInputEvents(
     const fileHistoryPageDownEvents = handleFileHistoryInput(state, inputValue, key, context, 'page-down')
     if (fileHistoryPageDownEvents) {
       return fileHistoryPageDownEvents
+    }
+
+    const listPageDownEvents = resolveListJump(state, context, 10)
+    if (listPageDownEvents) {
+      return listPageDownEvents
     }
 
     return [action({ type: 'page', delta: 10 })]

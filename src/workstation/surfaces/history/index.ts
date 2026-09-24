@@ -367,6 +367,10 @@ function renderCommitHistoryRow(
     key: `${commit.hash}-${index}`,
     backgroundColor: selectedBg,
     color: selectedFg,
+    // NO_COLOR drops the background, which left a bold short hash as the
+    // only cursor cue. Reverse video is monochrome-safe and there are no
+    // child colors for it to garble.
+    inverse: (selected && theme.noColor) || undefined,
   },
   ...graphChildren,
   ' ',

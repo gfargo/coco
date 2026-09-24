@@ -122,6 +122,7 @@ Available in every view (unless an overlay/mode has claimed the keyboard):
 |-----|--------|
 | `q` | Quit |
 | `Ctrl+C` | Quit (hard) |
+| `Ctrl+Z` | Suspend to the shell (`fg` resumes); other Ctrl/Alt+letter combos are ignored in normal mode rather than running the bare letter's action |
 | `?` | Toggle help overlay (full categorized help; "This view" section first, `/` type-to-filter inside, two-stage Esc clears the filter then closes) |
 | `:` | Command palette |
 | `/` | Enter filter mode |
@@ -132,7 +133,8 @@ Available in every view (unless an overlay/mode has claimed the keyboard):
 | `v` | Peek the sidebar (narrow / single-pane terminals only) — momentary glance, `v`/`Esc` snaps back to where you were |
 | `↑`/`k`, `↓`/`j` | Move selection / scroll |
 | `←`/`→` | Switch sidebar or inspector tab (focus-dependent) |
-| `PageUp` / `PageDown` | Page scroll |
+| `PageUp` / `PageDown` | Page scroll (10 rows in the list views) |
+| `gg` / `G` | Jump to the top / bottom of the active list (history, branches, tags, stashes, reflog, worktrees, remotes, submodules, issues, PR triage, conflicts) |
 | `n` / `N` | Next / previous search match |
 | `y` / `Y` | Yank identifier (long / short) for the cursored item |
 

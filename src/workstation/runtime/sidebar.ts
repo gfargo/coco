@@ -76,9 +76,13 @@ function renderSelectableSidebarRows<T>(
     const color = isSelected ? undefined : rowColor?.(items[index], index)
     elements.push(h(Text, {
       key: `${keyPrefix}-row-${index}`,
+      // Background + contrast-derived foreground when colored (inverse
+      // on top of a background swaps them, turning the selection color
+      // into the text color); reverse video only in monochrome, where
+      // it is the one selection signal left.
       backgroundColor: isSelected && !theme.noColor ? theme.colors.selection : undefined,
-      inverse: isSelected,
-      color,
+      inverse: (isSelected && theme.noColor) || undefined,
+      color: isSelected && !theme.noColor ? theme.colors.selectionForeground : color,
     }, truncateCells(`  ${text}`, width - 4)))
   }
 
@@ -358,11 +362,11 @@ export function renderSidebar(
       bold: isActive,
       dimColor: !isActive,
       // Selection styling on the header itself when the cursor has
-      // been promoted off the items list. inverse swaps fg/bg so the
-      // highlight reads as "this is the cursor target" identically
-      // to how items render when focused.
+      // been promoted off the items list — same treatment as a
+      // focused item row above.
       backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
-      inverse: headerSelected,
+      color: headerSelected && !theme.noColor ? theme.colors.selectionForeground : undefined,
+      inverse: (headerSelected && theme.noColor) || undefined,
     }, headerText))
     if (isActive) {
       blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, bodyRows, theme, spinnerFrame, lists))

@@ -308,6 +308,13 @@ describe('renderFooter', () => {
       expect(contextualText(renderSinglePane(makeState({ focus: 'sidebar' })))).not.toContain('v peek')
     })
 
+    it('does not offer "v peek" where `v` anchors a range selection', () => {
+      // A populated history list: `v` sets the cherry-pick anchor (#1361).
+      const history = { ...createLogInkState([{ type: 'commit', hash: 'a'.repeat(40), shortHash: 'aaaaaaa', graph: '*', message: 'm', author: 'x', date: '2026-01-01', refs: '' } as never]) }
+      expect(contextualText(renderSinglePane(history))).not.toContain('v peek')
+      expect(contextualText(renderSinglePane(makeState({ activeView: 'branches' })))).not.toContain('v peek')
+    })
+
     it('swaps the switcher for the snap-back hint while peeking', () => {
       const peeking = makeState({ focus: 'sidebar', peekReturnFocus: 'commits' })
       const text = contextualText(renderSinglePane(peeking))
@@ -510,3 +517,39 @@ describe('renderFooter', () => {
     ).toMatchSnapshot()
   })
 })
+
+describe('renderFooter — row 2 fitting and modal prompts', () => {
+  const renderAt = (state: LogInkState, width: number): ReactElement =>
+    renderFooter(
+      createElement,
+      { Box, Text },
+      state,
+      baseContext,
+      createLogInkTheme({ noColor: false }),
+      undefined,
+      0,
+      false,
+      width
+    )
+
+  it('truncates a long status to the row so it cannot wrap the 2-row footer', () => {
+    const message = `push rejected: ${'x'.repeat(200)}\nhint: fetch first`
+    const row2 = childAt(asNode(renderAt(makeState({ statusMessage: message, statusKind: 'error' }), 80)), 1)
+    const text = String(row2.props.children)
+    expect(text).not.toContain('\n')
+    expect(text.length).toBeLessThanOrEqual(78)
+  })
+
+  it('replaces the view hints while a y/n confirm, choice, or text prompt owns the keyboard', () => {
+    const contextual = (state: LogInkState): string =>
+      String(childAt(childAt(asNode(renderAt(state, 160)), 0), 0).props.children)
+    expect(contextual(makeState({ pendingConfirmationId: 'revert-file' }))).toBe('y confirm   n/esc cancel')
+    expect(contextual(makeState({
+      pendingChoice: { title: 'Reset', options: [{ key: 's', label: 'soft' }] },
+    } as Partial<LogInkState>))).toContain('n/esc cancel')
+    expect(contextual(makeState({
+      inputPrompt: { kind: 'create-branch', label: 'Branch', value: '' },
+    } as Partial<LogInkState>))).toBe('enter submit   ctrl+u clear   esc cancel')
+  })
+})
+
