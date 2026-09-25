@@ -39,6 +39,8 @@ export const en: Catalog = {
   'keymap.binding.focusNext.desc': 'Move focus to the next panel.',
   'keymap.binding.focusPrevious.label': 'focus back',
   'keymap.binding.focusPrevious.desc': 'Move focus to the previous panel.',
+  'keymap.binding.togglePaneZoom.label': 'zoom pane',
+  'keymap.binding.togglePaneZoom.desc': 'Widen the focused panel; press again to restore it.',
   'keymap.binding.search.label': 'search',
   'keymap.binding.search.desc': 'Filter commits by hash, author, ref, or message.',
   'keymap.binding.clearSearch.label': 'clear',

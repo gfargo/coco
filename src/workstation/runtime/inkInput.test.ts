@@ -512,6 +512,28 @@ describe('log Ink input interactions', () => {
     expect(state.statusMessage).toBe('jumped to first commit')
   })
 
+  // #2157 — `=` zooms the focused pane's width without touching focus
+  // itself (Tab and `=` are independent actions).
+  it('"=" toggles pane zoom on the focused pane', () => {
+    let state = createLogInkState(rows)
+    expect(state.zoomedPane).toBeUndefined()
+
+    state = applyInput(state, '=')
+    expect(state.zoomedPane).toBe('commits')
+    expect(state.focus).toBe('commits')
+
+    state = applyInput(state, '=')
+    expect(state.zoomedPane).toBeUndefined()
+  })
+
+  it('palette execution of togglePaneZoom emits the same action as the "=" key', () => {
+    const command = getLogInkPaletteCommands().find((c) => c.id === 'togglePaneZoom')
+    if (!command) throw new Error('togglePaneZoom palette command missing')
+
+    const events = getLogInkPaletteExecuteEvents(command, createLogInkState(rows))
+    expect(events).toContainEqual({ type: 'action', action: { type: 'togglePaneZoom' } })
+  })
+
   it('Tab/Shift+Tab cycles the visible pane in single-pane mode', () => {
     // On narrow terminals the visible pane is derived from focus, so
     // the existing focus-cycle binding drives the pane switch with no

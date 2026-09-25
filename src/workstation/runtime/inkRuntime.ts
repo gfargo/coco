@@ -69,6 +69,13 @@ type LogInkOptions = {
    * sequence and the runtime's stdin handling is unchanged.
    */
   mouse?: boolean
+  /**
+   * Restore the pre-#2157 behavior where Tab-ing into the sidebar or
+   * inspector widens that pane automatically. Forwarded from
+   * `logTui.focusExpand`. Off by default — Tab leaves widths alone and
+   * the `=` zoom key is the explicit path to a wider pane.
+   */
+  focusExpand?: boolean
   initialView?: LogInkView
   logArgv?: LogArgv
   /**
@@ -149,6 +156,8 @@ export async function startInkInteractiveLog(
     syntaxHighlightEnabled: options.syntaxHighlight !== false,
     // Off by default (unlike the flags above) — see `LogInkOptions.mouse`.
     mouseEnabled: options.mouse === true,
+    // Off by default — see `LogInkOptions.focusExpand`.
+    focusExpandEnabled: options.focusExpand === true,
     ink,
     initialView: options.initialView || 'history',
     logArgv: options.logArgv,

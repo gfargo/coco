@@ -757,6 +757,17 @@ export type LogInkState = {
    * Single-pane only — above the breakpoint all panes are already visible.
    */
   peekReturnFocus?: LogInkFocus
+  /**
+   * Explicit pane-width zoom (#2157, the `=` key). Widths no longer
+   * follow focus — Tab must never resize the row the user is reading —
+   * so a pane only gets extra width when the user deliberately zooms
+   * it. Holds which focus target is zoomed; `undefined` when nothing
+   * is. Toggling `=` while already zoomed on that pane clears it;
+   * pressing it on a different pane moves the zoom (never stacks).
+   * Independent of `focus` — zooming the sidebar and then Tab-ing to
+   * the inspector leaves the sidebar zoomed.
+   */
+  zoomedPane?: LogInkFocus
   sidebarTab: LogInkSidebarTab
   /**
    * The user's last *explicit* sidebar tab choice. Only changes when
@@ -1117,6 +1128,7 @@ export type LogInkAction =
   | { type: 'commitCompose'; action: CommitComposeAction }
   | { type: 'focusNext' }
   | { type: 'focusPrevious' }
+  | { type: 'togglePaneZoom' }
   | { type: 'move'; delta: number }
   // OSS-1608 — click-to-select on the history list: sets the cursor to an
   // absolute index rather than a relative `move` delta. Same clamping /
@@ -2060,6 +2072,7 @@ export function createLogInkState(
     pendingConfirmationKeepStatusOnDismiss: undefined,
     pendingKey: undefined,
     focus: 'commits',
+    zoomedPane: undefined,
     // Default first-time tab is 'branches' — it's the most useful
     // landing surface in the workstation (current branch + recent
     // branches with ahead/behind, switch target, etc.). Users who
@@ -2176,6 +2189,12 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         sidebarHeaderFocused: false,
         statusGroupHeaderFocused: false,
         peekReturnFocus: undefined,
+        pendingKey: undefined,
+      }
+    case 'togglePaneZoom':
+      return {
+        ...state,
+        zoomedPane: state.zoomedPane === state.focus ? undefined : state.focus,
         pendingKey: undefined,
       }
     case 'move':

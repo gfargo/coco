@@ -1003,6 +1003,8 @@ export function getLogInkPaletteExecuteEvents(
       return [action({ type: 'focusNext' })]
     case 'focusPrevious':
       return [action({ type: 'focusPrevious' })]
+    case 'togglePaneZoom':
+      return [action({ type: 'togglePaneZoom' })]
     case 'search':
       return [action({ type: 'toggleFilterMode' })]
     case 'toggleGraph':
@@ -2717,6 +2719,18 @@ export function getLogInkInputEvents(
 
   if (key.tab) {
     return [action({ type: key.shift ? 'focusPrevious' : 'focusNext' })]
+  }
+
+  // `=` zooms the focused pane's width (#2157) — Tab no longer resizes
+  // panes on its own, so this is the only keyboard path to the old
+  // "focused pane gets more room" widths. Ungated: works from any pane,
+  // in any view, at any width (it's a no-op below the single-pane
+  // breakpoint since one pane already fills the terminal there).
+  if (inputValue === '=') {
+    return [
+      action({ type: 'togglePaneZoom' }),
+      action({ type: 'setStatus', value: 'toggled pane zoom', ttl: 'echo' }),
+    ]
   }
 
   // #1135 v2 — `v` peeks the sidebar from the main / inspector pane on

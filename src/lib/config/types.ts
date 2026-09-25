@@ -169,6 +169,18 @@ type BaseConfig = {
      * @default false
      */
     mouse?: boolean
+
+    /**
+     * Restore the pre-#2157 behavior where Tab-ing into the sidebar or
+     * inspector widens that pane automatically. Off by default — Tab
+     * now leaves every pane width unchanged so the row the user was
+     * reading doesn't reflow underneath them; use the `=` zoom key (or
+     * the command palette) to widen a pane on demand instead. Turn
+     * this on to get the old auto-widen-on-focus behavior back.
+     *
+     * @default false
+     */
+    focusExpand?: boolean
   }
 
   /**

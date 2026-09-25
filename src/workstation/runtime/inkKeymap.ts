@@ -27,6 +27,7 @@ export type LogInkCommandId =
   | 'commitSplit'
   | 'focusNext'
   | 'focusPrevious'
+  | 'togglePaneZoom'
   | 'help'
   | 'markForCompare'
   | 'moveDown'
@@ -249,6 +250,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['shift+tab'],
     label: t(en, 'keymap.binding.focusPrevious.label'),
     description: t(en, 'keymap.binding.focusPrevious.desc'),
+    contexts: ['normal'],
+  },
+  {
+    id: 'togglePaneZoom',
+    keys: ['='],
+    label: t(en, 'keymap.binding.togglePaneZoom.label'),
+    description: t(en, 'keymap.binding.togglePaneZoom.desc'),
     contexts: ['normal'],
   },
   {
@@ -1092,6 +1100,7 @@ const GLOBAL_BINDING_IDS: LogInkCommandId[] = [
   'workflowAiConflictHelp',
   'focusNext',
   'focusPrevious',
+  'togglePaneZoom',
   'refresh',
   'quit',
   'navigateHome',
@@ -1162,6 +1171,7 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   //    cluster here so users learn them as a set.
   focusNext: 'navigation',
   focusPrevious: 'navigation',
+  togglePaneZoom: 'navigation',
   navigateHome: 'navigation',
   navigateStatus: 'navigation',
   navigateDiff: 'navigation',

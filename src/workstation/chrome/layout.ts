@@ -2,17 +2,14 @@ export type LogInkLayoutInput = {
   columns: number
   rows: number
   /**
-   * When true the sidebar grows so long branch / file names stop
-   * truncating. Set this when the sidebar pane has focus — at rest the
-   * sidebar stays compact so the diff / history panels get most of the
-   * width.
+   * Which pane, if any, has keyboard focus. Drives `visiblePane` in
+   * single-pane mode (and below, `forcedPane` overrides). Does **not**
+   * affect pane widths in three-pane mode — Tab must never resize the
+   * row the user is reading (#2157). Use `zoomedPane` for that.
    */
   sidebarFocused?: boolean
   /**
-   * When true the inspector grows so the user can read long commit
-   * bodies / file lists / action labels. Mirrors the sidebar pattern:
-   * compact at rest so the commit graph dominates, wide on focus so
-   * the inspection surface gets the room it needs.
+   * See `sidebarFocused` — same rule, inspector pane.
    */
   inspectorFocused?: boolean
   /**
@@ -23,6 +20,15 @@ export type LogInkLayoutInput = {
    * open is fine — the user is paused on the help, not navigating.
    */
   helpOverlayActive?: boolean
+  /**
+   * Explicit, user-toggled pane zoom (the `=` key). Unlike focus, zoom
+   * is a deliberate "give this pane more room" action, so it's the only
+   * thing besides the help overlay allowed to change pane widths:
+   * `sidebar` → `clamp(32,50,36%)`, `inspector` → `clamp(36,60,40%)`,
+   * `main` → shrinks both side panels to their floors. `undefined`
+   * means no pane is zoomed — every pane renders at its at-rest width.
+   */
+  zoomedPane?: LogInkVisiblePane
   /**
    * Single-pane only. When an overlay needs a specific pane visible the
    * runtime passes it here so single-pane mode surfaces the overlay
@@ -175,6 +181,14 @@ export const LAYOUT_SINGLE_PANE_BELOW = LAYOUT_RAIL_BELOW
 export const LAYOUT_MAIN_PANEL_MIN_WIDTH = 20
 
 /**
+ * Hard floor for the inspector in three-pane mode — the at-rest minimum
+ * (see the `helpOverlayActive`-less branch of `detailWidth` below), and
+ * also what the inspector shrinks to when `zoomedPane === 'main'` gives
+ * its room to the main panel instead.
+ */
+export const LAYOUT_DETAIL_MIN_WIDTH = 20
+
+/**
  * Sidebar at-rest size targets, tier-aware. The sidebar's purpose at
  * rest is to surface enough room for the most common tab content
  * (status / branches / tags / stashes / worktrees) without dominating
@@ -270,13 +284,14 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
     ? input.forcedPane ?? focusPane
     : focusPane
 
-  // Inspector width — at rest 20-32 cells (~22% of width), focused
+  // Inspector width — at rest 20-32 cells (~22% of width), zoomed
   // 36-60 cells (~40% of width). Narrow rest state keeps the commit
-  // graph dominant; focus expansion gives the inspector room for long
-  // commit bodies / file lists / action labels. Mirrors the sidebar
-  // pattern (sidebarFocused above): instant transition per render.
+  // graph dominant; zoom gives the inspector room for long commit
+  // bodies / file lists / action labels. Width no longer follows focus
+  // (#2157) — Tab must never resize the row the user is reading, so
+  // only the explicit `=` zoom toggle (or the help overlay) changes it.
   //
-  // Help overlay overrides both — it borrows ~50% of the terminal so
+  // Help overlay overrides zoom — it borrows ~50% of the terminal so
   // hotkey descriptions render in full instead of truncating to
   // "Move focus...". Capped at 100 cells so a wide terminal doesn't
   // waste an absurd amount of horizontal space on the cheat sheet.
@@ -285,19 +300,24 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   // so the visible pane gets the full terminal.)
   const detailWidth = input.helpOverlayActive
     ? Math.max(60, Math.min(100, Math.floor(columns * 0.50)))
-    : input.inspectorFocused
+    : input.zoomedPane === 'inspector'
       ? Math.max(36, Math.min(60, Math.floor(columns * 0.40)))
-      : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
+      : input.zoomedPane === 'main'
+        ? LAYOUT_DETAIL_MIN_WIDTH
+        : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
   // Sidebar at rest is tier-aware (see `SIDEBAR_AT_REST_BY_TIER`):
   // tight stays compact (22-28), normal shrinks slightly (22-30),
   // wide grows naturally (28-48) so the side panel doesn't get pinned
   // at an arbitrary cap on big terminals while the main panel hogs
-  // 80% of the width. Focused: 32-50 cells (~36% of width),
-  // regardless of tier — deliberate user intent to read the sidebar
-  // deserves the extra width.
-  const sidebarWidth = input.sidebarFocused
+  // 80% of the width. Zoomed: 32-50 cells (~36% of width), regardless
+  // of tier — deliberate user intent to read the sidebar deserves the
+  // extra width. Main-zoom shrinks the sidebar to its tier floor so
+  // the main panel gets the room instead.
+  const sidebarWidth = input.zoomedPane === 'sidebar'
     ? Math.max(32, Math.min(50, Math.floor(columns * 0.36)))
-    : calcSidebarAtRestWidth(columns, density)
+    : input.zoomedPane === 'main'
+      ? SIDEBAR_AT_REST_BY_TIER[density].min
+      : calcSidebarAtRestWidth(columns, density)
 
   // Single-pane mode: exactly one pane renders, full-width; the other
   // two are hidden (width 0), not railed. Above the breakpoint the
