@@ -1,5 +1,5 @@
 import { getLaneColor, getLanePalette } from './graphLanes'
-import { createLogInkTheme } from './theme'
+import { createLogInkTheme, getLogInkThemePresets, THEME_PRESET_COLORS } from './theme'
 
 describe('lane palette helpers', () => {
   it('returns an empty palette when noColor is set', () => {
@@ -40,5 +40,56 @@ describe('lane palette helpers', () => {
   it('returns undefined lane color for undefined lane id', () => {
     const theme = createLogInkTheme({ preset: 'default', env: {} })
     expect(getLaneColor(undefined, theme)).toBeUndefined()
+  })
+
+  it('derives lane[0] from the preset\'s own accent for non-catppuccin/gruvbox hex themes', () => {
+    const truecolor = { COLORTERM: 'truecolor' }
+    for (const name of ['dracula', 'nord', 'tokyo-night'] as const) {
+      const theme = createLogInkTheme({ preset: name, env: truecolor })
+      expect(getLanePalette(theme)[0]).toBe(theme.colors.accent)
+    }
+  })
+
+  it('falls back to the ANSI default palette when a hex preset downgrades', () => {
+    const theme = createLogInkTheme({ preset: 'catppuccin', env: { TERM: 'xterm' } })
+    expect(getLanePalette(theme)).toEqual(['cyan', 'magenta', 'blue', 'cyanBright', 'magentaBright'])
+  })
+
+  it('falls back to the ANSI default palette when the user overrides accent with an ANSI name', () => {
+    const theme = createLogInkTheme({
+      colors: { accent: 'red', focusBorder: 'red', info: 'red' },
+      env: { COLORTERM: 'truecolor' },
+      preset: 'dracula',
+    })
+    expect(getLanePalette(theme)).toEqual(['cyan', 'magenta', 'blue', 'cyanBright', 'magentaBright'])
+  })
+
+  it('honors an explicit graphLane* override', () => {
+    const theme = createLogInkTheme({
+      colors: { graphLane1: '#123456' },
+      env: { COLORTERM: 'truecolor' },
+      preset: 'dracula',
+    })
+    expect(getLanePalette(theme)[0]).toBe('#123456')
+  })
+
+  it.each(Object.entries(THEME_PRESET_COLORS))(
+    'preset "%s" gets a well-formed lane palette under truecolor',
+    (name, colors) => {
+      const theme = createLogInkTheme({ preset: name as never, env: { COLORTERM: 'truecolor' } })
+      const palette = getLanePalette(theme)
+
+      expect(palette.length).toBeGreaterThanOrEqual(3)
+      if (name !== 'default') {
+        for (const entry of palette) {
+          expect(entry).toMatch(/^#[0-9a-f]{6}$/i)
+        }
+      }
+      expect(palette).not.toContain(colors.muted)
+    }
+  )
+
+  it('exposes every registered preset via getLogInkThemePresets (sanity for the it.each above)', () => {
+    expect(getLogInkThemePresets().length).toBeGreaterThan(Object.keys(THEME_PRESET_COLORS).length)
   })
 })

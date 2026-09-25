@@ -919,7 +919,7 @@ export function renderSplitPlanOverlay(
   ),
   ...errorBlock.map((line, offset) => h(Text, {
     key: `split-plan-error-${offset}`,
-    color: 'red',
+    color: theme.colors.danger,
     bold: offset === 0,
   }, line)),
   ...(overlay.error
