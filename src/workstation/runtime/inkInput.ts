@@ -453,6 +453,28 @@ function resolveEdgeJumpEvents(
       : []
   }
 
+  // Sidebar header focus (review follow-up, OSS-2782): mirrors the ↑/↓
+  // ladder's header handling above. Without this, an edge jump while the
+  // header is focused would move the underlying branch/tag/stash/worktree
+  // selection (those reducers don't clear the flag, unlike moveWorktreeFile
+  // for the status group) but leave the header rendered as focused — so
+  // Enter would then misfire into the dedicated drill-in view instead of
+  // the in-sidebar primary action.
+  if (state.focus === 'sidebar' && state.sidebarHeaderFocused) {
+    if (edge === 'top') {
+      // Already the topmost position — matches ↑'s no-op when the header
+      // is already focused.
+      return []
+    }
+    // Bottom: drop header focus, then resolve the same jump again so it
+    // falls through to the list-move branch below and lands on the last
+    // entry of whichever list is active.
+    return [
+      action({ type: 'setSidebarHeaderFocused', value: false }),
+      ...resolveEdgeJumpEvents({ ...state, sidebarHeaderFocused: false }, context, 'bottom'),
+    ]
+  }
+
   if (isBranchActionTarget(state) && context.branchCount) {
     return [action({
       type: 'moveBranch',
@@ -896,7 +918,13 @@ function getSidebarItemCount(
  */
 export function getLogInkPaletteExecuteEvents(
   command: LogInkPaletteCommand,
-  state: LogInkState
+  state: LogInkState,
+  // Optional (review follow-up, OSS-2782): only `moveToTop`/`moveToBottom`
+  // consult it, to reuse the same per-view `resolveEdgeJumpEvents` the
+  // keyboard route uses instead of hard-coding the HISTORY-only jump. Every
+  // `LogInkInputContext` field is optional, so omitting it (existing call
+  // sites / tests) degrades to that same HISTORY-only jump as before.
+  context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
   if (command.kind === 'workflow') {
     if (command.requiresConfirmation) {
@@ -922,15 +950,11 @@ export function getLogInkPaletteExecuteEvents(
     case 'pageDown':
       return [action({ type: 'page', delta: 10 })]
     case 'moveToTop':
-      return [
-        action({ type: 'moveToTop' }),
-        action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
-      ]
+      // Same per-view jump `gg`/Home resolve to (#OSS-2782 review) — not a
+      // hard-coded history-only jump, so the palette matches the keyboard.
+      return resolveEdgeJumpEvents(state, context, 'top')
     case 'moveToBottom':
-      return [
-        action({ type: 'moveToBottom' }),
-        action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
-      ]
+      return resolveEdgeJumpEvents(state, context, 'bottom')
     case 'previousSidebarTab':
       return [action({ type: 'previousSidebarTab' })]
     case 'nextSidebarTab':

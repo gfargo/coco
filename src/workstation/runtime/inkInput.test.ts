@@ -1798,6 +1798,49 @@ describe('log Ink input interactions', () => {
         { type: 'action', action: { type: 'pageDetailPreview', delta: -50, previewLineCount: 50 } },
       ])
     })
+
+    it('sidebar header focused: Home is a no-op, End drops header focus and jumps to the last branch (review follow-up)', () => {
+      const state = {
+        ...createLogInkState(rows),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+        sidebarHeaderFocused: true,
+      }
+      const branchIds = ['a', 'b', 'c', 'd', 'e']
+
+      // Already the topmost position — same no-op as ↑ when header-focused.
+      expect(getLogInkInputEvents(state, '', { home: true }, { branchCount: 5, branchIds })).toEqual([])
+
+      expect(getLogInkInputEvents(state, '', { end: true }, { branchCount: 5, branchIds })).toEqual([
+        { type: 'action', action: { type: 'setSidebarHeaderFocused', value: false } },
+        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+      ])
+    })
+
+    it('palette moveToTop/moveToBottom resolve the same per-view jump as gg/G/Home/End, not a hard-coded history jump (review follow-up)', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const branchIds = ['a', 'b', 'c', 'd', 'e']
+      const context = { branchCount: 5, branchIds }
+
+      const topCommand = getLogInkPaletteCommands().find((c) => c.id === 'moveToTop')
+      const bottomCommand = getLogInkPaletteCommands().find((c) => c.id === 'moveToBottom')
+      expect(topCommand).toBeDefined()
+      expect(bottomCommand).toBeDefined()
+
+      expect(getLogInkPaletteExecuteEvents(topCommand!, state, context)).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: -5, count: 5, id: 'a' } },
+      ])
+      expect(getLogInkPaletteExecuteEvents(bottomCommand!, state, context)).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+      ])
+
+      // Omitting context (existing call sites) degrades to the previous
+      // HISTORY-only jump instead of throwing.
+      expect(getLogInkPaletteExecuteEvents(topCommand!, createLogInkState(rows))).toEqual([
+        { type: 'action', action: { type: 'moveToTop' } },
+        { type: 'action', action: { type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' } },
+      ])
+    })
   })
 
   describe('view-local jump keys on blame / file-history / changelog (#1387)', () => {
