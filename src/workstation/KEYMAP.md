@@ -209,7 +209,7 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `\` | Toggle the graph column |
 | `c` | Cherry-pick the commit |
 | `R` | Revert the commit |
-| `Z` | Reset branch tip here (1-key mode choice: `s` soft · `m` mixed · `h` hard) |
+| `Z` | Reset branch tip here (1-key mode choice: `s` soft · `m` mixed · `h` hard — `h` opens a y/n confirm naming the discarded changes before it runs) |
 | `i` | Open the **rebase plan** surface for `<commit>^..HEAD` (in-TUI interactive rebase; the $EDITOR variant stays in the `:` palette) |
 | `f` | Fixup: commit staged changes as `fixup!` of the cursored commit (confirm; offers immediate autosquash) |
 | `B` | Create branch here |
@@ -313,9 +313,9 @@ cursored row there too.
 | `R` | Rename (prompt) |
 | `D` | Delete (confirm) |
 | `u` | Set upstream (prompt) |
-| `F` / `U` / `P` | Fetch / pull / push the **cursored** branch — `P` opens a 1-key choice: `p` normal push · `f` force-with-lease |
+| `F` / `U` / `P` | Fetch / pull / push the **cursored** branch — `P` opens a push sub-choice (`p` normal push · `f` force-push with lease, which opens its own y/n confirm before it runs) |
 | `M` | Merge the cursored branch into the current branch (confirm) |
-| `Z` | Reset the current branch to the cursored ref — 1-key mode choice: `s` soft · `m` mixed · `h` hard |
+| `Z` | Reset the current branch to the cursored ref (1-key mode choice: `s` soft · `m` mixed · `h` hard — `h` opens a y/n confirm naming the discarded changes before it runs) |
 | `S` | Sync the cursored branch (pull, then push) — branches **view** only, not the sidebar tab (#2155) |
 | `r` | Rebase the current branch onto the cursored branch (confirm) — branches **view** only, not the sidebar tab; the sidebar footer doesn't advertise it, so sidebar focus falls through to the global refresh instead (#2155) |
 | `s` | Cycle the branch sort mode |
@@ -540,6 +540,26 @@ be gated a second time. `reword-head` (seeds the prompt with the current
 subject, `requiresConfirmation: false`), `gZ` stash-all (an empty message
 is read as "quick WIP stash, go"), and the comment/PR-comment flows all
 follow this rule today.
+
+**Carve-out (OSS-2796):** a choice menu is the confirmation only for its
+non-destructive options. A `destructive: true` option — `Z→h` hard reset,
+`P→f` force-push, a merge-strategy pick, `abort-operation`, the
+worktree-conflict removals — still takes an explicit `y` after the pick,
+because the keystroke that selects the option and the keystroke that
+would run an ordinary y-confirm are otherwise the same single keypress
+(`h`, notoriously, is also vim's move-left). `getLogInkInputEvents`
+routes a `destructive: true` pick into `setPendingConfirmation` instead of
+firing `runWorkflowAction` directly; only the follow-up `y` runs the
+workflow. #1867 owns the remaining bypass — non-destructive choice options
+reached *through* a workflow that itself needs gating.
+
+Rerouting through `setPendingConfirmation` carries the origin choice
+prompt's `keepStatusOnDismiss` flag (#1360) along as
+`pendingConfirmationKeepStatusOnDismiss`, so declining still leaves a
+sticky git-error status alone — e.g. operation-conflict-recovery's `a`
+(abort-operation, `destructive: true`) followed by `n` keeps the original
+`error: could not apply ...` visible instead of overwriting it with
+"workflow action cancelled".
 
 - #1451 covers the flip side of this: two separate confirmation systems
   exist with diverging precedence, copy, and cancel vocabulary — doctrine

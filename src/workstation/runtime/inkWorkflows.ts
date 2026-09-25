@@ -199,7 +199,10 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'git push --force-with-lease for the cursored branch after a history rewrite.',
       kind: 'destructive',
       requiresConfirmation: true,
-      warning: 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.',
+      // OSS-2796 — this is now also reachable voluntarily via P→f in
+      // the push sub-choice, not just as a rejected-push escalation, so
+      // the copy can't assume the push was already rejected.
+      warning: '--force-with-lease overwrites the remote branch to match your local history. Still refuses if the remote moved since your last fetch.',
       targets: 'single',
     },
     {
@@ -400,7 +403,10 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Move the current branch pointer to match the selected ref.',
       kind: 'destructive',
       requiresConfirmation: true,
-      warning: 'Rewrites local history. Use g u to undo if needed.',
+      // OSS-2796 — same mode-aware copy as reset-to-commit above.
+      warning: (state) => state.pendingConfirmationPayload === 'hard'
+        ? 'git reset --hard — ALL uncommitted working-tree changes are discarded. g u restores HEAD, not your changes.'
+        : `git reset --${state.pendingConfirmationPayload || 'mixed'} — moves the branch tip; your changes are kept.`,
       targets: 'single',
     },
     {
@@ -608,6 +614,9 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Merge the current branch\'s pull request (prompts for merge / squash / rebase, then confirms).',
       kind: 'destructive',
       requiresConfirmation: true,
+      // OSS-2796 — the strategy choice rides along as the confirmation
+      // payload; name it so the y-confirm says what's about to land.
+      warning: (state) => `Merges with the "${state.pendingConfirmationPayload || 'merge'}" strategy — lands on the base branch immediately.`,
       targets: 'single',
     },
     {
@@ -720,6 +729,8 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Merge the cursored pull request on the triage list view (prompts for merge / squash / rebase, then confirms).',
       kind: 'destructive',
       requiresConfirmation: true,
+      // OSS-2796 — same strategy-aware copy as merge-pr above.
+      warning: (state) => `Merges with the "${state.pendingConfirmationPayload || 'merge'}" strategy — lands on the base branch immediately.`,
       targets: 'single',
     },
     {
@@ -827,6 +838,13 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Move the current branch tip to the cursored commit (prompts for soft / mixed / hard).',
       kind: 'destructive',
       requiresConfirmation: true,
+      // OSS-2796 — the mode choice (soft/mixed/hard) rides along as the
+      // confirmation payload, so `h` gets its own words: `--hard`
+      // discards uncommitted work that `g u` (which only restores HEAD)
+      // can't bring back.
+      warning: (state) => state.pendingConfirmationPayload === 'hard'
+        ? 'git reset --hard — ALL uncommitted working-tree changes are discarded. g u restores HEAD, not your changes.'
+        : `git reset --${state.pendingConfirmationPayload || 'mixed'} — moves the branch tip; your changes are kept.`,
       targets: 'single',
     },
     {

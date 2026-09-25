@@ -1152,6 +1152,50 @@ describe('log Ink input interactions', () => {
         },
       ])
     })
+
+    it('Z then h opens a y-confirm for reset-to-branch instead of resetting immediately (OSS-2796)', () => {
+      // Same vim-key trap as the history view's Z→h: `h` must not fire
+      // git reset --hard on the branch ref on a single keypress.
+      const branchState = { branchCount: 3, currentBranch: 'feature', branchSelectedShortName: 'main' }
+      let state = createLogInkState(rows, { activeView: 'branches' })
+      state = applyInput(state, 'Z', {}, branchState)
+      expect(state.pendingChoice?.id).toBe('reset-to-branch-mode-choice')
+
+      const events = getLogInkInputEvents(state, 'h', {}, branchState)
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'reset-to-branch', payload: 'hard' },
+        },
+      ])
+      expect(events.some((event) => event.type === 'runWorkflowAction')).toBe(false)
+
+      const confirmState = applyInput(state, 'h', {}, branchState)
+      expect(confirmState.pendingChoice).toBeUndefined()
+      expect(confirmState.pendingConfirmationId).toBe('reset-to-branch')
+      expect(confirmState.pendingConfirmationPayload).toBe('hard')
+
+      const confirmed = getLogInkInputEvents(confirmState, 'y', {}, branchState)
+      expect(confirmed).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'reset-to-branch',
+        payload: 'hard',
+      })
+    })
+
+    it('Z then s/m still runs reset-to-branch directly (non-destructive modes)', () => {
+      const branchState = { branchCount: 3, currentBranch: 'feature', branchSelectedShortName: 'main' }
+      for (const [choiceKey, mode] of [['s', 'soft'], ['m', 'mixed']] as const) {
+        let state = createLogInkState(rows, { activeView: 'branches' })
+        state = applyInput(state, 'Z', {}, branchState)
+        const events = getLogInkInputEvents(state, choiceKey, {}, branchState)
+        expect(events).toContainEqual({
+          type: 'runWorkflowAction',
+          id: 'reset-to-branch',
+          payload: mode,
+        })
+      }
+    })
   })
 
   describe('S sync-branch on the branches view', () => {
@@ -1182,6 +1226,45 @@ describe('log Ink input interactions', () => {
           action: { type: 'setPendingChoice', value: PUSH_SUB_CHOICE },
         },
       ])
+    })
+
+    it('P then f opens a y-confirm for force-push-selected-branch instead of pushing immediately (OSS-2796)', () => {
+      const branchState = { branchCount: 3, currentBranch: 'feature', branchSelectedShortName: 'main' }
+      let state = createLogInkState(rows, { activeView: 'branches' })
+      state = applyInput(state, 'P', {}, branchState)
+      expect(state.pendingChoice?.id).toBe('push-sub-choice')
+
+      const events = getLogInkInputEvents(state, 'f', {}, branchState)
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'force-push-selected-branch', payload: undefined },
+        },
+      ])
+      expect(events.some((event) => event.type === 'runWorkflowAction')).toBe(false)
+
+      const confirmState = applyInput(state, 'f', {}, branchState)
+      expect(confirmState.pendingChoice).toBeUndefined()
+      expect(confirmState.pendingConfirmationId).toBe('force-push-selected-branch')
+
+      const confirmed = getLogInkInputEvents(confirmState, 'y', {}, branchState)
+      expect(confirmed).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'force-push-selected-branch',
+        payload: undefined,
+      })
+    })
+
+    it('P then p still runs push-selected-branch directly (non-destructive)', () => {
+      const branchState = { branchCount: 3, currentBranch: 'feature', branchSelectedShortName: 'main' }
+      let state = createLogInkState(rows, { activeView: 'branches' })
+      state = applyInput(state, 'P', {}, branchState)
+      const events = getLogInkInputEvents(state, 'p', {}, branchState)
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'push-selected-branch',
+        payload: undefined,
+      })
     })
   })
 
@@ -4614,9 +4697,9 @@ describe('log Ink input interactions', () => {
       })
     })
 
-    it('the reset choice keys run reset-to-commit with the mode payload (#1351)', () => {
+    it('the non-destructive reset choice keys run reset-to-commit with the mode payload (#1351)', () => {
       // One keystroke per mode — no typed word, no typo scold.
-      for (const [choiceKey, mode] of [['s', 'soft'], ['m', 'mixed'], ['h', 'hard']] as const) {
+      for (const [choiceKey, mode] of [['s', 'soft'], ['m', 'mixed']] as const) {
         let state = createLogInkState(rows)
         state = applyInput(state, 'Z')
         expect(state.pendingChoice?.id).toBe('reset-mode-choice')
@@ -4630,6 +4713,41 @@ describe('log Ink input interactions', () => {
         const after = applyInput(state, choiceKey)
         expect(after.pendingChoice).toBeUndefined()
       }
+    })
+
+    it('the hard reset choice key (h) opens a y-confirm instead of running reset-to-commit directly (OSS-2796)', () => {
+      // `h` is vim's move-left — a reflexive Z→h must not fire
+      // git reset --hard on a single keypress. It's `destructive: true`,
+      // so it routes into the same confirmation gate as every other
+      // destructive workflow instead of running immediately.
+      let state = createLogInkState(rows)
+      state = applyInput(state, 'Z')
+      expect(state.pendingChoice?.id).toBe('reset-mode-choice')
+      const events = getLogInkInputEvents(state, 'h')
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'reset-to-commit', payload: 'hard' },
+        },
+      ])
+      expect(events.some((event) => event.type === 'runWorkflowAction')).toBe(false)
+
+      const after = applyInput(state, 'h')
+      expect(after.pendingChoice).toBeUndefined()
+      expect(after.pendingConfirmationId).toBe('reset-to-commit')
+      expect(after.pendingConfirmationPayload).toBe('hard')
+
+      // Only the follow-up y actually runs the workflow.
+      const confirmed = getLogInkInputEvents(after, 'y')
+      expect(confirmed).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'reset-to-commit',
+        payload: 'hard',
+      })
+
+      // n cancels without ever running the workflow.
+      const declined = applyInput(after, 'n')
+      expect(declined.pendingConfirmationId).toBeUndefined()
     })
 
     it('an unbound key leaves the reset choice open; esc cancels it', () => {
@@ -6783,11 +6901,28 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
       expect(state.inputPrompt).toBeUndefined()
     })
 
-    it('the strategy keys run triage-pr-merge with the strategy payload (#1351)', () => {
+    it('the strategy keys open a y-confirm for triage-pr-merge with the strategy payload (OSS-2796)', () => {
+      // All three merge strategies are `destructive: true` — merging a PR
+      // is near-irreversible once gh publishes it, so picking a strategy
+      // must land on the same y/n gate as every other destructive
+      // workflow rather than merging on the single keypress.
       for (const [choiceKey, strategy] of [['m', 'merge'], ['s', 'squash'], ['r', 'rebase']] as const) {
         const state = applyInput(baseState(), 'm', {}, { pullRequestTriageCount: 3 })
         const events = getLogInkInputEvents(state, choiceKey)
-        expect(events).toContainEqual({
+        expect(events).toEqual([
+          {
+            type: 'action',
+            action: { type: 'setPendingConfirmation', value: 'triage-pr-merge', payload: strategy },
+          },
+        ])
+        expect(events.some((event) => event.type === 'runWorkflowAction')).toBe(false)
+
+        const confirmState = applyInput(state, choiceKey)
+        expect(confirmState.pendingConfirmationId).toBe('triage-pr-merge')
+        expect(confirmState.pendingConfirmationPayload).toBe(strategy)
+
+        const confirmed = getLogInkInputEvents(confirmState, 'y')
+        expect(confirmed).toContainEqual({
           type: 'runWorkflowAction',
           id: 'triage-pr-merge',
           payload: strategy,
@@ -6883,6 +7018,50 @@ describe('triage-view destructive actions (#882 phase 5)', () => {
         id: 'ready-pr',
         payload: undefined,
       })
+    })
+
+    it('m opens the merge-strategy choice, and picking merge opens a y-confirm for merge-pr (OSS-2796)', () => {
+      let state = applyInput(baseState(), 'm')
+      expect(state.pendingChoice?.id).toBe('pr-merge-strategy-choice')
+
+      const events = getLogInkInputEvents(state, 'm')
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'merge-pr', payload: 'merge' },
+        },
+      ])
+      expect(events.some((event) => event.type === 'runWorkflowAction')).toBe(false)
+
+      state = applyInput(state, 'm')
+      expect(state.pendingChoice).toBeUndefined()
+      expect(state.pendingConfirmationId).toBe('merge-pr')
+      expect(state.pendingConfirmationPayload).toBe('merge')
+
+      const confirmed = getLogInkInputEvents(state, 'y')
+      expect(confirmed).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'merge-pr',
+        payload: 'merge',
+      })
+    })
+
+    it('M opens the auto-merge strategy choice, and picking a strategy still runs automerge-pr directly (no destructive flag)', () => {
+      // Auto-merge schedules a later merge rather than landing one now, so
+      // `autoMergeStrategyChoice`'s options carry no `destructive` flag —
+      // this must keep firing on the single keypress, unlike merge-pr above.
+      const state = applyInput(baseState(), 'M')
+      expect(state.pendingChoice?.id).toBe('pr-automerge-strategy-choice')
+
+      const events = getLogInkInputEvents(state, 'm')
+      expect(events).toContainEqual({
+        type: 'runWorkflowAction',
+        id: 'automerge-pr',
+        payload: 'merge',
+      })
+      expect(events.some((event) =>
+        event.type === 'action' && event.action.type === 'setPendingConfirmation'
+      )).toBe(false)
     })
   })
 })
@@ -7083,20 +7262,40 @@ describe('triage filter cycling (#882 phase 6)', () => {
       expect(after.worktreeCheckoutConflict).toBeUndefined()
     })
 
-    it('r runs the remove-worktree-&-checkout workflow and closes the prompt', () => {
+    it('r opens a y-confirm for remove-worktree-&-checkout (destructive, OSS-2796) and closes the choice prompt', () => {
+      // `destructive: true` options never run on the picking keystroke —
+      // this widens the OSS-2796 fix's blast radius past the four
+      // prompts named in the issue (see the plan's risk notes), which
+      // matches the acceptance wording: no destructive choice option
+      // runs without an explicit y.
       const state = conflictState()
       const events = getLogInkInputEvents(state, 'r')
-      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'conflict-remove-worktree-checkout' })
-      // The runtime owns clearing the conflict (it reads it first), so
-      // the input layer only closes the choice prompt.
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'conflict-remove-worktree-checkout', payload: undefined },
+        },
+      ])
       const after = applyInput(state, 'r')
       expect(after.pendingChoice).toBeUndefined()
+      expect(after.pendingConfirmationId).toBe('conflict-remove-worktree-checkout')
+
+      const confirmed = getLogInkInputEvents(after, 'y')
+      expect(confirmed).toContainEqual({ type: 'runWorkflowAction', id: 'conflict-remove-worktree-checkout', payload: undefined })
     })
 
-    it('x runs the remove-worktree-&-branch workflow and closes the prompt', () => {
+    it('x opens a y-confirm for remove-worktree-&-branch (destructive, OSS-2796)', () => {
       const state = conflictState()
       const events = getLogInkInputEvents(state, 'x')
-      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'conflict-remove-worktree-branch' })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'conflict-remove-worktree-branch', payload: undefined },
+        },
+      ])
+      const after = applyInput(state, 'x')
+      const confirmed = getLogInkInputEvents(after, 'y')
+      expect(confirmed).toContainEqual({ type: 'runWorkflowAction', id: 'conflict-remove-worktree-branch', payload: undefined })
     })
 
     it('ignores keys that match no option', () => {
@@ -7141,12 +7340,42 @@ describe('triage filter cycling (#882 phase 6)', () => {
       expect(after.statusMessage).toBe('error: could not apply abc1234... feat: add thing')
     })
 
-    it('a runs the abort-operation workflow and closes the prompt', () => {
+    it('a opens a y-confirm for abort-operation (destructive, OSS-2796) and closes the choice prompt', () => {
       const state = conflictRecoveryState()
       const events = getLogInkInputEvents(state, 'a')
-      expect(events).toContainEqual({ type: 'runWorkflowAction', id: 'abort-operation', payload: undefined })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setPendingConfirmation',
+            value: 'abort-operation',
+            payload: undefined,
+            keepStatusOnDismiss: true,
+          },
+        },
+      ])
       const after = applyInput(state, 'a')
       expect(after.pendingChoice).toBeUndefined()
+      expect(after.pendingConfirmationId).toBe('abort-operation')
+      expect(after.pendingConfirmationKeepStatusOnDismiss).toBe(true)
+
+      const confirmed = getLogInkInputEvents(after, 'y')
+      expect(confirmed).toContainEqual({ type: 'runWorkflowAction', id: 'abort-operation', payload: undefined })
+    })
+
+    it('a then n keeps the sticky error status instead of "workflow action cancelled" (keepStatusOnDismiss survives the confirm reroute)', () => {
+      // Regression for the PR #2169 review: routing a `destructive: true`
+      // choice pick through setPendingConfirmation must not drop the
+      // origin prompt's keepStatusOnDismiss (#1360) — declining the
+      // abort-operation confirm should leave the raw git error visible,
+      // the same as declining the choice prompt directly would (see the
+      // Esc test above).
+      const state = conflictRecoveryState()
+      const afterPick = applyInput(state, 'a')
+      const afterDecline = applyInput(afterPick, 'n')
+      expect(afterDecline.pendingConfirmationId).toBeUndefined()
+      expect(afterDecline.statusMessage).toBe('error: could not apply abc1234... feat: add thing')
+      expect(afterDecline.statusKind).toBe('error')
     })
 
     it('Esc dismisses but keeps the raw error status visible (keepStatusOnDismiss)', () => {
