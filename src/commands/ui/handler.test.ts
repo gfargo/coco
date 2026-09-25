@@ -75,6 +75,21 @@ describe('ui command handler utilities', () => {
     expect(logArgv.all).toBe(true)
     expect(logArgv.branch).toBe('feature/x')
   })
+
+  it('carries --ascii through to the inner log argv', () => {
+    const logArgv = createLogArgvFromUiArgv(argv({ ascii: true }))
+    expect(logArgv.ascii).toBe(true)
+  })
+
+  it('carries --no-ascii (explicit false) through to the inner log argv', () => {
+    const logArgv = createLogArgvFromUiArgv(argv({ ascii: false }))
+    expect(logArgv.ascii).toBe(false)
+  })
+
+  it('leaves ascii undefined on the inner log argv when unset', () => {
+    const logArgv = createLogArgvFromUiArgv(argv({}))
+    expect(logArgv.ascii).toBeUndefined()
+  })
 })
 
 describe('createUiTheme', () => {
@@ -141,5 +156,21 @@ describe('createUiTheme', () => {
     } as unknown as Config)
     const theme = createUiTheme(config, argv({}))
     expect(theme).toEqual({ preset: 'gruvbox' })
+  })
+
+  it('CLI --no-ascii (explicit false) overrides config logTui.theme.ascii: true', () => {
+    // yargs boolean-negation gives `argv.ascii === false` for `--no-ascii`.
+    // Without an escape hatch, a `logTui.theme.ascii: true` config value (or
+    // a locale-based false positive) had no way to be overridden per-run.
+    const config = makeConfig({
+      logTui: { theme: { preset: 'gruvbox', ascii: true } },
+    } as unknown as Config)
+    const theme = createUiTheme(config, argv({ ascii: false }))
+    expect(theme).toEqual({ preset: 'gruvbox', ascii: false })
+  })
+
+  it('CLI --no-ascii forces ascii off even with no other theme config', () => {
+    const theme = createUiTheme(makeConfig(), argv({ ascii: false }))
+    expect(theme).toEqual({ ascii: false })
   })
 })

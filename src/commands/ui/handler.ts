@@ -51,6 +51,7 @@ export function createLogArgvFromUiArgv(argv: UiArgv): LogArgv {
     verbose: argv.verbose,
     version: argv.version,
     help: argv.help,
+    ascii: argv.ascii,
   } as Arguments<LogOptions>
 }
 
@@ -75,7 +76,7 @@ export function createUiTheme(config: Config, argv: ThemeArgv): LogInkThemeConfi
   const merged: LogInkThemeConfig = {
     ...config.logTui?.theme,
     ...(argv.theme ? { preset: argv.theme } : {}),
-    ...(argv.ascii ? { ascii: true } : {}),
+    ...(argv.ascii !== undefined ? { ascii: argv.ascii } : {}),
   }
 
   return Object.keys(merged).length > 0 ? merged : undefined

@@ -78,6 +78,15 @@ describe('workspace handler argv resolution', () => {
     expect(drill.theme).toBe('gruvbox')
     expect(drill.verbose).toBe(true)
   })
+
+  it('buildDrillInUiArgv carries --ascii through to the inner ui argv', () => {
+    // #2163 CONCERNS: `coco workspace --ascii` drilled into a repo used to
+    // hand off to `coco ui` with `ascii` dropped, silently losing ASCII
+    // mode on the inner surface.
+    expect(buildDrillInUiArgv(argv({ ascii: true })).ascii).toBe(true)
+    expect(buildDrillInUiArgv(argv({ ascii: false })).ascii).toBe(false)
+    expect(buildDrillInUiArgv(argv({})).ascii).toBeUndefined()
+  })
 })
 
 describe('runWorkspaceLoop', () => {

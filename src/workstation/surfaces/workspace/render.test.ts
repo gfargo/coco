@@ -9,6 +9,7 @@ import {
     buildWorkspaceListWindow,
     buildWorkspaceOnboarding,
     buildWorkspaceSidebar,
+    workspaceSpinnerFrame,
 } from './render'
 import { applyWorkspaceAction, createWorkspaceState } from './state'
 
@@ -112,6 +113,12 @@ describe('workspace render builders', () => {
     })
     const rows = buildWorkspaceListRows(next)
     expect(rows[1].columns[2].text).not.toContain('⊙4')
+  })
+
+  it('animates through 4 distinct ASCII frames instead of freezing on a static glyph', () => {
+    const frames = [0, 1, 2, 3].map((tick) => workspaceSpinnerFrame(tick, true))
+    expect(new Set(frames).size).toBe(4)
+    expect(frames).toEqual(['|', '/', '-', '\\'])
   })
 
   it('renders ASCII-only glyphs in the status cell + placeholder when ascii: true', () => {

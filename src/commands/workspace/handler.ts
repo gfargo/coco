@@ -74,6 +74,7 @@ export function buildDrillInUiArgv(argv: WorkspaceArgv): UiArgv {
     version: false,
     help: false,
     theme: argv.theme,
+    ascii: argv.ascii,
     all: true,
     repo: undefined,
   } as unknown) as UiArgv

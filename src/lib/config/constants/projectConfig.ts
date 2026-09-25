@@ -111,4 +111,5 @@ export const TRUSTED_PROJECT_TOP_LEVEL_KEYS = [
   'repo',
   'quiet',
   'json',
+  'ascii',
 ] as const

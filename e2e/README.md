@@ -52,6 +52,13 @@ extending it:
   onboarding marker (pre-seeded so journeys don't start on the welcome
   overlay).
 
+`asciiMode.e2e.test.ts` (#2163) boots with `env: { LANG: 'C' }` to prove
+`LANG=C coco ui` renders no byte above `0x7e` across history, branches,
+and the help overlay, and that `--no-ascii` still forces unicode back on
+under the same locale. Its `waitForReady`-style gate cannot reuse the
+default `· loading` check — under ASCII the separator itself
+transliterates to `.`, so it keys on the bare `loading` token instead.
+
 The same deterministic scripts are the seed for the VHS visual-
 regression / demo-gif half of #1424 — a journey that passes here can be
 transcribed into a `.tape` recipe in `bin/screenshot/`.

@@ -37,6 +37,6 @@ export function getLogInkRenderOptions(
     patchConsole: false,
     stdin: streams.input,
     stdout: streams.ascii ? wrapAsciiOutputStream(streams.output) : streams.output,
-    stderr: streams.error,
+    stderr: streams.ascii ? wrapAsciiOutputStream(streams.error) : streams.error,
   }
 }
