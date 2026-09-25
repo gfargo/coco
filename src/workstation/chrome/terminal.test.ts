@@ -30,4 +30,18 @@ describe('log Ink terminal hygiene', () => {
       stderr: error,
     })
   })
+
+  it('wraps both stdout and stderr with the ASCII backstop when ascii: true', () => {
+    // stderr shares the PTY with stdout — leaving it unwrapped would let
+    // unicode written there (warnings, uncaught errors) land on screen and
+    // fail an ASCII-mode assertion nondeterministically.
+    const input = readStream(true)
+    const output = writeStream(true)
+    const error = writeStream(true)
+
+    const options = getLogInkRenderOptions({ input, output, error, ascii: true })
+
+    expect(options.stdout).not.toBe(output)
+    expect(options.stderr).not.toBe(error)
+  })
 })

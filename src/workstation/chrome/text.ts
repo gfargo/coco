@@ -3,6 +3,27 @@ import { cellWidth, graphemes } from './cellWidth'
 export { cellWidth }
 
 /**
+ * Process-wide ASCII-dialect default (mirrors `chrome/snapshotMode.ts`'s
+ * module-level `now` override). `truncateCells` is called from ~200 sites
+ * across the workstation, the vast majority without an `options.ascii`
+ * — threading the flag through every one of them isn't practical, so the
+ * runtime sets this once per theme (boot + theme-picker change) and
+ * every un-opted-in call site picks it up automatically. An explicit
+ * `options.ascii` at a call site always wins over this default.
+ */
+let asciiDialect = false
+
+/** Set the process-wide ASCII-dialect default. Call once per theme resolution. */
+export function setAsciiDialect(value: boolean): void {
+  asciiDialect = value
+}
+
+/** Read the process-wide ASCII-dialect default. Exposed for tests. */
+export function getAsciiDialect(): boolean {
+  return asciiDialect
+}
+
+/**
  * Word-wrap `value` into lines that each fit within `width` cells. Breaks
  * on whitespace where possible; falls back to mid-word splits when a single
  * word is wider than the budget. Preserves blank input as a single empty
@@ -124,7 +145,8 @@ export function truncateCells(
   // back to the compact 1-cell `…` when even the 3-cell ascii form can't
   // fit means a narrow ascii-mode budget still gets a visible marker
   // instead of none.
-  const dialectEllipsis = options.ascii ? '...' : '…'
+  const useAscii = options.ascii ?? asciiDialect
+  const dialectEllipsis = useAscii ? '...' : '…'
   const suffix = cellWidth(dialectEllipsis) <= width ? dialectEllipsis : '…'
   const available = width - cellWidth(suffix)
   let used = 0

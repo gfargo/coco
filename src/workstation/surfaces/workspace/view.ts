@@ -11,6 +11,7 @@ import type * as ReactTypes from 'react'
 import type { TextProps } from 'ink'
 
 import type { LogInkTheme } from '../../chrome/theme'
+import { pickWorkstationGlyph } from '../../chrome/glyphs'
 import { renderThemePickerOverlay } from '../../runtime/overlays'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 import { truncateCells } from '../../chrome/text'
@@ -176,7 +177,7 @@ function renderSidebarRail(
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
   const focused = state.focus === 'sidebar' // never true while railed, but defensive
-  const tabs = buildWorkspaceSidebar(state)
+  const tabs = buildWorkspaceSidebar(state, theme.ascii)
   const rows = tabs.map((row) => {
     const tone = row.disabled
       ? { dimColor: true }
@@ -220,7 +221,7 @@ function renderSidebar(
     return renderSidebarRail(deps, height)
   }
 
-  const tabs = buildWorkspaceSidebar(state)
+  const tabs = buildWorkspaceSidebar(state, theme.ascii)
   const widest = tabs.reduce((acc, row) => Math.max(acc, row.label.length), SIDEBAR_LABEL_WIDTH)
   const rows = tabs.map((row) => {
     // The `key` is on each call site (caret/glyph/label/count) so we
@@ -307,8 +308,8 @@ function renderListRow(
   // landed on the screen as visual noise.
   const cursorGlyph = row.cursor
     ? state.focus === 'list'
-      ? '↵'
-      : '›'
+      ? pickWorkstationGlyph('enter', theme.ascii)
+      : pickWorkstationGlyph('chevron', theme.ascii)
     : ' '
   const cells = row.columns.map((column, index) => {
     // Cursored rows lean on bold + a richer color treatment rather
@@ -382,7 +383,11 @@ function renderEmptyState(
     : state.overview.repos.length === 0
       ? 'no-repos'
       : 'no-matches'
-  const glyph = variant === 'loading' ? '◐' : variant === 'no-repos' ? '∅' : '○'
+  const glyph = variant === 'loading'
+    ? pickWorkstationGlyph('half', theme.ascii)
+    : variant === 'no-repos'
+      ? pickWorkstationGlyph('empty', theme.ascii)
+      : pickWorkstationGlyph('hollow', theme.ascii)
   const headline =
     variant === 'loading'
       ? 'Scanning configured roots…'
@@ -469,6 +474,7 @@ function renderListBody(
     rows: listRows,
     spinnerTick: deps.spinnerTick,
     now: deps.now,
+    ascii: theme.ascii,
   })
   const visibleRepos = selectVisibleRepos(state)
 

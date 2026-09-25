@@ -405,7 +405,7 @@ describe('log Ink keymap', () => {
       expect(formatLogInkRepoBreadcrumb([{ label: 'coco' }])).toBe('')
     })
 
-    it('renders a two-frame stack with the back-hint cue', () => {
+    it('renders a two-frame stack with the back-hint cue (unicode default)', () => {
       expect(formatLogInkRepoBreadcrumb([
         { label: 'coco' },
         { label: 'vendor/lib' },
@@ -418,6 +418,13 @@ describe('log Ink keymap', () => {
         { label: 'vendor/lib' },
         { label: 'vendor/lib/inner' },
       ])).toBe('coco › vendor/lib › vendor/lib/inner   ← esc')
+    })
+
+    it('uses ASCII left arrow when ascii=true', () => {
+      expect(formatLogInkRepoBreadcrumb([
+        { label: 'coco' },
+        { label: 'vendor/lib' },
+      ], true)).toBe('coco › vendor/lib   < esc')
     })
 
     it('reads only the label off each frame and ignores other fields', () => {

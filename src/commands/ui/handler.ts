@@ -51,28 +51,35 @@ export function createLogArgvFromUiArgv(argv: UiArgv): LogArgv {
     verbose: argv.verbose,
     version: argv.version,
     help: argv.help,
+    ascii: argv.ascii,
   } as Arguments<LogOptions>
 }
 
 /**
  * Resolve which theme to apply for the workstation. CLI `--theme`
- * overrides the config's preset; otherwise we pass through the
- * config's `logTui.theme` block (or `undefined` if none is set, to
- * let the chrome layer pick the default preset).
+ * overrides the config's preset and CLI `--ascii` forces ASCII mode on
+ * top of whatever `theme.ascii` config/detection would otherwise pick;
+ * otherwise we pass through the config's `logTui.theme` block (or
+ * `undefined` if none is set, to let the chrome layer pick the default
+ * preset / auto-detect ASCII).
  *
  * Exported for unit testing — the merge/override logic is small but
  * easy to break (e.g. accidentally overwriting the entire theme
  * block instead of just the preset).
  */
-export function createUiTheme(config: Config, argv: UiArgv): LogInkThemeConfig | undefined {
-  if (!argv.theme) {
-    return config.logTui?.theme
+type ThemeArgv = {
+  theme?: UiArgv['theme']
+  ascii?: boolean
+}
+
+export function createUiTheme(config: Config, argv: ThemeArgv): LogInkThemeConfig | undefined {
+  const merged: LogInkThemeConfig = {
+    ...config.logTui?.theme,
+    ...(argv.theme ? { preset: argv.theme } : {}),
+    ...(argv.ascii !== undefined ? { ascii: argv.ascii } : {}),
   }
 
-  return {
-    ...config.logTui?.theme,
-    preset: argv.theme,
-  }
+  return Object.keys(merged).length > 0 ? merged : undefined
 }
 
 type StartCocoUiFromLogArgvOptions = {
@@ -155,7 +162,7 @@ export async function startCocoUiFromLogArgv(
     initialView: 'history',
     loadRows,
     logArgv,
-    theme: config.logTui?.theme,
+    theme: createUiTheme(config, logArgv),
   })
 }
 

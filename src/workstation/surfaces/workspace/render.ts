@@ -1,4 +1,6 @@
 import type { WorkspaceRepoSummary } from '../../../git/workspaceData'
+import { pickWorkstationGlyph } from '../../chrome/glyphs'
+import { pickThemedSpinnerFrame } from '../../chrome/spinner'
 import { truncateCells, truncatePathCells } from '../../chrome/text'
 import {
     workspaceTabGlyph,
@@ -163,14 +165,12 @@ export function assignWorkspaceColumnWidths(budget: number): WorkspaceColumnWidt
 }
 
 /**
- * Spinner frames cycled by the runtime tick. Same Braille-style
- * spinner the existing `chrome/spinner.ts` uses so workspace +
- * coco ui feel consistent.
+ * Spinner frame cycled by the runtime tick. Delegates to the shared
+ * `chrome/spinner.ts` theming so workspace + `coco ui` feel consistent
+ * — including the ASCII `|/-\` cycle under `theme.ascii`.
  */
-export const WORKSPACE_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'] as const
-
-export function workspaceSpinnerFrame(tick: number): string {
-  return WORKSPACE_SPINNER_FRAMES[tick % WORKSPACE_SPINNER_FRAMES.length]
+export function workspaceSpinnerFrame(tick: number, ascii = false): string {
+  return pickThemedSpinnerFrame(tick, ascii)
 }
 
 function formatStatusCell(
@@ -179,17 +179,18 @@ function formatStatusCell(
   ghAuthenticated: boolean | undefined,
   prCount: number | undefined,
   isFetchingPr: boolean,
-  spinnerFrame: string
+  spinnerFrame: string,
+  ascii: boolean
 ): WorkspaceListColumn {
   const tokens: string[] = []
   if (repo.dirty > 0) {
-    tokens.push(`●${repo.dirty}`)
+    tokens.push(`${pickWorkstationGlyph('filled', ascii)}${repo.dirty}`)
   }
   if (repo.ahead > 0) {
-    tokens.push(`↑${repo.ahead}`)
+    tokens.push(`${pickWorkstationGlyph('up', ascii)}${repo.ahead}`)
   }
   if (repo.behind > 0) {
-    tokens.push(`↓${repo.behind}`)
+    tokens.push(`${pickWorkstationGlyph('down', ascii)}${repo.behind}`)
   }
   if (isFetchingPr) {
     // Animated spinner replaces the PR token while the gh call is
@@ -197,11 +198,11 @@ function formatStatusCell(
     // workspace-wide loading indicator so users learn one shape.
     tokens.push(spinnerFrame)
   } else if (ghAuthenticated && typeof prCount === 'number' && prCount > 0) {
-    // `⊙ N` matches the PRs tab glyph so the status column reads as a
+    // Matches the PRs tab glyph so the status column reads as a
     // glance-grokable summary of the same data the tabs filter on.
-    tokens.push(`⊙${prCount}`)
+    tokens.push(`${pickWorkstationGlyph('target', ascii)}${prCount}`)
   }
-  const text = tokens.length === 0 ? '·' : tokens.join(' ')
+  const text = tokens.length === 0 ? pickWorkstationGlyph('sep', ascii) : tokens.join(' ')
   const tone: WorkspaceListColumn['tone'] = repo.behind > 0 || repo.dirty > 0 ? 'warn' : 'dim'
   return { text: truncateCells(text, width), width, key: 'status', tone }
 }
@@ -212,9 +213,9 @@ function formatStatusCell(
  * naturally. Wide terminals get the full ISO date through
  * formatDateCell's wide path.
  */
-function formatRelativeDate(iso: string, now: Date): string {
+function formatRelativeDate(iso: string, now: Date, ascii: boolean): string {
   const past = new Date(iso).getTime()
-  if (!Number.isFinite(past)) return '—'
+  if (!Number.isFinite(past)) return pickWorkstationGlyph('dash', ascii)
   const seconds = Math.max(0, Math.floor((now.getTime() - past) / 1000))
   if (seconds < 60) return 'now'
   const minutes = Math.floor(seconds / 60)
@@ -237,14 +238,15 @@ function formatDateCell(
   repo: WorkspaceRepoSummary,
   width: number,
   mode: WorkspaceDateMode,
-  now: Date
+  now: Date,
+  ascii: boolean
 ): WorkspaceListColumn {
   const date = repo.lastCommit?.date
   if (!date) {
-    return { text: truncateCells('—', width), width, key: 'date', tone: 'dim' }
+    return { text: truncateCells(pickWorkstationGlyph('dash', ascii), width), width, key: 'date', tone: 'dim' }
   }
   const text = mode === 'relative'
-    ? formatRelativeDate(date, now)
+    ? formatRelativeDate(date, now, ascii)
     : date.slice(0, 10) // YYYY-MM-DD — full precision is noise in the row otherwise.
   return { text: truncateCells(text, width), width, key: 'date', tone: 'dim' }
 }
@@ -266,6 +268,8 @@ export type BuildWorkspaceListRowsOptions = {
    * is in flight.
    */
   spinnerTick?: number
+  /** Render ASCII-only glyphs (`theme.ascii`). Default `false`. */
+  ascii?: boolean
 }
 
 const DEFAULT_ROW_WIDTH = 120
@@ -291,7 +295,8 @@ export function buildWorkspaceListRows(
   const widths = assignWorkspaceColumnWidths(rowWidth)
   const dateMode = options.dateMode ?? pickWorkspaceDateMode(rowWidth)
   const now = options.now ?? new Date()
-  const spinner = workspaceSpinnerFrame(options.spinnerTick ?? 0)
+  const ascii = options.ascii ?? false
+  const spinner = workspaceSpinnerFrame(options.spinnerTick ?? 0, ascii)
   const fetchingSet = new Set(state.pullRequestFetching)
   return visible.map((repo, index) => {
     const cursor = index === state.selectedIndex
@@ -308,7 +313,7 @@ export function buildWorkspaceListRows(
     }
     if (widths.branch !== undefined) {
       columns.push({
-        text: truncateCells(repo.branch ?? '—', widths.branch),
+        text: truncateCells(repo.branch ?? pickWorkstationGlyph('dash', ascii), widths.branch),
         width: widths.branch,
         key: 'branch',
         tone: repo.branch ? 'default' : 'dim',
@@ -322,15 +327,16 @@ export function buildWorkspaceListRows(
           state.ghAuthenticated,
           state.pullRequestCounts[repo.path],
           fetchingSet.has(repo.path),
-          spinner
+          spinner,
+          ascii
         )
       )
     }
     if (widths.date !== undefined) {
-      columns.push(formatDateCell(repo, widths.date, dateMode, now))
+      columns.push(formatDateCell(repo, widths.date, dateMode, now, ascii))
     }
     if (widths.subject !== undefined) {
-      const subject = repo.lastCommit?.subject ?? '—'
+      const subject = repo.lastCommit?.subject ?? pickWorkstationGlyph('dash', ascii)
       columns.push({
         text: truncateCells(subject, widths.subject),
         width: widths.subject,
@@ -397,12 +403,13 @@ export type WorkspaceListWindow = {
  */
 export function buildWorkspaceListWindow(
   state: WorkspaceState,
-  options: { width?: number; rows: number; spinnerTick?: number; now?: Date } = { rows: 20 }
+  options: { width?: number; rows: number; spinnerTick?: number; now?: Date; ascii?: boolean } = { rows: 20 }
 ): WorkspaceListWindow {
   const all = buildWorkspaceListRows(state, {
     width: options.width,
     spinnerTick: options.spinnerTick,
     now: options.now,
+    ascii: options.ascii,
   })
   const visibleCount = Math.max(1, options.rows)
   if (all.length <= visibleCount) {
@@ -451,7 +458,7 @@ export function shouldRailWorkspaceSidebar(
   return columns < WORKSPACE_SIDEBAR_RAIL_BELOW && !sidebarFocused
 }
 
-export function buildWorkspaceSidebar(state: WorkspaceState): WorkspaceSidebarTabRow[] {
+export function buildWorkspaceSidebar(state: WorkspaceState, ascii = false): WorkspaceSidebarTabRow[] {
   const repos = state.overview.repos
   return WORKSPACE_TABS.map((tab) => {
     const disabled = tab === 'pull-requests' && state.ghAuthenticated === false
@@ -475,7 +482,7 @@ export function buildWorkspaceSidebar(state: WorkspaceState): WorkspaceSidebarTa
     return {
       tab,
       label: workspaceTabLabel(tab),
-      glyph: workspaceTabGlyph(tab),
+      glyph: workspaceTabGlyph(tab, ascii),
       count,
       active: state.tab === tab,
       disabled,

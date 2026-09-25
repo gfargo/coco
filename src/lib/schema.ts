@@ -47,6 +47,10 @@ export const schema = {
           "type": "boolean",
           "description": "Global `--json`: emit machine-readable JSON on supported commands."
         },
+        "ascii": {
+          "type": "boolean",
+          "description": "Global `--ascii`: force the workstation TUI to render ASCII-only glyphs, for non-UTF-8 terminals / locales where box-drawing, braille spinners, and arrow glyphs render as mojibake. Detected automatically from the locale / `TERM` / `COCO_ASCII` when unset — see `workstation/chrome/asciiMode.ts`."
+        },
         "mode": {
           "type": "string",
           "enum": [

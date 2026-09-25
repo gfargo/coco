@@ -22,6 +22,7 @@ import {
 } from '../../chrome/surfaceStates'
 import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
+import { pickWorkstationGlyph } from '../../chrome/glyphs'
 import { ISSUE_FILTER_LABELS } from '../../../git/triageFilterPresets'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
 import type { SurfaceRenderContext } from '../../runtime/types'
@@ -101,7 +102,7 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
     const startIndex = clampListWindowStart(selected, visible.length, listRows)
     const windowed = visible.slice(startIndex, startIndex + listRows)
     const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
-    const presetLabel = `▼ ${ISSUE_FILTER_LABELS[state.selectedIssueFilter]}`
+    const presetLabel = `${pickWorkstationGlyph('downtri', theme.ascii)} ${ISSUE_FILTER_LABELS[state.selectedIssueFilter]}`
     const repoLabel = overview.repository
       ? `${overview.repository.owner}/${overview.repository.name}`
       : ''

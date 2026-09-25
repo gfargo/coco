@@ -50,7 +50,10 @@ describe('theme preset catalog', () => {
 
 describe('log Ink theme', () => {
   it('creates semantic color tokens for normal terminals', () => {
-    const theme = createLogInkTheme({ noColor: false, term: 'xterm-256color' })
+    // Pin asciiEnv so a contributor's real (possibly non-UTF-8) locale can't
+    // flip `theme.ascii`/`borderStyle` and fail this assertion locally while
+    // CI (no LANG set) stays green.
+    const theme = createLogInkTheme({ asciiEnv: {}, noColor: false, term: 'xterm-256color' })
 
     expect(theme.borderStyle).toBe('round')
     expect(theme.colors.accent).toBe('cyan')
@@ -65,6 +68,37 @@ describe('log Ink theme', () => {
     expect(theme.ascii).toBe(true)
     expect(theme.borderStyle).toBe('classic')
     expect(theme.colors).toEqual({})
+  })
+
+  it('detects ASCII mode from a non-UTF-8 locale via asciiEnv, independent of TERM', () => {
+    const theme = createLogInkTheme({
+      asciiEnv: { LANG: 'C' },
+      noColor: false,
+      term: 'xterm-256color',
+    })
+
+    expect(theme.ascii).toBe(true)
+    expect(theme.borderStyle).toBe('classic')
+  })
+
+  it('a UTF-8 locale does not force ASCII mode', () => {
+    const theme = createLogInkTheme({
+      asciiEnv: { LANG: 'en_US.UTF-8' },
+      noColor: false,
+      term: 'xterm-256color',
+    })
+
+    expect(theme.ascii).toBe(false)
+  })
+
+  it('an explicit ascii: false overrides a non-UTF-8 asciiEnv', () => {
+    const theme = createLogInkTheme({
+      ascii: false,
+      asciiEnv: { LANG: 'C' },
+      noColor: false,
+    })
+
+    expect(theme.ascii).toBe(false)
   })
 
   it('supports configurable presets and token overrides', () => {

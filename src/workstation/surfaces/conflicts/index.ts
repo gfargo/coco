@@ -17,6 +17,7 @@
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
+import { pickWorkstationGlyph } from '../../chrome/glyphs'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import { truncateCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
@@ -59,9 +60,14 @@ function renderProposalPanel(
   if (!proposal) return out
 
   const mark = (status: 'pending' | 'accepted' | 'rejected'): string =>
-    status === 'accepted' ? '✓' : status === 'rejected' ? '✗' : '·'
+    status === 'accepted'
+      ? pickWorkstationGlyph('check', theme.ascii)
+      : status === 'rejected'
+        ? pickWorkstationGlyph('cross', theme.ascii)
+        : pickWorkstationGlyph('sep', theme.ascii)
+  const pointer = pickWorkstationGlyph('pointer', theme.ascii)
   const strip = session.proposals
-    .map((p, i) => `${i === session.selectedIndex ? '❯' : ' '}${p.regionIndex + 1}${mark(p.status)}`)
+    .map((p, i) => `${i === session.selectedIndex ? pointer : ' '}${p.regionIndex + 1}${mark(p.status)}`)
     .join(' ')
   out.push(h(Text, { key: 'ai-res-title', bold: true }, truncateCells(
     `AI proposals — region ${proposal.regionIndex + 1} (lines ${proposal.region.startLine}-${proposal.region.endLine}) · ${strip}`,

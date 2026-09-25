@@ -20,6 +20,7 @@
 import type * as ReactTypes from 'react'
 import { expandTabs, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
+import { pickWorkstationGlyph } from '../chrome/glyphs'
 import type { WorktreeHunk } from '../../git/statusHunks'
 import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
 import type { LogInkComponents } from './types'
@@ -75,7 +76,11 @@ export function renderWorktreeDiffBody(
     const isSelected = hunkIndex >= 0 && hunkIndex === selectedIndex
     const isStaged = hunk?.state === 'staged'
     const isLineSelected = lineSelect !== undefined && abs >= lineSelect.start && abs <= lineSelect.end
-    const bar = isLineSelected ? '▌' : isSelected ? '▎' : ' '
+    const bar = isLineSelected
+      ? pickWorkstationGlyph('halfleft', theme.ascii)
+      : isSelected
+        ? pickWorkstationGlyph('gutter', theme.ascii)
+        : ' '
 
     // `@@` header row — badge + (dim) hunk position, emphasized when selected.
     if (headerSet.has(abs)) {

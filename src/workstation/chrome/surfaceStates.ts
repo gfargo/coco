@@ -7,6 +7,8 @@
  * so a blank list never feels like a dead end.
  */
 
+import { getAsciiDialect } from './text'
+
 export type LogInkSurfaceLoadingArgs = {
   /** Short noun for the resource: "branches", "tags", etc. */
   resource: string
@@ -15,9 +17,14 @@ export type LogInkSurfaceLoadingArgs = {
 /**
  * Standardized leading glyph for loading lines so the eye picks them up
  * consistently across surfaces. ASCII-safe — never relies on color.
+ * The trailing ellipsis follows the process-wide ASCII dialect
+ * (`chrome/text.ts`'s `setAsciiDialect`) so `theme.ascii` terminals get
+ * `...` without every one of this helper's ~20 call sites threading a
+ * flag through.
  */
 export function formatLogInkLoading({ resource }: LogInkSurfaceLoadingArgs): string {
-  return `Loading ${resource}…`
+  const ellipsis = getAsciiDialect() ? '...' : '…'
+  return `Loading ${resource}${ellipsis}`
 }
 
 export type LogInkBranchesEmptyArgs = {
@@ -83,7 +90,8 @@ export function formatLogInkStatusEmpty({ hasChanges, sparse }: LogInkStatusEmpt
   if (hasChanges) {
     return undefined
   }
-  const sparseNote = sparse ? ' This is a sparse checkout — paths outside your cone are omitted on purpose.' : ''
+  const dash = getAsciiDialect() ? '-' : '—'
+  const sparseNote = sparse ? ` This is a sparse checkout ${dash} paths outside your cone are omitted on purpose.` : ''
   return `Worktree clean. Press gh for history, gb for branches, gz for stash.${sparseNote}`
 }
 

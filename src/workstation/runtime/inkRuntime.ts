@@ -19,6 +19,7 @@ import { startInteractiveLog } from './interactive'
 import { LogInkView } from './inkViewModel'
 import { LogInkApp } from '../runtime/app'
 import { createLogInkTheme, LogInkThemeConfig } from '../chrome/theme'
+import { setAsciiDialect } from '../chrome/text'
 import { installTerminalLifecycle } from '../chrome/terminalLifecycle'
 import { canStartLogInkTui, getLogInkRenderOptions } from '../chrome/terminal'
 import type { LogInkRuntime } from '../runtime/types'
@@ -128,6 +129,12 @@ export async function startInkInteractiveLog(
   // tree on SIGCONT to force a repaint after the user `fg`s.
   const resumeRef: { current: (() => void) | null } = { current: null }
 
+  const theme = createLogInkTheme(options.theme)
+  // Process-wide default so the ~200 `truncateCells` / `formatLogInkLoading`
+  // call sites that don't thread an explicit `ascii` flag still render the
+  // right ellipsis/dash dialect (see `chrome/text.ts`'s `setAsciiDialect`).
+  setAsciiDialect(theme.ascii)
+
   const app = React.createElement(LogInkApp, {
     appLabel: options.appLabel || 'coco log',
     git,
@@ -148,11 +155,11 @@ export async function startInkInteractiveLog(
     loadRows: options.loadRows,
     React,
     rows,
-    theme: createLogInkTheme(options.theme),
+    theme,
     themeConfig: options.theme,
     resumeRef,
   })
-  const instance = ink.render(app, getLogInkRenderOptions({ input, output, error }))
+  const instance = ink.render(app, getLogInkRenderOptions({ input, output, error, ascii: theme.ascii }))
 
   const lifecycle = installTerminalLifecycle({
     input,

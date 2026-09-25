@@ -8,6 +8,7 @@ import {
 } from './inkWorkflows'
 import { en } from '../../lib/i18n/en'
 import { t } from '../../lib/i18n/t'
+import { pickWorkstationGlyph } from '../chrome/glyphs'
 
 export type LogInkCommandId =
   | 'clearSearch'
@@ -1351,11 +1352,15 @@ export function formatLogInkBreadcrumb(viewStack: LogInkView[]): string {
  *   `[coco, vendor/lib]`         → 'coco › vendor/lib   ← esc'
  *   `[coco, vendor/lib, deep]`   → 'coco › vendor/lib › deep   ← esc'
  */
-export function formatLogInkRepoBreadcrumb(repoStack: ReadonlyArray<{ label: string }>): string {
+export function formatLogInkRepoBreadcrumb(
+  repoStack: ReadonlyArray<{ label: string }>,
+  ascii = false
+): string {
   if (repoStack.length <= 1) {
     return ''
   }
-  return `${repoStack.map((frame) => frame.label).join(' › ')}   ← esc`
+  const leftArrow = pickWorkstationGlyph('left', ascii)
+  return `${repoStack.map((frame) => frame.label).join(' › ')}   ${leftArrow} esc`
 }
 
 /**

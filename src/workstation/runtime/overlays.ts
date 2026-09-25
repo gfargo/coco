@@ -19,10 +19,11 @@
 import type * as ReactTypes from 'react'
 import { deriveGitignoreOptions } from '../chrome/gitignore'
 import { clampListWindowStart } from '../chrome/layout'
-import { pickSpinnerFrame } from '../chrome/spinner'
+import { pickThemedSpinnerFrame } from '../chrome/spinner'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import { THEME_PRESET_COLORS } from '../chrome/theme'
+import { pickWorkstationGlyph } from '../chrome/glyphs'
 import {
     filterLogInkPaletteCommands,
     formatBindingBareKeys,
@@ -793,7 +794,7 @@ export function renderSplitPlanOverlay(
 
   const maxLineWidth = Math.max(20, width - 4)
   const listRows = Math.max(4, bodyRows - 3)
-  const spinner = pickSpinnerFrame(spinnerFrame)
+  const spinner = pickThemedSpinnerFrame(spinnerFrame, theme.ascii)
 
   // Loading state — overlay opens immediately so the user sees the
   // "in flight" feedback without staring at a frozen compose view.
@@ -860,7 +861,7 @@ export function renderSplitPlanOverlay(
       lines.push(`⚠ ${group.title}  (stays in your worktree — not committed)`)
     } else {
       commitNumber += 1
-      lines.push(`▎ ${commitNumber}. ${group.title}`)
+      lines.push(`${pickWorkstationGlyph('gutter', theme.ascii)} ${commitNumber}. ${group.title}`)
     }
     if (group.body) {
       group.body.split('\n').forEach((bodyLine) => lines.push(`  ${bodyLine}`))
@@ -889,9 +890,11 @@ export function renderSplitPlanOverlay(
   const visible = lines.slice(scrollOffset, scrollOffset + listRows)
 
   const unclaimedCount = plan.groups.length - committedGroups.length
+  const rangeEnd = Math.min(totalLines, scrollOffset + listRows)
+  const rangeSep = pickWorkstationGlyph('endash', theme.ascii)
   const headerRight = overlay.status === 'applying'
     ? `${spinner} applying…`
-    : `${committedGroups.length} commit(s)${unclaimedCount ? ' · 1 set stays staged' : ''} · ${scrollOffset + 1}–${Math.min(totalLines, scrollOffset + listRows)} / ${totalLines}`
+    : `${committedGroups.length} commit(s)${unclaimedCount ? ' · 1 set stays staged' : ''} · ${scrollOffset + 1}${rangeSep}${rangeEnd} / ${totalLines}`
 
   // Apply errors get the full available width — long validator
   // messages (the failure path that surfaced in PR #916 testing was

@@ -173,6 +173,46 @@ describe('renderHistoryPanel', () => {
     expect(unicode).toBeDefined()
   })
 
+  function collectAllStrings(node: unknown, out: string[] = []): string[] {
+    if (typeof node === 'string') {
+      out.push(node)
+    } else if (Array.isArray(node)) {
+      node.forEach((child) => collectAllStrings(child, out))
+    } else if (node && typeof node === 'object' && 'props' in node) {
+      collectAllStrings((node as { props: { children?: unknown } }).props.children, out)
+    }
+    return out
+  }
+
+  it('renders no non-ASCII bytes for the date-bucket rule when ascii: true', () => {
+    const tree = render(makeState(), { ascii: true, dateBucketingEnabled: true })
+    const strings = collectAllStrings(tree)
+    for (const text of strings) {
+      expect(text).not.toMatch(/[^\x00-\x7e]/)
+    }
+    expect(strings.join('')).toContain('--')
+  })
+
+  it('renders an ASCII spinner + track for the remote-op loader when ascii: true', () => {
+    // `op.label` is free-form caller text (from `useWorkflowAction.ts`,
+    // e.g. "Pushing to origin…") — deliberately NOT swept for ASCII here;
+    // that's the output-stream backstop's job (`chrome/asciiOutput.ts`).
+    // This asserts the parts the renderer itself controls: the spinner
+    // frame and the directional travelling-dot track.
+    const withoutLabelPunctuation = (text: string) => text.replace(/Pushing to origin…/, '')
+    const tree = render(
+      makeState({ remoteOp: { kind: 'push', label: 'Pushing to origin…' } }),
+      { ascii: true }
+    )
+    const strings = collectAllStrings(tree).map(withoutLabelPunctuation)
+    for (const text of strings) {
+      expect(text).not.toMatch(/[^\x00-\x7e]/)
+    }
+    // The travelling-dot track uses '.' separators and '^'/'v'/'~' for
+    // the directional glyph — never the unicode arrows or braille spinner.
+    expect(strings.join('')).toMatch(/[|/\-\\]/)
+  })
+
   it('handles narrow terminals (tight density)', () => {
     const tree = render(makeState(), { density: 'tight', width: 60 })
     expect(tree).toBeDefined()

@@ -38,13 +38,25 @@ export function pickSpinnerFrame(tick: number): string {
 export const ASCII_SPINNER_FRAMES = ['|', '/', '-', '\\']
 
 /**
+ * Theme-aware spinner frame — braille normally, the `|/-\` ASCII cycle
+ * under `theme.ascii` so the indicator animates instead of freezing on a
+ * single static character on dumb terminals / non-UTF-8 locales.
+ */
+export function pickThemedSpinnerFrame(tick: number, ascii: boolean): string {
+  return ascii
+    ? ASCII_SPINNER_FRAMES[Math.max(0, tick) % ASCII_SPINNER_FRAMES.length]
+    : pickSpinnerFrame(tick)
+}
+
+/**
  * Inline per-item pending glyph — used in place of (or appended to) a
  * list row's status icon while that row's mutation (a delete) is in
  * flight. Braille spinner normally; the ASCII cycle under `ascii`
  * themes so the indicator survives `NO_COLOR` / dumb terminals.
+ *
+ * Delegates to `pickThemedSpinnerFrame` — kept as a separate name so
+ * existing call sites (list-row mutation indicators) don't need to churn.
  */
 export function inlineSpinnerGlyph(tick: number, ascii: boolean): string {
-  return ascii
-    ? ASCII_SPINNER_FRAMES[Math.max(0, tick) % ASCII_SPINNER_FRAMES.length]
-    : pickSpinnerFrame(tick)
+  return pickThemedSpinnerFrame(tick, ascii)
 }

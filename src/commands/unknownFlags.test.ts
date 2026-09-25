@@ -35,8 +35,8 @@ interface ParseResult {
  * the given args. Returns the fail() message (unknown-flag errors land here)
  * or null if no failure was triggered.
  *
- * Global flags (--repo, --verbose, --quiet, --json) are registered on the
- * instance so they aren't treated as unknown arguments.
+ * Global flags (--repo, --verbose, --quiet, --json, --ascii) are registered
+ * on the instance so they aren't treated as unknown arguments.
  */
 function parseWithStrict(
   builder: (y: Argv) => Argv,
@@ -51,6 +51,7 @@ function parseWithStrict(
   y.option('verbose', { type: 'boolean', alias: 'v', global: true })
   y.option('quiet', { type: 'boolean', alias: 'q', global: true })
   y.option('json', { type: 'boolean', global: true })
+  y.option('ascii', { type: 'boolean', global: true })
 
   builder(y)
 
@@ -135,6 +136,15 @@ describe('global flags are accepted on every command', () => {
     ['log', logBuilder],
   ] as const)('%s accepts --json', (_name, builder) => {
     const { failMessage } = parseWithStrict(builder, ['--json'])
+    expect(failMessage).toBeNull()
+  })
+
+  it.each([
+    ['ui', uiBuilder],
+    ['workspace', workspaceBuilder],
+    ['log', logBuilder],
+  ] as const)('%s accepts --ascii', (_name, builder) => {
+    const { failMessage } = parseWithStrict(builder, ['--ascii'])
     expect(failMessage).toBeNull()
   })
 
@@ -231,6 +241,7 @@ describe('pr <action> rejects unknown actions', () => {
     y.option('verbose', { type: 'boolean', alias: 'v', global: true })
     y.option('quiet', { type: 'boolean', alias: 'q', global: true })
     y.option('json', { type: 'boolean', global: true })
+    y.option('ascii', { type: 'boolean', global: true })
 
     y.command(
       prCreateCommand,

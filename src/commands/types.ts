@@ -24,6 +24,14 @@ export interface BaseArgvOptions {
   quiet?: boolean
   /** Global `--json`: emit machine-readable JSON on supported commands. */
   json?: boolean
+  /**
+   * Global `--ascii`: force the workstation TUI to render ASCII-only
+   * glyphs, for non-UTF-8 terminals / locales where box-drawing, braille
+   * spinners, and arrow glyphs render as mojibake. Detected automatically
+   * from the locale / `TERM` / `COCO_ASCII` when unset — see
+   * `workstation/chrome/asciiMode.ts`.
+   */
+  ascii?: boolean
 }
 
 export interface BaseCommandOptions extends BaseArgvOptions {}

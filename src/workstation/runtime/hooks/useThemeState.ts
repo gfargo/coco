@@ -20,6 +20,7 @@
 
 import type * as ReactTypes from 'react'
 import { createLogInkTheme, type LogInkTheme, type LogInkThemeConfig, type LogInkThemePreset } from '../../chrome/theme'
+import { setAsciiDialect } from '../../chrome/text'
 import type { LogInkState } from '../inkViewModel'
 import { getThemePickerSelection } from '../inkViewModel'
 
@@ -51,10 +52,15 @@ export function useThemeState(
   const effectiveThemePreset = themePreviewPreset ?? themeSessionPreset
 
   const theme = React.useMemo(
-    () =>
-      effectiveThemePreset
+    () => {
+      const resolved = effectiveThemePreset
         ? createLogInkTheme({ ...themeConfig, preset: effectiveThemePreset })
-        : baseTheme,
+        : baseTheme
+      // Keep the process-wide ASCII dialect (chrome/text.ts) in sync with
+      // a picker-driven theme change, same as the boot-time default.
+      setAsciiDialect(resolved.ascii)
+      return resolved
+    },
     [effectiveThemePreset, themeConfig, baseTheme]
   )
 
