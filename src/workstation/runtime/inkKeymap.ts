@@ -82,6 +82,8 @@ export type LogInkCommandId =
   | 'viewRebaseOnto'
   | 'viewCreateBranchHere'
   | 'viewCreateTagHere'
+  | 'viewApplyHunkWorktree'
+  | 'viewApplyHunkIndex'
   | 'viewChangelog'
   | 'yankClipboard'
   // #1447 registry backfill — per-view-context command ids
@@ -668,6 +670,23 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     contexts: ['history'],
   },
   {
+    // Per-view-only: only fires on a commit-diff or stash-diff explore
+    // (see `buildApplyHunkEvents` in inkInput.ts). Sibling of the `gH`
+    // index variant below.
+    id: 'viewApplyHunkWorktree',
+    keys: ['H'],
+    label: t(en, 'keymap.binding.viewApplyHunkWorktree.label'),
+    description: t(en, 'keymap.binding.viewApplyHunkWorktree.desc'),
+    contexts: ['diff'],
+  },
+  {
+    id: 'viewApplyHunkIndex',
+    keys: ['gH'],
+    label: t(en, 'keymap.binding.viewApplyHunkIndex.label'),
+    description: t(en, 'keymap.binding.viewApplyHunkIndex.desc'),
+    contexts: ['diff'],
+  },
+  {
     id: 'viewKeys',
     keys: ['g?'],
     label: t(en, 'keymap.binding.viewKeys.label'),
@@ -1220,6 +1239,9 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   viewCreateBranchHere: 'history-actions',
   viewCreateTagHere: 'history-actions',
   viewChangelog: 'history-actions',
+  // Diff-view-only hunk-apply actions (commit-diff / stash-diff explore).
+  viewApplyHunkWorktree: 'mutate',
+  viewApplyHunkIndex: 'mutate',
 }
 
 /**
@@ -1531,10 +1553,11 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
       // attention is on a branch when the branches sidebar is focused;
       // pull / push / fetch are the next obvious actions.
       //
-      // Note: `U` and `P` currently operate on the CURRENT branch, not the
-      // cursored one. Task #5 will extend them to act on the cursored row;
-      // until then the labels read as "current-branch ops" by virtue of
-      // matching the workflow descriptions.
+      // Note: `U` and `P` act on the CURSORED branch, not the current one —
+      // `isBranchActionTarget` in inkInput.ts intercepts them before the
+      // global current-branch fallback. The labels below (borrowed from the
+      // current-branch workflow descriptions) still read fine since the
+      // verb ("pull", "push") doesn't change, only the target.
       return {
         contextual: [
           t(en, 'keymap.footer.branches'), t(en, 'keymap.footer.tab'), t(en, 'keymap.footer.enterCheckout'),
