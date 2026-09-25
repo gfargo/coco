@@ -1473,10 +1473,10 @@ export function getLogInkInputEvents(
       // #1451 — per-id cancel messages for the unified confirmation system.
       const cancelMessage =
         state.pendingConfirmationId === 'discard-draft'
-          ? 'kept draft — press q again to quit without saving'
+          ? 'kept draft — press y on the next prompt to quit without saving'
           : state.pendingConfirmationId === 'discard-rebase-plan'
           ? state.pendingConfirmationPayload === 'quit'
-            ? 'kept rebase plan — press q again to quit without saving'
+            ? 'kept rebase plan — press y on the next prompt to quit without saving'
             : 'kept rebase plan'
           : state.pendingConfirmationId === 'quit-during-split-apply'
           ? 'split apply still running'
