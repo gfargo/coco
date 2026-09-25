@@ -972,6 +972,12 @@ export function getLogInkPaletteExecuteEvents(
       // would. Empty active views (no commits / no branches / etc.) are
       // surfaced by the runtime as a "Nothing to yank" status.
       return [{ type: 'yankFromActiveView' }]
+    // `viewMergeIntoCurrent` / `viewResetToBranch` / `viewSyncBranch` /
+    // `viewRebaseOnto` / `viewApplyHunkWorktree` / `viewApplyHunkIndex`
+    // fall through to `default` deliberately: each needs a payload
+    // (cursored branch, extracted hunk patch) the palette has no live
+    // context to resolve, so palette execution is a documented no-op —
+    // the keystroke path (branches view / diff view) is the real entry.
     default:
       return []
   }
@@ -2092,9 +2098,10 @@ export function getLogInkInputEvents(
 
   // `gH` chord: apply the cursored hunk to the index (`git apply
   // --cached`). Sibling of bare `H` which targets the worktree.
-  // Discoverable via the footer hint on diff views and the help
-  // overlay; the explicit chord keeps `H` (single keystroke) for
-  // the more common worktree case.
+  // Discoverable via `?` help, the `:` palette, and the `g`-chord
+  // which-key overlay (both have `LOG_INK_KEY_BINDINGS` entries); the
+  // explicit chord keeps `H` (single keystroke) for the more common
+  // worktree case.
   if (state.pendingKey === 'g' && inputValue === 'H') {
     const events = buildApplyHunkEvents(state, context, 'index')
     if (events.length) {
@@ -3846,8 +3853,9 @@ export function getLogInkInputEvents(
   // Global `L` — generate the changelog for the current branch and
   // push the dedicated `changelog` view. Scoped to history and branches
   // — those are the natural "where am I, what landed here recently"
-  // entry points. Avoids polluting every view's global namespace; the
-  // changelog is reachable from anywhere via `g L` (added in keymap).
+  // entry points. Avoids polluting every view's global namespace; there
+  // is no `g L` chord — `g` then `L` just cancels the chord (see the
+  // chord-cancel fallthrough above).
   if (
     inputValue === 'L' &&
     (state.activeView === 'history' || state.activeView === 'branches')

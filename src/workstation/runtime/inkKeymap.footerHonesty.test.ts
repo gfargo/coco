@@ -975,6 +975,11 @@ const BINDING_FIXTURE_OVERRIDES: Partial<Record<LogInkCommandId, () => Fixture>>
   editCommit: statusFixture,
   editCommitExternal: statusFixture,
   navigateBack: statusFixture,
+  // `viewApplyHunkWorktree` (bare `H`) only fires on a commit-diff or
+  // stash-diff explore — the generic `diff` fixture is a worktree diff,
+  // where `buildApplyHunkEvents` bails immediately. Same class of
+  // correction as `toggleDiffViewMode` above.
+  viewApplyHunkWorktree: () => diffCommitFixture('unified'),
 }
 
 const BINDING_KEY_ALIASES: Record<string, Press> = {
