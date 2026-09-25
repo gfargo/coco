@@ -140,7 +140,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // `!hasSeenOnboarding()` and returns `dismissOnboarding`, which clears the
   // overlay and writes the seen-marker; the input handler calls it on the
   // first keystroke.
-  const {showOnboarding, dismissOnboarding} = useOnboarding(React)
+  const {showOnboarding, dismissOnboarding, showOnboardingOverlay} = useOnboarding(React)
   const [state, setState] = React.useState<LogInkState>(() =>
     createLogInkState(rows, {
       activeView: initialView,
@@ -1168,6 +1168,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch,
     showOnboarding,
     dismissOnboarding,
+    showOnboardingOverlay,
     filteredBranchList,
     filteredTagList,
     filteredStashList,

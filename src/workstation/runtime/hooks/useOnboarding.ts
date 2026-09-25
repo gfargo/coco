@@ -28,12 +28,16 @@ import type * as ReactTypes from 'react'
 import { hasSeenOnboarding, markOnboardingSeen } from '../../chrome/onboarding'
 
 /**
- * Owns the first-run overlay state. Returns whether to render the overlay and
- * a single `dismissOnboarding` that clears it and persists the seen-marker.
+ * Owns the first-run overlay state. Returns whether to render the overlay,
+ * `dismissOnboarding` (clears it and persists the seen-marker), and
+ * `showOnboardingOverlay` — the palette / `gW` replay entry point
+ * (OSS-2782). Replaying re-shows the overlay without touching the
+ * seen-marker; dismissing a replay still (harmlessly) re-writes it.
  */
 export function useOnboarding(React: typeof ReactTypes): {
   showOnboarding: boolean
   dismissOnboarding: () => void
+  showOnboardingOverlay: () => void
 } {
   const [showOnboarding, setShowOnboarding] = React.useState<boolean>(
     () => !hasSeenOnboarding(),
@@ -42,5 +46,8 @@ export function useOnboarding(React: typeof ReactTypes): {
     setShowOnboarding(false)
     markOnboardingSeen()
   }, [])
-  return { showOnboarding, dismissOnboarding }
+  const showOnboardingOverlay = React.useCallback(() => {
+    setShowOnboarding(true)
+  }, [])
+  return { showOnboarding, dismissOnboarding, showOnboardingOverlay }
 }

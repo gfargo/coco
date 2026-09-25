@@ -993,6 +993,8 @@ const BINDING_KEY_ALIASES: Record<string, Press> = {
   esc: { value: '', key: { escape: true } },
   'ctrl+u': { value: 'u', key: { ctrl: true } },
   'ctrl+c': { value: 'c', key: { ctrl: true } },
+  home: { value: '', key: { home: true } },
+  end: { value: '', key: { end: true } },
 }
 
 function bindingKeyToSequence(token: string): string[] {

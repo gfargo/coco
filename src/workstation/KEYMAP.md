@@ -131,14 +131,32 @@ Available in every view (unless an overlay/mode has claimed the keyboard):
 | `Tab` / `Shift+Tab` | Focus next / previous pane |
 | `v` | Peek the sidebar (narrow / single-pane terminals only) — momentary glance, `v`/`Esc` snaps back to where you were |
 | `↑`/`k`, `↓`/`j` | Move selection / scroll |
-| `←`/`→` | Switch sidebar or inspector tab (focus-dependent) |
+| `←`/`→` (`h`/`l`) | Switch sidebar or inspector tab (focus-dependent) — `h`/`l` mirror the arrows wherever they're bound; they're inert everywhere else (text-input modes, overlays, and views where the letters already mean something) |
+| `Home` / `End` | Jump to the top / bottom of the current list view — the one-keystroke equivalent of `gg` / `G` below |
 | `PageUp` / `PageDown` | Page scroll |
-| `n` / `N` | Next / previous search match |
 | `y` / `Y` | Yank identifier (long / short) for the cursored item |
 
 > `<` and `Esc` both walk back, but `Esc` also pops the **repo** stack — that's
 > why the repo breadcrumb shows `← esc` while the view breadcrumb is pure
 > location. The footer's global `< back` covers the common case.
+
+> **`gg`/`G`/`Home`/`End` are per-view now.** They used to move only the
+> HISTORY cursor everywhere except blame / file-history / changelog (which had
+> their own carve-outs) — so on e.g. the branches or diff view, `gg` silently
+> relocated a cursor you couldn't see while the visible list stayed put. All
+> four keys now route through one shared edge-jump resolver
+> (`resolveEdgeJumpEvents` in `inkInput.ts`) that jumps whatever list the
+> cursor is actually on — history, branches, tags, stashes, reflog, remotes,
+> submodules, issues, PR triage, worktrees, conflicts, blame, file-history,
+> the worktree/commit diff scroll, and the changelog scroll — falling back to
+> the history cursor only when none of those match.
+>
+> **Workstation vs. workspace still disagree on `h`/`l`.** Here `l` cycles
+> the sidebar *tab*; in the separate workspace TUI (`surfaces/workspace/`)
+> `l` moves list focus *into* the pane and `h` moves it back out. Adding the
+> aliases here closes the "unbound in one TUI" gap the issue tracked — it
+> does not reconcile the two TUIs' *meaning* of the keys, which stays a
+> separate design call.
 
 ---
 
@@ -172,6 +190,7 @@ the which-key overlay lists them live when you press `g`.
 | `g C` | Theme picker (overlay) |
 | `g u` | **Undo last action** (action, not nav) — pops the session-scoped undo stack and reverses the top entry: branch delete (recreate at recorded sha), stash drop (`git stash store`), reset (reset back to the recorded HEAD using the *original* mode), or tag delete (recreate at recorded sha). Not every destructive action is invertible — only these four push an entry. Never touches pushed/remote history; the footer shows a count (`gu undo (N)`) when the stack is non-empty. |
 | `g k` / `g K` | Open the project / global coco config in `$EDITOR` |
+| `g W` | **Show welcome** (action, not nav) — replays the first-run onboarding overlay; also reachable from the `:` palette |
 | `g ?` | **Which-key strip** (overlay, not nav) — surfaces the *single-key* actions available in the current view (the deliberate overloads below), sourced live from `LOG_INK_KEY_BINDINGS`. `?` from the strip expands to the full help; `Esc` closes. The per-view counterpart to this very `g`-chord menu. |
 
 ---
