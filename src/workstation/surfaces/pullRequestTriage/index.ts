@@ -39,7 +39,7 @@ function stateColor(theme: LogInkTheme, state: string, isDraft: boolean): string
     case 'CLOSED':
       return theme.colors.danger
     case 'MERGED':
-      return theme.colors.accent
+      return theme.colors.merged ?? theme.colors.accent
     default:
       return theme.colors.muted
   }
