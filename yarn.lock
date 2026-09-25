@@ -5476,10 +5476,10 @@ rc9@^3.0.1:
     defu "^6.1.7"
     destr "^2.0.5"
 
-react-devtools-core@7.0.1:
-  version "7.0.1"
-  resolved "https://registry.npmjs.org/react-devtools-core/-/react-devtools-core-7.0.1.tgz"
-  integrity sha512-C3yNvRHaizlpiASzy7b9vbnBGLrhvdhl1CbdU6EnZgxPNbai60szdLtl+VL76UNOt5bOoVTOz5rNWZxgGt+Gsw==
+react-devtools-core@8.0.0:
+  version "8.0.0"
+  resolved "https://registry.yarnpkg.com/react-devtools-core/-/react-devtools-core-8.0.0.tgz#05102227a4797c1f93c479c30684a45e77017379"
+  integrity sha512-DGXJX+sCn2zC3ZalHoJhmZJsvP4QTpERlmCQAOgExc4Vp74ywB9ZnO8992cKw5ZcOS5u8GtpchTUPbjTiu5zaw==
   dependencies:
     shell-quote "^1.6.1"
     ws "^7"
