@@ -133,7 +133,11 @@ const LONG_BRANCH = 'feature/very-long-branch-name-for-a-monorepo-service-that-k
 // row-content assertions above (over 20 surfaces, each with 60-300
 // adversarial rows) are what actually re-derives the harness's value.
 const MODERATE_BRANCH = 'feat/checkout-flow'
-const EMOJI_CJK = '🎉 修复问题 fix: 你好世界 🚀 emoji test'
+// ❤️ ✔️ are VS16 (emoji-presentation-selector) sequences — OSS-2785:
+// cellWidth used to under-count these as 1 cell while Ink's string-width
+// (and every terminal) renders them at 2, so this fixture had no coverage
+// for the exact bug class the width table disagreed with Ink on.
+const EMOJI_CJK = '🎉 修复问题 fix: 你好世界 🚀 emoji test ❤️ ✔️'
 const TAB_CONTENT = '\tfunc\tmain() {\n\t\treturn 1\n\t}'
 
 function times<T>(count: number, factory: (index: number) => T): T[] {
@@ -733,6 +737,50 @@ describe.each(SURFACES)('$name render budget', ({ build }) => {
     // `lines` (see the constant's comment above) but still consumes
     // rows out of the `bodyRows` budget the runtime actually allots it.
     expect(lines.length + BORDER_ROWS).toBeLessThanOrEqual(bodyRows)
+  })
+})
+
+// OSS-2785 — a dedicated single-commit regression for the bug report's
+// exact example: a `❤️` (VS16 emoji-presentation) subject at a panel
+// width narrow enough that the old under-counting `cellWidth` (which
+// measured `❤️` as 1 cell instead of Ink's 2) would have let the row's
+// message column overflow the interior — Ink would then wrap it onto a
+// second visual line, breaking the fixed-height history pane. Asserting
+// `cellWidth(line) <= width - 4` for every flattened line *is* the
+// single-line assertion here: `renderToLines` never simulates Ink's own
+// wrapping (see its header comment), but Ink only wraps a `Text` line
+// when `string-width(line) > interior` — and `cellWidth` now equals
+// `string-width` — so this bound is exactly the condition under which
+// Ink would keep the row on one line.
+describe('history row with a VS16 emoji subject stays on one line (OSS-2785)', () => {
+  it.each(GEOMETRIES)('%s', (_label, layout) => {
+    const { width, bodyRows } = paneSize(layout)
+    const rows = [
+      {
+        type: 'commit' as const,
+        graph: '*',
+        shortHash: '0000000',
+        hash: '0'.repeat(40),
+        parents: [],
+        date: '2026-05-18',
+        author: 'Jane Doe',
+        refs: [],
+        message: 'feat: love ❤️ the thing',
+      },
+    ]
+    const ctx = baseCtx(width, bodyRows, { state: baseState(createLogInkState(rows)) })
+    const tree = renderHistoryPanel(ctx, false, false, layout.density, layout.historyRowMode, false, new Date(0))
+    const lines = renderToLines(tree, Text, Box)
+
+    const interior = Math.max(20, width - 4)
+    for (const line of lines) {
+      expect(cellWidth(line)).toBeLessThanOrEqual(interior)
+    }
+    // The subject renders as one row (title/date-bucket lines are separate
+    // entries in `lines`, not a wrapped continuation of the commit row) —
+    // exactly one line carries the ❤️ subject, not two halves of it.
+    const commitLines = lines.filter((line) => line.includes('❤️'))
+    expect(commitLines).toHaveLength(1)
   })
 })
 
