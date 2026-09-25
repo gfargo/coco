@@ -46,6 +46,12 @@ describe('hitTestPane', () => {
     expect(hit).toEqual({ pane: 'sidebar', paneRow: -PANE_CHROME_ROWS, paneColumn: 1 })
   })
 
+  it('derives the header offset from layout.headerRows, not a hardcoded constant', () => {
+    const layout = getLogInkLayout({ columns: 160, rows: 40 })
+    const hit = hitTestPane(layout, 1, layout.headerRows + PANE_CHROME_ROWS)
+    expect(hit).toEqual({ pane: 'sidebar', paneRow: 0, paneColumn: 1 })
+  })
+
   describe('single-pane mode (narrow terminals)', () => {
     it('routes every in-bounds click to the single visible pane', () => {
       const layout = getLogInkLayout({ columns: 80, rows: 30 })

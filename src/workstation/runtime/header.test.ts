@@ -171,11 +171,11 @@ describe('createLogInkHeader', () => {
     expect(collectText(tree)).not.toContain('REBASING')
   })
 
-  it('wraps the chips in a 3-high bordered Box (layout unchanged)', () => {
+  it('renders the chips in a 1-high borderless Box', () => {
     const tree = renderHeader(makeRuntimeValue())
     const props = (tree as unknown as { props: StubProps }).props
-    expect(props.height).toBe(3)
-    expect(props.borderStyle).toBeDefined()
+    expect(props.height).toBe(1)
+    expect(props.borderStyle).toBeUndefined()
     expect(props.paddingX).toBe(1)
   })
 

@@ -60,6 +60,13 @@ export type LogInkLayout = {
   columns: number
   detailWidth: number
   /**
+   * Rows consumed by the header chrome above the three-pane body. Kept
+   * on the layout (rather than a bare constant) so mouse hit-testing
+   * derives the same value the header actually rendered with instead of
+   * hardcoding it a second time — see `chrome/hitTest.ts`.
+   */
+  headerRows: number
+  /**
    * Width allocated to the main panel (history / status / diff / compose /
    * branches / tags / stash). Computed as `columns - sidebarWidth -
    * detailWidth` so the three panels always tile flush. Surfaces lock to
@@ -119,6 +126,18 @@ export const LOG_INK_DEFAULT_ROWS = 40
  * gives both views their own air.
  */
 export const INSPECTOR_TABBED_BELOW_ROWS = 28
+
+/**
+ * Rows the borderless header line occupies (see `runtime/header.ts`).
+ * Kept as a named constant so `getLogInkLayout` and `hitTest.ts`'s
+ * re-exported `HEADER_ROWS` can't drift apart.
+ */
+export const LOG_INK_HEADER_ROWS = 1
+
+/**
+ * Rows the borderless footer occupies (see `runtime/footer.ts`).
+ */
+export const LOG_INK_FOOTER_ROWS = 2
 
 /**
  * Density-tier breakpoints in columns. Picked so the three legacy
@@ -292,8 +311,9 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
     : allocateThreePaneWidths(columns, detailWidth, sidebarWidth)
 
   return {
-    bodyRows: Math.max(8, rows - 5),
+    bodyRows: Math.max(8, rows - LOG_INK_HEADER_ROWS - LOG_INK_FOOTER_ROWS),
     columns,
+    headerRows: LOG_INK_HEADER_ROWS,
     rows,
     tooSmall: columns < LOG_INK_MIN_COLUMNS || rows < LOG_INK_MIN_ROWS,
     inspectorTabbed: rows < INSPECTOR_TABBED_BELOW_ROWS,
