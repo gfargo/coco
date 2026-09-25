@@ -1444,9 +1444,9 @@
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
 "@langchain/anthropic@^1.0.0":
-  version "1.5.2"
-  resolved "https://registry.yarnpkg.com/@langchain/anthropic/-/anthropic-1.5.2.tgz#8e94ea2c122c477c2b7fb7cef14afc1d6a8212d8"
-  integrity sha512-lYOHo5BpRbgmQVSggwPLhBNFtatiAFlVirY44tnfocx5tQKfeLYo5emqPwNwcNBuw236sr0tsDxZcmbLASN/GA==
+  version "1.5.5"
+  resolved "https://registry.yarnpkg.com/@langchain/anthropic/-/anthropic-1.5.5.tgz#7e32bf6fd59c5889649fd93addc4885bf9f66056"
+  integrity sha512-OeWrKNqx4kgJBfpFAbT/wVzeGibAwVdmI9+DifkI/U3ejpVuUpISdSEVvnRIT0aqlk+sf2EI362Rt8FiJwxIDg==
   dependencies:
     "@anthropic-ai/sdk" "^0.115.0"
     zod "^3.25.76 || ^4"
