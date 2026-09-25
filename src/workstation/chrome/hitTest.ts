@@ -8,13 +8,15 @@
  * `sidebarWidth + mainPanelWidth`.
  */
 
-import type { LogInkLayout, LogInkVisiblePane } from './layout'
+import { LOG_INK_HEADER_ROWS, type LogInkLayout, type LogInkVisiblePane } from './layout'
 
 /**
- * Rows consumed by the global chrome (the header box, see
- * `runtime/header.ts`) before the three-pane body starts.
+ * Rows consumed by the global chrome (the borderless header line, see
+ * `runtime/header.ts`) before the three-pane body starts. Re-exported
+ * from `layout.ts`'s constant so callers that predate `layout.headerRows`
+ * keep compiling; `hitTestPane` itself reads `layout.headerRows`.
  */
-export const HEADER_ROWS = 3
+export const HEADER_ROWS = LOG_INK_HEADER_ROWS
 
 /**
  * Rows consumed by a pane's own top border + title line before its list
@@ -47,7 +49,7 @@ export type MousePaneHit = {
  * mode — a zero-width pane that budget starved to nothing).
  */
 export function hitTestPane(layout: LogInkLayout, x: number, y: number): MousePaneHit | null {
-  const bodyY = y - HEADER_ROWS
+  const bodyY = y - layout.headerRows
   if (x < 0 || bodyY < 0 || bodyY >= layout.bodyRows) {
     return null
   }

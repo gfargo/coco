@@ -122,7 +122,7 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
       )
       const authorColWidth = Math.min(
         16,
-        Math.max(...windowed.map((i) => (i.author || '').length), 4)
+        Math.max(...windowed.map((i) => cellWidth(i.author || '')), 4)
       )
 
       bodyLines = windowed.map((issue, offset) => {

@@ -443,6 +443,72 @@ describe('split-plan overlay — dedupe rescue warning (#1462)', () => {
   })
 })
 
+describe('split-plan overlay — error coloring (OSS-2784 / #2165)', () => {
+  const components: LogInkComponents = { Box, Text }
+
+  function stateWithError() {
+    return {
+      ...createLogInkState([]),
+      splitPlan: {
+        status: 'ready' as const,
+        scrollOffset: 0,
+        error: 'unknown hunks: src/widgets/button.ts::hunk-1',
+        plan: {
+          groups: [
+            { title: 'feat: real work', files: ['src/a.ts'], hunks: [] },
+          ],
+        },
+      },
+    }
+  }
+
+  /** Collect the `color` prop on every `split-plan-error-*` keyed node. */
+  function errorColors(node: unknown): Array<string | undefined> {
+    if (node == null || node === false || typeof node === 'string' || typeof node === 'number') {
+      return []
+    }
+    if (Array.isArray(node)) {
+      return node.flatMap(errorColors)
+    }
+    const el = node as { key?: string; props?: { color?: string; children?: unknown } }
+    const own = typeof el.key === 'string' && el.key.startsWith('split-plan-error-') && el.key !== 'split-plan-error-hint'
+      ? [el.props?.color]
+      : []
+    const nested = el.props && 'children' in el.props ? errorColors(el.props.children) : []
+    return [...own, ...nested]
+  }
+
+  it('renders no color under NO_COLOR / noColor theme', () => {
+    const noColorTheme = createLogInkTheme({ noColor: true })
+    const colors = errorColors(
+      renderSplitPlanOverlay(createElement, components, stateWithError(), 100, 40, noColorTheme, false)
+    )
+    expect(colors.length).toBeGreaterThan(0)
+    expect(colors.every((color) => color === undefined)).toBe(true)
+  })
+
+  it('uses the theme danger token for the default preset', () => {
+    const defaultTheme = createLogInkTheme({ preset: 'default', noColor: false })
+    const colors = errorColors(
+      renderSplitPlanOverlay(createElement, components, stateWithError(), 100, 40, defaultTheme, false)
+    )
+    expect(colors).toContain('red')
+    expect(colors).toContain(defaultTheme.colors.danger)
+  })
+
+  it('uses the theme danger token for hex presets (catppuccin)', () => {
+    const catppuccinTheme = createLogInkTheme({
+      env: { COLORTERM: 'truecolor' },
+      preset: 'catppuccin',
+    })
+    const colors = errorColors(
+      renderSplitPlanOverlay(createElement, components, stateWithError(), 100, 40, catppuccinTheme, false)
+    )
+    expect(colors).toContain('#f38ba8')
+    expect(colors).toContain(catppuccinTheme.colors.danger)
+  })
+})
+
 describe('choice panel — worktree-checkout conflict (#1175, #1181)', () => {
   const components: LogInkComponents = { Box, Text }
 

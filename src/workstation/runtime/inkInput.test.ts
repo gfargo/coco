@@ -4,6 +4,7 @@ import {
     getLogInkPaletteExecuteEvents,
     isCreatePrView,
     isCreateStashView,
+    isRemoteOpFallbackView,
     PUSH_SUB_CHOICE,
     RESET_TO_BRANCH_MODE_CHOICE,
 } from './inkInput'
@@ -66,6 +67,35 @@ describe('log Ink input interactions', () => {
     ])
   })
 
+  it('does not treat Ctrl+navigation keys as Ctrl+C', () => {
+    // Ink blanks `input` for every ctrl-modified non-alphanumeric key
+    // (use-input.js clears it when the keypress name is in
+    // nonAlphanumericKeys), so Ctrl+Left/Right/Up/Down, Ctrl+PageUp/Down,
+    // and Ctrl+Backspace/Delete/Tab/Return/Escape all arrive as
+    // `key.ctrl: true` with `inputValue === ''` — same shape as a bare
+    // ctrl byte. Only `inputValue === 'c'` may resolve the quit guard.
+    const navigationKeys = [
+      { leftArrow: true },
+      { rightArrow: true },
+      { upArrow: true },
+      { downArrow: true },
+      { pageUp: true },
+      { pageDown: true },
+      { backspace: true },
+      { delete: true },
+      { tab: true },
+      { return: true },
+      { escape: true },
+    ]
+    for (const navigationKey of navigationKeys) {
+      const events = getLogInkInputEvents(createLogInkState(rows), '', {
+        ctrl: true,
+        ...navigationKey,
+      })
+      expect(events).not.toEqual([{ type: 'exit' }])
+    }
+  })
+
   it('opens and edits search mode without handling meta/control text input', () => {
     let state = createLogInkState(rows)
 
@@ -84,6 +114,19 @@ describe('log Ink input interactions', () => {
     state = applyInput(state, 'u', { ctrl: true })
     expect(state.filter).toBe('')
     expect(state.filterMode).toBe(false)
+  })
+
+  it('h/l append to the filter text instead of acting as sidebar/inspector aliases (OSS-2782)', () => {
+    // Filter mode is checked far above the h/l handlers this issue adds —
+    // this pins that ordering so h/l stay plain letters while typing a
+    // filter, even though they're bound elsewhere in normal mode.
+    let state = createLogInkState(rows)
+    state = applyInput(state, '/')
+    state = applyInput(state, 'h')
+    state = applyInput(state, 'e')
+    state = applyInput(state, 'l')
+    expect(state.filter).toBe('hel')
+    expect(state.filterMode).toBe(true)
   })
 
   it('clears the filter on first Esc and exits filter mode on the second', () => {
@@ -134,6 +177,191 @@ describe('log Ink input interactions', () => {
 
     const events = getLogInkInputEvents(state, 'y')
     expect(events.find((event) => event.type === 'exit')).toBeDefined()
+  })
+
+  describe('Ctrl+C quit guard (OSS-2795)', () => {
+    it('Ctrl+C with a dirty compose draft raises the discard confirm instead of exiting', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+
+      const events = applyInput(state, 'c', { ctrl: true })
+      expect(events.pendingConfirmationId).toBe('discard-draft')
+    })
+
+    it('a second Ctrl+C while the discard confirm is open exits unconditionally', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyInput(state, 'c', { ctrl: true })
+      expect(state.pendingConfirmationId).toBe('discard-draft')
+
+      expect(getLogInkInputEvents(state, 'c', { ctrl: true })).toEqual([{ type: 'exit' }])
+    })
+
+    it('y confirms discard-draft raised by Ctrl+C and emits exit; n keeps the draft', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyInput(state, 'c', { ctrl: true })
+
+      const exitEvents = getLogInkInputEvents(state, 'y')
+      expect(exitEvents.find((event) => event.type === 'exit')).toBeDefined()
+
+      const kept = applyInput(state, 'n')
+      expect(kept.pendingConfirmationId).toBeUndefined()
+      expect(kept.commitCompose.summary).toBe('feat: in-flight summary')
+    })
+
+    it('Ctrl+C with no draft exits immediately (unchanged)', () => {
+      expect(getLogInkInputEvents(createLogInkState(rows), 'c', { ctrl: true })).toEqual([
+        { type: 'exit' },
+      ])
+    })
+
+    it('Ctrl+C while a split apply is in flight does not quit; a second Ctrl+C is the escape hatch', () => {
+      const mockPlan = {
+        groups: [{ title: 'feat: foo', files: ['src/foo.ts'], hunks: [] }],
+      }
+      const mockPlanContext = {
+        changes: { staged: [], unstaged: [], untracked: [] },
+        hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      state = applyLogInkAction(state, { type: 'setSplitPlanApplying' })
+
+      const first = getLogInkInputEvents(state, 'c', { ctrl: true })
+      expect(first.some((event) => event.type === 'exit')).toBe(false)
+
+      state = applyInput(state, 'c', { ctrl: true })
+      expect(state.pendingConfirmationId).toBe('quit-during-split-apply')
+
+      expect(getLogInkInputEvents(state, 'c', { ctrl: true })).toEqual([{ type: 'exit' }])
+    })
+
+    it('q from the help overlay with a dirty draft raises the discard confirm instead of exiting', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyInput(state, '?')
+      expect(state.showHelp).toBe(true)
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).not.toContainEqual({ type: 'exit' })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: 'discard-draft' },
+      })
+    })
+
+    it('q from the g? view-keys strip with a dirty draft raises the discard confirm instead of exiting', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyInput(state, 'g')
+      state = applyInput(state, '?')
+      expect(state.showViewKeys).toBe(true)
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).not.toContainEqual({ type: 'exit' })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: 'discard-draft' },
+      })
+    })
+
+    it('q from the split-plan overlay with a dirty draft raises the discard confirm instead of exiting', () => {
+      const mockPlan = {
+        groups: [{ title: 'feat: foo', files: ['src/foo.ts'], hunks: [] }],
+      }
+      const mockPlanContext = {
+        changes: { staged: [], unstaged: [], untracked: [] },
+        hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'commitCompose',
+        action: { type: 'append', value: 'feat: in-flight summary' },
+      })
+      state = applyLogInkAction(state, {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).not.toContainEqual({ type: 'exit' })
+      expect(events).toContainEqual({
+        type: 'action',
+        action: { type: 'setPendingConfirmation', value: 'discard-draft' },
+      })
+    })
+
+    it('q from the split-plan overlay on a clean state cancels the split and exits', () => {
+      const mockPlan = {
+        groups: [{ title: 'feat: foo', files: ['src/foo.ts'], hunks: [] }],
+      }
+      const mockPlanContext = {
+        changes: { staged: [], unstaged: [], untracked: [] },
+        hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      const state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+
+      expect(getLogInkInputEvents(state, 'q')).toEqual([
+        { type: 'cancelCommitSplit' },
+        { type: 'exit' },
+      ])
+    })
+
+    it('q from the split-plan overlay mid-apply does not quit (parity with the pre-existing block)', () => {
+      const mockPlan = {
+        groups: [{ title: 'feat: foo', files: ['src/foo.ts'], hunks: [] }],
+      }
+      const mockPlanContext = {
+        changes: { staged: [], unstaged: [], untracked: [] },
+        hunkInventory: { hunks: [], byId: new Map(), byFile: new Map() },
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any
+
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'setSplitPlanReady',
+        plan: mockPlan,
+        planContext: mockPlanContext,
+      })
+      state = applyLogInkAction(state, { type: 'setSplitPlanApplying' })
+
+      const events = getLogInkInputEvents(state, 'q')
+      expect(events).not.toContainEqual({ type: 'cancelCommitSplit' })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: { type: 'setPendingConfirmation', value: 'quit-during-split-apply' },
+        },
+      ])
+    })
   })
 
   it('snaps promoted-view selection to 0 when the filter changes', () => {
@@ -221,6 +449,25 @@ describe('log Ink input interactions', () => {
       expect(command).toBeDefined()
       const events = getLogInkPaletteExecuteEvents(command!, createLogInkState(rows))
       expect(events).toEqual([{ type: 'action', action: { type: 'toggleViewKeys' } }])
+    })
+  })
+
+  describe('replayable onboarding overlay (OSS-2782)', () => {
+    it('replays via the gW chord', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      const events = getLogInkInputEvents(state, 'W')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingKey', value: undefined } },
+        { type: 'showOnboarding' },
+      ])
+    })
+
+    it('replays via the command palette entry', () => {
+      const command = getLogInkPaletteCommands().find((c) => c.id === 'showWelcome')
+      expect(command).toBeDefined()
+      const events = getLogInkPaletteExecuteEvents(command!, createLogInkState(rows))
+      expect(events).toEqual([{ type: 'showOnboarding' }])
     })
   })
 
@@ -354,22 +601,31 @@ describe('log Ink input interactions', () => {
     expect(state.pendingCommitFocused).toBeFalsy()
   })
 
-  it('supports next/previous match and top/bottom navigation conventions', () => {
+  it('supports gg/G and Home/End top/bottom navigation conventions', () => {
     let state = createLogInkState(rows)
 
     state = applyInput(state, 'G')
     expect(state.selectedIndex).toBe(2)
     expect(state.statusMessage).toBe('jumped to last commit')
 
-    state = applyInput(state, 'N')
-    expect(state.selectedIndex).toBe(1)
-
-    state = applyInput(state, 'n')
-    expect(state.selectedIndex).toBe(2)
-
     state = applyInput(state, 'g')
     state = applyInput(state, 'g')
     expect(state.selectedIndex).toBe(0)
+
+    state = applyInput(state, '', { end: true })
+    expect(state.selectedIndex).toBe(2)
+
+    state = applyInput(state, '', { home: true })
+    expect(state.selectedIndex).toBe(0)
+  })
+
+  it('no longer claims n/N as search-match navigation (OSS-2782)', () => {
+    // #1387's "next / previous search match" claim never matched
+    // `n`/`N`'s actual behavior (a plain ±1 move, same as j/k) — dropped
+    // rather than implemented, since `/` is a re-sorting filter, not a
+    // highlight-only search term to navigate matches within.
+    expect(getLogInkInputEvents(createLogInkState(rows), 'n')).toEqual([])
+    expect(getLogInkInputEvents(createLogInkState(rows), 'N')).toEqual([])
   })
 
   it('moves detail file selection and diff preview pages when detail is focused', () => {
@@ -793,6 +1049,37 @@ describe('log Ink input interactions', () => {
         branchSelectedShortName: 'main',
       })).toEqual([{ type: 'refreshContext' }])
     })
+
+    it('refreshes instead of prompting rebase when the sidebar is focused on the Branches tab (#2155)', () => {
+      // Focusing the sidebar's Branches tab from ANY view used to also
+      // satisfy `isBranchActionTarget`, so pressing the global refresh key
+      // there silently became a rebase-onto confirmation. The sidebar
+      // footer never advertised `r rebase`, so this is now scoped to the
+      // dedicated branches view only.
+      const state = {
+        ...createLogInkState(rows),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+      }
+      expect(getLogInkInputEvents(state, 'r', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })).toEqual([{ type: 'refreshContext' }])
+    })
+
+    it('still refreshes when the branches view is active but focus is on the sidebar (#2155)', () => {
+      const state = {
+        ...createLogInkState(rows, { activeView: 'branches' }),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+      }
+      expect(getLogInkInputEvents(state, 'r', {}, {
+        branchCount: 3,
+        currentBranch: 'feature',
+        branchSelectedShortName: 'main',
+      })).toEqual([{ type: 'refreshContext' }])
+    })
   })
 
   describe('M merge-into-current on the branches view', () => {
@@ -978,6 +1265,113 @@ describe('log Ink input interactions', () => {
         id: 'push-selected-branch',
         payload: undefined,
       })
+    })
+  })
+
+  describe('mutating registry fallback is view-scoped (#2155)', () => {
+    // blame / file-history / rebase bind none of S / U / P. Before this
+    // fix, an unbound key on these views fell through to the generic
+    // registry-by-key lookup and fired the global workflow anyway —
+    // `sync-branch` in particular has `requiresConfirmation: false`, so a
+    // stray `S` while reading blame silently pulled and pushed the
+    // current branch.
+    function rebaseState(): LogInkState {
+      return applyLogInkAction(createLogInkState(rows), {
+        type: 'openRebasePlan',
+        rows: [
+          { sha: 'a'.repeat(40), shortSha: 'aaaaaaa', subject: 'feat: one', author: 'Coco', date: '2026-05-01', action: 'pick' as const },
+        ],
+      })
+    }
+
+    const orphanViews: Array<{ name: string, state: () => LogInkState }> = [
+      { name: 'blame', state: () => createLogInkState(rows, { activeView: 'blame' }) },
+      { name: 'file-history', state: () => createLogInkState(rows, { activeView: 'file-history' }) },
+      { name: 'rebase', state: () => rebaseState() },
+    ]
+
+    for (const { name, state: stateFactory } of orphanViews) {
+      for (const key of ['S', 'U', 'P']) {
+        it(`${key} on ${name} warns instead of dispatching a workflow`, () => {
+          const events = getLogInkInputEvents(stateFactory(), key)
+          expect(events.some((e) => 'type' in e && e.type === 'runWorkflowAction')).toBe(false)
+          expect(events).toEqual([
+            {
+              type: 'action',
+              action: {
+                type: 'setStatus',
+                value: `${key} isn't bound on the ${name} view`,
+                kind: 'warning',
+              },
+            },
+          ])
+        })
+      }
+    }
+
+    it('S with the branches sidebar focused still warns on blame (bypasses the per-branch S block, #2155)', () => {
+      // Regression for the ordering trap: the branch-target `S` handler
+      // runs BEFORE the registry fallback, so narrowing only the fallback
+      // would leave this path open whenever the sidebar happens to be on
+      // the Branches tab while blame/file-history/rebase is active.
+      const state = {
+        ...createLogInkState(rows, { activeView: 'blame' }),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+      }
+      const events = getLogInkInputEvents(state, 'S', {}, { branchCount: 3 })
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'setStatus',
+            value: "S isn't bound on the blame view",
+            kind: 'warning',
+          },
+        },
+      ])
+    })
+
+    it('S with the branches sidebar focused on the default history view still opens create-stash (unchanged)', () => {
+      const state = {
+        ...createLogInkState(rows),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+      }
+      const events = getLogInkInputEvents(state, 'S')
+      expect(events).toEqual([
+        {
+          type: 'action',
+          action: {
+            type: 'openInputPrompt',
+            kind: 'create-stash',
+            label: 'Stash message (empty = WIP)',
+          },
+        },
+      ])
+    })
+
+    it('S still syncs the cursored branch on the branches view (unchanged)', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const events = getLogInkInputEvents(state, 'S', {}, { branchCount: 3 })
+      expect(events).toEqual([{ type: 'runWorkflowAction', id: 'sync-branch' }])
+    })
+
+    it('U / P still fire the global pull/push-current-branch workflows on history (unchanged)', () => {
+      const state = createLogInkState(rows)
+      expect(getLogInkInputEvents(state, 'U')).toEqual([
+        { type: 'runWorkflowAction', id: 'pull-current-branch' },
+      ])
+      expect(getLogInkInputEvents(state, 'P')).toEqual([
+        { type: 'runWorkflowAction', id: 'push-current-branch' },
+      ])
+    })
+
+    it('F still reaches fetch-remotes on blame (gate is key-scoped, not a blanket fallback kill)', () => {
+      const state = createLogInkState(rows, { activeView: 'blame' })
+      expect(getLogInkInputEvents(state, 'F')).toEqual([
+        { type: 'runWorkflowAction', id: 'fetch-remotes' },
+      ])
     })
   })
 
@@ -1783,6 +2177,108 @@ describe('log Ink input interactions', () => {
     )).toBeDefined()
   })
 
+  describe('Home/End edge jumps mirror gg/G on every list/scroll surface (OSS-2782)', () => {
+    it('history: Home/End match gg/G', () => {
+      const state = createLogInkState(rows)
+      expect(getLogInkInputEvents(state, '', { end: true })).toEqual(
+        getLogInkInputEvents(state, 'G')
+      )
+      const armed = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      expect(getLogInkInputEvents(state, '', { home: true })).toEqual(
+        getLogInkInputEvents(armed, 'g')
+      )
+    })
+
+    it('branches: Home/End jump to the first/last branch', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const branchIds = ['a', 'b', 'c', 'd', 'e']
+
+      expect(getLogInkInputEvents(state, '', { end: true }, { branchCount: 5, branchIds })).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+      ])
+      expect(getLogInkInputEvents(state, '', { home: true }, { branchCount: 5, branchIds })).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: -5, count: 5, id: 'a' } },
+      ])
+    })
+
+    it('status: End jumps to the last worktree file', () => {
+      const state = createLogInkState(rows, { activeView: 'status' })
+      expect(getLogInkInputEvents(state, '', { end: true }, { worktreeFileCount: 6 })).toEqual([
+        { type: 'action', action: { type: 'moveWorktreeFile', delta: 6, fileCount: 6 } },
+      ])
+    })
+
+    it('worktree diff: End scrolls to the bottom', () => {
+      const state = createLogInkState(rows, { activeView: 'diff' })
+      expect(getLogInkInputEvents(state, '', { end: true }, { worktreeDiffLineCount: 40 })).toEqual([
+        {
+          type: 'action',
+          action: { type: 'pageWorktreeDiff', delta: 40, lineCount: 40, hunkOffsets: undefined },
+        },
+      ])
+    })
+
+    it('commit diff: Home/End scroll the preview instead of moving selectedIndex', () => {
+      const state = { ...createLogInkState(rows, { activeView: 'diff' }), diffSource: 'commit' as const }
+      expect(getLogInkInputEvents(state, 'G', {}, { previewLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageDetailPreview', delta: 50, previewLineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, '', { end: true }, { previewLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageDetailPreview', delta: 50, previewLineCount: 50 } },
+      ])
+      const armed = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      expect(getLogInkInputEvents(armed, 'g', {}, { previewLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageDetailPreview', delta: -50, previewLineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, '', { home: true }, { previewLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageDetailPreview', delta: -50, previewLineCount: 50 } },
+      ])
+    })
+
+    it('sidebar header focused: Home is a no-op, End drops header focus and jumps to the last branch (review follow-up)', () => {
+      const state = {
+        ...createLogInkState(rows),
+        focus: 'sidebar' as const,
+        sidebarTab: 'branches' as const,
+        sidebarHeaderFocused: true,
+      }
+      const branchIds = ['a', 'b', 'c', 'd', 'e']
+
+      // Already the topmost position — same no-op as ↑ when header-focused.
+      expect(getLogInkInputEvents(state, '', { home: true }, { branchCount: 5, branchIds })).toEqual([])
+
+      expect(getLogInkInputEvents(state, '', { end: true }, { branchCount: 5, branchIds })).toEqual([
+        { type: 'action', action: { type: 'setSidebarHeaderFocused', value: false } },
+        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+      ])
+    })
+
+    it('palette moveToTop/moveToBottom resolve the same per-view jump as gg/G/Home/End, not a hard-coded history jump (review follow-up)', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const branchIds = ['a', 'b', 'c', 'd', 'e']
+      const context = { branchCount: 5, branchIds }
+
+      const topCommand = getLogInkPaletteCommands().find((c) => c.id === 'moveToTop')
+      const bottomCommand = getLogInkPaletteCommands().find((c) => c.id === 'moveToBottom')
+      expect(topCommand).toBeDefined()
+      expect(bottomCommand).toBeDefined()
+
+      expect(getLogInkPaletteExecuteEvents(topCommand!, state, context)).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: -5, count: 5, id: 'a' } },
+      ])
+      expect(getLogInkPaletteExecuteEvents(bottomCommand!, state, context)).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+      ])
+
+      // Omitting context (existing call sites) degrades to the previous
+      // HISTORY-only jump instead of throwing.
+      expect(getLogInkPaletteExecuteEvents(topCommand!, createLogInkState(rows))).toEqual([
+        { type: 'action', action: { type: 'moveToTop' } },
+        { type: 'action', action: { type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' } },
+      ])
+    })
+  })
+
   describe('view-local jump keys on blame / file-history / changelog (#1387)', () => {
     it('G and gg move the blame cursor, not the hidden history cursor', () => {
       let state = createLogInkState(rows)
@@ -1836,6 +2332,33 @@ describe('log Ink input interactions', () => {
         event.type === 'action' && event.action.type === 'pageChangelog' && event.action.delta === 80
       )).toBeDefined()
       expect(getLogInkInputEvents(state, 'G', {}, {})).toEqual([])
+    })
+
+    it('Home/End move the blame cursor, same as gg/G (OSS-2782)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'blame' })
+
+      const end = getLogInkInputEvents(state, '', { end: true }, { blameLineCount: 120 })
+      expect(end).toEqual([
+        { type: 'action', action: { type: 'moveBlame', delta: 120, count: 120 } },
+        { type: 'action', action: { type: 'setStatus', value: 'jumped to last line', ttl: 'echo' } },
+      ])
+
+      const home = getLogInkInputEvents(state, '', { home: true }, { blameLineCount: 120 })
+      expect(home).toEqual([
+        { type: 'action', action: { type: 'moveBlame', delta: -120, count: 120 } },
+        { type: 'action', action: { type: 'setStatus', value: 'jumped to first line', ttl: 'echo' } },
+      ])
+    })
+
+    it('End scrolls the ready changelog to the end, same as G (OSS-2782)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'changelog' })
+
+      const events = getLogInkInputEvents(state, '', { end: true }, { changelogLineCount: 80 })
+      expect(events.find((event) =>
+        event.type === 'action' && event.action.type === 'pageChangelog' && event.action.delta === 80
+      )).toBeDefined()
     })
   })
 
@@ -3626,6 +4149,14 @@ describe('log Ink input interactions', () => {
       expect(left).toEqual([{ type: 'action', action: { type: 'previousSidebarTab' } }])
     })
 
+    it('h/l on the sidebar mirror ←/→ (OSS-2782)', () => {
+      const right = getLogInkInputEvents(sidebarBranchesState(), 'l')
+      expect(right).toEqual([{ type: 'action', action: { type: 'nextSidebarTab' } }])
+
+      const left = getLogInkInputEvents(sidebarBranchesState(), 'h')
+      expect(left).toEqual([{ type: 'action', action: { type: 'previousSidebarTab' } }])
+    })
+
     it('↑/↓ on a sidebar branches tab with items moves the branch cursor', () => {
       // The action is `moveBranch` (not previousSidebarTab) because the
       // branches tab has items the user is cursoring through. Without
@@ -5097,6 +5628,28 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    it('h/l mirror ←/→ on the status groups (OSS-2782)', () => {
+      const right = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 0 }),
+        'l',
+        {},
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(right).toEqual([
+        { type: 'action', action: { type: 'jumpToStatusGroup', targetIndex: 2 } },
+      ])
+
+      const left = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 3 }),
+        'h',
+        {},
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(left).toEqual([
+        { type: 'action', action: { type: 'jumpToStatusGroup', targetIndex: 0 } },
+      ])
+    })
+
     it('→ at the last group is a no-op', () => {
       const events = getLogInkInputEvents(
         statusState({ selectedWorktreeFileIndex: 5 }),
@@ -5485,6 +6038,18 @@ describe('log Ink input interactions', () => {
         { rightArrow: true },
       )
       expect(events).toEqual([
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: 1 } },
+      ])
+    })
+
+    it('h/l on detail focus mirror ←/→ (OSS-2782)', () => {
+      const left = getLogInkInputEvents(actionsFocusState(), 'h')
+      expect(left).toEqual([
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: -1 } },
+      ])
+
+      const right = getLogInkInputEvents(actionsFocusState({ inspectorTab: 'inspector' }), 'l')
+      expect(right).toEqual([
         { type: 'action', action: { type: 'cycleInspectorTab', delta: 1 } },
       ])
     })
@@ -6915,23 +7480,34 @@ describe('triage filter cycling (#882 phase 6)', () => {
 const ALL_VIEWS: LogInkView[] = [
   'history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash',
   'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'conflicts',
-  'reflog', 'bisect', 'changelog', 'submodules',
+  'reflog', 'bisect', 'changelog', 'submodules', 'remotes', 'blame',
+  'file-history', 'rebase',
 ]
 
 describe('global key allowlists (negation-guard conversion)', () => {
-  it('C creates a PR in every view except conflicts and the PR triage list', () => {
+  it('C creates a PR in every view except conflicts, the PR triage list, and the three orphan views', () => {
     // conflicts → C marks the conflict resolved; pull-request-triage →
-    // C checks the cursored PR out locally (#1363).
-    const excluded: LogInkView[] = ['conflicts', 'pull-request-triage']
+    // C checks the cursored PR out locally (#1363); blame / file-history /
+    // rebase never opted in (#2155).
+    const excluded: LogInkView[] = ['conflicts', 'pull-request-triage', 'blame', 'file-history', 'rebase']
     for (const view of ALL_VIEWS) {
       expect(isCreatePrView(view)).toBe(!excluded.includes(view))
     }
   })
 
-  it('S creates a stash in every view except the commit triad (compose/status/diff) and branches (sync)', () => {
-    const excluded: LogInkView[] = ['compose', 'status', 'diff', 'branches']
+  it('S creates a stash in every view except the commit triad (compose/status/diff), branches (sync), and the three orphan views', () => {
+    const excluded: LogInkView[] = ['compose', 'status', 'diff', 'branches', 'blame', 'file-history', 'rebase']
     for (const view of ALL_VIEWS) {
       expect(isCreateStashView(view)).toBe(!excluded.includes(view))
+    }
+  })
+
+  it('S / U / P registry fallback fires everywhere except blame, file-history, and rebase (#2155)', () => {
+    // These three views bind none of S / U / P, so reaching them through
+    // the generic registry-by-key fallback is always a mistake.
+    const excluded: LogInkView[] = ['blame', 'file-history', 'rebase']
+    for (const view of ALL_VIEWS) {
+      expect(isRemoteOpFallbackView(view)).toBe(!excluded.includes(view))
     }
   })
 })

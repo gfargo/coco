@@ -47,6 +47,8 @@ describe('handleConflictsInput', () => {
     expect(handleConflictsInput(state, 'k', {}, {}, 'move')).toBeNull()
     expect(handleConflictsInput(state, '', { return: true }, {}, 'enter')).toBeNull()
     expect(handleConflictsInput(state, 'y', {}, {}, 'session')).toBeNull()
+    expect(handleConflictsInput(state, '', { home: true }, {}, 'jump-top')).toBeNull()
+    expect(handleConflictsInput(state, '', { end: true }, {}, 'jump-bottom')).toBeNull()
   })
 
   describe('session slot', () => {
@@ -136,6 +138,29 @@ describe('handleConflictsInput', () => {
       expect(handleConflictsInput(state, '', { escape: true }, {}, 'session')).toEqual([
         { type: 'action', action: { type: 'clearConflictResolution' } },
       ])
+    })
+  })
+
+  describe('jump-top / jump-bottom slots (OSS-2782)', () => {
+    it('jumps to the first file and sets an echo status when files exist', () => {
+      const events = handleConflictsInput(conflictsState(), '', { home: true }, { conflictFileCount: 4 }, 'jump-top')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'moveConflictFile', delta: -4, count: 4 } },
+        { type: 'action', action: { type: 'setStatus', value: 'jumped to first conflict', ttl: 'echo' } },
+      ])
+    })
+
+    it('jumps to the last file and sets an echo status when files exist', () => {
+      const events = handleConflictsInput(conflictsState(), '', { end: true }, { conflictFileCount: 4 }, 'jump-bottom')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'moveConflictFile', delta: 4, count: 4 } },
+        { type: 'action', action: { type: 'setStatus', value: 'jumped to last conflict', ttl: 'echo' } },
+      ])
+    })
+
+    it('swallows the keystroke (returns []) rather than falling through when there are no files', () => {
+      expect(handleConflictsInput(conflictsState(), '', { home: true }, {}, 'jump-top')).toEqual([])
+      expect(handleConflictsInput(conflictsState(), '', { end: true }, {}, 'jump-bottom')).toEqual([])
     })
   })
 

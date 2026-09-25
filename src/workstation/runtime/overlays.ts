@@ -274,7 +274,7 @@ export function renderOnboardingOverlay(
     h(Text, { color: accent, bold: true }, `  ${tip.keys.padEnd(maxKeys)}  `),
     h(Text, undefined, truncateCells(tip.text, lineWidth - maxKeys - 4)))),
   h(Text, undefined, ''),
-  h(Text, { dimColor: true }, 'This tip is shown once per machine. Press any key to continue.'))
+  h(Text, { dimColor: true }, 'Replay this tour anytime with `: show welcome` or `g W`. Press any key to continue.'))
 }
 
 /**
@@ -919,7 +919,7 @@ export function renderSplitPlanOverlay(
   ),
   ...errorBlock.map((line, offset) => h(Text, {
     key: `split-plan-error-${offset}`,
-    color: 'red',
+    color: theme.colors.danger,
     bold: offset === 0,
   }, line)),
   ...(overlay.error

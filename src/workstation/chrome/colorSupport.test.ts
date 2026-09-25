@@ -1,4 +1,4 @@
-import { getColorLevel, presetUsesTrueColor, readableForegroundFor } from './colorSupport'
+import { adjustHexLightness, getColorLevel, presetUsesTrueColor, readableForegroundFor } from './colorSupport'
 
 describe('log Ink color support (P5.2)', () => {
   describe('getColorLevel', () => {
@@ -93,6 +93,31 @@ describe('log Ink color support (P5.2)', () => {
       for (const bg of selections) {
         expect(['#000000', '#ffffff']).toContain(readableForegroundFor(bg))
       }
+    })
+  })
+
+  describe('adjustHexLightness', () => {
+    it('lightens toward white for a positive delta', () => {
+      expect(adjustHexLightness('#000000', 0.5)).toBe('#808080')
+    })
+
+    it('darkens toward black for a negative delta', () => {
+      expect(adjustHexLightness('#ffffff', -0.5)).toBe('#808080')
+    })
+
+    it('clamps at white / black for extreme deltas', () => {
+      expect(adjustHexLightness('#123456', 1)).toBe('#ffffff')
+      expect(adjustHexLightness('#123456', -1)).toBe('#000000')
+    })
+
+    it('accepts hex with or without the leading #', () => {
+      expect(adjustHexLightness('123456', 0)).toBe('#123456')
+    })
+
+    it('returns undefined for non-hex or malformed input', () => {
+      expect(adjustHexLightness('cyan', 0.2)).toBeUndefined()
+      expect(adjustHexLightness('#fff', 0.2)).toBeUndefined()
+      expect(adjustHexLightness('', 0.2)).toBeUndefined()
     })
   })
 })

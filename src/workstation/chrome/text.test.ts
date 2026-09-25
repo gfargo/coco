@@ -131,6 +131,34 @@ describe('log Ink text helpers', () => {
     })
   })
 
+  // OSS-2785 — cellWidth now agrees with Ink's string-width, and the
+  // grapheme-cluster loops below must never split a multi-code-point
+  // cluster (ZWJ family sequences, VS16 emoji) in half.
+  describe('grapheme-cluster safety (OSS-2785)', () => {
+    it('truncateCells keeps a ZWJ family sequence intact', () => {
+      const result = truncateCells('👨‍👩‍👧‍👦 team', 6)
+      expect(result).toBe('👨‍👩‍👧‍👦 te…')
+      expect(cellWidth(result)).toBe(6)
+    })
+
+    it('truncateCells keeps a VS16 emoji cluster intact', () => {
+      const result = truncateCells('fix ❤️ bug', 8)
+      expect(result).toBe('fix ❤️ …')
+      expect(cellWidth(result)).toBe(8)
+    })
+
+    it('wrapCells never splits a VS16 cluster across lines', () => {
+      const lines = wrapCells('❤️ '.repeat(10), 7)
+      expect(lines.every((line) => cellWidth(line) <= 7)).toBe(true)
+      expect(lines.join('')).toBe('❤️ '.repeat(10))
+    })
+
+    it("expandTabs advances the tab stop by a VS16 cluster's full cell width", () => {
+      // ❤️ is 2 cells; next tab stop from column 2 is 8 → 6 spaces.
+      expect(expandTabs('❤️\tx')).toBe('❤️      x')
+    })
+  })
+
   describe('wrapCells', () => {
     it('never hangs when the budget is narrower than one wide character', () => {
       // Regression: an empty chunk never shrank `remaining`, spinning

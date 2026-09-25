@@ -249,6 +249,27 @@ describe('renderPullRequestTriageSurface', () => {
     expect(branchOffset(cjkRow as string, 'feature/a')).toBe(branchOffset(asciiRow as string, 'feature/b'))
   })
 
+  it('sizes the author column by cell width, not code-unit length (OSS-2785)', () => {
+    // Regression: `authorColWidth` was derived from `.length`, which
+    // undercounts a CJK name's cell width by half. That sized the
+    // column too narrow and truncated a name that should have fit —
+    // not an overflow, but a needless truncation.
+    const width = 140
+    const cjkAuthor = '山田太郎田中花子' // 8 chars, 16 cells
+    const tree = render(makeState(), {
+      width,
+      pullRequestList: {
+        available: true,
+        authenticated: true,
+        pullRequests: [makePr({ number: 1, author: cjkAuthor, headRefName: 'feature/a' })],
+      },
+    })
+    const children = (tree.props as { children: unknown[] }).children
+    const row = children.flat().map(treeText).find((line) => line.includes('#1'))
+    expect(row).toBeDefined()
+    expect(row).toContain(cjkAuthor)
+  })
+
   it('structural snapshot — empty list', () => {
     expect(
       render(makeState(), {

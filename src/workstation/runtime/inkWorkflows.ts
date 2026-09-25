@@ -1538,7 +1538,23 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Leave the rebase view, discarding the edited rebase todo.',
       kind: 'destructive',
       requiresConfirmation: true,
-      warning: 'You have an edited rebase plan. Press y to discard it and leave.',
+      // OSS-2795 — the quit guard raises this same confirmation id when
+      // Ctrl+C / q would quit out from under an edited rebase plan
+      // (payload: 'quit'), so the copy needs to say "quit" rather than
+      // "leave" in that case.
+      warning: (state) => state.pendingConfirmationPayload === 'quit'
+        ? 'You have an edited rebase plan. Press y to discard it and quit.'
+        : 'You have an edited rebase plan. Press y to discard it and leave.',
+      targets: 'single',
+    },
+    {
+      id: 'quit-during-split-apply',
+      key: '',
+      label: 'Quit while a commit split is applying',
+      description: 'Exit the workstation while a commit split is still being applied.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: 'A commit split is still applying. Press y to quit anyway.',
       targets: 'single',
     },
   ]
