@@ -19,7 +19,7 @@
 import type * as ReactTypes from 'react'
 import { deriveGitignoreOptions } from '../chrome/gitignore'
 import { clampListWindowStart } from '../chrome/layout'
-import { pickSpinnerFrame } from '../chrome/spinner'
+import { pickThemedSpinnerFrame } from '../chrome/spinner'
 import { truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import { THEME_PRESET_COLORS } from '../chrome/theme'
@@ -793,7 +793,7 @@ export function renderSplitPlanOverlay(
 
   const maxLineWidth = Math.max(20, width - 4)
   const listRows = Math.max(4, bodyRows - 3)
-  const spinner = pickSpinnerFrame(spinnerFrame)
+  const spinner = pickThemedSpinnerFrame(spinnerFrame, theme.ascii)
 
   // Loading state — overlay opens immediately so the user sees the
   // "in flight" feedback without staring at a frozen compose view.

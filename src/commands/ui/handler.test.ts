@@ -121,4 +121,25 @@ describe('createUiTheme', () => {
     const theme = createUiTheme(makeConfig(), argv({ theme: 'monochrome' }))
     expect(theme).toEqual({ preset: 'monochrome' })
   })
+
+  it('CLI --ascii forces ascii mode even with no other theme config', () => {
+    const theme = createUiTheme(makeConfig(), argv({ ascii: true }))
+    expect(theme).toEqual({ ascii: true })
+  })
+
+  it('CLI --ascii composes with CLI --theme and config theme fields', () => {
+    const config = makeConfig({
+      logTui: { theme: { preset: 'default', noColor: true } },
+    } as unknown as Config)
+    const theme = createUiTheme(config, argv({ ascii: true, theme: 'gruvbox' }))
+    expect(theme).toEqual({ preset: 'gruvbox', noColor: true, ascii: true })
+  })
+
+  it('omitting --ascii does not force ascii mode (auto-detection stays in effect)', () => {
+    const config = makeConfig({
+      logTui: { theme: { preset: 'gruvbox' } },
+    } as unknown as Config)
+    const theme = createUiTheme(config, argv({}))
+    expect(theme).toEqual({ preset: 'gruvbox' })
+  })
 })

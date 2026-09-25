@@ -48,7 +48,8 @@ import type {
 import type { LogInkComponents, LogInkContext, SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
 import { getRenderNow } from '../../chrome/snapshotMode'
-import { pickSpinnerFrame } from '../../chrome/spinner'
+import { pickWorkstationGlyph } from '../../chrome/glyphs'
+import { pickThemedSpinnerFrame } from '../../chrome/spinner'
 
 /**
  * How the date column should render for a given density tier:
@@ -504,7 +505,7 @@ function renderStackedCommitHistoryRow(
         dateText && refsTrunc ? h(Text, { key: `${commit.hash}-${index}-l2-sep` }, ' ') : null,
         refsTrunc ? h(Text, { key: `${commit.hash}-${index}-l2-refs` }, refsTrunc) : null,
       ].filter(Boolean)
-    : [h(Text, { key: `${commit.hash}-${index}-l2-empty` }, '·')]
+    : [h(Text, { key: `${commit.hash}-${index}-l2-empty` }, pickWorkstationGlyph('sep', theme.ascii))]
 
   const lineTwo = h(Text, {
     key: `${commit.hash}-${index}-l2`,
@@ -630,14 +631,19 @@ function renderRemoteOpLoader(
   if (!op) {
     return h(Box, { width })
   }
-  const spinner = pickSpinnerFrame(spinnerFrame)
+  const spinner = pickThemedSpinnerFrame(spinnerFrame, theme.ascii)
   // Directional glyph hints which way the bits are flowing.
-  const glyph = op.kind === 'push' ? '↑' : op.kind === 'pull' ? '↓' : '↕'
+  const glyph = op.kind === 'push'
+    ? pickWorkstationGlyph('up', theme.ascii)
+    : op.kind === 'pull'
+      ? pickWorkstationGlyph('down', theme.ascii)
+      : pickWorkstationGlyph('updown', theme.ascii)
   // A single glyph "travels" along a dotted track each tick so the
   // motion reads even on terminals that render braille spinners poorly.
   const trackWidth = 9
   const pos = Math.max(0, spinnerFrame) % trackWidth
-  const track = Array.from({ length: trackWidth }, (_, i) => (i === pos ? glyph : '·')).join(' ')
+  const trackDot = pickWorkstationGlyph('sep', theme.ascii)
+  const track = Array.from({ length: trackWidth }, (_, i) => (i === pos ? glyph : trackDot)).join(' ')
   const accent = theme.noColor ? undefined : theme.colors.accent
   const innerHeight = Math.max(3, bodyRows - 2)
 
@@ -663,7 +669,7 @@ function renderRemoteOpLoader(
     h(Text, undefined, ''),
     h(Text, { color: accent }, track),
     h(Text, undefined, ''),
-    h(Text, { dimColor: true }, 'Talking to the remote — history refreshes automatically.')))
+    h(Text, { dimColor: true }, `Talking to the remote ${pickWorkstationGlyph('dash', theme.ascii)} history refreshes automatically.`)))
 }
 
 export function renderHistoryPanel(
@@ -849,14 +855,15 @@ export function renderHistoryPanel(
         const contentWidth = Math.max(10, width - 4)
         const labelCells = cellWidth(item.label) + 2 // pad the label with surrounding spaces
         const ruleAfter = Math.max(0, contentWidth - 3 - labelCells)
+        const ruleGlyph = pickWorkstationGlyph('rule', theme.ascii)
         return h(Text, {
           key: `bucket-${index}-${item.label}`,
           dimColor: true,
         },
-          h(Text, undefined, '── '),
+          h(Text, undefined, `${ruleGlyph}${ruleGlyph} `),
           h(Text, { bold: true }, item.label),
           h(Text, undefined, ' '),
-          h(Text, undefined, '─'.repeat(ruleAfter)),
+          h(Text, undefined, ruleGlyph.repeat(ruleAfter)),
         )
       }
 

@@ -114,6 +114,43 @@ describe('workspace render builders', () => {
     expect(rows[1].columns[2].text).not.toContain('⊙4')
   })
 
+  it('renders ASCII-only glyphs in the status cell + placeholder when ascii: true', () => {
+    const rows = buildWorkspaceListRows(state, { ascii: true })
+    expect(rows[0].columns[2].text).toContain('*2') // filled dot
+    expect(rows[0].columns[2].text).toContain('^1') // ahead
+    expect(rows[0].columns[2].text).toContain('v3') // behind
+    expect(rows[1].columns[2].text.trim()).toBe('.') // clean-repo placeholder
+    for (const row of rows) {
+      for (const column of row.columns) {
+        expect(column.text).not.toMatch(/[^\x00-\x7e]/)
+      }
+    }
+  })
+
+  it('renders an ASCII spinner + PR token in the status cell when ascii: true', () => {
+    const fetching = applyWorkspaceAction(state, {
+      type: 'set-pull-request-fetching',
+      paths: [state.overview.repos[1].path],
+    })
+    const rows = buildWorkspaceListRows(fetching, { spinnerTick: 1, ascii: true })
+    expect(rows[1].columns[2].text).toBe('/')
+
+    const next = applyWorkspaceAction(state, {
+      type: 'replace-pull-request-counts',
+      counts: { [state.overview.repos[1].path]: 4 },
+      authenticated: true,
+    })
+    const prRows = buildWorkspaceListRows(next, { ascii: true })
+    expect(prRows[1].columns[2].text).toContain('o4')
+  })
+
+  it('renders ASCII tab glyphs when ascii: true', () => {
+    const sidebar = buildWorkspaceSidebar(state, true)
+    for (const row of sidebar) {
+      expect(row.glyph).toMatch(/^[\x00-\x7e]+$/)
+    }
+  })
+
   it('dims the PRs sidebar tab when gh is unauthenticated', () => {
     const next = applyWorkspaceAction(state, {
       type: 'replace-pull-request-counts',

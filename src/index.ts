@@ -107,6 +107,17 @@ y.option('json', {
   global: true,
 })
 
+// Global `--ascii` — forces the workstation TUI (`coco ui`, `coco log -i`,
+// `coco workspace`) into ASCII-only rendering. Auto-detected from the
+// locale / TERM / COCO_ASCII env var when unset (see
+// `workstation/chrome/asciiMode.ts`); the flag is for terminals that slip
+// past detection or users who just want it on.
+y.option('ascii', {
+  type: 'boolean',
+  description: 'Render the TUI with ASCII-only glyphs (for non-UTF-8 terminals).',
+  global: true,
+})
+
 // `$0` (no positional args) routes through the smart default router
 // rather than aliasing directly to `coco commit`. The router probes
 // the user's environment (config presence, git-repo presence) and
@@ -333,6 +344,7 @@ const FISH_COMPLETION_GLOBAL_FLAGS: Array<{ name: string; desc: string }> = [
   { name: 'verbose', desc: 'Print verbose diagnostic output.' },
   { name: 'quiet', desc: 'Suppress non-error status output.' },
   { name: 'json', desc: 'Emit machine-readable JSON to stdout (supported commands only).' },
+  { name: 'ascii', desc: 'Render the TUI with ASCII-only glyphs (for non-UTF-8 terminals).' },
   { name: 'help', desc: 'Show help.' },
 ]
 

@@ -1,4 +1,5 @@
 import type { WorkspaceRepoSummary } from '../../../git/workspaceData'
+import { pickWorkstationGlyph, type WorkstationGlyphKey } from '../../chrome/glyphs'
 
 /**
  * Sidebar tabs for the workspace surface. Each tab is a predicate on
@@ -26,26 +27,23 @@ const TAB_LABELS: Record<WorkspaceTab, string> = {
  *
  * Used in two places: as a label prefix in the expanded sidebar,
  * and as the standalone icon when the sidebar is rail-collapsed at
- * narrow terminal widths.
- *
- * ASCII fallback isn't wired through yet — none of these glyphs
- * affect layout (they're width-1), so even on `TERM=dumb` they
- * render as best the terminal can. Add a `theme.ascii`-aware lookup
- * here if we hit a real environment where the unicode breaks.
+ * narrow terminal widths. ASCII fallbacks come from the shared
+ * workstation glyph table (`o`, `*`, `v`, `o`) so `theme.ascii`
+ * terminals get a legible marker instead of mojibake.
  */
-const TAB_GLYPHS: Record<WorkspaceTab, string> = {
-  all: '◯',
-  dirty: '●',
-  behind: '↓',
-  'pull-requests': '⊙',
+const TAB_GLYPHS: Record<WorkspaceTab, WorkstationGlyphKey> = {
+  all: 'hollow',
+  dirty: 'filled',
+  behind: 'down',
+  'pull-requests': 'target',
 }
 
 export function workspaceTabLabel(tab: WorkspaceTab): string {
   return TAB_LABELS[tab]
 }
 
-export function workspaceTabGlyph(tab: WorkspaceTab): string {
-  return TAB_GLYPHS[tab]
+export function workspaceTabGlyph(tab: WorkspaceTab, ascii = false): string {
+  return pickWorkstationGlyph(TAB_GLYPHS[tab], ascii)
 }
 
 export function nextWorkspaceTab(current: WorkspaceTab): WorkspaceTab {

@@ -49,7 +49,7 @@
  */
 
 import type * as ReactTypes from 'react'
-import { pickSpinnerFrame } from '../chrome/spinner'
+import { pickThemedSpinnerFrame } from '../chrome/spinner'
 import { cellWidth, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import { getLogInkFooterHints } from '../../workstation/runtime/inkKeymap'
@@ -156,7 +156,7 @@ export function renderFooter(
   //   info     →  ℹ  / i
   //   idle tip →  no glyph (passive)
   const glyph = ((): string => {
-    if (isLoading) return pickSpinnerFrame(spinnerFrame)
+    if (isLoading) return pickThemedSpinnerFrame(spinnerFrame, theme.ascii)
     if (isError) return theme.ascii ? '!' : '✗'
     if (isWarning) return theme.ascii ? '!' : '⚠'
     if (isSuccess) return theme.ascii ? '+' : '✓'

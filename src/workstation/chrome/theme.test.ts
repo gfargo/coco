@@ -67,6 +67,37 @@ describe('log Ink theme', () => {
     expect(theme.colors).toEqual({})
   })
 
+  it('detects ASCII mode from a non-UTF-8 locale via asciiEnv, independent of TERM', () => {
+    const theme = createLogInkTheme({
+      asciiEnv: { LANG: 'C' },
+      noColor: false,
+      term: 'xterm-256color',
+    })
+
+    expect(theme.ascii).toBe(true)
+    expect(theme.borderStyle).toBe('classic')
+  })
+
+  it('a UTF-8 locale does not force ASCII mode', () => {
+    const theme = createLogInkTheme({
+      asciiEnv: { LANG: 'en_US.UTF-8' },
+      noColor: false,
+      term: 'xterm-256color',
+    })
+
+    expect(theme.ascii).toBe(false)
+  })
+
+  it('an explicit ascii: false overrides a non-UTF-8 asciiEnv', () => {
+    const theme = createLogInkTheme({
+      ascii: false,
+      asciiEnv: { LANG: 'C' },
+      noColor: false,
+    })
+
+    expect(theme.ascii).toBe(false)
+  })
+
   it('supports configurable presets and token overrides', () => {
     const theme = createLogInkTheme({
       borderStyle: 'single',

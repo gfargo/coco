@@ -10,7 +10,7 @@
 
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
-import { pickSpinnerFrame } from '../../chrome/spinner'
+import { pickThemedSpinnerFrame } from '../../chrome/spinner'
 import {
   formatStreamingPreview,
   streamingPreviewTruncateMarker,
@@ -272,8 +272,8 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
         bold: true,
         color: theme.noColor ? undefined : theme.colors.accent,
       }, theme.ascii
-        ? `[${pickSpinnerFrame(spinnerFrame).replace(/[^a-zA-Z0-9 ]/g, '.')}] Generating AI commit draft (this can take a moment)`
-        : `${pickSpinnerFrame(spinnerFrame)}  Generating AI commit draft… (this can take a moment)`),
+        ? `[${pickThemedSpinnerFrame(spinnerFrame, true)}] Generating AI commit draft (this can take a moment)`
+        : `${pickThemedSpinnerFrame(spinnerFrame, false)}  Generating AI commit draft… (this can take a moment)`),
       // Streaming preview (#881 phase 2). Renders the trailing visual
       // lines of the in-flight LLM stream below the loader so the user
       // sees content building up instead of an opaque spinner. Empty

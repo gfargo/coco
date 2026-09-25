@@ -1,3 +1,4 @@
+import { AsciiEnv, detectAsciiMode } from './asciiMode'
 import { ColorEnv, getColorLevel, presetUsesTrueColor, readableForegroundFor } from './colorSupport'
 import { THEME_PRESET_COLORS } from './themePresets'
 
@@ -66,6 +67,12 @@ export type CreateLogInkThemeOptions = LogInkThemeConfig & {
    * across CI runners and developer machines.
    */
   env?: ColorEnv
+  /**
+   * Snapshot of the env used for ASCII-mode detection (locale + TERM +
+   * COCO_ASCII). Defaults to `process.env`. Tests pass a synthetic env to
+   * keep results deterministic across CI runners and developer machines.
+   */
+  asciiEnv?: AsciiEnv
 }
 
 /**
@@ -83,18 +90,13 @@ export function getLogInkThemePresets(): LogInkThemePreset[] {
     : ['monochrome', ...keys]
 }
 
-function shouldUseAscii(term: string | undefined): boolean {
-  if (!term) {
-    return false
-  }
-
-  return term === 'dumb' || term.startsWith('vt100')
-}
-
 export function createLogInkTheme(options: CreateLogInkThemeOptions = {}): LogInkTheme {
   const noColor = (options.noColor ?? Boolean(process.env.NO_COLOR)) ||
     options.preset === 'monochrome'
-  const ascii = options.ascii ?? shouldUseAscii(options.term ?? process.env.TERM)
+  const ascii = options.ascii ?? detectAsciiMode({
+    ...(options.asciiEnv ?? process.env),
+    ...(options.term ? { TERM: options.term } : {}),
+  })
   const requestedPreset = options.preset && options.preset !== 'monochrome' ? options.preset : 'default'
   // P5.2 — gracefully downgrade hex presets (catppuccin / gruvbox) when
   // the host terminal can't render truecolor. Chalk approximates hex in

@@ -58,6 +58,7 @@ import {
   type LogInkThemeConfig,
   type LogInkThemePreset,
 } from '../../chrome/theme'
+import { setAsciiDialect } from '../../chrome/text'
 import { saveThemePreset } from '../../chrome/themePersistence'
 import { getCocoCacheDir } from '../../../lib/utils/cocoPaths'
 import { getThemePickerSelectionFor } from '../../../workstation/runtime/inkViewModel'
@@ -257,6 +258,7 @@ export async function startWorkspace(
   const runtime = await loadWorkspaceInkRuntime()
   const { ink, React } = runtime
   const theme = createLogInkTheme(options.theme)
+  setAsciiDialect(theme.ascii)
 
   const resumeRef: { current: (() => void) | null } = { current: null }
   const exitRef: { current: WorkspaceExitResult } = { current: { kind: 'quit' } }
@@ -283,7 +285,7 @@ export async function startWorkspace(
   // and surfaces as TTY EIO. We handle ctrl+c in our own useInput
   // handler so the quit path is the same as `q`.
   const renderOptions = {
-    ...getLogInkRenderOptions({ input, output, error }),
+    ...getLogInkRenderOptions({ input, output, error, ascii: theme.ascii }),
     exitOnCtrlC: false,
   }
   const instance = ink.render(app, renderOptions)
@@ -502,10 +504,15 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   const [themeSessionPreset, setThemeSessionPreset] = React.useState<LogInkThemePreset | undefined>(undefined)
   const effectiveThemePreset = themePreviewPreset ?? themeSessionPreset
   const theme = React.useMemo(
-    () =>
-      effectiveThemePreset
+    () => {
+      const resolved = effectiveThemePreset
         ? createLogInkTheme({ ...props.themeConfig, preset: effectiveThemePreset })
-        : props.theme,
+        : props.theme
+      // Keep the process-wide ASCII dialect (chrome/text.ts) in sync with
+      // a picker-driven theme change, same as the boot-time default.
+      setAsciiDialect(resolved.ascii)
+      return resolved
+    },
     [effectiveThemePreset, props.themeConfig, props.theme]
   )
 

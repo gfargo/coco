@@ -7,7 +7,7 @@ import {
   type WorkspaceResumeState,
 } from '../../workstation/surfaces/workspace'
 import { applyRepoFlag } from '../utils/applyRepoFlag'
-import { createLogArgvFromUiArgv, startCocoUiFromLogArgv } from '../ui/handler'
+import { createLogArgvFromUiArgv, createUiTheme, startCocoUiFromLogArgv } from '../ui/handler'
 import type { UiArgv } from '../ui/config'
 
 import { WorkspaceArgv } from './config'
@@ -147,9 +147,7 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
         knownRepos,
         maxDepth,
         appLabel: 'coco workspace',
-        theme: argv.theme
-          ? { ...config.logTui?.theme, preset: argv.theme }
-          : config.logTui?.theme,
+        theme: createUiTheme(config, argv),
         resume,
       }),
     runUiForRepo: async (repoPath) => {

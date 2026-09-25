@@ -1,7 +1,15 @@
+import { wrapAsciiOutputStream } from './asciiOutput'
+
 export type LogInkTerminalStreams = {
   input: NodeJS.ReadStream
   output: NodeJS.WriteStream
   error: NodeJS.WriteStream
+  /**
+   * When true, wrap `output` so every non-ASCII byte written to the
+   * terminal is transliterated before it reaches the PTY — the hard
+   * backstop behind `theme.ascii` (see `chrome/asciiOutput.ts`).
+   */
+  ascii?: boolean
 }
 
 export type LogInkRenderOptions = {
@@ -28,7 +36,7 @@ export function getLogInkRenderOptions(
     exitOnCtrlC: true,
     patchConsole: false,
     stdin: streams.input,
-    stdout: streams.output,
+    stdout: streams.ascii ? wrapAsciiOutputStream(streams.output) : streams.output,
     stderr: streams.error,
   }
 }
