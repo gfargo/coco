@@ -246,6 +246,37 @@ describe('log Ink view model', () => {
     expect(state.focus).toBe('sidebar')
   })
 
+  // #2157 — the `=` zoom toggle is independent of Tab: toggling on the
+  // focused pane sets/clears zoomedPane, toggling on a different pane
+  // moves the zoom, and cycling focus never touches it.
+  it('togglePaneZoom sets, moves, and clears zoomedPane independently of focus', () => {
+    let state = createLogInkState(rows)
+    expect(state.zoomedPane).toBeUndefined()
+    expect(state.focus).toBe('commits')
+
+    state = applyLogInkAction(state, { type: 'togglePaneZoom' })
+    expect(state.zoomedPane).toBe('commits')
+
+    // Toggling again on the same (still-focused) pane clears it.
+    state = applyLogInkAction(state, { type: 'togglePaneZoom' })
+    expect(state.zoomedPane).toBeUndefined()
+
+    // Zoom the sidebar, then Tab away — zoom stays on the sidebar.
+    state = applyLogInkAction(state, { type: 'focusNext' })
+    expect(state.focus).toBe('detail')
+    state = applyLogInkAction(state, { type: 'togglePaneZoom' })
+    expect(state.zoomedPane).toBe('detail')
+
+    state = applyLogInkAction(state, { type: 'focusNext' })
+    expect(state.focus).toBe('sidebar')
+    expect(state.zoomedPane).toBe('detail')
+
+    // Toggling from a different focus moves the zoom rather than
+    // stacking or clearing it.
+    state = applyLogInkAction(state, { type: 'togglePaneZoom' })
+    expect(state.zoomedPane).toBe('sidebar')
+  })
+
   it('jumps to list boundaries', () => {
     let state = createLogInkState(rows)
 

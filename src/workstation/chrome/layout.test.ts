@@ -104,9 +104,26 @@ describe('log Ink layout', () => {
     expect(huge.detailWidth).toBe(32)
   })
 
-  it('grows the inspector when inspectorFocused is set', () => {
+  // #2157 — pane widths no longer follow focus. `inspectorFocused` /
+  // `sidebarFocused` still drive `visiblePane` in single-pane mode (see
+  // the 'single-pane mode' describe block below), but in three-pane
+  // mode they must be a total no-op on width. Only an explicit
+  // `zoomedPane` (the `=` key) or the help overlay may resize a pane.
+  it('leaves every width unchanged across sidebarFocused / inspectorFocused / no focus', () => {
+    const rest = getLogInkLayout({ columns: 120, rows: 40 })
+    const sidebarFocused = getLogInkLayout({ columns: 120, rows: 40, sidebarFocused: true })
+    const inspectorFocused = getLogInkLayout({ columns: 120, rows: 40, inspectorFocused: true })
+
+    for (const layout of [sidebarFocused, inspectorFocused]) {
+      expect(layout.sidebarWidth).toBe(rest.sidebarWidth)
+      expect(layout.mainPanelWidth).toBe(rest.mainPanelWidth)
+      expect(layout.detailWidth).toBe(rest.detailWidth)
+    }
+  })
+
+  it('grows the inspector when zoomedPane is "inspector"', () => {
     const collapsed = getLogInkLayout({ columns: 120, rows: 40 })
-    const expanded = getLogInkLayout({ columns: 120, rows: 40, inspectorFocused: true })
+    const expanded = getLogInkLayout({ columns: 120, rows: 40, zoomedPane: 'inspector' })
 
     expect(expanded.detailWidth).toBeGreaterThan(collapsed.detailWidth)
     // 120 * 0.40 = 48 → clamped down to the 60-cell maximum (no clamp needed at 120)
@@ -116,15 +133,47 @@ describe('log Ink layout', () => {
     expect(expanded.mainPanelWidth).toBe(120 - expanded.sidebarWidth - expanded.detailWidth)
   })
 
-  it('clamps the focused inspector to its 36-60 cell range in three-pane tiers', () => {
+  it('clamps the zoomed inspector to its 36-60 cell range in three-pane tiers', () => {
     // The 36-cell floor is only reachable below the single-pane
     // breakpoint, where the inspector instead takes the full width, so
-    // the lowest three-pane focused width is floor(100 × 0.40) = 40.
-    const narrow = getLogInkLayout({ columns: 100, rows: 24, inspectorFocused: true })
-    const wide = getLogInkLayout({ columns: 200, rows: 60, inspectorFocused: true })
+    // the lowest three-pane zoomed width is floor(100 × 0.40) = 40.
+    const narrow = getLogInkLayout({ columns: 100, rows: 24, zoomedPane: 'inspector' })
+    const wide = getLogInkLayout({ columns: 200, rows: 60, zoomedPane: 'inspector' })
 
     expect(narrow.detailWidth).toBe(40)
     expect(wide.detailWidth).toBe(60)
+  })
+
+  it('zooming a pane is unaffected by which pane has focus (Tab-invariance)', () => {
+    const zoomOnly = getLogInkLayout({ columns: 120, rows: 40, zoomedPane: 'inspector' })
+    const zoomPlusSidebarFocus = getLogInkLayout({
+      columns: 120,
+      rows: 40,
+      zoomedPane: 'inspector',
+      sidebarFocused: true,
+    })
+    const zoomPlusInspectorFocus = getLogInkLayout({
+      columns: 120,
+      rows: 40,
+      zoomedPane: 'inspector',
+      inspectorFocused: true,
+    })
+
+    for (const layout of [zoomPlusSidebarFocus, zoomPlusInspectorFocus]) {
+      expect(layout.sidebarWidth).toBe(zoomOnly.sidebarWidth)
+      expect(layout.mainPanelWidth).toBe(zoomOnly.mainPanelWidth)
+      expect(layout.detailWidth).toBe(zoomOnly.detailWidth)
+    }
+  })
+
+  it('shrinks both side panels to their floors when zoomedPane is "main"', () => {
+    const rest = getLogInkLayout({ columns: 120, rows: 40 })
+    const mainZoomed = getLogInkLayout({ columns: 120, rows: 40, zoomedPane: 'main' })
+
+    expect(mainZoomed.sidebarWidth).toBeLessThan(rest.sidebarWidth)
+    expect(mainZoomed.detailWidth).toBeLessThan(rest.detailWidth)
+    expect(mainZoomed.mainPanelWidth).toBeGreaterThan(rest.mainPanelWidth)
+    expect(mainZoomed.sidebarWidth + mainZoomed.mainPanelWidth + mainZoomed.detailWidth).toBe(120)
   })
 
   it('reports terminals below the minimum as too small', () => {
@@ -144,9 +193,9 @@ describe('log Ink layout', () => {
     expect(getLogInkLayout({ columns: 120, rows: 40 }).inspectorTabbed).toBe(false)
   })
 
-  it('grows the sidebar when sidebarFocused is set', () => {
+  it('grows the sidebar when zoomedPane is "sidebar"', () => {
     const collapsed = getLogInkLayout({ columns: 120, rows: 40 })
-    const expanded = getLogInkLayout({ columns: 120, rows: 40, sidebarFocused: true })
+    const expanded = getLogInkLayout({ columns: 120, rows: 40, zoomedPane: 'sidebar' })
 
     expect(expanded.sidebarWidth).toBeGreaterThan(collapsed.sidebarWidth)
     expect(expanded.sidebarWidth).toBe(43)
@@ -156,12 +205,12 @@ describe('log Ink layout', () => {
     expect(expanded.mainPanelWidth).toBe(120 - expanded.sidebarWidth - expanded.detailWidth)
   })
 
-  it('clamps the focused sidebar to its 32–50 cell range in three-pane tiers', () => {
+  it('clamps the zoomed sidebar to its 32–50 cell range in three-pane tiers', () => {
     // The 32-cell floor is only reachable below the single-pane
     // breakpoint, where the sidebar instead takes the full width, so
-    // the lowest three-pane focused width is floor(100 × 0.36) = 36.
-    const narrow = getLogInkLayout({ columns: 100, rows: 24, sidebarFocused: true })
-    const wide = getLogInkLayout({ columns: 200, rows: 60, sidebarFocused: true })
+    // the lowest three-pane zoomed width is floor(100 × 0.36) = 36.
+    const narrow = getLogInkLayout({ columns: 100, rows: 24, zoomedPane: 'sidebar' })
+    const wide = getLogInkLayout({ columns: 200, rows: 60, zoomedPane: 'sidebar' })
 
     expect(narrow.sidebarWidth).toBe(36)
     expect(wide.sidebarWidth).toBe(50)
@@ -171,12 +220,12 @@ describe('log Ink layout', () => {
   // hotkey descriptions stop truncating. Wins over both the at-rest
   // and the inspector-focused states.
   describe('helpOverlayActive', () => {
-    it('expands the detail panel beyond both at-rest and inspector-focused widths', () => {
+    it('expands the detail panel beyond both at-rest and zoomed-inspector widths', () => {
       const collapsed = getLogInkLayout({ columns: 160, rows: 40 })
-      const focused = getLogInkLayout({ columns: 160, rows: 40, inspectorFocused: true })
+      const zoomed = getLogInkLayout({ columns: 160, rows: 40, zoomedPane: 'inspector' })
       const help = getLogInkLayout({ columns: 160, rows: 40, helpOverlayActive: true })
 
-      expect(help.detailWidth).toBeGreaterThan(focused.detailWidth)
+      expect(help.detailWidth).toBeGreaterThan(zoomed.detailWidth)
       expect(help.detailWidth).toBeGreaterThan(collapsed.detailWidth)
       // Main panel absorbs the loss so the three columns still tile
       // across the terminal width.
@@ -192,7 +241,18 @@ describe('log Ink layout', () => {
       expect(wide.detailWidth).toBe(100)
     })
 
-    it('overrides inspectorFocused when both are set (help wins)', () => {
+    it('overrides zoomedPane when both are set (help wins)', () => {
+      const both = getLogInkLayout({
+        columns: 160,
+        rows: 40,
+        zoomedPane: 'inspector',
+        helpOverlayActive: true,
+      })
+      const helpOnly = getLogInkLayout({ columns: 160, rows: 40, helpOverlayActive: true })
+      expect(both.detailWidth).toBe(helpOnly.detailWidth)
+    })
+
+    it('overrides inspectorFocused too, even though focus no longer drives width on its own', () => {
       const both = getLogInkLayout({
         columns: 160,
         rows: 40,
@@ -212,7 +272,7 @@ describe('log Ink layout', () => {
   // terminal so the three always tile flush.
   describe('three-pane width budgeting (#1855)', () => {
     const FOCUS_OVERLAY_COMBOS: Array<
-      Pick<Parameters<typeof getLogInkLayout>[0], 'sidebarFocused' | 'inspectorFocused' | 'helpOverlayActive'>
+      Pick<Parameters<typeof getLogInkLayout>[0], 'sidebarFocused' | 'inspectorFocused' | 'helpOverlayActive' | 'zoomedPane'>
     > = [
       {},
       { sidebarFocused: true },
@@ -220,6 +280,12 @@ describe('log Ink layout', () => {
       { helpOverlayActive: true },
       { helpOverlayActive: true, sidebarFocused: true },
       { helpOverlayActive: true, inspectorFocused: true },
+      { zoomedPane: 'sidebar' },
+      { zoomedPane: 'inspector' },
+      { zoomedPane: 'main' },
+      { zoomedPane: 'sidebar', helpOverlayActive: true },
+      { zoomedPane: 'inspector', helpOverlayActive: true },
+      { zoomedPane: 'main', helpOverlayActive: true },
     ]
 
     it('never lets the three panes exceed the terminal width, for any column count or focus/overlay combination', () => {
@@ -403,18 +469,18 @@ describe('log Ink layout', () => {
       expect(wideEdge.sidebarWidth).toBeGreaterThan(normalEdge.sidebarWidth)
     })
 
-    it('focused-sidebar width is unaffected by tier — keeps its 32-50 clamp', () => {
-      // Regression guard for the design choice: focus = "user wants
-      // to read the sidebar," which deserves consistent width across
+    it('zoomed-sidebar width is unaffected by tier — keeps its 32-50 clamp', () => {
+      // Regression guard for the design choice: zoom = "user wants to
+      // read the sidebar," which deserves consistent width across
       // tiers. Don't have the tier-aware at-rest formula bleed into
-      // the focused path.
-      const normalFocused = getLogInkLayout({ columns: 140, rows: 40, sidebarFocused: true })
-      const wideFocused = getLogInkLayout({ columns: 200, rows: 40, sidebarFocused: true })
+      // the zoomed path.
+      const normalZoomed = getLogInkLayout({ columns: 140, rows: 40, zoomedPane: 'sidebar' })
+      const wideZoomed = getLogInkLayout({ columns: 200, rows: 40, zoomedPane: 'sidebar' })
 
-      // 140 × 0.36 = 50.4 → clamped to 50 (the focused cap)
-      expect(normalFocused.sidebarWidth).toBe(50)
+      // 140 × 0.36 = 50.4 → clamped to 50 (the zoomed cap)
+      expect(normalZoomed.sidebarWidth).toBe(50)
       // 200 × 0.36 = 72 → clamped to 50
-      expect(wideFocused.sidebarWidth).toBe(50)
+      expect(wideZoomed.sidebarWidth).toBe(50)
     })
 
     it('main panel still tiles flush across all tiers', () => {
@@ -479,6 +545,19 @@ describe('log Ink layout', () => {
       })
       expect(help.visiblePane).toBe('inspector')
       expect(help.detailWidth).toBe(80)
+    })
+
+    it('ignores zoomedPane below the breakpoint — the visible pane is still full-width, not extra-wide', () => {
+      // Zoom survives a resize into single-pane mode without breaking
+      // anything: the single-pane override always wins, so a stale
+      // zoomedPane from a wider terminal is simply inert here. It
+      // re-applies once the terminal widens back into three-pane mode.
+      const layout = getLogInkLayout({ columns: 80, rows: 24, zoomedPane: 'sidebar' })
+      expect(layout.singlePane).toBe(true)
+      expect(layout.visiblePane).toBe('main')
+      expect(layout.mainPanelWidth).toBe(80)
+      expect(layout.sidebarWidth).toBe(0)
+      expect(layout.detailWidth).toBe(0)
     })
 
     it('ignores forcedPane above the breakpoint (all panes render)', () => {

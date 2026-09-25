@@ -249,6 +249,11 @@ export type LogInkComponentDeps = LogInkRuntime & {
    * disabled flag is byte-identical to keyboard-only behavior.
    */
   mouseEnabled?: boolean
+  /**
+   * Restore the pre-#2157 auto-widen-on-focus behavior (`logTui.focusExpand`).
+   * Off by default — pane widths follow `zoomedPane`, not `focus`.
+   */
+  focusExpandEnabled?: boolean
   initialView: LogInkView
   logArgv?: LogArgv
   rows: GitLogRow[]

@@ -59,7 +59,7 @@ import type * as ReactTypes from 'react'
 import { saveThemePreset } from '../chrome/themePersistence'
 import { LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout } from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
-import { LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit } from '../../workstation/runtime/inkViewModel'
+import { LogInkFocus, LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit } from '../../workstation/runtime/inkViewModel'
 import { parseStashDiffFiles } from '../../git/stashData'
 
 
@@ -120,8 +120,14 @@ import { renderDetailPanel } from '../runtime/detailPanel'
 import { renderOnboardingOverlay } from '../runtime/overlays'
 import { getLogInkRuntimeContext, type LogInkRuntimeContextValue } from '../runtime/runtimeContext'
 
+const PANE_BY_FOCUS: Record<LogInkFocus, LogInkVisiblePane> = {
+  sidebar: 'sidebar',
+  commits: 'main',
+  detail: 'inspector',
+}
+
 export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, clipboardRunner, dateBucketingEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, mouseEnabled, React, resumeRef, rows, syntaxHighlightEnabled, theme: baseTheme, themeConfig } = deps
+  const { appLabel, clipboardRunner, dateBucketingEnabled, focusExpandEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, mouseEnabled, React, resumeRef, rows, syntaxHighlightEnabled, theme: baseTheme, themeConfig } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
 
@@ -1148,12 +1154,23 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       ? 'inspector'
       : undefined
 
+  // Widths follow explicit zoom, not focus (#2157) — Tab must never
+  // reflow the row the user is reading. `focusExpandEnabled` is the
+  // opt-out (`logTui.focusExpand`) that restores the old
+  // auto-widen-on-focus behavior for users who want it back.
+  const zoomedPane = state.zoomedPane
+    ? PANE_BY_FOCUS[state.zoomedPane]
+    : focusExpandEnabled && state.focus !== 'commits'
+      ? PANE_BY_FOCUS[state.focus]
+      : undefined
+
   const layout = getLogInkLayout({
     columns: windowSize.columns || process.stdout.columns || LOG_INK_DEFAULT_COLUMNS,
     rows: windowSize.rows || process.stdout.rows || LOG_INK_DEFAULT_ROWS,
     sidebarFocused: state.focus === 'sidebar',
     inspectorFocused: state.focus === 'detail',
     helpOverlayActive: state.showHelp,
+    zoomedPane,
     forcedPane,
   })
 
