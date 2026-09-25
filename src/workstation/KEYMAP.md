@@ -149,6 +149,7 @@ the which-key overlay lists them live when you press `g`.
 
 | Chord | Jumps to |
 |-------|----------|
+| `g g` | **Jump to top** (action, not nav) — moves the commit-list cursor to the first row; `G` jumps to the bottom. |
 | `g h` | History |
 | `g s` | Status (staging) |
 | `g d` | Diff (worktree) |
@@ -234,6 +235,7 @@ The hunk is the unit of action here.
 | `[` / `]` | Previous / next hunk |
 | `c` | Cherry-pick the cursored file into the worktree |
 | `H` | Apply the cursored hunk to the worktree |
+| `g H` | Apply the cursored hunk to the index (`git apply --cached`) |
 | `d` | Toggle unified / split |
 
 ### Diff — stash (read-only)
@@ -242,8 +244,9 @@ The hunk is the unit of action here.
 |-----|--------|
 | `j`/`k` | Line-scroll the diff body |
 | `[` / `]` | Previous / next **file** (stash diffs index by file) |
-| `c` | Restore the cursored file from the stash |
+| `c` | Cherry-pick the cursored file from the stash into the worktree |
 | `H` | Apply the cursored hunk to the worktree |
+| `g H` | Apply the cursored hunk to the index (`git apply --cached`) |
 | `o` | Open the file in `$EDITOR` |
 | `d` | Toggle unified / split |
 
@@ -281,6 +284,9 @@ No cherry-pick / hunk-apply / `$EDITOR` here — the patch's files live on the P
 
 ### Branches
 
+Also fires from the branches **sidebar tab** when it's focused, acting on the
+cursored row there too.
+
 | Key | Action |
 |-----|--------|
 | `Enter` | Check out |
@@ -288,11 +294,16 @@ No cherry-pick / hunk-apply / `$EDITOR` here — the patch's files live on the P
 | `R` | Rename (prompt) |
 | `D` | Delete (confirm) |
 | `u` | Set upstream (prompt) |
-| `F` / `U` / `P` | Fetch / pull / push the branch |
-| `S` | Sync the current branch (pull + push) — branches **view** only, not the sidebar tab (#2155) |
+| `F` / `U` / `P` | Fetch / pull / push the **cursored** branch — `P` opens a 1-key choice: `p` normal push · `f` force-with-lease |
+| `M` | Merge the cursored branch into the current branch (confirm) |
+| `Z` | Reset the current branch to the cursored ref — 1-key mode choice: `s` soft · `m` mixed · `h` hard |
+| `S` | Sync the cursored branch (pull, then push) — branches **view** only, not the sidebar tab (#2155) |
 | `r` | Rebase the current branch onto the cursored branch (confirm) — branches **view** only, not the sidebar tab; the sidebar footer doesn't advertise it, so sidebar focus falls through to the global refresh instead (#2155) |
 | `s` | Cycle the branch sort mode |
 | `m` | Mark / unmark compare base |
+| `x` | Mark / unmark the cursored branch (auto-advances); marked branches act as a batch for `D` |
+| `v` | Anchor a range selection at the cursored branch (`j`/`k` extends; `v` again clears); the range acts as a batch for `D` |
+| `y` | Yank the cursored branch name |
 
 ### Tags
 
@@ -300,7 +311,8 @@ No cherry-pick / hunk-apply / `$EDITOR` here — the patch's files live on the P
 |-----|--------|
 | `+` | Create tag (prompt) |
 | `P` | Push tag to origin |
-| `T` / `R` | Delete tag (remote) |
+| `T` | Delete the tag locally (confirm) |
+| `R` | Delete the tag on the remote (confirm) |
 | `m` | Mark / unmark compare base |
 
 ### Stashes
@@ -350,6 +362,8 @@ While AI proposals are open (after `M`):
 | `Enter` | Open the PR's diff (triage; `gh pr diff <n>`, cached per number) |
 | `C` | Check the PR's branch out locally (triage; `gh pr checkout <n>`) — the global create-PR `C` is repurposed on this view |
 | `m` | Merge (1-key strategy choice: `m` merge · `s` squash · `r` rebase) |
+| `M` | Enable auto-merge (same 1-key strategy choice as `m`; merges automatically once checks pass) |
+| `K` | Re-run failed checks (fires directly, no confirm) |
 | `a` | Approve (confirm) |
 | `d` | Mark ready for review (confirm; `gh pr ready`) |
 | `X` | Reopen (confirm) |
@@ -408,22 +422,25 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 
 | Key | Meanings by context |
 |-----|---------------------|
-| `c` | history → cherry-pick commit · commit/stash diff → cherry-pick/restore file · status/diff/compose → commit · PR/PR-triage → comment · issues → comment |
+| `c` | history → cherry-pick commit · commit/stash diff → cherry-pick file · status/diff/compose → commit · PR/PR-triage → comment · issues → comment |
 | `C` | conflicts → continue operation · PR triage / PR diff → **checkout PR** (#1363) · compose → *blocked* (guard against fat-finger PR-create) · elsewhere → create PR |
-| `R` | history → revert · branches → rename · tags → delete-remote · PR/PR-triage → request changes · bisect → run command |
+| `R` | history → revert · branches → rename · tags → delete tag (remote) · PR/PR-triage → request changes · bisect → run command |
 | `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve · compose → **amend HEAD** (confirm; #1350) |
 | `m` | branches/tags/history (compare flow) → mark compare base · PR/PR-triage → merge |
+| `M` | conflicts → AI conflict resolution · branches → merge cursored branch into current · PR/PR-triage → enable auto-merge · elsewhere → global AI conflict help |
 | `i` | status → open `.gitignore` picker · history → interactive rebase |
 | `S` | status/diff/compose → commit-split flow · branches **view** → sync (pull + push) cursored branch · blame/file-history/rebase → **unbound** (warns; #2155) · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
 | `r` | branches **view** → rebase current onto cursored branch (confirm) · elsewhere (including the branches sidebar tab) → global refresh (#2155) |
-| `P` | branches → push branch · tags → push tag (takes precedence over the global push) |
+| `P` | branches → push the cursored branch (1-key normal/force-with-lease choice) · tags → push tag (takes precedence over the global push) |
 | `D` | worktrees → remove worktree + branch · branches → delete branch |
 | `d` | diff → toggle unified/side-by-side · rebase plan → retag drop · PR/PR-triage → mark ready for review (#1933) |
-| `x` / `X` | PR → close · PR/PR-triage `X` → **reopen** (#1933) · issues → close / reopen · stashes → drop (`X`) |
+| `x` / `X` | PR → close · PR/PR-triage `X` → **reopen** (#1933) · issues → close / reopen · stashes → drop (`X`) · branches `x` → mark / unmark for batch delete |
 | `L` | history/branches → generate changelog · PR-triage/issues → add label |
 | `f` | history → fixup staged into cursored commit · PR-triage → cycle PR filter · issues → cycle issue filter |
 | `o` | status/diff/conflicts → open file in `$EDITOR` (consistent — different file resolution only) |
 | `y` | bisect → mark good · conflicts (AI proposals open) → accept proposal · elsewhere → yank (`g` stays the chord prefix everywhere — bisect used to shadow it and `gh` silently marked the candidate good) |
+| `T` | tags → delete the tag locally · `gT` (chord, history) → create a tag at the cursored commit |
+| `Z` | history → reset branch tip to the cursored commit (1-key mode choice) · branches → reset the current branch to the cursored ref (1-key mode choice) |
 | `[` / `]` | worktree diff → hunk · commit diff → hunk · stash/PR diff → **file** · sidebar/inspector focus → cycle tab |
 
 The three highest-risk overloads, because they're guard-heavy or
