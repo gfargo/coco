@@ -1,8 +1,13 @@
 /**
  * Title-bar renderer. Surfaces the workstation's identity + navigation
- * state as a row of small visually-distinct chips:
+ * state as a single borderless line of small visually-distinct chips:
  *
  *   coco · gfargo/coco · ⎇ main · ✓ clean · [NORMAL]
+ *
+ * No border: the terminal edge already frames the top of the screen and
+ * the panes below draw their own borders, so a boxed header separated
+ * nothing — see #2156. Dropping it reclaims 2 rows of body height at the
+ * 80×24 floor.
  *
  * The PR chip is appended only when a pull request exists (e.g.
  * `· ⊠ PR #1234 OPEN`); there's no "no PR" placeholder chip.
@@ -145,14 +150,13 @@ export function createLogInkHeader(
     })
 
     // Truncation budget. Header line gets the full terminal width minus
-    // the box's horizontal padding (2 cells) and a small safety margin.
-    const budget = Math.max(0, columns - 4)
+    // the box's horizontal padding (2 cells) — there's no border to
+    // budget for since the header renders borderless.
+    const budget = Math.max(0, columns - 2)
     const chipsWidth = measureHeaderChipsWidth(chips)
 
     return h(Box, {
-      borderColor: theme.colors.border,
-      borderStyle: theme.borderStyle,
-      height: 3,
+      height: 1,
       paddingX: 1,
     },
     chipsWidth <= budget

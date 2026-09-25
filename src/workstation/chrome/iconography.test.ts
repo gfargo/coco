@@ -282,6 +282,13 @@ describe('log Ink iconography', () => {
       expect(color).toBe('magenta')
     })
 
+    it('falls back to the theme accent for MERGED on hex presets without a merged token', () => {
+      const dracula = createLogInkTheme({ preset: 'dracula', env: { COLORTERM: 'truecolor' } })
+      const { color } = getPullRequestStateGlyph({ state: 'MERGED', isDraft: false }, dracula)
+      expect(color).toBe(dracula.colors.accent)
+      expect(color).toBe('#bd93f9')
+    })
+
     it('maps CLOSED to a red ×', () => {
       const { glyph, color } = getPullRequestStateGlyph(
         { state: 'CLOSED', isDraft: false },

@@ -15,7 +15,24 @@ export type LogInkThemeColors = {
   gitAdded?: string
   gitDeleted?: string
   gitModified?: string
+  /**
+   * Optional explicit commit-graph lane colors (up to 5). When a preset
+   * doesn't define these, `getLanePalette` derives a palette from its
+   * other tokens instead of falling back to a fixed hex list, so every
+   * preset's lanes follow its own palette (see `chrome/graphLanes.ts`).
+   */
+  graphLane1?: string
+  graphLane2?: string
+  graphLane3?: string
+  graphLane4?: string
+  graphLane5?: string
   info?: string
+  /**
+   * Merged pull-request badge color. Optional: most presets don't define a
+   * dedicated purple/magenta slot, so callers fall back to `accent` when
+   * this is unset rather than hand-picking a color for every theme.
+   */
+  merged?: string
   muted?: string
   selection?: string
   /**

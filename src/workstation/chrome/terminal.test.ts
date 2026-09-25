@@ -23,7 +23,7 @@ describe('log Ink terminal hygiene', () => {
 
     expect(getLogInkRenderOptions({ input, output, error })).toEqual({
       alternateScreen: true,
-      exitOnCtrlC: true,
+      exitOnCtrlC: false,
       patchConsole: false,
       stdin: input,
       stdout: output,

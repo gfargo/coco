@@ -65,4 +65,14 @@ describe('useOnboarding', () => {
     expect(setShowOnboarding).toHaveBeenCalledWith(false)
     expect(markOnboardingSeenMock).toHaveBeenCalledTimes(1)
   })
+
+  it('showOnboardingOverlay re-shows the overlay without touching the seen-marker', () => {
+    hasSeenOnboardingMock.mockReturnValue(true)
+    const { React, setShowOnboarding } = makeReact()
+
+    useOnboarding(React).showOnboardingOverlay()
+
+    expect(setShowOnboarding).toHaveBeenCalledWith(true)
+    expect(markOnboardingSeenMock).not.toHaveBeenCalled()
+  })
 })

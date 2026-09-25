@@ -27,13 +27,16 @@ import { handleConflictsInput } from '../surfaces/conflicts/input'
 import { handleFileHistoryInput } from '../surfaces/fileHistory/input'
 import { handleRebaseInput } from '../surfaces/rebase/input'
 import { handleOverlayInput } from './overlayInput'
+import { resolveQuitEvents } from './quitGuard'
 
 export type LogInkInputKey = {
   backspace?: boolean
   ctrl?: boolean
   delete?: boolean
   downArrow?: boolean
+  end?: boolean
   escape?: boolean
+  home?: boolean
   leftArrow?: boolean
   meta?: boolean
   pageDown?: boolean
@@ -81,6 +84,7 @@ export type LogInkInputEvent =
   | { type: 'yankFromActiveView'; short?: boolean }
   | { type: 'yankText'; value: string; label: string }
   | { type: 'applyThemePreset'; preset: string }
+  | { type: 'showOnboarding' }
   // Open the "add to .gitignore" picker over the cursored worktree
   // file. Carries no path — the runtime resolves the cursored file (it
   // owns the selection→file mapping) and dispatches `openGitignorePicker`
@@ -370,6 +374,205 @@ function resolveMoveTargetId(
 }
 
 /**
+ * Resolve the events for a top/bottom edge jump (Home/End, and `gg`/`G`
+ * once routed through here). Mirrors the ↑/↓ (`k`/`j`) movement ladder
+ * below, branch for branch, substituting a delta of ±the target list's
+ * length for ±1 — `clampIndex` (and the `moveWorktreeFile` /
+ * `pageWorktreeDiff` / `pageDetailPreview` reducers, which clamp the
+ * same way) lands an over-large delta exactly on the edge, so no
+ * per-branch min/max math is needed here.
+ *
+ * Falls back to the generic `moveToTop`/`moveToBottom` (the HISTORY
+ * cursor) when no more specific surface claims the jump — same
+ * fallback the old `gg`/`G` handlers used before this helper existed.
+ */
+function resolveEdgeJumpEvents(
+  state: LogInkState,
+  context: LogInkInputContext,
+  edge: 'top' | 'bottom'
+): LogInkInputEvent[] {
+  const sign = edge === 'top' ? -1 : 1
+
+  if (state.focus === 'detail' && state.inspectorTab === 'actions' && context.inspectorActionCount) {
+    return [action({
+      type: 'moveInspectorAction',
+      delta: sign * context.inspectorActionCount,
+      actionCount: context.inspectorActionCount,
+    })]
+  }
+
+  if (state.focus === 'detail' && context.detailFileCount) {
+    return [action({
+      type: 'moveDetailFile',
+      delta: sign * context.detailFileCount,
+      fileCount: context.detailFileCount,
+    })]
+  }
+
+  if (state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
+    return [action({
+      type: 'moveWorktreeFile',
+      delta: sign * context.worktreeFileCount,
+      fileCount: context.worktreeFileCount,
+    })]
+  }
+
+  if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
+    return [action({
+      type: 'pageWorktreeDiff',
+      delta: sign * context.worktreeDiffLineCount,
+      lineCount: context.worktreeDiffLineCount,
+      hunkOffsets: context.worktreeHunkOffsets,
+    })]
+  }
+
+  if (state.activeView === 'diff' && context.previewLineCount) {
+    return [action({
+      type: 'pageDetailPreview',
+      delta: sign * context.previewLineCount,
+      previewLineCount: context.previewLineCount,
+    })]
+  }
+
+  const blameJumpEvents = handleBlameInput(state, '', {}, context, edge === 'top' ? 'jump-top' : 'jump-bottom')
+  if (blameJumpEvents) {
+    return blameJumpEvents
+  }
+
+  const fileHistoryJumpEvents = handleFileHistoryInput(state, '', {}, context, edge === 'top' ? 'jump-top' : 'jump-bottom')
+  if (fileHistoryJumpEvents) {
+    return fileHistoryJumpEvents
+  }
+
+  if (state.activeView === 'changelog') {
+    return context.changelogLineCount
+      ? [action({
+        type: 'pageChangelog',
+        delta: sign * context.changelogLineCount,
+        lineCount: context.changelogLineCount,
+      })]
+      : []
+  }
+
+  // Sidebar header focus (review follow-up, OSS-2782): mirrors the ↑/↓
+  // ladder's header handling above. Without this, an edge jump while the
+  // header is focused would move the underlying branch/tag/stash/worktree
+  // selection (those reducers don't clear the flag, unlike moveWorktreeFile
+  // for the status group) but leave the header rendered as focused — so
+  // Enter would then misfire into the dedicated drill-in view instead of
+  // the in-sidebar primary action.
+  if (state.focus === 'sidebar' && state.sidebarHeaderFocused) {
+    if (edge === 'top') {
+      // Already the topmost position — matches ↑'s no-op when the header
+      // is already focused.
+      return []
+    }
+    // Bottom: drop header focus, then resolve the same jump again so it
+    // falls through to the list-move branch below and lands on the last
+    // entry of whichever list is active.
+    return [
+      action({ type: 'setSidebarHeaderFocused', value: false }),
+      ...resolveEdgeJumpEvents({ ...state, sidebarHeaderFocused: false }, context, 'bottom'),
+    ]
+  }
+
+  if (isBranchActionTarget(state) && context.branchCount) {
+    return [action({
+      type: 'moveBranch',
+      delta: sign * context.branchCount,
+      count: context.branchCount,
+      id: resolveMoveTargetId(context.branchIds, state.selectedBranchIndex, sign * context.branchCount, context.branchCount),
+    })]
+  }
+
+  if (isTagActionTarget(state) && context.tagCount) {
+    return [action({
+      type: 'moveTag',
+      delta: sign * context.tagCount,
+      count: context.tagCount,
+      id: resolveMoveTargetId(context.tagIds, state.selectedTagIndex, sign * context.tagCount, context.tagCount),
+    })]
+  }
+
+  if (isStashActionTarget(state) && context.stashCount) {
+    return [action({
+      type: 'moveStash',
+      delta: sign * context.stashCount,
+      count: context.stashCount,
+      id: resolveMoveTargetId(context.stashIds, state.selectedStashIndex, sign * context.stashCount, context.stashCount),
+    })]
+  }
+
+  if (isReflogActionTarget(state) && context.reflogCount) {
+    return [action({ type: 'moveReflog', delta: sign * context.reflogCount, count: context.reflogCount })]
+  }
+
+  if (isRemotesActionTarget(state) && context.remoteCount) {
+    return [action({
+      type: 'moveRemote',
+      delta: sign * context.remoteCount,
+      count: context.remoteCount,
+      id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, sign * context.remoteCount, context.remoteCount),
+    })]
+  }
+
+  if (isSubmodulesActionTarget(state) && context.submoduleCount) {
+    return [action({
+      type: 'moveSubmodule',
+      delta: sign * context.submoduleCount,
+      count: context.submoduleCount,
+      id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, sign * context.submoduleCount, context.submoduleCount),
+    })]
+  }
+
+  if (isIssueActionTarget(state) && context.issueCount) {
+    return [action({
+      type: 'moveIssue',
+      delta: sign * context.issueCount,
+      count: context.issueCount,
+      id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, sign * context.issueCount, context.issueCount),
+    })]
+  }
+
+  if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
+    return [action({
+      type: 'movePullRequestTriage',
+      delta: sign * context.pullRequestTriageCount,
+      count: context.pullRequestTriageCount,
+      id: resolveMoveTargetId(
+        context.pullRequestTriageListIds,
+        state.selectedPullRequestTriageIndex,
+        sign * context.pullRequestTriageCount,
+        context.pullRequestTriageCount,
+      ),
+    })]
+  }
+
+  if (isWorktreeActionTarget(state) && context.worktreeListCount) {
+    return [action({
+      type: 'moveWorktreeListEntry',
+      delta: sign * context.worktreeListCount,
+      count: context.worktreeListCount,
+      id: resolveMoveTargetId(context.worktreeListIds, state.selectedWorktreeListIndex, sign * context.worktreeListCount, context.worktreeListCount),
+    })]
+  }
+
+  const conflictsJumpEvents = handleConflictsInput(state, '', {}, context, edge === 'top' ? 'jump-top' : 'jump-bottom')
+  if (conflictsJumpEvents) {
+    return conflictsJumpEvents
+  }
+
+  return [
+    action(edge === 'top' ? { type: 'moveToTop' } : { type: 'moveToBottom' }),
+    action({
+      type: 'setStatus',
+      value: edge === 'top' ? 'jumped to first commit' : 'jumped to last commit',
+      ttl: 'echo',
+    }),
+  ]
+}
+
+/**
  * Resolve which inspector action context applies for the current
  * state. Today only history commits expose actions in the inspector
  * (the renderer hard-coded `'history-commit'`); future PRs can fan
@@ -506,6 +709,17 @@ function isBranchActionTarget(state: LogInkState): boolean {
     (state.focus === 'sidebar' && state.sidebarTab === 'branches')
 }
 
+/**
+ * The promoted-view half of `isBranchActionTarget`, without the sidebar
+ * fallback. Use this for ops that `branchesHints` advertises (#2155) but
+ * the sidebar footer does not — inheriting them onto the sidebar tab turns
+ * a keystroke pressed on some unrelated view (the sidebar can be focused
+ * from anywhere) into a surprise action the footer never mentioned.
+ */
+function isBranchesViewTarget(state: LogInkState): boolean {
+  return state.activeView === 'branches' && state.focus === 'commits'
+}
+
 function isTagActionTarget(state: LogInkState): boolean {
   return (state.activeView === 'tags' && state.focus === 'commits') ||
     (state.focus === 'sidebar' && state.sidebarTab === 'tags')
@@ -587,6 +801,19 @@ const CREATE_STASH_VIEWS: readonly LogInkView[] = [
   'pull-request-triage', 'issues', 'conflicts', 'reflog', 'bisect',
   'changelog', 'submodules', 'remotes',
 ]
+// The mutating registry-fallback keys (S/U/P — sync / pull / push the
+// current branch) fire EXCEPT on blame / file-history / rebase (#2155).
+// Those three views have no binding for S/U/P at all — the keys only
+// reach a workflow there because the generic registry-by-key fallback at
+// the bottom of this file doesn't know which views opted in. `sync-branch`
+// in particular has `requiresConfirmation: false`, so an unbound `S` while
+// reading blame silently pulled and pushed the current branch.
+const REMOTE_OP_FALLBACK_VIEWS: readonly LogInkView[] = [
+  'history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash',
+  'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'conflicts',
+  'reflog', 'bisect', 'changelog', 'submodules', 'remotes',
+]
+const REMOTE_OP_FALLBACK_KEYS: ReadonlySet<string> = new Set(['S', 'U', 'P'])
 
 /** True when bare `C` should create a PR in the active view. */
 export function isCreatePrView(view: LogInkView): boolean {
@@ -596,6 +823,11 @@ export function isCreatePrView(view: LogInkView): boolean {
 /** True when bare `S` should create a stash in the active view. */
 export function isCreateStashView(view: LogInkView): boolean {
   return CREATE_STASH_VIEWS.includes(view)
+}
+
+/** True when the S/U/P registry fallback (sync/pull/push current branch) may fire on this view. */
+export function isRemoteOpFallbackView(view: LogInkView): boolean {
+  return REMOTE_OP_FALLBACK_VIEWS.includes(view)
 }
 
 /**
@@ -716,7 +948,13 @@ function getSidebarItemCount(
  */
 export function getLogInkPaletteExecuteEvents(
   command: LogInkPaletteCommand,
-  state: LogInkState
+  state: LogInkState,
+  // Optional (review follow-up, OSS-2782): only `moveToTop`/`moveToBottom`
+  // consult it, to reuse the same per-view `resolveEdgeJumpEvents` the
+  // keyboard route uses instead of hard-coding the HISTORY-only jump. Every
+  // `LogInkInputContext` field is optional, so omitting it (existing call
+  // sites / tests) degrades to that same HISTORY-only jump as before.
+  context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
   if (command.kind === 'workflow') {
     if (command.requiresConfirmation) {
@@ -742,19 +980,11 @@ export function getLogInkPaletteExecuteEvents(
     case 'pageDown':
       return [action({ type: 'page', delta: 10 })]
     case 'moveToTop':
-      return [
-        action({ type: 'moveToTop' }),
-        action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
-      ]
+      // Same per-view jump `gg`/Home resolve to (#OSS-2782 review) — not a
+      // hard-coded history-only jump, so the palette matches the keyboard.
+      return resolveEdgeJumpEvents(state, context, 'top')
     case 'moveToBottom':
-      return [
-        action({ type: 'moveToBottom' }),
-        action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
-      ]
-    case 'nextMatch':
-      return [action({ type: 'move', delta: 1 })]
-    case 'previousMatch':
-      return [action({ type: 'move', delta: -1 })]
+      return resolveEdgeJumpEvents(state, context, 'bottom')
     case 'previousSidebarTab':
       return [action({ type: 'previousSidebarTab' })]
     case 'nextSidebarTab':
@@ -883,6 +1113,10 @@ export function getLogInkPaletteExecuteEvents(
       // Palette closes on execute (toggleCommandPalette runs first), then
       // this opens the per-view which-key strip (#1137).
       return [action({ type: 'toggleViewKeys' })]
+    case 'showWelcome':
+      // Palette closes on execute (toggleCommandPalette runs first), then
+      // this replays the first-run onboarding overlay (OSS-2782).
+      return [{ type: 'showOnboarding' }]
     case 'openProjectConfig':
       return [{ type: 'openConfigInEditor', scope: 'project' }]
     case 'openGlobalConfig':
@@ -948,10 +1182,7 @@ export function getLogInkPaletteExecuteEvents(
       // workflow action lookup below.
       return []
     case 'quit':
-      if (hasUnsavedComposeDraft(state)) {
-        return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
-      }
-      return [{ type: 'exit' }]
+      return resolveQuitEvents(state)
     case 'clearSearch':
       return [action({ type: 'clearFilter' })]
     case 'cycleSort':
@@ -972,6 +1203,12 @@ export function getLogInkPaletteExecuteEvents(
       // would. Empty active views (no commits / no branches / etc.) are
       // surfaced by the runtime as a "Nothing to yank" status.
       return [{ type: 'yankFromActiveView' }]
+    // `viewMergeIntoCurrent` / `viewResetToBranch` / `viewSyncBranch` /
+    // `viewRebaseOnto` / `viewApplyHunkWorktree` / `viewApplyHunkIndex`
+    // fall through to `default` deliberately: each needs a payload
+    // (cursored branch, extracted hunk patch) the palette has no live
+    // context to resolve, so palette execution is a documented no-op —
+    // the keystroke path (branches view / diff view) is the real entry.
     default:
       return []
   }
@@ -1085,20 +1322,6 @@ const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '3': 'tags',
   '4': 'stashes',
   '5': 'worktrees',
-}
-
-/**
- * Returns true when the compose surface holds an unsaved commit message
- * (any text in summary or body and no in-flight AI draft). Used by the
- * quit confirmation flow (P2.3) so users can't lose drafts via a stray
- * `q` / Ctrl+C.
- */
-function hasUnsavedComposeDraft(state: LogInkState): boolean {
-  const compose = state.commitCompose
-  if (compose.loading) {
-    return false
-  }
-  return Boolean(compose.summary.trim() || compose.body.trim())
 }
 
 /**
@@ -1270,11 +1493,16 @@ export function getLogInkInputEvents(
   key: LogInkInputKey = {},
   context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
+  // Ink's parseKeypress always resolves a raw Ctrl+C byte to name 'c'
+  // (see node_modules/ink/build/parse-keypress.js), so `inputValue === 'c'`
+  // is the only real Ctrl+C signal. Matching on `key.ctrl` with an empty
+  // `inputValue` looked like a defensive net for "some terminals", but
+  // Ink blanks `input` for every ctrl-modified non-alphanumeric key
+  // (Ctrl+Left/Right/Up/Down, Ctrl+Home/End, Ctrl+Delete, ...) too — that
+  // wider match resolved the quit guard on those keystrokes instead of
+  // letting them fall through to normal handling.
   if (key.ctrl && inputValue === 'c') {
-    if (hasUnsavedComposeDraft(state) && !state.pendingConfirmationId) {
-      return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
-    }
-    return [{ type: 'exit' }]
+    return resolveQuitEvents(state)
   }
 
   // Input prompt is the most modal — when active, every keystroke routes
@@ -1361,6 +1589,30 @@ export function getLogInkInputEvents(
         ]
       }
       if (option.workflowId) {
+        // OSS-2796 — a `destructive: true` option must not run on the
+        // single keypress that selects it. `h` is vim's move-left; a
+        // reflexive Z→h discarded the working tree with no y-confirm,
+        // and `--hard` loses uncommitted work the undo stack (`gu`)
+        // can't recreate. Route the pick into the same y/n gate every
+        // other destructive workflow uses; the mode/strategy rides
+        // along as the confirmation payload, which the y-handler below
+        // forwards to runWorkflowAction. `setPendingConfirmation`
+        // clears pendingChoice itself (#1342), so the choice overlay
+        // closes without a separate setPendingChoice dispatch here.
+        // `keepStatusOnDismiss` carries the choice prompt's own flag
+        // through so declining the confirmation doesn't clobber a
+        // sticky git-error status the choice was raised on top of
+        // (#1360) — see the pendingConfirmationId n/Esc handler below.
+        if (option.destructive) {
+          return [
+            action({
+              type: 'setPendingConfirmation',
+              value: option.workflowId,
+              payload: option.payload,
+              keepStatusOnDismiss: state.pendingChoice.keepStatusOnDismiss,
+            }),
+          ]
+        }
         // The workflow runner owns the live context + clears any
         // conflict state once it resolves. Options may carry a payload
         // (#1351 — reset mode, merge strategy).
@@ -1441,10 +1693,25 @@ export function getLogInkInputEvents(
         ]
       }
       if (workflowAction?.id === 'discard-rebase-plan') {
+        // OSS-2795 — the quit guard reuses this same confirmation to
+        // discard an edited rebase plan on the way out (`payload:
+        // 'quit'`), distinct from the Esc-triggered "pop back to the
+        // previous view" flow this id was originally built for.
+        return state.pendingConfirmationPayload === 'quit'
+          ? [
+              action({ type: 'setPendingConfirmation', value: undefined }),
+              { type: 'exit' },
+            ]
+          : [
+              action({ type: 'setPendingConfirmation', value: undefined }),
+              action({ type: 'clearRebasePlan' }),
+              action({ type: 'popView' }),
+            ]
+      }
+      if (workflowAction?.id === 'quit-during-split-apply') {
         return [
           action({ type: 'setPendingConfirmation', value: undefined }),
-          action({ type: 'clearRebasePlan' }),
-          action({ type: 'popView' }),
+          { type: 'exit' },
         ]
       }
 
@@ -1466,12 +1733,24 @@ export function getLogInkInputEvents(
     }
 
     if (inputValue === 'n' || key.escape) {
+      // OSS-2796 — mirror of the pendingChoice keepStatusOnDismiss check
+      // above: a destructive choice option routed here (Z→h, P→f, …)
+      // carries its origin prompt's keepStatusOnDismiss flag (#1360).
+      // Declining must leave the sticky git-error status alone, same as
+      // declining the choice prompt directly would have.
+      if (state.pendingConfirmationKeepStatusOnDismiss) {
+        return [action({ type: 'setPendingConfirmation', value: undefined })]
+      }
       // #1451 — per-id cancel messages for the unified confirmation system.
       const cancelMessage =
         state.pendingConfirmationId === 'discard-draft'
-          ? 'kept draft — press q again to quit without saving'
+          ? 'kept draft — press y on the next prompt to quit without saving'
           : state.pendingConfirmationId === 'discard-rebase-plan'
-          ? 'kept rebase plan'
+          ? state.pendingConfirmationPayload === 'quit'
+            ? 'kept rebase plan — press y on the next prompt to quit without saving'
+            : 'kept rebase plan'
+          : state.pendingConfirmationId === 'quit-during-split-apply'
+          ? 'split apply still running'
           : state.pendingConfirmationId === 'revert-file' ||
             state.pendingConfirmationId === 'revert-hunk' ||
             state.pendingConfirmationId === 'discard-lines'
@@ -1706,11 +1985,18 @@ export function getLogInkInputEvents(
     }
 
     // `q` quits from the overlay like it does from help / view-keys
-    // (#1348) — EXCEPT mid-apply, where quitting would abandon a
-    // half-applied split. Loading is safe to quit from (same soft-
-    // cancel semantics as Esc).
-    if (inputValue === 'q' && state.splitPlan.status !== 'applying') {
-      return [{ type: 'cancelCommitSplit' }, { type: 'exit' }]
+    // (#1348), routed through the same guard as every other exit path
+    // (OSS-2795). Mid-apply, the guard itself raises the
+    // quit-during-split-apply confirm instead of an immediate exit, so
+    // quitting can't abandon a half-applied split; only prepend the
+    // plan cancel when the guard actually resolves to an exit —
+    // otherwise declining the confirm would have silently killed the
+    // plan already.
+    if (inputValue === 'q') {
+      const quitEvents = resolveQuitEvents(state)
+      return quitEvents.some((event) => event.type === 'exit')
+        ? [{ type: 'cancelCommitSplit' }, ...quitEvents]
+        : quitEvents
     }
 
     // Apply only fires from the 'ready' state. While loading we have
@@ -1902,10 +2188,7 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === 'q') {
-    if (hasUnsavedComposeDraft(state)) {
-      return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
-    }
-    return [{ type: 'exit' }]
+    return resolveQuitEvents(state)
   }
 
   // `g?` chord (#1137) — open the per-view which-key strip. Placed
@@ -2092,9 +2375,10 @@ export function getLogInkInputEvents(
 
   // `gH` chord: apply the cursored hunk to the index (`git apply
   // --cached`). Sibling of bare `H` which targets the worktree.
-  // Discoverable via the footer hint on diff views and the help
-  // overlay; the explicit chord keeps `H` (single keystroke) for
-  // the more common worktree case.
+  // Discoverable via `?` help, the `:` palette, and the `g`-chord
+  // which-key overlay (both have `LOG_INK_KEY_BINDINGS` entries); the
+  // explicit chord keeps `H` (single keystroke) for the more common
+  // worktree case.
   if (state.pendingKey === 'g' && inputValue === 'H') {
     const events = buildApplyHunkEvents(state, context, 'index')
     if (events.length) {
@@ -2157,6 +2441,17 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // gW — replay the first-run onboarding overlay (OSS-2782). It only shows
+  // once per machine on its own; this is the discoverable way to see it
+  // again short of deleting the seen-marker file. Capital W disambiguates
+  // from bare `W` (remove-worktree, a global mutate key).
+  if (state.pendingKey === 'g' && inputValue === 'W') {
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      { type: 'showOnboarding' },
+    ]
+  }
+
   // Any other key while the chord is armed CANCELS it (which-key
   // semantics: an unknown continuation dismisses the chord without
   // acting). Unmatched keys used to fall through returning [] with the
@@ -2186,34 +2481,9 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
-      // View-local top jumps (#1387): blame / file-history / changelog
-      // advertise gg in the footer, but the generic moveToTop below
-      // only touches the HISTORY cursor — the visible list stayed put
-      // while the hidden selection silently relocated. Blame and
-      // file-history are extracted to `surfaces/blame/input.ts` /
-      // `surfaces/fileHistory/input.ts` (#1722); changelog stays inline
-      // (see the note on `handleChangelogInput` above).
-      const blameJumpTopEvents = handleBlameInput(state, inputValue, key, context, 'jump-top')
-      if (blameJumpTopEvents) {
-        return blameJumpTopEvents
-      }
-      const fileHistoryJumpTopEvents = handleFileHistoryInput(state, inputValue, key, context, 'jump-top')
-      if (fileHistoryJumpTopEvents) {
-        return fileHistoryJumpTopEvents
-      }
-      if (state.activeView === 'changelog') {
-        return context.changelogLineCount
-          ? [action({
-            type: 'pageChangelog',
-            delta: -context.changelogLineCount,
-            lineCount: context.changelogLineCount,
-          })]
-          : []
-      }
-      return [
-        action({ type: 'moveToTop' }),
-        action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
-      ]
+      // View-local top jump (#1387 / OSS-2782): shared with Home below —
+      // see `resolveEdgeJumpEvents`.
+      return resolveEdgeJumpEvents(state, context, 'top')
     }
 
     return [action({ type: 'setPendingKey', value: 'g' })]
@@ -2264,36 +2534,20 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === 'G') {
-    // View-local bottom jumps (#1387) — see the gg mirror above.
-    const blameJumpBottomEvents = handleBlameInput(state, inputValue, key, context, 'jump-bottom')
-    if (blameJumpBottomEvents) {
-      return blameJumpBottomEvents
-    }
-    const fileHistoryJumpBottomEvents = handleFileHistoryInput(state, inputValue, key, context, 'jump-bottom')
-    if (fileHistoryJumpBottomEvents) {
-      return fileHistoryJumpBottomEvents
-    }
-    if (state.activeView === 'changelog') {
-      return context.changelogLineCount
-        ? [action({
-          type: 'pageChangelog',
-          delta: context.changelogLineCount,
-          lineCount: context.changelogLineCount,
-        })]
-        : []
-    }
-    return [
-      action({ type: 'moveToBottom' }),
-      action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
-    ]
+    // View-local bottom jump (#1387 / OSS-2782) — see the gg mirror above.
+    return resolveEdgeJumpEvents(state, context, 'bottom')
   }
 
-  if (inputValue === 'n') {
-    return [action({ type: 'move', delta: 1 })]
+  // Home/End (OSS-2782): the same per-view edge jump as `gg`/`G`, reached
+  // in one keystroke instead of two. Ink resolves these from a wide range
+  // of terminal escape sequences (xterm/iTerm/kitty/Windows Terminal/tmux);
+  // `gg`/`G` remain the portable fallback for terminals that don't.
+  if (key.home) {
+    return resolveEdgeJumpEvents(state, context, 'top')
   }
 
-  if (inputValue === 'N') {
-    return [action({ type: 'move', delta: -1 })]
+  if (key.end) {
+    return resolveEdgeJumpEvents(state, context, 'bottom')
   }
 
   // Per-view branches action: `r` rebases the current branch onto the
@@ -2305,13 +2559,18 @@ export function getLogInkInputEvents(
   //   - detached HEAD (no current branch): nothing to rebase onto a ref
   //   - self-rebase (cursored ref === current branch): a no-op git would
   //     reject anyway, surfaced here as a clear status instead.
-  // Scoped to the branches target so the letter stays free elsewhere
-  // (the global `r` refresh below still fires on every other view). The
-  // confirmation warning names both branches; it's carried as the
-  // pending-confirmation payload and rendered by `renderConfirmationPanel`
-  // — the runtime handler re-resolves both branches off live context, so
-  // it ignores this payload.
-  if (inputValue === 'r' && isBranchActionTarget(state) && context.branchCount) {
+  // Scoped to the branches VIEW only — not the sidebar tab (#2155). Unlike
+  // most per-entity ops, `r` here isn't advertised on the sidebar footer
+  // (`branchesHints` lists it, the sidebar hints don't), so letting sidebar
+  // focus inherit it meant pressing the global refresh key while the
+  // sidebar happened to be on the Branches tab silently became a rebase
+  // confirm prompt instead. The global `r` refresh below still fires on
+  // every other view/focus combination. The confirmation warning names
+  // both branches; it's carried as the pending-confirmation payload and
+  // rendered by `renderConfirmationPanel` — the runtime handler
+  // re-resolves both branches off live context, so it ignores this
+  // payload.
+  if (inputValue === 'r' && isBranchesViewTarget(state) && context.branchCount) {
     const current = context.currentBranch
     const target = context.branchSelectedShortName
     if (!current) {
@@ -2488,10 +2747,10 @@ export function getLogInkInputEvents(
   // vertical axis (↑/↓ below) is "within the active tab's items".
   // [/] still works as a keyboard alternative for users who prefer
   // non-arrow keys.
-  if (key.leftArrow && state.focus === 'sidebar') {
+  if ((key.leftArrow || inputValue === 'h') && state.focus === 'sidebar') {
     return [action({ type: 'previousSidebarTab' })]
   }
-  if (key.rightArrow && state.focus === 'sidebar') {
+  if ((key.rightArrow || inputValue === 'l') && state.focus === 'sidebar') {
     return [action({ type: 'nextSidebarTab' })]
   }
 
@@ -2501,10 +2760,10 @@ export function getLogInkInputEvents(
   // inspector chrome shows ←/→ because the bracketed `[/]` notation
   // reads as "press the / key" — which is the global filter trigger and
   // was making users think the binding was busted.
-  if (key.leftArrow && state.focus === 'detail') {
+  if ((key.leftArrow || inputValue === 'h') && state.focus === 'detail') {
     return [action({ type: 'cycleInspectorTab', delta: -1 })]
   }
-  if (key.rightArrow && state.focus === 'detail') {
+  if ((key.rightArrow || inputValue === 'l') && state.focus === 'detail') {
     return [action({ type: 'cycleInspectorTab', delta: 1 })]
   }
 
@@ -2515,7 +2774,7 @@ export function getLogInkInputEvents(
   // focus) so the user is always on a real file after a jump,
   // mirroring the sidebar's tab-switch landing behavior.
   if (
-    (key.leftArrow || key.rightArrow) &&
+    (key.leftArrow || key.rightArrow || inputValue === 'h' || inputValue === 'l') &&
     state.activeView === 'status' &&
     state.focus === 'commits' &&
     context.statusGroups &&
@@ -2527,7 +2786,7 @@ export function getLogInkInputEvents(
       state.selectedWorktreeFileIndex < group.startIndex + group.count
     )
     const fallback = currentIndex >= 0 ? currentIndex : 0
-    const delta = key.leftArrow ? -1 : 1
+    const delta = (key.leftArrow || inputValue === 'h') ? -1 : 1
     const nextIndex = Math.max(0, Math.min(groups.length - 1, fallback + delta))
     if (nextIndex !== fallback) {
       return [action({ type: 'jumpToStatusGroup', targetIndex: groups[nextIndex].startIndex })]
@@ -3846,8 +4105,9 @@ export function getLogInkInputEvents(
   // Global `L` — generate the changelog for the current branch and
   // push the dedicated `changelog` view. Scoped to history and branches
   // — those are the natural "where am I, what landed here recently"
-  // entry points. Avoids polluting every view's global namespace; the
-  // changelog is reachable from anywhere via `g L` (added in keymap).
+  // entry points. Avoids polluting every view's global namespace; there
+  // is no `g L` chord — `g` then `L` just cancels the chord (see the
+  // chord-cancel fallthrough above).
   if (
     inputValue === 'L' &&
     (state.activeView === 'history' || state.activeView === 'branches')
@@ -4383,7 +4643,12 @@ export function getLogInkInputEvents(
 
     // `S` syncs the cursored branch (pull + push). The upstream guard
     // is enforced by the workflow handler (it needs async git context).
-    if (inputValue === 'S') {
+    // Narrowed to the branches VIEW, not the wider branch-action-target
+    // (#2155): this block runs before the registry fallback below, so
+    // without this narrowing a sidebar-focused `S` on blame / file-history
+    // / rebase would reach `sync-branch` here and bypass the fallback gate
+    // entirely.
+    if (inputValue === 'S' && isBranchesViewTarget(state)) {
       return [{ type: 'runWorkflowAction', id: 'sync-branch' }]
     }
 
@@ -4408,6 +4673,19 @@ export function getLogInkInputEvents(
   // remove (a PR-creation flow launching mid-rebase-plan).
   if (workflowAction?.id === 'create-pr' && !isCreatePrView(state.activeView)) {
     return []
+  }
+
+  // Same idea for the mutating S / U / P fallback (#2155): blame,
+  // file-history and rebase have no binding for these keys, so reaching
+  // here on those views means the user almost certainly meant something
+  // else. `sync-branch` in particular is NOT confirm-gated, so an unbound
+  // `S` there would otherwise pull and push the current branch unasked.
+  if (workflowAction && REMOTE_OP_FALLBACK_KEYS.has(inputValue) && !isRemoteOpFallbackView(state.activeView)) {
+    return [action({
+      type: 'setStatus',
+      value: `${inputValue} isn't bound on the ${state.activeView} view`,
+      kind: 'warning',
+    })]
   }
 
   if (workflowAction?.requiresConfirmation) {

@@ -13,14 +13,14 @@
  * they're built entirely from ASCII bytes) pass through untouched. Any
  * character above that is transliterated via the glyph tables' reverse
  * lookup when known, ASCII-folded when it's an accented Latin letter
- * (`é`→`e`), or replaced with `?` repeated `characterWidth(ch)` times
+ * (`é`→`e`), or replaced with `?` repeated `cellWidth(ch)` times
  * otherwise — preserving the column layout Ink already computed even for
  * glyphs with no direct ASCII counterpart (CJK, emoji).
  */
 
 import { GLYPHS, ASCII_GLYPHS } from '../../lib/ui/glyphs'
 import { SPINNER_FRAMES, ASCII_SPINNER_FRAMES } from './spinner'
-import { characterWidth, cellWidth } from './text'
+import { cellWidth } from './text'
 import { WORKSTATION_GLYPHS, WORKSTATION_ASCII_GLYPHS } from './glyphs'
 
 /**
@@ -103,7 +103,7 @@ function transliterate(text: string): string {
       out += folded
       continue
     }
-    out += '?'.repeat(characterWidth(character))
+    out += '?'.repeat(cellWidth(character))
   }
   return out
 }

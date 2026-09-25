@@ -199,7 +199,10 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'git push --force-with-lease for the cursored branch after a history rewrite.',
       kind: 'destructive',
       requiresConfirmation: true,
-      warning: 'Push was rejected (remote moved). --force-with-lease overwrites the remote branch, but still refuses if it moved since your last fetch.',
+      // OSS-2796 — this is now also reachable voluntarily via P→f in
+      // the push sub-choice, not just as a rejected-push escalation, so
+      // the copy can't assume the push was already rejected.
+      warning: '--force-with-lease overwrites the remote branch to match your local history. Still refuses if the remote moved since your last fetch.',
       targets: 'single',
     },
     {
@@ -400,7 +403,10 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Move the current branch pointer to match the selected ref.',
       kind: 'destructive',
       requiresConfirmation: true,
-      warning: 'Rewrites local history. Use g u to undo if needed.',
+      // OSS-2796 — same mode-aware copy as reset-to-commit above.
+      warning: (state) => state.pendingConfirmationPayload === 'hard'
+        ? 'git reset --hard — ALL uncommitted working-tree changes are discarded. g u restores HEAD, not your changes.'
+        : `git reset --${state.pendingConfirmationPayload || 'mixed'} — moves the branch tip; your changes are kept.`,
       targets: 'single',
     },
     {
@@ -608,6 +614,9 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Merge the current branch\'s pull request (prompts for merge / squash / rebase, then confirms).',
       kind: 'destructive',
       requiresConfirmation: true,
+      // OSS-2796 — the strategy choice rides along as the confirmation
+      // payload; name it so the y-confirm says what's about to land.
+      warning: (state) => `Merges with the "${state.pendingConfirmationPayload || 'merge'}" strategy — lands on the base branch immediately.`,
       targets: 'single',
     },
     {
@@ -720,6 +729,8 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Merge the cursored pull request on the triage list view (prompts for merge / squash / rebase, then confirms).',
       kind: 'destructive',
       requiresConfirmation: true,
+      // OSS-2796 — same strategy-aware copy as merge-pr above.
+      warning: (state) => `Merges with the "${state.pendingConfirmationPayload || 'merge'}" strategy — lands on the base branch immediately.`,
       targets: 'single',
     },
     {
@@ -827,6 +838,13 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Move the current branch tip to the cursored commit (prompts for soft / mixed / hard).',
       kind: 'destructive',
       requiresConfirmation: true,
+      // OSS-2796 — the mode choice (soft/mixed/hard) rides along as the
+      // confirmation payload, so `h` gets its own words: `--hard`
+      // discards uncommitted work that `g u` (which only restores HEAD)
+      // can't bring back.
+      warning: (state) => state.pendingConfirmationPayload === 'hard'
+        ? 'git reset --hard — ALL uncommitted working-tree changes are discarded. g u restores HEAD, not your changes.'
+        : `git reset --${state.pendingConfirmationPayload || 'mixed'} — moves the branch tip; your changes are kept.`,
       targets: 'single',
     },
     {
@@ -1520,7 +1538,23 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       description: 'Leave the rebase view, discarding the edited rebase todo.',
       kind: 'destructive',
       requiresConfirmation: true,
-      warning: 'You have an edited rebase plan. Press y to discard it and leave.',
+      // OSS-2795 — the quit guard raises this same confirmation id when
+      // Ctrl+C / q would quit out from under an edited rebase plan
+      // (payload: 'quit'), so the copy needs to say "quit" rather than
+      // "leave" in that case.
+      warning: (state) => state.pendingConfirmationPayload === 'quit'
+        ? 'You have an edited rebase plan. Press y to discard it and quit.'
+        : 'You have an edited rebase plan. Press y to discard it and leave.',
+      targets: 'single',
+    },
+    {
+      id: 'quit-during-split-apply',
+      key: '',
+      label: 'Quit while a commit split is applying',
+      description: 'Exit the workstation while a commit split is still being applied.',
+      kind: 'destructive',
+      requiresConfirmation: true,
+      warning: 'A commit split is still applying. Press y to quit anyway.',
       targets: 'single',
     },
   ]

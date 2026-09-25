@@ -12,6 +12,8 @@ import {
     getLogInkPaletteCommands,
     getLogInkViewKeyBindings,
 } from './inkKeymap'
+import { en } from '../../lib/i18n/en'
+import { t } from '../../lib/i18n/t'
 
 describe('log Ink keymap', () => {
   it('returns view-aware contextual hints alongside persistent globals', () => {
@@ -370,8 +372,8 @@ describe('log Ink keymap', () => {
 
     expect(helpText).toContain('/ Filter commits')
     expect(helpText).toContain('\\ Toggle compact and full graph display.')
-    expect(helpText).toContain('gg Jump to the first visible commit.')
-    expect(helpText).toContain('G Jump to the last visible commit.')
+    expect(helpText).toContain('gg/home Jump to the top of the current list (Home also works).')
+    expect(helpText).toContain('G/end Jump to the bottom of the current list (End also works).')
     expect(helpText).toContain('z Ask to revert the selected file or hunk, or undo the last operation.')
     expect(helpText).toContain('e Edit the manual commit summary or body inline.')
     expect(helpText).toContain('E Open the current commit draft in $EDITOR (or $VISUAL) for full editing, write-back on save.')
@@ -751,6 +753,35 @@ describe('log Ink keymap', () => {
       const withGc = LOG_INK_KEY_BINDINGS.filter((b) => b.keys.includes('gC'))
       expect(withGc).toHaveLength(1)
       expect(withGc[0].id).toBe('themePicker')
+    })
+  })
+
+  describe('hunk-apply bindings (H / gH, OSS-2781)', () => {
+    it('registers viewApplyHunkWorktree on the bare H key and viewApplyHunkIndex on the gH chord', () => {
+      const worktree = LOG_INK_KEY_BINDINGS.find((b) => b.id === 'viewApplyHunkWorktree')
+      const index = LOG_INK_KEY_BINDINGS.find((b) => b.id === 'viewApplyHunkIndex')
+      expect(worktree).toMatchObject({ keys: ['H'], contexts: ['diff'] })
+      expect(index).toMatchObject({ keys: ['gH'], contexts: ['diff'] })
+    })
+
+    it('surfaces H in the diff view single-key strip (the bare key, not the gH chord)', () => {
+      const bindings = getLogInkViewKeyBindings({ activeView: 'diff', focus: 'commits' })
+      const ids = bindings.map((b) => b.id)
+      expect(ids).toContain('viewApplyHunkWorktree')
+      expect(ids).not.toContain('viewApplyHunkIndex')
+    })
+
+    it('surfaces gH in the g-chord which-key continuations', () => {
+      const continuations = getLogInkChordContinuations('g')
+      const entry = continuations.find((c) => c.key === 'H')
+      expect(entry).toBeDefined()
+      expect(entry!.label).toBe(t(en, 'keymap.binding.viewApplyHunkIndex.label'))
+    })
+
+    it('both are reachable from the command palette', () => {
+      const ids = getLogInkPaletteCommands().map((command) => command.id)
+      expect(ids).toContain('viewApplyHunkWorktree')
+      expect(ids).toContain('viewApplyHunkIndex')
     })
   })
 })

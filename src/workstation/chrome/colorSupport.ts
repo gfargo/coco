@@ -125,3 +125,24 @@ export function readableForegroundFor(bg: string | undefined): string | undefine
   if (luminance === null) return undefined
   return luminance > 0.179 ? '#000000' : '#ffffff'
 }
+
+/**
+ * Shift a `#rrggbb` color toward white (`delta` > 0) or black (`delta` < 0)
+ * by `delta` (-1…1), clamping each channel. Used to derive tint/shade
+ * variants of a theme's own hues for the commit-graph lane palette, instead
+ * of hand-picking hex values per preset. Returns `undefined` for anything
+ * that isn't a 6-digit hex (ANSI-named colors, etc.) — same contract as
+ * `readableForegroundFor`.
+ */
+export function adjustHexLightness(hex: string, delta: number): string | undefined {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim())
+  if (!match) return undefined
+  const int = parseInt(match[1]!, 16)
+  const target = delta >= 0 ? 255 : 0
+  const amount = Math.min(1, Math.abs(delta))
+  const shift = (c: number): number => Math.round(c + (target - c) * amount)
+  const r = shift((int >> 16) & 0xff)
+  const g = shift((int >> 8) & 0xff)
+  const b = shift(int & 0xff)
+  return `#${[r, g, b].map((c) => c.toString(16).padStart(2, '0')).join('')}`
+}
