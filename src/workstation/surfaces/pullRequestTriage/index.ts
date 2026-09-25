@@ -39,7 +39,7 @@ function stateColor(theme: LogInkTheme, state: string, isDraft: boolean): string
     case 'CLOSED':
       return theme.colors.danger
     case 'MERGED':
-      return theme.colors.accent
+      return theme.colors.merged ?? theme.colors.accent
     default:
       return theme.colors.muted
   }
@@ -199,11 +199,11 @@ export function renderPullRequestTriageSurface(
       const branchCap = Math.max(6, Math.min(24, authorBranchBudget - authorCap))
       const authorColWidth = Math.min(
         authorCap,
-        Math.max(...windowed.map((p) => (p.author || '').length), 4)
+        Math.max(...windowed.map((p) => cellWidth(p.author || '')), 4)
       )
       const branchColWidth = Math.min(
         branchCap,
-        Math.max(...windowed.map((p) => p.headRefName.length), 6)
+        Math.max(...windowed.map((p) => cellWidth(p.headRefName)), 6)
       )
 
       bodyLines = windowed.map((pr, offset) => {

@@ -4041,8 +4041,28 @@ export const schema = {
         "gitModified": {
           "type": "string"
         },
+        "graphLane1": {
+          "type": "string",
+          "description": "Optional explicit commit-graph lane colors (up to 5). When a preset doesn't define these, `getLanePalette` derives a palette from its other tokens instead of falling back to a fixed hex list, so every preset's lanes follow its own palette (see `chrome/graphLanes.ts`)."
+        },
+        "graphLane2": {
+          "type": "string"
+        },
+        "graphLane3": {
+          "type": "string"
+        },
+        "graphLane4": {
+          "type": "string"
+        },
+        "graphLane5": {
+          "type": "string"
+        },
         "info": {
           "type": "string"
+        },
+        "merged": {
+          "type": "string",
+          "description": "Merged pull-request badge color. Optional: most presets don't define a dedicated purple/magenta slot, so callers fall back to `accent` when this is unset rather than hand-picking a color for every theme."
         },
         "muted": {
           "type": "string"

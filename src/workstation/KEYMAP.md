@@ -132,14 +132,32 @@ Available in every view (unless an overlay/mode has claimed the keyboard):
 | `=` | Zoom the focused pane's width; press again to restore it (`logTui.focusExpand: true` restores the old Tab-widens behavior instead) |
 | `v` | Peek the sidebar (narrow / single-pane terminals only) — momentary glance, `v`/`Esc` snaps back to where you were |
 | `↑`/`k`, `↓`/`j` | Move selection / scroll |
-| `←`/`→` | Switch sidebar or inspector tab (focus-dependent) |
+| `←`/`→` (`h`/`l`) | Switch sidebar or inspector tab (focus-dependent) — `h`/`l` mirror the arrows wherever they're bound; they're inert everywhere else (text-input modes, overlays, and views where the letters already mean something) |
+| `Home` / `End` | Jump to the top / bottom of the current list view — the one-keystroke equivalent of `gg` / `G` below |
 | `PageUp` / `PageDown` | Page scroll |
-| `n` / `N` | Next / previous search match |
 | `y` / `Y` | Yank identifier (long / short) for the cursored item |
 
 > `<` and `Esc` both walk back, but `Esc` also pops the **repo** stack — that's
 > why the repo breadcrumb shows `← esc` while the view breadcrumb is pure
 > location. The footer's global `< back` covers the common case.
+
+> **`gg`/`G`/`Home`/`End` are per-view now.** They used to move only the
+> HISTORY cursor everywhere except blame / file-history / changelog (which had
+> their own carve-outs) — so on e.g. the branches or diff view, `gg` silently
+> relocated a cursor you couldn't see while the visible list stayed put. All
+> four keys now route through one shared edge-jump resolver
+> (`resolveEdgeJumpEvents` in `inkInput.ts`) that jumps whatever list the
+> cursor is actually on — history, branches, tags, stashes, reflog, remotes,
+> submodules, issues, PR triage, worktrees, conflicts, blame, file-history,
+> the worktree/commit diff scroll, and the changelog scroll — falling back to
+> the history cursor only when none of those match.
+>
+> **Workstation vs. workspace still disagree on `h`/`l`.** Here `l` cycles
+> the sidebar *tab*; in the separate workspace TUI (`surfaces/workspace/`)
+> `l` moves list focus *into* the pane and `h` moves it back out. Adding the
+> aliases here closes the "unbound in one TUI" gap the issue tracked — it
+> does not reconcile the two TUIs' *meaning* of the keys, which stays a
+> separate design call.
 
 ---
 
@@ -150,6 +168,7 @@ the which-key overlay lists them live when you press `g`.
 
 | Chord | Jumps to |
 |-------|----------|
+| `g g` | **Jump to top** (action, not nav) — moves the commit-list cursor to the first row; `G` jumps to the bottom. |
 | `g h` | History |
 | `g s` | Status (staging) |
 | `g d` | Diff (worktree) |
@@ -172,6 +191,7 @@ the which-key overlay lists them live when you press `g`.
 | `g C` | Theme picker (overlay) |
 | `g u` | **Undo last action** (action, not nav) — pops the session-scoped undo stack and reverses the top entry: branch delete (recreate at recorded sha), stash drop (`git stash store`), reset (reset back to the recorded HEAD using the *original* mode), or tag delete (recreate at recorded sha). Not every destructive action is invertible — only these four push an entry. Never touches pushed/remote history; the footer shows a count (`gu undo (N)`) when the stack is non-empty. |
 | `g k` / `g K` | Open the project / global coco config in `$EDITOR` |
+| `g W` | **Show welcome** (action, not nav) — replays the first-run onboarding overlay; also reachable from the `:` palette |
 | `g ?` | **Which-key strip** (overlay, not nav) — surfaces the *single-key* actions available in the current view (the deliberate overloads below), sourced live from `LOG_INK_KEY_BINDINGS`. `?` from the strip expands to the full help; `Esc` closes. The per-view counterpart to this very `g`-chord menu. |
 
 ---
@@ -190,7 +210,7 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `\` | Toggle the graph column |
 | `c` | Cherry-pick the commit |
 | `R` | Revert the commit |
-| `Z` | Reset branch tip here (1-key mode choice: `s` soft · `m` mixed · `h` hard) |
+| `Z` | Reset branch tip here (1-key mode choice: `s` soft · `m` mixed · `h` hard — `h` opens a y/n confirm naming the discarded changes before it runs) |
 | `i` | Open the **rebase plan** surface for `<commit>^..HEAD` (in-TUI interactive rebase; the $EDITOR variant stays in the `:` palette) |
 | `f` | Fixup: commit staged changes as `fixup!` of the cursored commit (confirm; offers immediate autosquash) |
 | `B` | Create branch here |
@@ -235,6 +255,7 @@ The hunk is the unit of action here.
 | `[` / `]` | Previous / next hunk |
 | `c` | Cherry-pick the cursored file into the worktree |
 | `H` | Apply the cursored hunk to the worktree |
+| `g H` | Apply the cursored hunk to the index (`git apply --cached`) |
 | `d` | Toggle unified / split |
 
 ### Diff — stash (read-only)
@@ -243,8 +264,9 @@ The hunk is the unit of action here.
 |-----|--------|
 | `j`/`k` | Line-scroll the diff body |
 | `[` / `]` | Previous / next **file** (stash diffs index by file) |
-| `c` | Restore the cursored file from the stash |
+| `c` | Cherry-pick the cursored file from the stash into the worktree |
 | `H` | Apply the cursored hunk to the worktree |
+| `g H` | Apply the cursored hunk to the index (`git apply --cached`) |
 | `o` | Open the file in `$EDITOR` |
 | `d` | Toggle unified / split |
 
@@ -282,6 +304,9 @@ No cherry-pick / hunk-apply / `$EDITOR` here — the patch's files live on the P
 
 ### Branches
 
+Also fires from the branches **sidebar tab** when it's focused, acting on the
+cursored row there too.
+
 | Key | Action |
 |-----|--------|
 | `Enter` | Check out |
@@ -289,10 +314,16 @@ No cherry-pick / hunk-apply / `$EDITOR` here — the patch's files live on the P
 | `R` | Rename (prompt) |
 | `D` | Delete (confirm) |
 | `u` | Set upstream (prompt) |
-| `F` / `U` / `P` | Fetch / pull / push the branch |
-| `r` | Rebase the current branch onto the cursored branch (confirm) |
+| `F` / `U` / `P` | Fetch / pull / push the **cursored** branch — `P` opens a push sub-choice (`p` normal push · `f` force-push with lease, which opens its own y/n confirm before it runs) |
+| `M` | Merge the cursored branch into the current branch (confirm) |
+| `Z` | Reset the current branch to the cursored ref (1-key mode choice: `s` soft · `m` mixed · `h` hard — `h` opens a y/n confirm naming the discarded changes before it runs) |
+| `S` | Sync the cursored branch (pull, then push) — branches **view** only, not the sidebar tab (#2155) |
+| `r` | Rebase the current branch onto the cursored branch (confirm) — branches **view** only, not the sidebar tab; the sidebar footer doesn't advertise it, so sidebar focus falls through to the global refresh instead (#2155) |
 | `s` | Cycle the branch sort mode |
 | `m` | Mark / unmark compare base |
+| `x` | Mark / unmark the cursored branch (auto-advances); marked branches act as a batch for `D` |
+| `v` | Anchor a range selection at the cursored branch (`j`/`k` extends; `v` again clears); the range acts as a batch for `D` |
+| `y` | Yank the cursored branch name |
 
 ### Tags
 
@@ -300,7 +331,8 @@ No cherry-pick / hunk-apply / `$EDITOR` here — the patch's files live on the P
 |-----|--------|
 | `+` | Create tag (prompt) |
 | `P` | Push tag to origin |
-| `T` / `R` | Delete tag (remote) |
+| `T` | Delete the tag locally (confirm) |
+| `R` | Delete the tag on the remote (confirm) |
 | `m` | Mark / unmark compare base |
 
 ### Stashes
@@ -350,6 +382,8 @@ While AI proposals are open (after `M`):
 | `Enter` | Open the PR's diff (triage; `gh pr diff <n>`, cached per number) |
 | `C` | Check the PR's branch out locally (triage; `gh pr checkout <n>`) — the global create-PR `C` is repurposed on this view |
 | `m` | Merge (1-key strategy choice: `m` merge · `s` squash · `r` rebase) |
+| `M` | Enable auto-merge (same 1-key strategy choice as `m`; merges automatically once checks pass) |
+| `K` | Re-run failed checks (fires directly, no confirm) |
 | `a` | Approve (confirm) |
 | `d` | Mark ready for review (confirm; `gh pr ready`) |
 | `X` | Reopen (confirm) |
@@ -408,21 +442,25 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 
 | Key | Meanings by context |
 |-----|---------------------|
-| `c` | history → cherry-pick commit · commit/stash diff → cherry-pick/restore file · status/diff/compose → commit · PR/PR-triage → comment · issues → comment |
+| `c` | history → cherry-pick commit · commit/stash diff → cherry-pick file · status/diff/compose → commit · PR/PR-triage → comment · issues → comment |
 | `C` | conflicts → continue operation · PR triage / PR diff → **checkout PR** (#1363) · compose → *blocked* (guard against fat-finger PR-create) · elsewhere → create PR |
-| `R` | history → revert · branches → rename · tags → delete-remote · PR/PR-triage → request changes · bisect → run command |
+| `R` | history → revert · branches → rename · tags → delete tag (remote) · PR/PR-triage → request changes · bisect → run command |
 | `a` | status/worktree-diff → stage whole file · stashes → apply · PR/PR-triage → approve · compose → **amend HEAD** (confirm; #1350) |
 | `m` | branches/tags/history (compare flow) → mark compare base · PR/PR-triage → merge |
+| `M` | conflicts → AI conflict resolution · branches → merge cursored branch into current · PR/PR-triage → enable auto-merge · elsewhere → global AI conflict help |
 | `i` | status → open `.gitignore` picker · history → interactive rebase |
-| `S` | status/diff/compose → commit-split flow · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
-| `P` | branches → push branch · tags → push tag (takes precedence over the global push) |
+| `S` | status/diff/compose → commit-split flow · branches **view** → sync (pull + push) cursored branch · blame/file-history/rebase → **unbound** (warns; #2155) · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
+| `r` | branches **view** → rebase current onto cursored branch (confirm) · elsewhere (including the branches sidebar tab) → global refresh (#2155) |
+| `P` | branches → push the cursored branch (1-key normal/force-with-lease choice) · tags → push tag (takes precedence over the global push) |
 | `D` | worktrees → remove worktree + branch · branches → delete branch |
 | `d` | diff → toggle unified/side-by-side · rebase plan → retag drop · PR/PR-triage → mark ready for review (#1933) |
-| `x` / `X` | PR → close · PR/PR-triage `X` → **reopen** (#1933) · issues → close / reopen · stashes → drop (`X`) |
+| `x` / `X` | PR → close · PR/PR-triage `X` → **reopen** (#1933) · issues → close / reopen · stashes → drop (`X`) · branches `x` → mark / unmark for batch delete |
 | `L` | history/branches → generate changelog · PR-triage/issues → add label |
 | `f` | history → fixup staged into cursored commit · PR-triage → cycle PR filter · issues → cycle issue filter |
 | `o` | status/diff/conflicts → open file in `$EDITOR` (consistent — different file resolution only) |
 | `y` | bisect → mark good · conflicts (AI proposals open) → accept proposal · elsewhere → yank (`g` stays the chord prefix everywhere — bisect used to shadow it and `gh` silently marked the candidate good) |
+| `T` | tags → delete the tag locally · `gT` (chord, history) → create a tag at the cursored commit |
+| `Z` | history → reset branch tip to the cursored commit (1-key mode choice) · branches → reset the current branch to the cursored ref (1-key mode choice) |
 | `[` / `]` | worktree diff → hunk · commit diff → hunk · stash/PR diff → **file** · sidebar/inspector focus → cycle tab |
 
 The three highest-risk overloads, because they're guard-heavy or
@@ -504,6 +542,26 @@ subject, `requiresConfirmation: false`), `gZ` stash-all (an empty message
 is read as "quick WIP stash, go"), and the comment/PR-comment flows all
 follow this rule today.
 
+**Carve-out (OSS-2796):** a choice menu is the confirmation only for its
+non-destructive options. A `destructive: true` option — `Z→h` hard reset,
+`P→f` force-push, a merge-strategy pick, `abort-operation`, the
+worktree-conflict removals — still takes an explicit `y` after the pick,
+because the keystroke that selects the option and the keystroke that
+would run an ordinary y-confirm are otherwise the same single keypress
+(`h`, notoriously, is also vim's move-left). `getLogInkInputEvents`
+routes a `destructive: true` pick into `setPendingConfirmation` instead of
+firing `runWorkflowAction` directly; only the follow-up `y` runs the
+workflow. #1867 owns the remaining bypass — non-destructive choice options
+reached *through* a workflow that itself needs gating.
+
+Rerouting through `setPendingConfirmation` carries the origin choice
+prompt's `keepStatusOnDismiss` flag (#1360) along as
+`pendingConfirmationKeepStatusOnDismiss`, so declining still leaves a
+sticky git-error status alone — e.g. operation-conflict-recovery's `a`
+(abort-operation, `destructive: true`) followed by `n` keeps the original
+`error: could not apply ...` visible instead of overwriting it with
+"workflow action cancelled".
+
 - #1451 covers the flip side of this: two separate confirmation systems
   exist with diverging precedence, copy, and cancel vocabulary — doctrine
   says there should be one.
@@ -560,9 +618,13 @@ flows too, not just where things are.
 
 ## Known risks (carried from the TUI audit)
 
-- **Negation-guarded globals** (`C` create-PR gated by `!== 'conflicts'`,
-  `S` create-stash gated away from the status/diff/compose triad). Each new view
-  must be checked against these.
+- **Explicit view allowlists, not negation guards** (`isCreatePrView`,
+  `isCreateStashView`, `isRemoteOpFallbackView` in `inkInput.ts`) gate `C`
+  create-PR, `S` create-stash, and the mutating `S`/`U`/`P` registry
+  fallback (sync/pull/push current branch) respectively. Each new view must
+  be added to (or deliberately left out of) these lists — a view that's
+  silently missing doesn't get the binding, so the failure mode is a
+  missing feature, not a surprise action (#2155).
 - **`[` / `]` is the most overloaded navigation key** — hunk vs. file vs. tab,
   decided by `activeView` + `diffSource` + `focus`. A wrong/stale focus value
   sends the keypress to the wrong axis.

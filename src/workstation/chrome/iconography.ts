@@ -313,7 +313,7 @@ export function getPullRequestStateGlyph(
     case 'OPEN':
       return { glyph: '◉', color: theme.colors.success, dim: false }
     case 'MERGED':
-      return { glyph: '●', color: theme.noColor ? undefined : 'magenta', dim: false }
+      return { glyph: '●', color: theme.noColor ? undefined : (theme.colors.merged ?? theme.colors.accent), dim: false }
     case 'CLOSED':
       return { glyph: '×', color: theme.colors.danger, dim: false }
     default:

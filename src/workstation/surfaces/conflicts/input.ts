@@ -17,7 +17,13 @@ import type {
  * that interleaved logic, so the router calls this function once per
  * `slot`, at each original branch's exact original position.
  */
-export type LogInkConflictsInputSlot = 'session' | 'move' | 'enter' | 'row-action'
+export type LogInkConflictsInputSlot =
+  | 'session'
+  | 'move'
+  | 'jump-top'
+  | 'jump-bottom'
+  | 'enter'
+  | 'row-action'
 
 export function handleConflictsInput(
   state: LogInkState,
@@ -96,6 +102,25 @@ export function handleConflictsInput(
       }
       return null
     }
+
+    // Home/End edge jumps (mirrors blame's jump-top/jump-bottom). Always
+    // handled once the view matches — an empty result still swallows the
+    // keystroke rather than falling through to the hidden history cursor.
+    case 'jump-top':
+      return context.conflictFileCount
+        ? [
+          action({ type: 'moveConflictFile', delta: -context.conflictFileCount, count: context.conflictFileCount }),
+          action({ type: 'setStatus', value: 'jumped to first conflict', ttl: 'echo' }),
+        ]
+        : []
+
+    case 'jump-bottom':
+      return context.conflictFileCount
+        ? [
+          action({ type: 'moveConflictFile', delta: context.conflictFileCount, count: context.conflictFileCount }),
+          action({ type: 'setStatus', value: 'jumped to last conflict', ttl: 'echo' }),
+        ]
+        : []
 
     case 'enter': {
       // Enter on a conflict file opens the worktree diff for that file so

@@ -39,6 +39,7 @@ import {
     getInspectorActionsForState,
     getLogInkInputEvents,
 } from '../inkInput'
+import { resolveQuitEvents } from '../quitGuard'
 import { findStashFileForOffset } from '../../../git/stashData'
 import { getBisectCompletion } from '../../../git/bisectData'
 import { planReflogUndo } from '../../../git/reflogActions'
@@ -80,6 +81,8 @@ export type UseInputHandlerDeps = {
   /** First-launch onboarding overlay flag + its dismiss (clears + persists). */
   showOnboarding: boolean
   dismissOnboarding: () => void
+  /** Replays the onboarding overlay (`:` palette / `gW`, OSS-2782). */
+  showOnboardingOverlay: () => void
 
   /** Memoized filtered promoted-view lists (per-keystroke selection snapshots). */
   filteredBranchList: FilteredLists['filteredBranchList']
@@ -236,6 +239,7 @@ export function useInputHandler(
     dispatch,
     showOnboarding,
     dismissOnboarding,
+    showOnboardingOverlay,
     filteredBranchList,
     filteredTagList,
     filteredStashList,
@@ -304,6 +308,24 @@ export function useInputHandler(
   } = deps
 
   useInput((inputValue: string, key: LogInkInputKey) => {
+    // Ctrl+C quits from ANYWHERE (OSS-2795) — checked before the
+    // onboarding dismissal below, which otherwise swallows the very
+    // first keystroke and would leave Ctrl+C only dismissing the
+    // first-run overlay instead of quitting (mirrors
+    // `getLogInkInputEvents`'s own top-of-function Ctrl+C check, and the
+    // workspace surface's hoisted ctrl+c check, both of which the
+    // onboarding early-return below would otherwise short-circuit).
+    if (key.ctrl && inputValue === 'c') {
+      resolveQuitEvents(state).forEach((event) => {
+        if (event.type === 'exit') {
+          exit()
+        } else if (event.type === 'action') {
+          dispatch(event.action)
+        }
+      })
+      return
+    }
+
     // First-launch onboarding (P1.3): any keystroke dismisses the overlay
     // and writes the seen-marker. Swallow the keystroke so the same key
     // doesn't also trigger normal input dispatch.
@@ -696,6 +718,8 @@ export function useInputHandler(
         } else {
           void runWorkflowAction(event.id, event.payload)
         }
+      } else if (event.type === 'showOnboarding') {
+        showOnboardingOverlay()
       } else if (event.type === 'openFileInEditor') {
         openInEditor(event.path)
       } else if (event.type === 'openConfigInEditor') {

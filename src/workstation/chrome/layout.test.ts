@@ -1,5 +1,7 @@
 import {
   LAYOUT_SINGLE_PANE_BELOW,
+  LOG_INK_FOOTER_ROWS,
+  LOG_INK_HEADER_ROWS,
   LOG_INK_MIN_COLUMNS,
   LOG_INK_MIN_ROWS,
   getLogInkLayout,
@@ -13,7 +15,9 @@ describe('log Ink layout', () => {
     })
 
     expect(layout.tooSmall).toBe(false)
-    expect(layout.bodyRows).toBe(19)
+    expect(layout.headerRows).toBe(1)
+    expect(layout.bodyRows).toBe(21)
+    expect(layout.bodyRows).toBe(LOG_INK_MIN_ROWS - LOG_INK_HEADER_ROWS - LOG_INK_FOOTER_ROWS)
     // 80 columns falls below the single-pane breakpoint (< 100), so
     // exactly one full-width pane renders. With no focus flags set the
     // main pane is visible and takes the whole terminal; the side panes
@@ -30,7 +34,7 @@ describe('log Ink layout', () => {
     const layout = getLogInkLayout({ columns: 120, rows: 40 })
 
     expect(layout.tooSmall).toBe(false)
-    expect(layout.bodyRows).toBe(35)
+    expect(layout.bodyRows).toBe(37)
     // 120 cols sits in the `normal` tier, where the sidebar uses
     // 22% × cols clamped to 22-30: 0.22 × 120 = 26.4 → floor 26.
     expect(layout.sidebarWidth).toBe(26)
@@ -42,7 +46,7 @@ describe('log Ink layout', () => {
     const layout = getLogInkLayout({ columns: 200, rows: 60 })
 
     expect(layout.tooSmall).toBe(false)
-    expect(layout.bodyRows).toBe(55)
+    expect(layout.bodyRows).toBe(57)
     // 200 cols is `wide`. Sidebar clamps to 28-32: 0.20 × 200 = 40
     // → capped at 32. The sidebar stops growing past the wide-tier
     // ceiling so all the additional terminal width flows to the

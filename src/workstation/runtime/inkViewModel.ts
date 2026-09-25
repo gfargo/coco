@@ -696,6 +696,16 @@ export type LogInkState = {
    */
   pendingConfirmationPayload?: string
   /**
+   * Mirrors `LogInkChoicePrompt.keepStatusOnDismiss` (#1360) when a
+   * `destructive: true` choice option is routed into this confirmation
+   * (OSS-2796) instead of running immediately. Without this, declining
+   * the confirmation would always overwrite the status line with
+   * "workflow action cancelled" — clobbering a sticky git-error status
+   * the original choice prompt was raised on top of (e.g.
+   * operation-conflict-recovery's `a` / abort-operation option).
+   */
+  pendingConfirmationKeepStatusOnDismiss?: boolean
+  /**
    * Set when a `checkout-branch` was rejected because the branch is
    * already checked out in another worktree (#1175). Carries the branch
    * the user tried to check out and the worktree holding it (+ whether
@@ -1204,7 +1214,7 @@ export type LogInkAction =
   | { type: 'setStatus'; value?: string; kind?: 'info' | 'error' | 'success' | 'warning'; loading?: boolean; ttl?: 'echo' | 'result' | 'advisory' }
   | { type: 'setPendingPullRequestBodyDraft'; value: boolean }
   | { type: 'setWorkflowAction'; value?: string }
-  | { type: 'setPendingConfirmation'; value?: string; payload?: string }
+  | { type: 'setPendingConfirmation'; value?: string; payload?: string; keepStatusOnDismiss?: boolean }
   | { type: 'setWorktreeCheckoutConflict'; value?: { branch: string; worktreePath: string; dirty: boolean } }
   | { type: 'setPendingChoice'; value?: LogInkChoicePrompt }
   | { type: 'setPendingItemAction'; value?: LogInkPendingItemAction }
@@ -1524,6 +1534,7 @@ function withPushedRepoFrame(
     pendingKey: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
+    pendingConfirmationKeepStatusOnDismiss: undefined,
     // #1429 — a choice prompt raised in the parent (or its worktree-
     // checkout-conflict sibling) references the PARENT repo's git call;
     // it can't be answered meaningfully after drilling into a submodule.
@@ -1658,6 +1669,7 @@ function withPoppedRepoFrame(state: LogInkState): LogInkState {
     pendingKey: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
+    pendingConfirmationKeepStatusOnDismiss: undefined,
     // #1429 — mirror of the push-time clear above; a choice prompt from
     // the popped (child) frame is equally meaningless once back in the
     // parent's context.
@@ -2057,6 +2069,7 @@ export function createLogInkState(
     workflowActionId: undefined,
     pendingConfirmationId: undefined,
     pendingConfirmationPayload: undefined,
+    pendingConfirmationKeepStatusOnDismiss: undefined,
     pendingKey: undefined,
     focus: 'commits',
     zoomedPane: undefined,
@@ -2942,6 +2955,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         workflowActionId: action.value,
         pendingConfirmationId: undefined,
         pendingConfirmationPayload: undefined,
+        pendingConfirmationKeepStatusOnDismiss: undefined,
         pendingKey: undefined,
       }
     case 'setPendingConfirmation':
@@ -2949,6 +2963,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         pendingConfirmationId: action.value,
         pendingConfirmationPayload: action.value ? action.payload : undefined,
+        pendingConfirmationKeepStatusOnDismiss: action.value ? Boolean(action.keepStatusOnDismiss) : undefined,
         workflowActionId: action.value ? undefined : state.workflowActionId,
         // Only one modal prompt may own the keyboard (#1342): raising a
         // confirmation dismisses any open choice prompt so a `y` meant

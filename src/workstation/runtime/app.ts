@@ -60,6 +60,7 @@ import { saveThemePreset } from '../chrome/themePersistence'
 import { LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout } from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
 import { LogInkFocus, LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit } from '../../workstation/runtime/inkViewModel'
+import { resolveForcedPane } from './forcedPane'
 import { parseStashDiffFiles } from '../../git/stashData'
 
 
@@ -146,7 +147,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // `!hasSeenOnboarding()` and returns `dismissOnboarding`, which clears the
   // overlay and writes the seen-marker; the input handler calls it on the
   // first keystroke.
-  const {showOnboarding, dismissOnboarding} = useOnboarding(React)
+  const {showOnboarding, dismissOnboarding, showOnboardingOverlay} = useOnboarding(React)
   const [state, setState] = React.useState<LogInkState>(() =>
     createLogInkState(rows, {
       activeView: initialView,
@@ -1133,26 +1134,17 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // hidden behind whatever pane focus points at. The split-plan overlay
   // lives in the main panel; every other overlay (help / palette / theme
   // / gitignore / input prompt / confirmation / chord) renders in the
-  // inspector. Ignored above the single-pane breakpoint (all panes show).
+  // inspector — and takes precedence over split-plan, since a
+  // confirmation (e.g. `quit-during-split-apply`) must stay visible even
+  // while a split apply is in flight. Ignored above the single-pane
+  // breakpoint (all panes show). See `forcedPane.ts` for the derivation.
   //
   // Computed here (moved up from its original slot just above the render
   // path, OSS-1608) so `useInputHandler` below can hit-test mouse clicks
   // against the SAME layout the render path uses this frame — deriving a
   // second copy from `windowSize` there would double the layout-recompute
   // cost and risk drifting out of sync with what's actually on screen.
-  const forcedPane: LogInkVisiblePane | undefined = state.splitPlan
-    ? 'main'
-    : state.showHelp ||
-        state.showViewKeys ||
-        state.showCommandPalette ||
-        state.showThemePicker ||
-        state.gitignorePicker ||
-        state.inputPrompt ||
-        state.pendingConfirmationId ||
-        state.pendingChoice ||
-        state.pendingKey
-      ? 'inspector'
-      : undefined
+  const forcedPane = resolveForcedPane(state)
 
   // Widths follow explicit zoom, not focus (#2157) — Tab must never
   // reflow the row the user is reading. `focusExpandEnabled` is the
@@ -1194,6 +1186,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     dispatch,
     showOnboarding,
     dismissOnboarding,
+    showOnboardingOverlay,
     filteredBranchList,
     filteredTagList,
     filteredStashList,
