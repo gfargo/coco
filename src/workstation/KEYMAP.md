@@ -297,8 +297,8 @@ cursored row there too.
 | `F` / `U` / `P` | Fetch / pull / push the **cursored** branch — `P` opens a 1-key choice: `p` normal push · `f` force-with-lease |
 | `M` | Merge the cursored branch into the current branch (confirm) |
 | `Z` | Reset the current branch to the cursored ref — 1-key mode choice: `s` soft · `m` mixed · `h` hard |
-| `S` | Sync the cursored branch (pull, then push) |
-| `r` | Rebase the current branch onto the cursored branch (confirm) |
+| `S` | Sync the cursored branch (pull, then push) — branches **view** only, not the sidebar tab (#2155) |
+| `r` | Rebase the current branch onto the cursored branch (confirm) — branches **view** only, not the sidebar tab; the sidebar footer doesn't advertise it, so sidebar focus falls through to the global refresh instead (#2155) |
 | `s` | Cycle the branch sort mode |
 | `m` | Mark / unmark compare base |
 | `x` | Mark / unmark the cursored branch (auto-advances); marked branches act as a batch for `D` |
@@ -429,7 +429,8 @@ arriving from another view.** Disambiguation is by the dispatch model above.
 | `m` | branches/tags/history (compare flow) → mark compare base · PR/PR-triage → merge |
 | `M` | conflicts → AI conflict resolution · branches → merge cursored branch into current · PR/PR-triage → enable auto-merge · elsewhere → global AI conflict help |
 | `i` | status → open `.gitignore` picker · history → interactive rebase |
-| `S` | status/diff/compose → commit-split flow · branches → sync (pull + push) the cursored branch · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
+| `S` | status/diff/compose → commit-split flow · branches **view** → sync (pull + push) cursored branch · blame/file-history/rebase → **unbound** (warns; #2155) · elsewhere → create stash (the view-agnostic create path is `gZ`, which also works in the staging triad) |
+| `r` | branches **view** → rebase current onto cursored branch (confirm) · elsewhere (including the branches sidebar tab) → global refresh (#2155) |
 | `P` | branches → push the cursored branch (1-key normal/force-with-lease choice) · tags → push tag (takes precedence over the global push) |
 | `D` | worktrees → remove worktree + branch · branches → delete branch |
 | `d` | diff → toggle unified/side-by-side · rebase plan → retag drop · PR/PR-triage → mark ready for review (#1933) |
@@ -577,9 +578,13 @@ flows too, not just where things are.
 
 ## Known risks (carried from the TUI audit)
 
-- **Negation-guarded globals** (`C` create-PR gated by `!== 'conflicts'`,
-  `S` create-stash gated away from the status/diff/compose triad). Each new view
-  must be checked against these.
+- **Explicit view allowlists, not negation guards** (`isCreatePrView`,
+  `isCreateStashView`, `isRemoteOpFallbackView` in `inkInput.ts`) gate `C`
+  create-PR, `S` create-stash, and the mutating `S`/`U`/`P` registry
+  fallback (sync/pull/push current branch) respectively. Each new view must
+  be added to (or deliberately left out of) these lists — a view that's
+  silently missing doesn't get the binding, so the failure mode is a
+  missing feature, not a surprise action (#2155).
 - **`[` / `]` is the most overloaded navigation key** — hunk vs. file vs. tab,
   decided by `activeView` + `diffSource` + `focus`. A wrong/stale focus value
   sends the keypress to the wrong axis.

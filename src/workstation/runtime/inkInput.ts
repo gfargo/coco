@@ -507,6 +507,17 @@ function isBranchActionTarget(state: LogInkState): boolean {
     (state.focus === 'sidebar' && state.sidebarTab === 'branches')
 }
 
+/**
+ * The promoted-view half of `isBranchActionTarget`, without the sidebar
+ * fallback. Use this for ops that `branchesHints` advertises (#2155) but
+ * the sidebar footer does not — inheriting them onto the sidebar tab turns
+ * a keystroke pressed on some unrelated view (the sidebar can be focused
+ * from anywhere) into a surprise action the footer never mentioned.
+ */
+function isBranchesViewTarget(state: LogInkState): boolean {
+  return state.activeView === 'branches' && state.focus === 'commits'
+}
+
 function isTagActionTarget(state: LogInkState): boolean {
   return (state.activeView === 'tags' && state.focus === 'commits') ||
     (state.focus === 'sidebar' && state.sidebarTab === 'tags')
@@ -588,6 +599,19 @@ const CREATE_STASH_VIEWS: readonly LogInkView[] = [
   'pull-request-triage', 'issues', 'conflicts', 'reflog', 'bisect',
   'changelog', 'submodules', 'remotes',
 ]
+// The mutating registry-fallback keys (S/U/P — sync / pull / push the
+// current branch) fire EXCEPT on blame / file-history / rebase (#2155).
+// Those three views have no binding for S/U/P at all — the keys only
+// reach a workflow there because the generic registry-by-key fallback at
+// the bottom of this file doesn't know which views opted in. `sync-branch`
+// in particular has `requiresConfirmation: false`, so an unbound `S` while
+// reading blame silently pulled and pushed the current branch.
+const REMOTE_OP_FALLBACK_VIEWS: readonly LogInkView[] = [
+  'history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash',
+  'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'conflicts',
+  'reflog', 'bisect', 'changelog', 'submodules', 'remotes',
+]
+const REMOTE_OP_FALLBACK_KEYS: ReadonlySet<string> = new Set(['S', 'U', 'P'])
 
 /** True when bare `C` should create a PR in the active view. */
 export function isCreatePrView(view: LogInkView): boolean {
@@ -597,6 +621,11 @@ export function isCreatePrView(view: LogInkView): boolean {
 /** True when bare `S` should create a stash in the active view. */
 export function isCreateStashView(view: LogInkView): boolean {
   return CREATE_STASH_VIEWS.includes(view)
+}
+
+/** True when the S/U/P registry fallback (sync/pull/push current branch) may fire on this view. */
+export function isRemoteOpFallbackView(view: LogInkView): boolean {
+  return REMOTE_OP_FALLBACK_VIEWS.includes(view)
 }
 
 /**
@@ -2324,13 +2353,18 @@ export function getLogInkInputEvents(
   //   - detached HEAD (no current branch): nothing to rebase onto a ref
   //   - self-rebase (cursored ref === current branch): a no-op git would
   //     reject anyway, surfaced here as a clear status instead.
-  // Scoped to the branches target so the letter stays free elsewhere
-  // (the global `r` refresh below still fires on every other view). The
-  // confirmation warning names both branches; it's carried as the
-  // pending-confirmation payload and rendered by `renderConfirmationPanel`
-  // — the runtime handler re-resolves both branches off live context, so
-  // it ignores this payload.
-  if (inputValue === 'r' && isBranchActionTarget(state) && context.branchCount) {
+  // Scoped to the branches VIEW only — not the sidebar tab (#2155). Unlike
+  // most per-entity ops, `r` here isn't advertised on the sidebar footer
+  // (`branchesHints` lists it, the sidebar hints don't), so letting sidebar
+  // focus inherit it meant pressing the global refresh key while the
+  // sidebar happened to be on the Branches tab silently became a rebase
+  // confirm prompt instead. The global `r` refresh below still fires on
+  // every other view/focus combination. The confirmation warning names
+  // both branches; it's carried as the pending-confirmation payload and
+  // rendered by `renderConfirmationPanel` — the runtime handler
+  // re-resolves both branches off live context, so it ignores this
+  // payload.
+  if (inputValue === 'r' && isBranchesViewTarget(state) && context.branchCount) {
     const current = context.currentBranch
     const target = context.branchSelectedShortName
     if (!current) {
@@ -4403,7 +4437,12 @@ export function getLogInkInputEvents(
 
     // `S` syncs the cursored branch (pull + push). The upstream guard
     // is enforced by the workflow handler (it needs async git context).
-    if (inputValue === 'S') {
+    // Narrowed to the branches VIEW, not the wider branch-action-target
+    // (#2155): this block runs before the registry fallback below, so
+    // without this narrowing a sidebar-focused `S` on blame / file-history
+    // / rebase would reach `sync-branch` here and bypass the fallback gate
+    // entirely.
+    if (inputValue === 'S' && isBranchesViewTarget(state)) {
       return [{ type: 'runWorkflowAction', id: 'sync-branch' }]
     }
 
@@ -4428,6 +4467,19 @@ export function getLogInkInputEvents(
   // remove (a PR-creation flow launching mid-rebase-plan).
   if (workflowAction?.id === 'create-pr' && !isCreatePrView(state.activeView)) {
     return []
+  }
+
+  // Same idea for the mutating S / U / P fallback (#2155): blame,
+  // file-history and rebase have no binding for these keys, so reaching
+  // here on those views means the user almost certainly meant something
+  // else. `sync-branch` in particular is NOT confirm-gated, so an unbound
+  // `S` there would otherwise pull and push the current branch unasked.
+  if (workflowAction && REMOTE_OP_FALLBACK_KEYS.has(inputValue) && !isRemoteOpFallbackView(state.activeView)) {
+    return [action({
+      type: 'setStatus',
+      value: `${inputValue} isn't bound on the ${state.activeView} view`,
+      kind: 'warning',
+    })]
   }
 
   if (workflowAction?.requiresConfirmation) {
