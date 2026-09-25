@@ -166,7 +166,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -319,7 +319,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
           <Text
             color="yellow"
           >
-            *2 ^1 o4
+            *2 ^1 #4
           </Text>
         </Box>
         <Box
@@ -721,7 +721,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -1114,7 +1114,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
         <Text
           dimColor={true}
         >
-          o 
+          # 
         </Text>
         <Text
           dimColor={true}
@@ -1604,7 +1604,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       <Text
         dimColor={true}
       >
-         o
+         #
       </Text>
     </Box>
     <Box
@@ -2096,7 +2096,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -2585,7 +2585,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       <Text
         dimColor={true}
       >
-         o
+         #
       </Text>
     </Box>
     <Box
@@ -3037,7 +3037,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -3581,7 +3581,7 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -3916,7 +3916,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -4458,7 +4458,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -5022,7 +5022,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -5411,7 +5411,7 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the URL field 1`] = `
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -5978,7 +5978,7 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the destination field 
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -6550,7 +6550,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -7114,7 +7114,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -7503,7 +7503,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -8776,7 +8776,7 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      
@@ -9105,7 +9105,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
         <Text
           color="gray"
         >
-          o 
+          # 
         </Text>
         <Text>
           PRs      

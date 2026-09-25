@@ -148,7 +148,7 @@ describe('workspace render builders', () => {
       authenticated: true,
     })
     const prRows = buildWorkspaceListRows(next, { ascii: true })
-    expect(prRows[1].columns[2].text).toContain('o4')
+    expect(prRows[1].columns[2].text).toContain('#4')
   })
 
   it('renders ASCII tab glyphs when ascii: true', () => {

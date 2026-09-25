@@ -109,7 +109,7 @@ export function createLogInkHeader(
       ? 'loading commits'
       : isLogInkContextLoading(contextStatus) ? 'loading context' : ''
     const breadcrumb = formatLogInkBreadcrumb(state.viewStack)
-    const repoCrumb = formatLogInkRepoBreadcrumb(state.repoStack)
+    const repoCrumb = formatLogInkRepoBreadcrumb(state.repoStack, theme.ascii)
     const view = combineLogInkBreadcrumbSegments(repoCrumb, breadcrumb)
     const mode: 'NORMAL' | 'EDIT' | 'FILTER' = state.commitCompose.editing
       ? 'EDIT'

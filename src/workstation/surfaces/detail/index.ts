@@ -60,6 +60,7 @@ import { getSelectedInkCommit } from '../../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../../git/providerData'
 import { matchesPromotedFilter } from '../../runtime/promotedFilter'
 import { sortBranches, sortTags } from '../../chrome/sorting'
+import { pickWorkstationGlyph } from '../../chrome/glyphs'
 import type { LogInkComponents, LogInkContext } from '../../runtime/types'
 import {
   buildCommitUrl,
@@ -624,7 +625,10 @@ export function renderHistoryInspector(
     includedTabs.add(tab)
     tabRowWidth += labelWidth
   }
-  const tabHint = '  · ←/→ switch'
+  const leftArrow = pickWorkstationGlyph('left', theme.ascii)
+  // In unicode: `←/→ switch`; in ASCII: `[/] switch` (the bracket
+  // notation users already see in the tab labels themselves).
+  const tabHint = theme.ascii ? '  · [/] switch' : `  · ${leftArrow}/→ switch`
   const showTabHint = focused && (tabBudget - tabRowWidth) >= cellWidth(tabHint)
   const tabHeader = h(Box, { key: 'inspector-tabs', flexDirection: 'row' },
     ...TAB_ORDER.filter((tab) => includedTabs.has(tab)).map((tab) => {

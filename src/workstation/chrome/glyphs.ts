@@ -17,10 +17,12 @@ export const WORKSTATION_GLYPHS = {
   vrule: '│',
   sep: '·',
   dash: '—',
+  endash: '–',
   ellipsis: '…',
   enter: '↵',
   chevron: '›',
   pointer: '❯',
+  left: '←',
   up: '↑',
   down: '↓',
   updown: '↕',
@@ -28,7 +30,14 @@ export const WORKSTATION_GLYPHS = {
   hollow: '○',
   empty: '∅',
   half: '◐',
+  /** ⊙ — PR count / "target" indicator in the workspace sidebar tab. */
   target: '⊙',
+  /** ▎ — left quarter-block used as a gutter/selection indicator. */
+  gutter: '▎',
+  /** ▌ — left half-block used as a selected-line indicator. */
+  halfleft: '▌',
+  /** ▼ — downward-pointing triangle, used for filter/mode drop-downs. */
+  downtri: '▼',
   cross: '✗',
   check: '✓',
 } as const
@@ -38,10 +47,12 @@ export const WORKSTATION_ASCII_GLYPHS: Record<keyof typeof WORKSTATION_GLYPHS, s
   vrule: '|',
   sep: '.',
   dash: '-',
+  endash: '-',
   ellipsis: '...',
   enter: '<',
   chevron: '>',
   pointer: '>',
+  left: '<',
   up: '^',
   down: 'v',
   updown: '~',
@@ -49,7 +60,12 @@ export const WORKSTATION_ASCII_GLYPHS: Record<keyof typeof WORKSTATION_GLYPHS, s
   hollow: 'o',
   empty: '-',
   half: '*',
-  target: 'o',
+  // `#` distinguishes the PR-count tab from the `hollow` (`o`) "all-repos"
+  // tab so the two sidebar tabs don't collapse to the same character.
+  target: '#',
+  gutter: '|',
+  halfleft: '|',
+  downtri: 'v',
   cross: 'x',
   check: '+',
 }
