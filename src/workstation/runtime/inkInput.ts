@@ -27,6 +27,7 @@ import { handleConflictsInput } from '../surfaces/conflicts/input'
 import { handleFileHistoryInput } from '../surfaces/fileHistory/input'
 import { handleRebaseInput } from '../surfaces/rebase/input'
 import { handleOverlayInput } from './overlayInput'
+import { resolveQuitEvents } from './quitGuard'
 
 export type LogInkInputKey = {
   backspace?: boolean
@@ -948,10 +949,7 @@ export function getLogInkPaletteExecuteEvents(
       // workflow action lookup below.
       return []
     case 'quit':
-      if (hasUnsavedComposeDraft(state)) {
-        return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
-      }
-      return [{ type: 'exit' }]
+      return resolveQuitEvents(state)
     case 'clearSearch':
       return [action({ type: 'clearFilter' })]
     case 'cycleSort':
@@ -1091,20 +1089,6 @@ const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '3': 'tags',
   '4': 'stashes',
   '5': 'worktrees',
-}
-
-/**
- * Returns true when the compose surface holds an unsaved commit message
- * (any text in summary or body and no in-flight AI draft). Used by the
- * quit confirmation flow (P2.3) so users can't lose drafts via a stray
- * `q` / Ctrl+C.
- */
-function hasUnsavedComposeDraft(state: LogInkState): boolean {
-  const compose = state.commitCompose
-  if (compose.loading) {
-    return false
-  }
-  return Boolean(compose.summary.trim() || compose.body.trim())
 }
 
 /**
@@ -1276,11 +1260,16 @@ export function getLogInkInputEvents(
   key: LogInkInputKey = {},
   context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
+  // Ink's parseKeypress always resolves a raw Ctrl+C byte to name 'c'
+  // (see node_modules/ink/build/parse-keypress.js), so `inputValue === 'c'`
+  // is the only real Ctrl+C signal. Matching on `key.ctrl` with an empty
+  // `inputValue` looked like a defensive net for "some terminals", but
+  // Ink blanks `input` for every ctrl-modified non-alphanumeric key
+  // (Ctrl+Left/Right/Up/Down, Ctrl+Home/End, Ctrl+Delete, ...) too — that
+  // wider match resolved the quit guard on those keystrokes instead of
+  // letting them fall through to normal handling.
   if (key.ctrl && inputValue === 'c') {
-    if (hasUnsavedComposeDraft(state) && !state.pendingConfirmationId) {
-      return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
-    }
-    return [{ type: 'exit' }]
+    return resolveQuitEvents(state)
   }
 
   // Input prompt is the most modal — when active, every keystroke routes
@@ -1447,10 +1436,25 @@ export function getLogInkInputEvents(
         ]
       }
       if (workflowAction?.id === 'discard-rebase-plan') {
+        // OSS-2795 — the quit guard reuses this same confirmation to
+        // discard an edited rebase plan on the way out (`payload:
+        // 'quit'`), distinct from the Esc-triggered "pop back to the
+        // previous view" flow this id was originally built for.
+        return state.pendingConfirmationPayload === 'quit'
+          ? [
+              action({ type: 'setPendingConfirmation', value: undefined }),
+              { type: 'exit' },
+            ]
+          : [
+              action({ type: 'setPendingConfirmation', value: undefined }),
+              action({ type: 'clearRebasePlan' }),
+              action({ type: 'popView' }),
+            ]
+      }
+      if (workflowAction?.id === 'quit-during-split-apply') {
         return [
           action({ type: 'setPendingConfirmation', value: undefined }),
-          action({ type: 'clearRebasePlan' }),
-          action({ type: 'popView' }),
+          { type: 'exit' },
         ]
       }
 
@@ -1475,9 +1479,13 @@ export function getLogInkInputEvents(
       // #1451 — per-id cancel messages for the unified confirmation system.
       const cancelMessage =
         state.pendingConfirmationId === 'discard-draft'
-          ? 'kept draft — press q again to quit without saving'
+          ? 'kept draft — press y on the next prompt to quit without saving'
           : state.pendingConfirmationId === 'discard-rebase-plan'
-          ? 'kept rebase plan'
+          ? state.pendingConfirmationPayload === 'quit'
+            ? 'kept rebase plan — press y on the next prompt to quit without saving'
+            : 'kept rebase plan'
+          : state.pendingConfirmationId === 'quit-during-split-apply'
+          ? 'split apply still running'
           : state.pendingConfirmationId === 'revert-file' ||
             state.pendingConfirmationId === 'revert-hunk' ||
             state.pendingConfirmationId === 'discard-lines'
@@ -1712,11 +1720,18 @@ export function getLogInkInputEvents(
     }
 
     // `q` quits from the overlay like it does from help / view-keys
-    // (#1348) — EXCEPT mid-apply, where quitting would abandon a
-    // half-applied split. Loading is safe to quit from (same soft-
-    // cancel semantics as Esc).
-    if (inputValue === 'q' && state.splitPlan.status !== 'applying') {
-      return [{ type: 'cancelCommitSplit' }, { type: 'exit' }]
+    // (#1348), routed through the same guard as every other exit path
+    // (OSS-2795). Mid-apply, the guard itself raises the
+    // quit-during-split-apply confirm instead of an immediate exit, so
+    // quitting can't abandon a half-applied split; only prepend the
+    // plan cancel when the guard actually resolves to an exit —
+    // otherwise declining the confirm would have silently killed the
+    // plan already.
+    if (inputValue === 'q') {
+      const quitEvents = resolveQuitEvents(state)
+      return quitEvents.some((event) => event.type === 'exit')
+        ? [{ type: 'cancelCommitSplit' }, ...quitEvents]
+        : quitEvents
     }
 
     // Apply only fires from the 'ready' state. While loading we have
@@ -1908,10 +1923,7 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === 'q') {
-    if (hasUnsavedComposeDraft(state)) {
-      return [action({ type: 'setPendingConfirmation', value: 'discard-draft' })]
-    }
-    return [{ type: 'exit' }]
+    return resolveQuitEvents(state)
   }
 
   // `g?` chord (#1137) — open the per-view which-key strip. Placed

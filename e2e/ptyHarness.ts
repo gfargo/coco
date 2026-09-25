@@ -87,6 +87,12 @@ export interface TuiSessionOptions {
   rows?: number
   /** Extra environment on top of the deterministic baseline. */
   env?: Record<string, string>
+  /**
+   * Skip pre-seeding the onboarding-seen marker, so the session boots
+   * with the first-run onboarding overlay showing. Off by default —
+   * most suites want the overlay out of the way.
+   */
+  skipOnboardingMarker?: boolean
 }
 
 export interface WaitOptions {
@@ -164,10 +170,13 @@ export class TuiSession {
     )
     // Pre-seed the once-per-machine onboarding marker (see
     // src/workstation/chrome/onboarding.ts) — with a fresh HOME every
-    // launch would otherwise open on the welcome overlay.
-    const onboardingDir = path.join(tempHome, '.cache', 'coco')
-    fs.mkdirSync(onboardingDir, { recursive: true })
-    fs.writeFileSync(path.join(onboardingDir, 'onboarding.seen'), '')
+    // launch would otherwise open on the welcome overlay. Skippable so a
+    // suite can deliberately exercise the onboarding overlay itself.
+    if (!options.skipOnboardingMarker) {
+      const onboardingDir = path.join(tempHome, '.cache', 'coco')
+      fs.mkdirSync(onboardingDir, { recursive: true })
+      fs.writeFileSync(path.join(onboardingDir, 'onboarding.seen'), '')
+    }
 
     const env: Record<string, string> = {
       PATH: process.env.PATH ?? '',
