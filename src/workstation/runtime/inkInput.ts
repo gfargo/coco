@@ -1371,12 +1371,17 @@ export function getLogInkInputEvents(
         // forwards to runWorkflowAction. `setPendingConfirmation`
         // clears pendingChoice itself (#1342), so the choice overlay
         // closes without a separate setPendingChoice dispatch here.
+        // `keepStatusOnDismiss` carries the choice prompt's own flag
+        // through so declining the confirmation doesn't clobber a
+        // sticky git-error status the choice was raised on top of
+        // (#1360) — see the pendingConfirmationId n/Esc handler below.
         if (option.destructive) {
           return [
             action({
               type: 'setPendingConfirmation',
               value: option.workflowId,
               payload: option.payload,
+              keepStatusOnDismiss: state.pendingChoice.keepStatusOnDismiss,
             }),
           ]
         }
@@ -1485,6 +1490,14 @@ export function getLogInkInputEvents(
     }
 
     if (inputValue === 'n' || key.escape) {
+      // OSS-2796 — mirror of the pendingChoice keepStatusOnDismiss check
+      // above: a destructive choice option routed here (Z→h, P→f, …)
+      // carries its origin prompt's keepStatusOnDismiss flag (#1360).
+      // Declining must leave the sticky git-error status alone, same as
+      // declining the choice prompt directly would have.
+      if (state.pendingConfirmationKeepStatusOnDismiss) {
+        return [action({ type: 'setPendingConfirmation', value: undefined })]
+      }
       // #1451 — per-id cancel messages for the unified confirmation system.
       const cancelMessage =
         state.pendingConfirmationId === 'discard-draft'

@@ -6781,15 +6781,36 @@ describe('triage filter cycling (#882 phase 6)', () => {
       expect(events).toEqual([
         {
           type: 'action',
-          action: { type: 'setPendingConfirmation', value: 'abort-operation', payload: undefined },
+          action: {
+            type: 'setPendingConfirmation',
+            value: 'abort-operation',
+            payload: undefined,
+            keepStatusOnDismiss: true,
+          },
         },
       ])
       const after = applyInput(state, 'a')
       expect(after.pendingChoice).toBeUndefined()
       expect(after.pendingConfirmationId).toBe('abort-operation')
+      expect(after.pendingConfirmationKeepStatusOnDismiss).toBe(true)
 
       const confirmed = getLogInkInputEvents(after, 'y')
       expect(confirmed).toContainEqual({ type: 'runWorkflowAction', id: 'abort-operation', payload: undefined })
+    })
+
+    it('a then n keeps the sticky error status instead of "workflow action cancelled" (keepStatusOnDismiss survives the confirm reroute)', () => {
+      // Regression for the PR #2169 review: routing a `destructive: true`
+      // choice pick through setPendingConfirmation must not drop the
+      // origin prompt's keepStatusOnDismiss (#1360) — declining the
+      // abort-operation confirm should leave the raw git error visible,
+      // the same as declining the choice prompt directly would (see the
+      // Esc test above).
+      const state = conflictRecoveryState()
+      const afterPick = applyInput(state, 'a')
+      const afterDecline = applyInput(afterPick, 'n')
+      expect(afterDecline.pendingConfirmationId).toBeUndefined()
+      expect(afterDecline.statusMessage).toBe('error: could not apply abc1234... feat: add thing')
+      expect(afterDecline.statusKind).toBe('error')
     })
 
     it('Esc dismisses but keeps the raw error status visible (keepStatusOnDismiss)', () => {

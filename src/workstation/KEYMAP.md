@@ -516,6 +516,14 @@ firing `runWorkflowAction` directly; only the follow-up `y` runs the
 workflow. #1867 owns the remaining bypass — non-destructive choice options
 reached *through* a workflow that itself needs gating.
 
+Rerouting through `setPendingConfirmation` carries the origin choice
+prompt's `keepStatusOnDismiss` flag (#1360) along as
+`pendingConfirmationKeepStatusOnDismiss`, so declining still leaves a
+sticky git-error status alone — e.g. operation-conflict-recovery's `a`
+(abort-operation, `destructive: true`) followed by `n` keeps the original
+`error: could not apply ...` visible instead of overwriting it with
+"workflow action cancelled".
+
 - #1451 covers the flip side of this: two separate confirmation systems
   exist with diverging precedence, copy, and cancel vocabulary — doctrine
   says there should be one.
