@@ -33,7 +33,9 @@ export type LogInkInputKey = {
   ctrl?: boolean
   delete?: boolean
   downArrow?: boolean
+  end?: boolean
   escape?: boolean
+  home?: boolean
   leftArrow?: boolean
   meta?: boolean
   pageDown?: boolean
@@ -81,6 +83,7 @@ export type LogInkInputEvent =
   | { type: 'yankFromActiveView'; short?: boolean }
   | { type: 'yankText'; value: string; label: string }
   | { type: 'applyThemePreset'; preset: string }
+  | { type: 'showOnboarding' }
   // Open the "add to .gitignore" picker over the cursored worktree
   // file. Carries no path — the runtime resolves the cursored file (it
   // owns the selection→file mapping) and dispatches `openGitignorePicker`
@@ -367,6 +370,183 @@ function resolveMoveTargetId(
   if (!ids || count === 0) return undefined
   const newIndex = Math.max(0, Math.min(currentIndex + delta, count - 1))
   return ids[newIndex]
+}
+
+/**
+ * Resolve the events for a top/bottom edge jump (Home/End, and `gg`/`G`
+ * once routed through here). Mirrors the ↑/↓ (`k`/`j`) movement ladder
+ * below, branch for branch, substituting a delta of ±the target list's
+ * length for ±1 — `clampIndex` (and the `moveWorktreeFile` /
+ * `pageWorktreeDiff` / `pageDetailPreview` reducers, which clamp the
+ * same way) lands an over-large delta exactly on the edge, so no
+ * per-branch min/max math is needed here.
+ *
+ * Falls back to the generic `moveToTop`/`moveToBottom` (the HISTORY
+ * cursor) when no more specific surface claims the jump — same
+ * fallback the old `gg`/`G` handlers used before this helper existed.
+ */
+function resolveEdgeJumpEvents(
+  state: LogInkState,
+  context: LogInkInputContext,
+  edge: 'top' | 'bottom'
+): LogInkInputEvent[] {
+  const sign = edge === 'top' ? -1 : 1
+
+  if (state.focus === 'detail' && state.inspectorTab === 'actions' && context.inspectorActionCount) {
+    return [action({
+      type: 'moveInspectorAction',
+      delta: sign * context.inspectorActionCount,
+      actionCount: context.inspectorActionCount,
+    })]
+  }
+
+  if (state.focus === 'detail' && context.detailFileCount) {
+    return [action({
+      type: 'moveDetailFile',
+      delta: sign * context.detailFileCount,
+      fileCount: context.detailFileCount,
+    })]
+  }
+
+  if (state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
+    return [action({
+      type: 'moveWorktreeFile',
+      delta: sign * context.worktreeFileCount,
+      fileCount: context.worktreeFileCount,
+    })]
+  }
+
+  if (isWorktreeDiffTarget(state) && context.worktreeDiffLineCount) {
+    return [action({
+      type: 'pageWorktreeDiff',
+      delta: sign * context.worktreeDiffLineCount,
+      lineCount: context.worktreeDiffLineCount,
+      hunkOffsets: context.worktreeHunkOffsets,
+    })]
+  }
+
+  if (state.activeView === 'diff' && context.previewLineCount) {
+    return [action({
+      type: 'pageDetailPreview',
+      delta: sign * context.previewLineCount,
+      previewLineCount: context.previewLineCount,
+    })]
+  }
+
+  const blameJumpEvents = handleBlameInput(state, '', {}, context, edge === 'top' ? 'jump-top' : 'jump-bottom')
+  if (blameJumpEvents) {
+    return blameJumpEvents
+  }
+
+  const fileHistoryJumpEvents = handleFileHistoryInput(state, '', {}, context, edge === 'top' ? 'jump-top' : 'jump-bottom')
+  if (fileHistoryJumpEvents) {
+    return fileHistoryJumpEvents
+  }
+
+  if (state.activeView === 'changelog') {
+    return context.changelogLineCount
+      ? [action({
+        type: 'pageChangelog',
+        delta: sign * context.changelogLineCount,
+        lineCount: context.changelogLineCount,
+      })]
+      : []
+  }
+
+  if (isBranchActionTarget(state) && context.branchCount) {
+    return [action({
+      type: 'moveBranch',
+      delta: sign * context.branchCount,
+      count: context.branchCount,
+      id: resolveMoveTargetId(context.branchIds, state.selectedBranchIndex, sign * context.branchCount, context.branchCount),
+    })]
+  }
+
+  if (isTagActionTarget(state) && context.tagCount) {
+    return [action({
+      type: 'moveTag',
+      delta: sign * context.tagCount,
+      count: context.tagCount,
+      id: resolveMoveTargetId(context.tagIds, state.selectedTagIndex, sign * context.tagCount, context.tagCount),
+    })]
+  }
+
+  if (isStashActionTarget(state) && context.stashCount) {
+    return [action({
+      type: 'moveStash',
+      delta: sign * context.stashCount,
+      count: context.stashCount,
+      id: resolveMoveTargetId(context.stashIds, state.selectedStashIndex, sign * context.stashCount, context.stashCount),
+    })]
+  }
+
+  if (isReflogActionTarget(state) && context.reflogCount) {
+    return [action({ type: 'moveReflog', delta: sign * context.reflogCount, count: context.reflogCount })]
+  }
+
+  if (isRemotesActionTarget(state) && context.remoteCount) {
+    return [action({
+      type: 'moveRemote',
+      delta: sign * context.remoteCount,
+      count: context.remoteCount,
+      id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, sign * context.remoteCount, context.remoteCount),
+    })]
+  }
+
+  if (isSubmodulesActionTarget(state) && context.submoduleCount) {
+    return [action({
+      type: 'moveSubmodule',
+      delta: sign * context.submoduleCount,
+      count: context.submoduleCount,
+      id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, sign * context.submoduleCount, context.submoduleCount),
+    })]
+  }
+
+  if (isIssueActionTarget(state) && context.issueCount) {
+    return [action({
+      type: 'moveIssue',
+      delta: sign * context.issueCount,
+      count: context.issueCount,
+      id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, sign * context.issueCount, context.issueCount),
+    })]
+  }
+
+  if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
+    return [action({
+      type: 'movePullRequestTriage',
+      delta: sign * context.pullRequestTriageCount,
+      count: context.pullRequestTriageCount,
+      id: resolveMoveTargetId(
+        context.pullRequestTriageListIds,
+        state.selectedPullRequestTriageIndex,
+        sign * context.pullRequestTriageCount,
+        context.pullRequestTriageCount,
+      ),
+    })]
+  }
+
+  if (isWorktreeActionTarget(state) && context.worktreeListCount) {
+    return [action({
+      type: 'moveWorktreeListEntry',
+      delta: sign * context.worktreeListCount,
+      count: context.worktreeListCount,
+      id: resolveMoveTargetId(context.worktreeListIds, state.selectedWorktreeListIndex, sign * context.worktreeListCount, context.worktreeListCount),
+    })]
+  }
+
+  const conflictsJumpEvents = handleConflictsInput(state, '', {}, context, edge === 'top' ? 'jump-top' : 'jump-bottom')
+  if (conflictsJumpEvents) {
+    return conflictsJumpEvents
+  }
+
+  return [
+    action(edge === 'top' ? { type: 'moveToTop' } : { type: 'moveToBottom' }),
+    action({
+      type: 'setStatus',
+      value: edge === 'top' ? 'jumped to first commit' : 'jumped to last commit',
+      ttl: 'echo',
+    }),
+  ]
 }
 
 /**
@@ -751,10 +931,6 @@ export function getLogInkPaletteExecuteEvents(
         action({ type: 'moveToBottom' }),
         action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
       ]
-    case 'nextMatch':
-      return [action({ type: 'move', delta: 1 })]
-    case 'previousMatch':
-      return [action({ type: 'move', delta: -1 })]
     case 'previousSidebarTab':
       return [action({ type: 'previousSidebarTab' })]
     case 'nextSidebarTab':
@@ -883,6 +1059,10 @@ export function getLogInkPaletteExecuteEvents(
       // Palette closes on execute (toggleCommandPalette runs first), then
       // this opens the per-view which-key strip (#1137).
       return [action({ type: 'toggleViewKeys' })]
+    case 'showWelcome':
+      // Palette closes on execute (toggleCommandPalette runs first), then
+      // this replays the first-run onboarding overlay (OSS-2782).
+      return [{ type: 'showOnboarding' }]
     case 'openProjectConfig':
       return [{ type: 'openConfigInEditor', scope: 'project' }]
     case 'openGlobalConfig':
@@ -2157,6 +2337,17 @@ export function getLogInkInputEvents(
     ]
   }
 
+  // gW — replay the first-run onboarding overlay (OSS-2782). It only shows
+  // once per machine on its own; this is the discoverable way to see it
+  // again short of deleting the seen-marker file. Capital W disambiguates
+  // from bare `W` (remove-worktree, a global mutate key).
+  if (state.pendingKey === 'g' && inputValue === 'W') {
+    return [
+      action({ type: 'setPendingKey', value: undefined }),
+      { type: 'showOnboarding' },
+    ]
+  }
+
   // Any other key while the chord is armed CANCELS it (which-key
   // semantics: an unknown continuation dismisses the chord without
   // acting). Unmatched keys used to fall through returning [] with the
@@ -2186,34 +2377,9 @@ export function getLogInkInputEvents(
 
   if (inputValue === 'g') {
     if (state.pendingKey === 'g') {
-      // View-local top jumps (#1387): blame / file-history / changelog
-      // advertise gg in the footer, but the generic moveToTop below
-      // only touches the HISTORY cursor — the visible list stayed put
-      // while the hidden selection silently relocated. Blame and
-      // file-history are extracted to `surfaces/blame/input.ts` /
-      // `surfaces/fileHistory/input.ts` (#1722); changelog stays inline
-      // (see the note on `handleChangelogInput` above).
-      const blameJumpTopEvents = handleBlameInput(state, inputValue, key, context, 'jump-top')
-      if (blameJumpTopEvents) {
-        return blameJumpTopEvents
-      }
-      const fileHistoryJumpTopEvents = handleFileHistoryInput(state, inputValue, key, context, 'jump-top')
-      if (fileHistoryJumpTopEvents) {
-        return fileHistoryJumpTopEvents
-      }
-      if (state.activeView === 'changelog') {
-        return context.changelogLineCount
-          ? [action({
-            type: 'pageChangelog',
-            delta: -context.changelogLineCount,
-            lineCount: context.changelogLineCount,
-          })]
-          : []
-      }
-      return [
-        action({ type: 'moveToTop' }),
-        action({ type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' }),
-      ]
+      // View-local top jump (#1387 / OSS-2782): shared with Home below —
+      // see `resolveEdgeJumpEvents`.
+      return resolveEdgeJumpEvents(state, context, 'top')
     }
 
     return [action({ type: 'setPendingKey', value: 'g' })]
@@ -2264,36 +2430,20 @@ export function getLogInkInputEvents(
   }
 
   if (inputValue === 'G') {
-    // View-local bottom jumps (#1387) — see the gg mirror above.
-    const blameJumpBottomEvents = handleBlameInput(state, inputValue, key, context, 'jump-bottom')
-    if (blameJumpBottomEvents) {
-      return blameJumpBottomEvents
-    }
-    const fileHistoryJumpBottomEvents = handleFileHistoryInput(state, inputValue, key, context, 'jump-bottom')
-    if (fileHistoryJumpBottomEvents) {
-      return fileHistoryJumpBottomEvents
-    }
-    if (state.activeView === 'changelog') {
-      return context.changelogLineCount
-        ? [action({
-          type: 'pageChangelog',
-          delta: context.changelogLineCount,
-          lineCount: context.changelogLineCount,
-        })]
-        : []
-    }
-    return [
-      action({ type: 'moveToBottom' }),
-      action({ type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' }),
-    ]
+    // View-local bottom jump (#1387 / OSS-2782) — see the gg mirror above.
+    return resolveEdgeJumpEvents(state, context, 'bottom')
   }
 
-  if (inputValue === 'n') {
-    return [action({ type: 'move', delta: 1 })]
+  // Home/End (OSS-2782): the same per-view edge jump as `gg`/`G`, reached
+  // in one keystroke instead of two. Ink resolves these from a wide range
+  // of terminal escape sequences (xterm/iTerm/kitty/Windows Terminal/tmux);
+  // `gg`/`G` remain the portable fallback for terminals that don't.
+  if (key.home) {
+    return resolveEdgeJumpEvents(state, context, 'top')
   }
 
-  if (inputValue === 'N') {
-    return [action({ type: 'move', delta: -1 })]
+  if (key.end) {
+    return resolveEdgeJumpEvents(state, context, 'bottom')
   }
 
   // Per-view branches action: `r` rebases the current branch onto the
@@ -2488,10 +2638,10 @@ export function getLogInkInputEvents(
   // vertical axis (↑/↓ below) is "within the active tab's items".
   // [/] still works as a keyboard alternative for users who prefer
   // non-arrow keys.
-  if (key.leftArrow && state.focus === 'sidebar') {
+  if ((key.leftArrow || inputValue === 'h') && state.focus === 'sidebar') {
     return [action({ type: 'previousSidebarTab' })]
   }
-  if (key.rightArrow && state.focus === 'sidebar') {
+  if ((key.rightArrow || inputValue === 'l') && state.focus === 'sidebar') {
     return [action({ type: 'nextSidebarTab' })]
   }
 
@@ -2501,10 +2651,10 @@ export function getLogInkInputEvents(
   // inspector chrome shows ←/→ because the bracketed `[/]` notation
   // reads as "press the / key" — which is the global filter trigger and
   // was making users think the binding was busted.
-  if (key.leftArrow && state.focus === 'detail') {
+  if ((key.leftArrow || inputValue === 'h') && state.focus === 'detail') {
     return [action({ type: 'cycleInspectorTab', delta: -1 })]
   }
-  if (key.rightArrow && state.focus === 'detail') {
+  if ((key.rightArrow || inputValue === 'l') && state.focus === 'detail') {
     return [action({ type: 'cycleInspectorTab', delta: 1 })]
   }
 
@@ -2515,7 +2665,7 @@ export function getLogInkInputEvents(
   // focus) so the user is always on a real file after a jump,
   // mirroring the sidebar's tab-switch landing behavior.
   if (
-    (key.leftArrow || key.rightArrow) &&
+    (key.leftArrow || key.rightArrow || inputValue === 'h' || inputValue === 'l') &&
     state.activeView === 'status' &&
     state.focus === 'commits' &&
     context.statusGroups &&
@@ -2527,7 +2677,7 @@ export function getLogInkInputEvents(
       state.selectedWorktreeFileIndex < group.startIndex + group.count
     )
     const fallback = currentIndex >= 0 ? currentIndex : 0
-    const delta = key.leftArrow ? -1 : 1
+    const delta = (key.leftArrow || inputValue === 'h') ? -1 : 1
     const nextIndex = Math.max(0, Math.min(groups.length - 1, fallback + delta))
     if (nextIndex !== fallback) {
       return [action({ type: 'jumpToStatusGroup', targetIndex: groups[nextIndex].startIndex })]

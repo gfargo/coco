@@ -86,6 +86,19 @@ describe('log Ink input interactions', () => {
     expect(state.filterMode).toBe(false)
   })
 
+  it('h/l append to the filter text instead of acting as sidebar/inspector aliases (OSS-2782)', () => {
+    // Filter mode is checked far above the h/l handlers this issue adds —
+    // this pins that ordering so h/l stay plain letters while typing a
+    // filter, even though they're bound elsewhere in normal mode.
+    let state = createLogInkState(rows)
+    state = applyInput(state, '/')
+    state = applyInput(state, 'h')
+    state = applyInput(state, 'e')
+    state = applyInput(state, 'l')
+    expect(state.filter).toBe('hel')
+    expect(state.filterMode).toBe(true)
+  })
+
   it('clears the filter on first Esc and exits filter mode on the second', () => {
     let state = createLogInkState(rows)
     state = applyInput(state, '/')
@@ -224,6 +237,25 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('replayable onboarding overlay (OSS-2782)', () => {
+    it('replays via the gW chord', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      const events = getLogInkInputEvents(state, 'W')
+      expect(events).toEqual([
+        { type: 'action', action: { type: 'setPendingKey', value: undefined } },
+        { type: 'showOnboarding' },
+      ])
+    })
+
+    it('replays via the command palette entry', () => {
+      const command = getLogInkPaletteCommands().find((c) => c.id === 'showWelcome')
+      expect(command).toBeDefined()
+      const events = getLogInkPaletteExecuteEvents(command!, createLogInkState(rows))
+      expect(events).toEqual([{ type: 'showOnboarding' }])
+    })
+  })
+
   it('toggles help, command palette, focus, and graph interactions', () => {
     let state = createLogInkState(rows)
 
@@ -354,22 +386,31 @@ describe('log Ink input interactions', () => {
     expect(state.pendingCommitFocused).toBeFalsy()
   })
 
-  it('supports next/previous match and top/bottom navigation conventions', () => {
+  it('supports gg/G and Home/End top/bottom navigation conventions', () => {
     let state = createLogInkState(rows)
 
     state = applyInput(state, 'G')
     expect(state.selectedIndex).toBe(2)
     expect(state.statusMessage).toBe('jumped to last commit')
 
-    state = applyInput(state, 'N')
-    expect(state.selectedIndex).toBe(1)
-
-    state = applyInput(state, 'n')
-    expect(state.selectedIndex).toBe(2)
-
     state = applyInput(state, 'g')
     state = applyInput(state, 'g')
     expect(state.selectedIndex).toBe(0)
+
+    state = applyInput(state, '', { end: true })
+    expect(state.selectedIndex).toBe(2)
+
+    state = applyInput(state, '', { home: true })
+    expect(state.selectedIndex).toBe(0)
+  })
+
+  it('no longer claims n/N as search-match navigation (OSS-2782)', () => {
+    // #1387's "next / previous search match" claim never matched
+    // `n`/`N`'s actual behavior (a plain ±1 move, same as j/k) — dropped
+    // rather than implemented, since `/` is a re-sorting filter, not a
+    // highlight-only search term to navigate matches within.
+    expect(getLogInkInputEvents(createLogInkState(rows), 'n')).toEqual([])
+    expect(getLogInkInputEvents(createLogInkState(rows), 'N')).toEqual([])
   })
 
   it('moves detail file selection and diff preview pages when detail is focused', () => {
@@ -1700,6 +1741,65 @@ describe('log Ink input interactions', () => {
     )).toBeDefined()
   })
 
+  describe('Home/End edge jumps mirror gg/G on every list/scroll surface (OSS-2782)', () => {
+    it('history: Home/End match gg/G', () => {
+      const state = createLogInkState(rows)
+      expect(getLogInkInputEvents(state, '', { end: true })).toEqual(
+        getLogInkInputEvents(state, 'G')
+      )
+      const armed = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      expect(getLogInkInputEvents(state, '', { home: true })).toEqual(
+        getLogInkInputEvents(armed, 'g')
+      )
+    })
+
+    it('branches: Home/End jump to the first/last branch', () => {
+      const state = createLogInkState(rows, { activeView: 'branches' })
+      const branchIds = ['a', 'b', 'c', 'd', 'e']
+
+      expect(getLogInkInputEvents(state, '', { end: true }, { branchCount: 5, branchIds })).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+      ])
+      expect(getLogInkInputEvents(state, '', { home: true }, { branchCount: 5, branchIds })).toEqual([
+        { type: 'action', action: { type: 'moveBranch', delta: -5, count: 5, id: 'a' } },
+      ])
+    })
+
+    it('status: End jumps to the last worktree file', () => {
+      const state = createLogInkState(rows, { activeView: 'status' })
+      expect(getLogInkInputEvents(state, '', { end: true }, { worktreeFileCount: 6 })).toEqual([
+        { type: 'action', action: { type: 'moveWorktreeFile', delta: 6, fileCount: 6 } },
+      ])
+    })
+
+    it('worktree diff: End scrolls to the bottom', () => {
+      const state = createLogInkState(rows, { activeView: 'diff' })
+      expect(getLogInkInputEvents(state, '', { end: true }, { worktreeDiffLineCount: 40 })).toEqual([
+        {
+          type: 'action',
+          action: { type: 'pageWorktreeDiff', delta: 40, lineCount: 40, hunkOffsets: undefined },
+        },
+      ])
+    })
+
+    it('commit diff: Home/End scroll the preview instead of moving selectedIndex', () => {
+      const state = { ...createLogInkState(rows, { activeView: 'diff' }), diffSource: 'commit' as const }
+      expect(getLogInkInputEvents(state, 'G', {}, { previewLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageDetailPreview', delta: 50, previewLineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, '', { end: true }, { previewLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageDetailPreview', delta: 50, previewLineCount: 50 } },
+      ])
+      const armed = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
+      expect(getLogInkInputEvents(armed, 'g', {}, { previewLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageDetailPreview', delta: -50, previewLineCount: 50 } },
+      ])
+      expect(getLogInkInputEvents(state, '', { home: true }, { previewLineCount: 50 })).toEqual([
+        { type: 'action', action: { type: 'pageDetailPreview', delta: -50, previewLineCount: 50 } },
+      ])
+    })
+  })
+
   describe('view-local jump keys on blame / file-history / changelog (#1387)', () => {
     it('G and gg move the blame cursor, not the hidden history cursor', () => {
       let state = createLogInkState(rows)
@@ -1753,6 +1853,33 @@ describe('log Ink input interactions', () => {
         event.type === 'action' && event.action.type === 'pageChangelog' && event.action.delta === 80
       )).toBeDefined()
       expect(getLogInkInputEvents(state, 'G', {}, {})).toEqual([])
+    })
+
+    it('Home/End move the blame cursor, same as gg/G (OSS-2782)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'blame' })
+
+      const end = getLogInkInputEvents(state, '', { end: true }, { blameLineCount: 120 })
+      expect(end).toEqual([
+        { type: 'action', action: { type: 'moveBlame', delta: 120, count: 120 } },
+        { type: 'action', action: { type: 'setStatus', value: 'jumped to last line', ttl: 'echo' } },
+      ])
+
+      const home = getLogInkInputEvents(state, '', { home: true }, { blameLineCount: 120 })
+      expect(home).toEqual([
+        { type: 'action', action: { type: 'moveBlame', delta: -120, count: 120 } },
+        { type: 'action', action: { type: 'setStatus', value: 'jumped to first line', ttl: 'echo' } },
+      ])
+    })
+
+    it('End scrolls the ready changelog to the end, same as G (OSS-2782)', () => {
+      let state = createLogInkState(rows)
+      state = applyLogInkAction(state, { type: 'pushView', value: 'changelog' })
+
+      const events = getLogInkInputEvents(state, '', { end: true }, { changelogLineCount: 80 })
+      expect(events.find((event) =>
+        event.type === 'action' && event.action.type === 'pageChangelog' && event.action.delta === 80
+      )).toBeDefined()
     })
   })
 
@@ -3543,6 +3670,14 @@ describe('log Ink input interactions', () => {
       expect(left).toEqual([{ type: 'action', action: { type: 'previousSidebarTab' } }])
     })
 
+    it('h/l on the sidebar mirror ←/→ (OSS-2782)', () => {
+      const right = getLogInkInputEvents(sidebarBranchesState(), 'l')
+      expect(right).toEqual([{ type: 'action', action: { type: 'nextSidebarTab' } }])
+
+      const left = getLogInkInputEvents(sidebarBranchesState(), 'h')
+      expect(left).toEqual([{ type: 'action', action: { type: 'previousSidebarTab' } }])
+    })
+
     it('↑/↓ on a sidebar branches tab with items moves the branch cursor', () => {
       // The action is `moveBranch` (not previousSidebarTab) because the
       // branches tab has items the user is cursoring through. Without
@@ -4979,6 +5114,28 @@ describe('log Ink input interactions', () => {
       ])
     })
 
+    it('h/l mirror ←/→ on the status groups (OSS-2782)', () => {
+      const right = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 0 }),
+        'l',
+        {},
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(right).toEqual([
+        { type: 'action', action: { type: 'jumpToStatusGroup', targetIndex: 2 } },
+      ])
+
+      const left = getLogInkInputEvents(
+        statusState({ selectedWorktreeFileIndex: 3 }),
+        'h',
+        {},
+        { worktreeFileCount: 6, statusGroups: groups },
+      )
+      expect(left).toEqual([
+        { type: 'action', action: { type: 'jumpToStatusGroup', targetIndex: 0 } },
+      ])
+    })
+
     it('→ at the last group is a no-op', () => {
       const events = getLogInkInputEvents(
         statusState({ selectedWorktreeFileIndex: 5 }),
@@ -5367,6 +5524,18 @@ describe('log Ink input interactions', () => {
         { rightArrow: true },
       )
       expect(events).toEqual([
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: 1 } },
+      ])
+    })
+
+    it('h/l on detail focus mirror ←/→ (OSS-2782)', () => {
+      const left = getLogInkInputEvents(actionsFocusState(), 'h')
+      expect(left).toEqual([
+        { type: 'action', action: { type: 'cycleInspectorTab', delta: -1 } },
+      ])
+
+      const right = getLogInkInputEvents(actionsFocusState({ inspectorTab: 'inspector' }), 'l')
+      expect(right).toEqual([
         { type: 'action', action: { type: 'cycleInspectorTab', delta: 1 } },
       ])
     })

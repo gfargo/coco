@@ -51,19 +51,18 @@ export type LogInkCommandId =
   | 'navigateStatus'
   | 'navigateTags'
   | 'nextHunk'
-  | 'nextMatch'
   | 'nextSidebarTab'
   | 'moveUp'
   | 'openSelected'
   | 'pageDown'
   | 'pageUp'
   | 'previousHunk'
-  | 'previousMatch'
   | 'previousSidebarTab'
   | 'quit'
   | 'refresh'
   | 'revertSelection'
   | 'search'
+  | 'showWelcome'
   | 'toggleDiffViewMode'
   | 'toggleGraph'
   | 'viewKeys'
@@ -195,42 +194,28 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
   },
   {
     id: 'moveToTop',
-    keys: ['gg'],
+    keys: ['gg', 'home'],
     label: t(en, 'keymap.binding.moveToTop.label'),
     description: t(en, 'keymap.binding.moveToTop.desc'),
     contexts: ['commits'],
   },
   {
     id: 'moveToBottom',
-    keys: ['G'],
+    keys: ['G', 'end'],
     label: t(en, 'keymap.binding.moveToBottom.label'),
     description: t(en, 'keymap.binding.moveToBottom.desc'),
     contexts: ['commits'],
   },
   {
-    id: 'nextMatch',
-    keys: ['n'],
-    label: t(en, 'keymap.binding.nextMatch.label'),
-    description: t(en, 'keymap.binding.nextMatch.desc'),
-    contexts: ['commits'],
-  },
-  {
-    id: 'previousMatch',
-    keys: ['N'],
-    label: t(en, 'keymap.binding.previousMatch.label'),
-    description: t(en, 'keymap.binding.previousMatch.desc'),
-    contexts: ['commits'],
-  },
-  {
     id: 'previousSidebarTab',
-    keys: ['['],
+    keys: ['[', 'h'],
     label: t(en, 'keymap.binding.previousSidebarTab.label'),
     description: t(en, 'keymap.binding.previousSidebarTab.desc'),
     contexts: ['sidebar'],
   },
   {
     id: 'nextSidebarTab',
-    keys: [']'],
+    keys: [']', 'l'],
     label: t(en, 'keymap.binding.nextSidebarTab.label'),
     description: t(en, 'keymap.binding.nextSidebarTab.desc'),
     contexts: ['sidebar'],
@@ -679,6 +664,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['gC'],
     label: t(en, 'keymap.binding.themePicker.label'),
     description: t(en, 'keymap.binding.themePicker.desc'),
+    contexts: ['normal'],
+  },
+  {
+    id: 'showWelcome',
+    keys: ['gW'],
+    label: t(en, 'keymap.binding.showWelcome.label'),
+    description: t(en, 'keymap.binding.showWelcome.desc'),
     contexts: ['normal'],
   },
   {
@@ -1132,6 +1124,7 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   help: 'essentials',
   commandPalette: 'essentials',
   themePicker: 'view',
+  showWelcome: 'view',
   openProjectConfig: 'view',
   openGlobalConfig: 'view',
   gitignoreFile: 'mutate',
@@ -1172,8 +1165,6 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   pageDown: 'movement',
   moveToTop: 'movement',
   moveToBottom: 'movement',
-  nextMatch: 'movement',
-  previousMatch: 'movement',
   nextHunk: 'movement',
   previousHunk: 'movement',
   nextSidebarTab: 'movement',

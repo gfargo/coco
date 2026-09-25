@@ -80,6 +80,8 @@ export type UseInputHandlerDeps = {
   /** First-launch onboarding overlay flag + its dismiss (clears + persists). */
   showOnboarding: boolean
   dismissOnboarding: () => void
+  /** Replays the onboarding overlay (`:` palette / `gW`, OSS-2782). */
+  showOnboardingOverlay: () => void
 
   /** Memoized filtered promoted-view lists (per-keystroke selection snapshots). */
   filteredBranchList: FilteredLists['filteredBranchList']
@@ -236,6 +238,7 @@ export function useInputHandler(
     dispatch,
     showOnboarding,
     dismissOnboarding,
+    showOnboardingOverlay,
     filteredBranchList,
     filteredTagList,
     filteredStashList,
@@ -696,6 +699,8 @@ export function useInputHandler(
         } else {
           void runWorkflowAction(event.id, event.payload)
         }
+      } else if (event.type === 'showOnboarding') {
+        showOnboardingOverlay()
       } else if (event.type === 'openFileInEditor') {
         openInEditor(event.path)
       } else if (event.type === 'openConfigInEditor') {
