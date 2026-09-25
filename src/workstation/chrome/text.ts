@@ -1,84 +1,6 @@
-const COMBINING_MARK_RANGES: Array<[number, number]> = [
-  [0x0300, 0x036f],
-  [0x1ab0, 0x1aff],
-  [0x1dc0, 0x1dff],
-  [0x20d0, 0x20ff],
-  [0xfe20, 0xfe2f],
-]
+import { cellWidth, graphemes } from './cellWidth'
 
-const WIDE_CHARACTER_RANGES: Array<[number, number]> = [
-  [0x1100, 0x115f],
-  [0x2329, 0x232a],
-  [0x2e80, 0xa4cf],
-  [0xac00, 0xd7a3],
-  [0xf900, 0xfaff],
-  [0xfe10, 0xfe19],
-  [0xfe30, 0xfe6f],
-  [0xff00, 0xff60],
-  [0xffe0, 0xffe6],
-  [0x231a, 0x231b],
-  [0x23e9, 0x23f3],
-  // OSS-1774 — Emoji_Presentation=Yes subranges of the Misc-Symbols +
-  // Dingbats block (U+2600-27BF). The block also holds text-presentation
-  // dingbats coco renders as UI glyphs (✓ ✗ ⚠ ✚ ❯) which must stay 1 cell;
-  // a blanket [0x2600, 0x27bf] range treated all of them as wide.
-  [0x2614, 0x2615],
-  [0x2648, 0x2653],
-  [0x267f, 0x267f],
-  [0x2693, 0x2693],
-  [0x26a1, 0x26a1],
-  [0x26aa, 0x26ab],
-  [0x26bd, 0x26be],
-  [0x26c4, 0x26c5],
-  [0x26ce, 0x26ce],
-  [0x26d4, 0x26d4],
-  [0x26ea, 0x26ea],
-  [0x26f2, 0x26f3],
-  [0x26f5, 0x26f5],
-  [0x26fa, 0x26fa],
-  [0x26fd, 0x26fd],
-  [0x2705, 0x2705],
-  [0x270a, 0x270b],
-  [0x2728, 0x2728],
-  [0x274c, 0x274c],
-  [0x274e, 0x274e],
-  [0x2753, 0x2755],
-  [0x2757, 0x2757],
-  [0x2795, 0x2797],
-  [0x27b0, 0x27b0],
-  [0x27bf, 0x27bf],
-  [0x2b1b, 0x2b1c],
-  [0x2b50, 0x2b50],
-  [0x2b55, 0x2b55],
-  [0x1f000, 0x1faff],
-  [0x20000, 0x3fffd],
-]
-
-function isInRange(codePoint: number, ranges: Array<[number, number]>): boolean {
-  return ranges.some(([start, end]) => codePoint >= start && codePoint <= end)
-}
-
-function characterWidth(character: string): number {
-  const codePoint = character.codePointAt(0) || 0
-
-  if (codePoint === 0 || codePoint < 32 || (codePoint >= 0x7f && codePoint < 0xa0)) {
-    return 0
-  }
-
-  if (
-    codePoint === 0x200d ||
-    (codePoint >= 0xfe00 && codePoint <= 0xfe0f) ||
-    isInRange(codePoint, COMBINING_MARK_RANGES)
-  ) {
-    return 0
-  }
-
-  return isInRange(codePoint, WIDE_CHARACTER_RANGES) ? 2 : 1
-}
-
-export function cellWidth(value: string): number {
-  return Array.from(value).reduce((width, character) => width + characterWidth(character), 0)
-}
+export { cellWidth }
 
 /**
  * Word-wrap `value` into lines that each fit within `width` cells. Breaks
@@ -138,18 +60,18 @@ export function wrapCells(value: string, width: number): string[] {
     while (cellWidth(remaining) > width) {
       let chunk = ''
       let chunkWidth = 0
-      for (const character of Array.from(remaining)) {
-        const charW = characterWidth(character)
-        if (chunkWidth + charW > width) break
-        chunk += character
-        chunkWidth += charW
+      for (const cluster of graphemes(remaining)) {
+        const clusterW = cellWidth(cluster)
+        if (chunkWidth + clusterW > width) break
+        chunk += cluster
+        chunkWidth += clusterW
       }
       if (chunk === '') {
-        // A single character wider than the whole budget (wide char,
+        // A single cluster wider than the whole budget (wide char,
         // width 1). Emit it anyway — an empty chunk never shrinks
         // `remaining`, which used to spin this loop forever and hang
         // the TUI.
-        chunk = Array.from(remaining)[0]
+        chunk = graphemes(remaining)[0]
       }
       lines.push(chunk)
       remaining = remaining.slice(chunk.length)
@@ -208,14 +130,14 @@ export function truncateCells(
   let used = 0
   let output = ''
 
-  for (const character of Array.from(value)) {
-    const nextWidth = characterWidth(character)
+  for (const cluster of graphemes(value)) {
+    const nextWidth = cellWidth(cluster)
 
     if (used + nextWidth > available) {
       break
     }
 
-    output += character
+    output += cluster
     used += nextWidth
   }
 
@@ -300,15 +222,15 @@ export function expandTabs(value: string, tabWidth = 8, startColumn = 0): string
   if (!value.includes('\t')) return value
   let out = ''
   let column = startColumn
-  for (const character of value) {
-    if (character === '\t') {
+  for (const cluster of graphemes(value)) {
+    if (cluster === '\t') {
       const pad = tabWidth - (column % tabWidth)
       out += ' '.repeat(pad)
       column += pad
       continue
     }
-    out += character
-    column += characterWidth(character)
+    out += cluster
+    column += cellWidth(cluster)
   }
   return out
 }

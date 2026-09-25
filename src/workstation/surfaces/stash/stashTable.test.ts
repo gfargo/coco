@@ -107,6 +107,43 @@ describe('stash surface — aligned table', () => {
     }
   })
 
+  // OSS-2785 — `padStart`/`padEnd` count UTF-16 code units, so a CJK
+  // branch name (2 cells/char) widened the row past the panel interior
+  // once the column math itself moved to `cellWidth`. `cell()` now pads
+  // by cell budget via `padCells`.
+  it('never lets a row with a CJK branch name exceed the panel interior width', () => {
+    const width = 90
+    const interior = width - 4
+    const cjkStashes = [
+      ...stashes,
+      { ref: 'stash@{3}', hash: 'd4', baseHash: 'd4p', date: '2024-01-08', branch: '機能/新しいテーマブランチ', message: 'fix: CJK branch name overflow regression', files: ['g.ts'] },
+    ]
+    const cjkContext: LogInkContext = { stashes: { stashes: cjkStashes } } as unknown as LogInkContext
+    const rows = leafRows(renderStashSurface({ ...ctx(width), context: cjkContext }, 0))
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) {
+      expect(cellWidth(row)).toBeLessThanOrEqual(interior)
+    }
+  })
+
+  it('keeps the message column aligned across ASCII and CJK branch names', () => {
+    const width = 90
+    const cjkBranch = '機能/新しいテーマ'
+    const mixedStashes = [stashes[0], { ...stashes[1], branch: cjkBranch }]
+    const mixedContext: LogInkContext = { stashes: { stashes: mixedStashes } } as unknown as LogInkContext
+    const rows = leafRows(renderStashSurface({ ...ctx(width), context: mixedContext }, 0))
+      .filter((row) => row.includes('stash@{'))
+    expect(rows).toHaveLength(2)
+
+    const offsets = rows.map((row, index) => {
+      const marker = mixedStashes[index].message.slice(0, 7)
+      const markerIndex = row.indexOf(marker)
+      expect(markerIndex).toBeGreaterThan(-1)
+      return cellWidth(row.slice(0, markerIndex))
+    })
+    expect(offsets[0]).toBe(offsets[1])
+  })
+
   it('sheds the branch column on a narrow terminal', () => {
     const flat = flattenText(renderStashSurface(ctx(48), 0))
     // ref + message survive; the branch name is dropped to protect the

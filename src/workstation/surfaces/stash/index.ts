@@ -14,7 +14,7 @@ import { formatCompactRelativeDate } from '../../chrome/dateFormat'
 import { getRenderNow } from '../../chrome/snapshotMode'
 import { inlineSpinnerGlyph } from '../../chrome/spinner'
 import { formatLogInkLoading, formatLogInkStashEmpty } from '../../chrome/surfaceStates'
-import { cellWidth, truncateCells } from '../../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../../chrome/text'
 import {
     matchesPromotedFilter,
     renderPromotedFilterAffordance,
@@ -28,10 +28,10 @@ const GAP = 2 // cells between columns
 /** Truncate to `w` cells, then pad to `w` (left = padEnd, right = padStart). */
 function cell(value: string, w: number, align: 'left' | 'right' = 'left'): string {
   const t = truncateCells(value, w)
-  // padStart/padEnd count code units; refs / ages / counts / branch
-  // names are ASCII in practice, matching the branches surface's
-  // padEnd-based column alignment.
-  return align === 'right' ? t.padStart(w) : t.padEnd(w)
+  if (align === 'right') {
+    return ' '.repeat(Math.max(0, w - cellWidth(t))) + t
+  }
+  return padCells(t, w)
 }
 
 export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: number = 0): ReactTypes.ReactElement {
