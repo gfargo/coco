@@ -1,7 +1,17 @@
 export default {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  transformIgnorePatterns: ['/node_modules/', '/dist/'],
+  // yargs 18 and its dependency tree ship as ESM only. Jest can't
+  // `require()` ESM on Node 22, so those packages are compiled to CommonJS
+  // by `src/test/transforms/esmToCjs.cjs`. Every other `node_modules`
+  // package is still left untransformed.
+  transform: {
+    '^.+\\.m?js$': '<rootDir>/src/test/transforms/esmToCjs.cjs',
+  },
+  transformIgnorePatterns: [
+    '/node_modules/(?!(yargs|yargs-parser|cliui|y18n|string-width|strip-ansi|ansi-regex|ansi-styles|wrap-ansi|emoji-regex|get-east-asian-width)/)',
+    '/dist/',
+  ],
   // `@langchain/mistralai` re-exports the official `@mistralai/mistralai`
   // SDK, which ships as pure ESM (no CommonJS build). ts-jest runs tests
   // through CommonJS `require`, which cannot load that ESM entry, so every
