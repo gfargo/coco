@@ -127,8 +127,8 @@ async function probeIsGitRepo(): Promise<boolean> {
   try {
     // Lazy-import simple-git so the cold-start path stays fast for
     // users running `coco --help` / `coco doctor` etc.
-    const { default: simpleGit } = await import('simple-git')
-    const git = simpleGit()
+    const { createSimpleGit } = await import('../lib/simple-git/createSimpleGit')
+    const git = createSimpleGit()
     return await git.checkIsRepo()
   } catch {
     return false

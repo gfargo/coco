@@ -169,7 +169,7 @@
     "pretty-ms": "7.0.1",
     "react": "19.2.8",
     "react-devtools-core": "8.0.0",
-    "simple-git": "3.36.0",
+    "simple-git": "4.0.2",
     "tiktoken": "^1.0.21",
     "web-tree-sitter": "^0.27.0",
     "yargs": "18.2.0",

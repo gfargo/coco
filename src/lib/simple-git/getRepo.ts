@@ -1,4 +1,5 @@
-import { simpleGit, SimpleGit } from 'simple-git'
+import { SimpleGit } from 'simple-git'
+import { createSimpleGit } from './createSimpleGit'
 import { commandExit } from '../utils/commandExit'
 
 /**
@@ -15,7 +16,7 @@ export const getRepo = (baseDir?: string) => {
   let git: SimpleGit
 
   try {
-    git = baseDir ? simpleGit(baseDir) : simpleGit()
+    git = createSimpleGit(baseDir)
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     process.stderr.write(

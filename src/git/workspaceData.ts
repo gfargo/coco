@@ -1,8 +1,9 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import simpleGit, { SimpleGit } from 'simple-git'
+import { SimpleGit } from 'simple-git'
 
+import { createSimpleGit } from '../lib/simple-git/createSimpleGit'
 import { mapWithConcurrency } from '../lib/utils/mapWithConcurrency'
 
 const FIELD_SEPARATOR = '\x1f'
@@ -291,7 +292,7 @@ export async function getRepoSummary(
     dirty: 0,
   }
 
-  const git = options.git ?? simpleGit(resolved)
+  const git = options.git ?? createSimpleGit(resolved)
 
   try {
     const [headOutput, statusOutput, lastCommitOutput] = await Promise.all([

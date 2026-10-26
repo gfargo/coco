@@ -1,7 +1,7 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import simpleGit, { SimpleGit } from 'simple-git'
+import { simpleGit, SimpleGit } from 'simple-git'
 import { getHooksStatus, HOOK_MARKER, installHooks, uninstallHooks } from './manageHooks'
 
 describe('manageHooks (#1591)', () => {
