@@ -1,6 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { rejectFlagLike } from './forgeArgGuards'
 import { resolveDefaultRemoteName } from './remoteResolution'
+import { retryOnIndexLock, withAuthHint } from './actionErrors'
 
 export type TagActionResult = {
   ok: boolean
@@ -9,7 +10,7 @@ export type TagActionResult = {
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<TagActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
 
     return {
       ok: true,
@@ -18,7 +19,7 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
   } catch (error) {
     return {
       ok: false,
-      message: (error as Error).message,
+      message: withAuthHint((error as Error).message),
     }
   }
 }

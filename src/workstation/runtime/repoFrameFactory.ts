@@ -1,4 +1,5 @@
-import { simpleGit, type SimpleGit } from 'simple-git'
+import { type SimpleGit } from 'simple-git'
+import { createHeadlessGit } from '../../lib/simple-git/headlessGit'
 import type { LogInkRepoFrame } from '../../workstation/runtime/inkViewModel'
 import {
   createLogInkContextStatus,
@@ -64,7 +65,7 @@ export function createRepoFrameRuntime(
   rootGit: SimpleGit,
 ): RepoFrameRuntime {
   return {
-    git: frame.workdir ? simpleGit(frame.workdir) : rootGit,
+    git: frame.workdir ? createHeadlessGit(frame.workdir) : rootGit,
     context: {},
     contextStatus: createInitialContextStatus(),
   }
