@@ -54,7 +54,7 @@ export type LogInkInputEvent =
   | { type: 'refreshContext' }
   | { type: 'toggleSelectedFileStage' }
   | { type: 'toggleSelectedHunkStage' }
-  | { type: 'revertSelectedFile' }
+  | { type: 'revertSelectedFile'; path?: string }
   | { type: 'revertSelectedHunk' }
   | { type: 'stageSelectedLines' }
   | { type: 'revertSelectedLines' }
@@ -958,7 +958,13 @@ export function getLogInkPaletteExecuteEvents(
 ): LogInkInputEvent[] {
   if (command.kind === 'workflow') {
     if (command.requiresConfirmation) {
-      return [action({ type: 'setPendingConfirmation', value: command.id })]
+      // #2202 — revert-file pins the cursored path so a background
+      // refresh can't re-aim the confirmed revert at another file.
+      return [action({
+        type: 'setPendingConfirmation',
+        value: command.id,
+        payload: command.id === 'revert-file' ? context.worktreeSelectedPath : undefined,
+      })]
     }
     // Non-confirm workflows are dispatched directly through the runtime
     // workflow runner — same path the keyboard takes. Previously this
@@ -1092,7 +1098,7 @@ export function getLogInkPaletteExecuteEvents(
     case 'refresh':
       return [{ type: 'refreshContext' }]
     case 'revertSelection':
-      return [action({ type: 'setPendingConfirmation', value: 'revert-file' })]
+      return [action({ type: 'setPendingConfirmation', value: 'revert-file', payload: context.worktreeSelectedPath })]
     case 'editCommit':
       return [
         ...(state.activeView !== 'compose'
@@ -1672,7 +1678,7 @@ export function getLogInkInputEvents(
       // because they call synchronous runtime hooks, not async git ops.
       if (workflowAction?.id === 'revert-file') {
         return [
-          { type: 'revertSelectedFile' },
+          { type: 'revertSelectedFile', path: state.pendingConfirmationPayload },
           action({ type: 'setPendingConfirmation', value: undefined }),
         ]
       }
@@ -4535,7 +4541,7 @@ export function getLogInkInputEvents(
     context.worktreeFileCount &&
     !state.statusGroupHeaderFocused
   ) {
-    return [action({ type: 'setPendingConfirmation', value: 'revert-file' })]
+    return [action({ type: 'setPendingConfirmation', value: 'revert-file', payload: context.worktreeSelectedPath })]
   }
 
   if (inputValue === 'z' && isWorktreeDiffTarget(state) && context.worktreeHunkOffsets?.length) {

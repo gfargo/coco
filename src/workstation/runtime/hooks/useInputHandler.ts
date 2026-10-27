@@ -161,7 +161,7 @@ export type UseInputHandlerDeps = {
   /** Worktree staging / revert callbacks (`useWorktreeStageActions`). */
   toggleSelectedFileStage: () => Promise<void>
   toggleSelectedHunkStage: () => Promise<void>
-  revertSelectedFile: () => Promise<void>
+  revertSelectedFile: (path?: string) => Promise<void>
   revertSelectedHunk: () => Promise<void>
   stageSelectedLines: () => Promise<void>
   revertSelectedLines: () => Promise<void>
@@ -650,7 +650,7 @@ export function useInputHandler(
       } else if (event.type === 'toggleSelectedHunkStage') {
         void toggleSelectedHunkStage()
       } else if (event.type === 'revertSelectedFile') {
-        void revertSelectedFile()
+        void revertSelectedFile(event.path)
       } else if (event.type === 'revertSelectedHunk') {
         void revertSelectedHunk()
       } else if (event.type === 'stageSelectedLines') {

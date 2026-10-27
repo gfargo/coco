@@ -157,6 +157,37 @@ describe('useWorktreeStageActions — refresh + diff/hunks clear on every mutati
   })
 })
 
+describe('revertSelectedFile — pinned target (#2202)', () => {
+  afterEach(() => {
+    revertFileMock.mockReset()
+    revertFileMock.mockResolvedValue({ ok: true, message: 'reverted file' })
+  })
+
+  it('reverts the pinned path even when the cursored file changed after a refresh', async () => {
+    const pinned = { ...selectedWorktreeFile, path: 'src/pinned.ts' }
+    const deps = baseDeps({ visibleWorktreeFilesGrouped: [selectedWorktreeFile, pinned] })
+    const { revertSelectedFile } = useWorktreeStageActions(fakeReact(), deps)
+
+    await revertSelectedFile('src/pinned.ts')
+
+    expect(revertFileMock).toHaveBeenCalledWith(deps.git, pinned)
+  })
+
+  it('aborts without reverting when the pinned path left the list', async () => {
+    const deps = baseDeps()
+    const { revertSelectedFile } = useWorktreeStageActions(fakeReact(), deps)
+
+    await revertSelectedFile('src/gone.ts')
+
+    expect(revertFileMock).not.toHaveBeenCalled()
+    expect(deps.dispatch).toHaveBeenCalledWith({
+      type: 'setStatus',
+      value: 'src/gone.ts is no longer changed; revert cancelled',
+      kind: 'warning',
+    })
+  })
+})
+
 describe('revertSelectedFile — status kind reflects outcome (#1602)', () => {
   afterEach(() => {
     revertFileMock.mockReset()
