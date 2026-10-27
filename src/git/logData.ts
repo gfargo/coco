@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { stripDisplayControl, stripDisplayControlMultiline } from './forgeText'
 import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
 import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from './submoduleDiff'
 import { LogArgv, LogView } from '../commands/log/config'
@@ -185,9 +186,9 @@ export function parseLogOutput(output: string): GitLogRow[] {
         hash,
         parents: parentsStr ? parentsStr.trim().split(' ').filter(Boolean) : [],
         date,
-        author,
-        refs: cleanRefs(refs),
-        message,
+        author: stripDisplayControl(author),
+        refs: cleanRefs(refs).map(stripDisplayControl),
+        message: stripDisplayControl(message),
       }
     })
 }
@@ -334,10 +335,10 @@ export function parseCommitDetail(metadata: string, files: string, numstatOutput
     hash,
     parents: parentsStr ? parentsStr.trim().split(' ').filter(Boolean) : [],
     date,
-    author,
-    refs: cleanRefs(refs),
-    message,
-    body: body.trim(),
+    author: stripDisplayControl(author),
+    refs: cleanRefs(refs).map(stripDisplayControl),
+    message: stripDisplayControl(message),
+    body: stripDisplayControlMultiline(body.trim()),
     files: parseNameStatus(files, numstat),
     stats: summarizeNumstat(numstat),
   }
@@ -610,6 +611,7 @@ export async function getCommitFilePreview(
       line.startsWith(' ')
     ))
     .slice(0, limit)
+    .map(stripDisplayControl)
 
   // #884 — replace LFS pointer hunks and submodule "Subproject
   // commit" hunks with one-line summaries. Both detections are

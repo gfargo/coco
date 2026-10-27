@@ -93,3 +93,19 @@ export async function getRemoteOverview(git: SimpleGit): Promise<RemoteOverview>
   const entries = parseRemoteVerboseOutput(output)
   return { hasRemotes: entries.length > 0, entries }
 }
+
+/**
+ * Hide credentials embedded in a remote URL before it is displayed or
+ * copied (#2204). `https://user:token@host/x` and `https://TOKEN@host/x`
+ * (token-as-username) lose their userinfo entirely; for other schemes
+ * (`ssh://git@host/x`) only a password is masked, since the bare user is
+ * not a secret. scp-style `git@host:path` has no scheme and is untouched.
+ */
+export function maskUrlCredentials(url: string): string {
+  const match = /^([a-z][a-z0-9+.-]*:\/\/)([^/@\s]+)@(.*)$/i.exec(url)
+  if (!match) return url
+  const [, scheme, userinfo, rest] = match
+  if (/^https?:|^ftps?:/i.test(scheme)) return `${scheme}***@${rest}`
+  const colon = userinfo.indexOf(':')
+  return colon === -1 ? url : `${scheme}${userinfo.slice(0, colon)}:***@${rest}`
+}

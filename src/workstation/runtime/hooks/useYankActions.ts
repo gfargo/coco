@@ -51,6 +51,7 @@ import {
   getSelectedPullRequestTriage,
 } from '../selection'
 import { getBisectCompletion } from '../../../git/bisectData'
+import { maskUrlCredentials } from '../../../git/remoteData'
 import { findStashFileForOffset, type StashDiffFile } from '../../../git/stashData'
 import type { WorktreeFile } from '../../../git/statusData'
 import type { GitLogCommitRow, GitCommitDetail } from '../../../git/logData'
@@ -213,7 +214,7 @@ export function useYankActions(
       // #1452 flip — resolved via the id-first/index-fallback selector.
       const entry = getSelectedRemote(state, context)
       if (entry && entry.fetchUrl) {
-        value = entry.fetchUrl
+        value = maskUrlCredentials(entry.fetchUrl)
         label = `remote ${entry.name} URL`
       }
     } else if (view === 'issues') {
