@@ -4,7 +4,7 @@ import { useInputHandler } from './useInputHandler'
 // #2204 — while the "Terminal too small" screen hides every prompt, keys
 // must not reach the workflow handlers (a `y` could confirm a revert the
 // user can't see). Ctrl+C stays live so they can still quit.
-function install(tooSmall: boolean, state = createLogInkState([])) {
+function useInstalledHandler(tooSmall: boolean, state = createLogInkState([])) {
   let handler: (input: string, key: Record<string, unknown>) => void = () => undefined
   const dispatch = jest.fn()
   const exit = jest.fn()
@@ -21,7 +21,7 @@ function install(tooSmall: boolean, state = createLogInkState([])) {
 describe('useInputHandler while the terminal is too small (#2204)', () => {
   it('drops a y-confirm answer for a prompt the user cannot see', () => {
     const state = { ...createLogInkState([]), pendingConfirmationId: 'revert-file' }
-    const { press, dispatch, revertSelectedFile } = install(true, state)
+    const { press, dispatch, revertSelectedFile } = useInstalledHandler(true, state)
 
     press('y')
 
@@ -30,7 +30,7 @@ describe('useInputHandler while the terminal is too small (#2204)', () => {
   })
 
   it('still lets Ctrl+C quit', () => {
-    const { press, exit } = install(true)
+    const { press, exit } = useInstalledHandler(true)
     press('c', { ctrl: true })
     expect(exit).toHaveBeenCalled()
   })
