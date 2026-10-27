@@ -1,7 +1,8 @@
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import simpleGit, { SimpleGit } from 'simple-git'
+import { SimpleGit } from 'simple-git'
+import { createHeadlessGit } from '../lib/simple-git/headlessGit'
 
 import { mapWithConcurrency } from '../lib/utils/mapWithConcurrency'
 
@@ -291,7 +292,7 @@ export async function getRepoSummary(
     dirty: 0,
   }
 
-  const git = options.git ?? simpleGit(resolved)
+  const git = options.git ?? createHeadlessGit(resolved)
 
   try {
     const [headOutput, statusOutput, lastCommitOutput] = await Promise.all([

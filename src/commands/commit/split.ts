@@ -272,11 +272,39 @@ function validatePlanForStagedFiles(
   }
 }
 
+/**
+ * Files staged AND edited again on disk (`AM`, `MM`). A whole-file
+ * `git add` would sweep the disk edits into the commit, so the apply path
+ * re-applies their staged content as a patch instead (#2129). Renames are
+ * excluded: `git diff --cached -- <new path>` loses the delete side, so
+ * the patch alone can't reproduce them.
+ */
+function getPartiallyStagedFiles(changes: Awaited<ReturnType<typeof getChanges>>): Set<string> {
+  const unstaged = new Set((changes.unstaged || []).map((change) => change.filePath))
+  return new Set(
+    (changes.staged || [])
+      .filter((change) => unstaged.has(change.filePath) && !change.oldFilePath && change.status !== 'deleted')
+      .map((change) => change.filePath)
+  )
+}
+
+/** Machine-parsed staged diff of one file, binary-safe, for `git apply --cached`. */
+async function captureStagedPatch(
+  git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>,
+  file: string
+): Promise<string> {
+  return git.raw([
+    'diff', '--cached', '--binary', '--no-ext-diff', '--no-textconv', '--no-color',
+    '--src-prefix=a/', '--dst-prefix=b/', '--', file,
+  ])
+}
+
 function assertNoUnstagedOverlap(
   plan: CommitSplitPlan,
   changes: Awaited<ReturnType<typeof getChanges>>,
   hunkInventory?: HunkInventory
 ): void {
+  const partiallyStaged = getPartiallyStagedFiles(changes)
   const hunkFiles = new Set(
     plan.groups.flatMap((group) =>
       getGroupHunks(group)
@@ -291,7 +319,7 @@ function assertNoUnstagedOverlap(
   )
   const overlapping = [...(changes.unstaged || []), ...(changes.untracked || [])]
     .map((change) => change.filePath)
-    .filter((file) => plannedFiles.has(file))
+    .filter((file) => plannedFiles.has(file) && !partiallyStaged.has(file))
 
   if (overlapping.length > 0) {
     throw new Error(
@@ -320,7 +348,8 @@ function assertNoUnstagedOverlap(
 async function assertNoStagedDriftSincePlan(
   plan: CommitSplitPlan,
   hunkInventory: HunkInventory,
-  git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>
+  git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>,
+  partiallyStaged: Set<string> = new Set()
 ): Promise<void> {
   const hunkFiles = new Set(
     plan.groups.flatMap((group) =>
@@ -360,7 +389,9 @@ async function assertNoStagedDriftSincePlan(
       `Staged changes drifted since the plan was generated — no longer staged: ${unstagedSincePlan.join(', ')}. Regenerate the plan (r) and re-apply.`
     )
   }
-  const editedSincePlan = fileModeFiles.filter((file) => worktreeEdited.has(file))
+  // Partially staged files are committed from their staged patch, so disk
+  // edits to them are expected and never enter the commit (#2129).
+  const editedSincePlan = fileModeFiles.filter((file) => worktreeEdited.has(file) && !partiallyStaged.has(file))
   if (editedSincePlan.length > 0) {
     throw new Error(
       `Files changed on disk since the plan was generated: ${editedSincePlan.join(', ')}. Applying would commit the drifted content under the reviewed message — regenerate the plan (r) and re-apply.`
@@ -487,7 +518,8 @@ export async function applyCommitSplitPlan({
 }): Promise<CommitSplitApplyResult> {
   validatePlanForStagedFiles(plan, changes.staged, hunkInventory)
   assertNoUnstagedOverlap(plan, changes, hunkInventory)
-  await assertNoStagedDriftSincePlan(plan, hunkInventory, git)
+  const partiallyStaged = getPartiallyStagedFiles(changes)
+  await assertNoStagedDriftSincePlan(plan, hunkInventory, git, partiallyStaged)
 
   // Defensive: drop any group with empty files[] AND empty hunks[].
   // `dropEmptyGroups` runs in the generator's rescue chain but we
@@ -596,6 +628,24 @@ export async function applyCommitSplitPlan({
   // instead of silently left out of the index (#1876).
   const committedFiles = new Set<string>()
 
+  // Staged content of partially staged files, captured before the reset
+  // wipes the index (#2129). Re-applied to the index in place of
+  // `git add`, so the disk edits stay unstaged instead of being committed.
+  const stagedPatches = new Map<string, string>()
+  for (const file of partiallyStaged) {
+    if (!stagedBeforeReset.includes(file)) continue
+    const patch = await captureStagedPatch(git, file)
+    if (patch.trim()) stagedPatches.set(file, patch)
+  }
+  const restoreToIndex = async (files: string[]) => {
+    const whole = files.filter((file) => !stagedPatches.has(file))
+    for (const file of files) {
+      const patch = stagedPatches.get(file)
+      if (patch) await applyPatchToIndex(patch, git)
+    }
+    if (whole.length > 0) await git.raw(['add', '--', ...whole])
+  }
+
   await git.raw(['reset'])
 
   logger.startSpinner(`Applying ${applicableGroups.length} commits…`)
@@ -630,7 +680,14 @@ export async function applyCommitSplitPlan({
     while (true) {
       try {
         if (groupFiles.length > 0) {
-          await git.add(groupFiles)
+          const wholeFiles = groupFiles.filter((file) => !stagedPatches.has(file))
+          if (wholeFiles.length > 0) {
+            await git.add(wholeFiles)
+          }
+          for (const file of groupFiles) {
+            const patch = stagedPatches.get(file)
+            if (patch) await applyPatchToIndex(patch, git)
+          }
         }
 
         if (groupHunks.length > 0) {
@@ -725,7 +782,7 @@ export async function applyCommitSplitPlan({
   // them into the unstaged pile.
   if (unplannedStaged.length > 0) {
     try {
-      await git.raw(['add', '--', ...unplannedStaged])
+      await restoreToIndex(unplannedStaged)
     } catch {
       // Best-effort — a path may have vanished from disk mid-apply.
     }
@@ -740,7 +797,7 @@ export async function applyCommitSplitPlan({
   )
   if (unresolvedPlannedFiles.length > 0) {
     try {
-      await git.raw(['add', '--', ...unresolvedPlannedFiles])
+      await restoreToIndex(unresolvedPlannedFiles)
     } catch {
       // Best-effort — a path may have vanished from disk mid-apply.
     }

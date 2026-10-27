@@ -48,7 +48,9 @@ export async function getChanges({ git, options }: GetChangesInput): Promise<Get
     if (file.working_dir !== '?' && file.working_dir !== ' ') {
       fileChange.status = getStatus(file, 'working_dir')
       fileChange.summary = getSummaryText(file, fileChange)
-      unstaged.push(fileChange as FileChange)
+      // Copy: the staged branch below overwrites status/summary on the
+      // same object, which would otherwise corrupt this unstaged entry.
+      unstaged.push({ ...fileChange } as FileChange)
     }
 
     // Staged files

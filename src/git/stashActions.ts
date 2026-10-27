@@ -3,10 +3,11 @@ import { BranchActionResult } from './branchActions'
 import { rejectFlagLike } from './forgeArgGuards'
 import { checkoutOrDeleteFromRef } from './historyActions'
 import { StashEntry } from './stashData'
+import { retryOnIndexLock } from './actionErrors'
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
 
     return {
       ok: true,

@@ -876,7 +876,7 @@ describe('log Ink input interactions', () => {
     })
 
     expect(getLogInkInputEvents(filePending, 'y')).toEqual([
-      { type: 'revertSelectedFile' },
+      { type: 'revertSelectedFile', path: undefined },
       {
         type: 'action',
         action: { type: 'setPendingConfirmation', value: undefined },
@@ -3983,6 +3983,17 @@ describe('log Ink input interactions', () => {
         { type: 'action', action: { type: 'setPendingConfirmation', value: undefined } },
         { type: 'startRebasePlan' },
       ])
+=======
+    it('pins the cursored path when revert-file opens and confirms against it (#2202)', () => {
+      const state = createLogInkState(rows, { activeView: 'status' })
+
+      const opened = getLogInkInputEvents(state, 'z', {}, { worktreeFileCount: 2, worktreeSelectedPath: 'src/foo.ts' })
+      expect(opened).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: 'revert-file', payload: 'src/foo.ts' } },
+      ])
+
+      const pending = applyLogInkAction(state, { type: 'setPendingConfirmation', value: 'revert-file', payload: 'src/foo.ts' })
+      expect(getLogInkInputEvents(pending, 'y')[0]).toEqual({ type: 'revertSelectedFile', path: 'src/foo.ts' })
     })
 
     it('emits yankFromActiveView from status only when a worktree path is selected', () => {

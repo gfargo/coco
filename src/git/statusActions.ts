@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { WorktreeFile } from './statusData'
+import { retryOnIndexLock } from './actionErrors'
 
 export type StatusActionResult = {
   ok: boolean
@@ -8,7 +9,7 @@ export type StatusActionResult = {
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<StatusActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
 
     return {
       ok: true,

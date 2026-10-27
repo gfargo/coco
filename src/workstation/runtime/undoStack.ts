@@ -47,10 +47,10 @@ export const MAX_UNDO_STACK_SIZE = 20
 export type UndoEntry =
   | { kind: 'delete-branch'; label: string; depth: number; workdir?: string; name: string; sha: string }
   | { kind: 'drop-stash'; label: string; depth: number; workdir?: string; hash: string; message: string }
-  | { kind: 'reset-to-commit'; label: string; depth: number; workdir?: string; previousSha: string; mode: ResetMode }
+  | { kind: 'reset-to-commit'; label: string; depth: number; workdir?: string; previousSha: string; headAfter?: string; mode: ResetMode }
   | { kind: 'delete-tag'; label: string; depth: number; workdir?: string; name: string; sha: string }
-  | { kind: 'merge-branch'; label: string; depth: number; workdir?: string; previousSha: string }
-  | { kind: 'reset-to-branch'; label: string; depth: number; workdir?: string; previousSha: string; mode: ResetMode }
+  | { kind: 'merge-branch'; label: string; depth: number; workdir?: string; previousSha: string; headAfter?: string }
+  | { kind: 'reset-to-branch'; label: string; depth: number; workdir?: string; previousSha: string; headAfter?: string; mode: ResetMode }
 
 export type UndoActionResult = { ok: boolean; message: string }
 
@@ -89,6 +89,42 @@ export function findMostRecentUndoEntry<K extends UndoEntry['kind']>(
   return undefined
 }
 
+/**
+ * Guard for the HEAD-moving entries (#2197). `headAfter` is HEAD as the
+ * undone action left it; if HEAD has since moved, resetting to
+ * `previousSha` would drop the newer commits, so refuse. A `--hard` undo
+ * also discards uncommitted tracked changes, so refuse that too rather
+ * than lose work silently. Entries without `headAfter` (revparse failed
+ * at capture) skip the guard.
+ */
+async function guardHeadMovingUndo(
+  git: SimpleGit,
+  entry: Extract<UndoEntry, { kind: 'reset-to-commit' | 'merge-branch' | 'reset-to-branch' }>,
+  mode: ResetMode,
+): Promise<UndoActionResult | undefined> {
+  if (!entry.headAfter) return undefined
+  const head = await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
+  if (head !== entry.headAfter) {
+    return { ok: false, message: `Cannot undo "${entry.label}": HEAD has moved since. Use the reflog (gr) to recover instead.` }
+  }
+  if (mode === 'hard') {
+    const dirty = await git.raw(['status', '--porcelain', '--untracked-files=no']).catch(() => '')
+    if (dirty.trim()) {
+      return { ok: false, message: `Cannot undo "${entry.label}": uncommitted changes would be discarded. Commit or stash them first.` }
+    }
+  }
+  return undefined
+}
+
+async function undoHeadMove(
+  git: SimpleGit,
+  entry: Extract<UndoEntry, { kind: 'reset-to-commit' | 'merge-branch' | 'reset-to-branch' }>,
+  mode: ResetMode,
+): Promise<UndoActionResult> {
+  const blocked = await guardHeadMovingUndo(git, entry, mode)
+  return blocked ?? restorePreviousHead(git, entry.previousSha, mode)
+}
+
 /** Run the recorded git-level inverse for a single undo entry. */
 export function performUndo(git: SimpleGit, entry: UndoEntry): Promise<UndoActionResult> {
   switch (entry.kind) {
@@ -97,12 +133,12 @@ export function performUndo(git: SimpleGit, entry: UndoEntry): Promise<UndoActio
     case 'drop-stash':
       return restoreStash(git, entry.hash, entry.message)
     case 'reset-to-commit':
-      return restorePreviousHead(git, entry.previousSha, entry.mode)
+      return undoHeadMove(git, entry, entry.mode)
     case 'delete-tag':
       return restoreDeletedTag(git, entry.name, entry.sha)
     case 'merge-branch':
-      return restorePreviousHead(git, entry.previousSha, 'hard')
+      return undoHeadMove(git, entry, 'hard')
     case 'reset-to-branch':
-      return restorePreviousHead(git, entry.previousSha, entry.mode)
+      return undoHeadMove(git, entry, entry.mode)
   }
 }

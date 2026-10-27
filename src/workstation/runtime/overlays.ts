@@ -123,6 +123,10 @@ export function describeConfirmationTarget(
   const id = state.pendingConfirmationId
   if (!id) return undefined
   const action = getLogInkWorkflowActionById(id)
+  // #2202 — revert-file acts on the path pinned when the prompt opened.
+  if (id === 'revert-file' && state.pendingConfirmationPayload) {
+    return `file: ${state.pendingConfirmationPayload}`
+  }
   const item = resolvePendingItemAction(id, state, context)
   if (item && (action?.targets !== 'multi' || item.ids.length === 1)) {
     return `${item.kind}: ${item.ids[0]}`

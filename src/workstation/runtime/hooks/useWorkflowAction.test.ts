@@ -1592,7 +1592,7 @@ describe('undo stack (OSS-1606)', () => {
     await runWorkflowAction('reset-to-commit', 'hard')
     expect(dispatch).toHaveBeenCalledWith({
       type: 'pushUndoEntry',
-      value: { kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234', mode: 'hard' },
+      value: { kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234', headAfter: 'deadbeef1234', mode: 'hard' },
     })
 
     dispatch.mockClear()
@@ -1752,6 +1752,7 @@ describe('merge-into-current workflow handler', () => {
         label: 'merge feature/merge-target into main',
         depth: 0,
         previousSha: 'deadbeef9876',
+        headAfter: 'deadbeef9876',
       },
     })
   })
@@ -1962,6 +1963,7 @@ describe('reset-to-branch workflow handler', () => {
         label: 'reset --hard to feature/target',
         depth: 0,
         previousSha: 'abc123previous',
+        headAfter: 'abc123previous',
         mode: 'hard',
       },
     })
