@@ -9,6 +9,7 @@ import {
     checkCacheHitRate,
     checkDynamicRouting,
     checkEndpointSupport,
+    checkGitInstallation,
     checkOllamaLiveness,
     checkProviderValidity,
     checkUsageBudget,
@@ -617,5 +618,26 @@ describe('checkDynamicRouting', () => {
     expect(diagnostics).toContainEqual(
       expect.objectContaining({ severity: 'info', message: expect.stringContaining('routing is active') })
     )
+  })
+})
+
+describe('checkGitInstallation (#2205)', () => {
+  it('reports nothing when git is present and recent enough', async () => {
+    const probe = jest.fn().mockResolvedValue({ ok: true, version: { major: 2, minor: 39, patch: 2, raw: 'git version 2.39.2' } })
+    await expect(checkGitInstallation(probe)).resolves.toEqual([])
+  })
+
+  it('errors with an upgrade hint for a git that is too old', async () => {
+    const probe = jest.fn().mockResolvedValue({ ok: false, reason: 'too-old', message: 'git 2.17.1 is too old; coco needs 2.24.0 or newer' })
+    const [diagnostic] = await checkGitInstallation(probe)
+    expect(diagnostic.severity).toBe('error')
+    expect(diagnostic.message).toContain('2.17.1')
+    expect(diagnostic.fix).toMatch(/Upgrade git/)
+  })
+
+  it('errors with an install hint when git is missing', async () => {
+    const probe = jest.fn().mockResolvedValue({ ok: false, reason: 'missing', message: 'git was not found on PATH.' })
+    const [diagnostic] = await checkGitInstallation(probe)
+    expect(diagnostic.fix).toMatch(/Install git/)
   })
 })
