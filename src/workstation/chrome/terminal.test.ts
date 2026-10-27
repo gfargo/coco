@@ -13,6 +13,9 @@ describe('log Ink terminal hygiene', () => {
   it('only starts the full-screen TUI when input and output are TTYs', () => {
     expect(canStartLogInkTui(readStream(true), writeStream(true))).toBe(true)
     expect(canStartLogInkTui(readStream(false), writeStream(true))).toBe(false)
+    // #2204 — a dumb terminal is a TTY but cannot render the alt-screen UI.
+    expect(canStartLogInkTui(readStream(true), writeStream(true), { TERM: 'dumb' })).toBe(false)
+    expect(canStartLogInkTui(readStream(true), writeStream(true), { TERM: 'xterm-256color' })).toBe(true)
     expect(canStartLogInkTui(readStream(true), writeStream(false))).toBe(false)
   })
 

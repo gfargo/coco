@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { stripDisplayControl } from './forgeText'
 
 /**
  * Blame loader (#0.71 — expanded git ops).
@@ -95,8 +96,8 @@ export function parseBlamePorcelain(output: string): BlameLine[] {
       if (metaLine.startsWith('\t')) {
         // The content line. Strip the single leading TAB the porcelain
         // format prepends; preserve everything after it verbatim.
-        const content = metaLine.slice(1)
-        const resolvedAuthor = author ?? 'Unknown'
+        const content = stripDisplayControl(metaLine.slice(1))
+        const resolvedAuthor = stripDisplayControl(author ?? 'Unknown')
         const resolvedTime = authorTime ?? 0
         metaByCommit.set(hash, { author: resolvedAuthor, authorTime: resolvedTime })
         lines.push({

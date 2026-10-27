@@ -14,7 +14,7 @@ import {
   formatLogInkRemotesEmpty,
 } from '../../chrome/surfaceStates'
 import { cellWidth, padCells, truncateCells } from '../../chrome/text'
-import type { RemoteEntry } from '../../../git/remoteData'
+import { maskUrlCredentials, type RemoteEntry } from '../../../git/remoteData'
 import {
   matchesPromotedFilter,
   renderPromotedFilterAffordance,
@@ -71,8 +71,8 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
         // shared URL, where a second column would just be noise).
         const pushDiffers = entry.pushUrl && entry.pushUrl !== entry.fetchUrl
         const urlText = pushDiffers
-          ? `${entry.fetchUrl} ↑ ${entry.pushUrl}`
-          : entry.fetchUrl || '(no url)'
+          ? `${maskUrlCredentials(entry.fetchUrl)} ↑ ${maskUrlCredentials(entry.pushUrl)}`
+          : entry.fetchUrl ? maskUrlCredentials(entry.fetchUrl) : '(no url)'
         const lineText = truncateCells(
           `${cursor} ${namePadded} ${urlText}`,
           Math.max(20, width - 4),

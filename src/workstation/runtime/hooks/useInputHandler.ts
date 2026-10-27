@@ -326,6 +326,11 @@ export function useInputHandler(
       return
     }
 
+    // The "Terminal too small" screen hides every prompt, so a key that
+    // reached the handlers could answer a y-confirm the user can't see
+    // (#2204). Ctrl+C above is the only key that works until they resize.
+    if (layout.tooSmall) return
+
     // First-launch onboarding (P1.3): any keystroke dismisses the overlay
     // and writes the seen-marker. Swallow the keystroke so the same key
     // doesn't also trigger normal input dispatch.

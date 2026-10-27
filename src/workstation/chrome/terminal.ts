@@ -23,9 +23,12 @@ export type LogInkRenderOptions = {
 
 export function canStartLogInkTui(
   input: NodeJS.ReadStream,
-  output: NodeJS.WriteStream
+  output: NodeJS.WriteStream,
+  env: NodeJS.ProcessEnv = process.env
 ): boolean {
-  return Boolean(input.isTTY && output.isTTY)
+  // A TERM=dumb terminal (Emacs `M-x shell`, some CI shells) is a TTY that
+  // can't render an alternate-screen UI; fall back to the snapshot (#2204).
+  return Boolean(input.isTTY && output.isTTY) && env.TERM !== 'dumb'
 }
 
 export function getLogInkRenderOptions(
