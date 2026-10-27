@@ -4,6 +4,7 @@ import { CommandHandler } from '../../lib/types'
 import { Config } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getRepo } from '../../lib/simple-git/getRepo'
+import { applyHeadlessGitEnv } from '../../lib/simple-git/headlessGit'
 import { LogArgv, LogOptions } from '../log/config'
 import { GitLogRow, getLogRows } from '../../git/logData'
 import { getStashCommitHashes } from '../../git/stashData'
@@ -134,7 +135,8 @@ export async function startCocoUiFromLogArgv(
   options: StartCocoUiFromLogArgvOptions = {}
 ): Promise<void> {
   const config = options.config || loadConfig<Config, LogArgv>(logArgv)
-  const git = options.git || getRepo()
+  applyHeadlessGitEnv()
+  const git = options.git || getRepo(undefined, { headless: true })
   const repoPath = process.cwd()
 
   // Three-stage boot (#808):

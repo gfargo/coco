@@ -3,6 +3,7 @@ import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
 import { rejectFlagLike } from './forgeArgGuards'
 import { getInProgressOperationType } from './operationData'
+import { retryOnIndexLock } from './actionErrors'
 
 function compactOutputLines(output: string): string[] {
   return output
@@ -13,7 +14,7 @@ function compactOutputLines(output: string): string[] {
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
 
     return {
       ok: true,

@@ -3,6 +3,7 @@ import { BranchRef } from './branchData'
 import { rejectFlagLike } from './forgeArgGuards'
 import type { ResetMode } from './historyActions'
 import { listRemotes, resolveDefaultRemoteName } from './remoteResolution'
+import { retryOnIndexLock, withAuthHint } from './actionErrors'
 
 export type BranchActionResult = {
   ok: boolean
@@ -42,7 +43,7 @@ export function getBranchActionRefs(branch: BranchRef): {
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
 
     return {
       ok: true,
@@ -51,7 +52,7 @@ async function runAction(action: () => Promise<unknown>, successMessage: string)
   } catch (error) {
     return {
       ok: false,
-      message: (error as Error).message,
+      message: withAuthHint((error as Error).message),
     }
   }
 }
