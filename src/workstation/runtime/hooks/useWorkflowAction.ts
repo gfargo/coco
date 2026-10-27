@@ -1568,7 +1568,11 @@ export function useWorkflowAction(
             )
           : []
       for (const entry of entriesToPush) {
-        dispatch({ type: 'pushUndoEntry', value: entry })
+        // #2197 — record where HEAD landed so `gu` can refuse once it moves.
+        const headAfter = entry.kind === 'reset-to-commit' || entry.kind === 'merge-branch' || entry.kind === 'reset-to-branch'
+          ? await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
+          : undefined
+        dispatch({ type: 'pushUndoEntry', value: headAfter ? { ...entry, headAfter } as UndoEntry : entry })
       }
     }
     // #1361 — batch delete selection lifecycle. A successful delete

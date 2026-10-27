@@ -82,6 +82,59 @@ describe('undo stack (OSS-1606)', () => {
   })
 
   describe('performUndo', () => {
+    describe('HEAD guard (#2197)', () => {
+      const mergeEntry: UndoEntry = {
+        kind: 'merge-branch',
+        label: 'merge feature/xyz into main',
+        depth: 0,
+        previousSha: 'aabbccdd1234',
+        headAfter: 'merged111',
+      }
+
+      it('refuses a merge undo when HEAD has moved since the merge', async () => {
+        const git = { revparse: jest.fn().mockResolvedValue('newer222\n'), raw: jest.fn().mockResolvedValue('') }
+        const result = await performUndo(git as never, mergeEntry)
+        expect(result.ok).toBe(false)
+        expect(result.message).toContain('HEAD has moved')
+        expect(git.raw).not.toHaveBeenCalledWith(['reset', '--hard', 'aabbccdd1234'])
+      })
+
+      it('refuses a --hard undo when tracked changes are uncommitted', async () => {
+        const git = {
+          revparse: jest.fn().mockResolvedValue('merged111'),
+          raw: jest.fn().mockImplementation(async (args: string[]) => (args[0] === 'status' ? ' M src/a.ts\n' : '')),
+        }
+        const result = await performUndo(git as never, mergeEntry)
+        expect(result.ok).toBe(false)
+        expect(result.message).toContain('uncommitted changes')
+        expect(git.raw).not.toHaveBeenCalledWith(['reset', '--hard', 'aabbccdd1234'])
+      })
+
+      it('undoes when HEAD is unchanged and the tree is clean', async () => {
+        const git = {
+          revparse: jest.fn().mockResolvedValue('merged111'),
+          raw: jest.fn().mockResolvedValue(''),
+        }
+        const result = await performUndo(git as never, mergeEntry)
+        expect(result.ok).toBe(true)
+        expect(git.raw).toHaveBeenCalledWith(['reset', '--hard', 'aabbccdd1234'])
+      })
+
+      it('does not check the worktree for a --soft reset undo', async () => {
+        const git = { revparse: jest.fn().mockResolvedValue('after1'), raw: jest.fn().mockResolvedValue('') }
+        const result = await performUndo(git as never, {
+          kind: 'reset-to-commit',
+          label: 'reset --soft to abc',
+          depth: 0,
+          previousSha: 'deadbeef1234',
+          headAfter: 'after1',
+          mode: 'soft',
+        })
+        expect(result.ok).toBe(true)
+        expect(git.raw).not.toHaveBeenCalledWith(['status', '--porcelain', '--untracked-files=no'])
+      })
+    })
+
     it('recreates a deleted branch at its recorded sha', async () => {
       const git = { raw: jest.fn().mockResolvedValue('') }
       const result = await performUndo(git as never, branchEntry())
