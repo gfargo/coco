@@ -3983,7 +3983,8 @@ describe('log Ink input interactions', () => {
         { type: 'action', action: { type: 'setPendingConfirmation', value: undefined } },
         { type: 'startRebasePlan' },
       ])
-=======
+    })
+
     it('pins the cursored path when revert-file opens and confirms against it (#2202)', () => {
       const state = createLogInkState(rows, { activeView: 'status' })
 
