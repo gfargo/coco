@@ -3974,6 +3974,17 @@ describe('log Ink input interactions', () => {
       expect(getLogInkInputEvents(state, 'y', {}, { stashCount: 1 })).toEqual([])
     })
 
+    it('confirming interactive-rebase opens the rebase plan view instead of spawning an editor (#2198)', () => {
+      const pending = applyLogInkAction(createLogInkState(rows), {
+        type: 'setPendingConfirmation',
+        value: 'interactive-rebase',
+      })
+      expect(getLogInkInputEvents(pending, 'y')).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: undefined } },
+        { type: 'startRebasePlan' },
+      ])
+    })
+
     it('emits yankFromActiveView from status only when a worktree path is selected', () => {
       const state = createLogInkState(rows, { activeView: 'status' })
 

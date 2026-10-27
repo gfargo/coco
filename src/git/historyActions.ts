@@ -573,33 +573,6 @@ export function autosquashRebase(
   }))
 }
 
-export function startInteractiveRebase(
-  git: SimpleGit,
-  commit: HistoryCommitRef | undefined
-): Promise<BranchActionResult> {
-  if (!commit) {
-    return Promise.resolve({
-      ok: false,
-      message: 'No commit selected.',
-    })
-  }
-
-  return guardNoInProgressOperation(git).then((blocked) => (
-    blocked || runAction(
-      () => git.raw(['rebase', '-i', `${commit.hash}^`]),
-      `Started interactive rebase from ${commit.shortHash}`
-    )
-  )).then((result) => ({
-    ...result,
-    details: result.ok
-      ? [
-        'Recovery: use `git rebase --abort` while the rebase is in progress.',
-        'After completion, use `git reflog` to recover the previous HEAD if needed.',
-      ]
-      : result.details,
-  }))
-}
-
 export const historyActionTestInternals = {
   compactOutputLines,
   getInProgressOperation,

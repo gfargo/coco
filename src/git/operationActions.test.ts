@@ -14,9 +14,11 @@ describe('log operation actions', () => {
   it('constructs continue and abort commands for rebase operations', async () => {
     const git = {
       raw: jest.fn().mockResolvedValue(''),
+      revparse: jest.fn().mockResolvedValue('/repo\n'),
     }
+    const runner = jest.fn().mockResolvedValue('')
 
-    await expect(continueOperation(git as never, 'rebase')).resolves.toEqual({
+    await expect(continueOperation(git as never, 'rebase', runner)).resolves.toEqual({
       ok: true,
       message: 'Continued rebase',
     })
@@ -25,8 +27,11 @@ describe('log operation actions', () => {
       message: 'Aborted rebase',
     })
 
-    expect(git.raw).toHaveBeenNthCalledWith(1, ['rebase', '--continue'])
-    expect(git.raw).toHaveBeenNthCalledWith(2, ['rebase', '--abort'])
+    expect(runner).toHaveBeenCalledWith(
+      ['rebase', '--continue'],
+      expect.objectContaining({ cwd: '/repo', env: expect.objectContaining({ GIT_EDITOR: 'true' }) })
+    )
+    expect(git.raw).toHaveBeenCalledWith(['rebase', '--abort'])
   })
 
   it('uses merge-specific continue and abort commands', async () => {
@@ -57,12 +62,31 @@ describe('log operation actions', () => {
     expect(git.raw).not.toHaveBeenCalled()
   })
 
-  it('returns readable command failures', async () => {
-    const git = {
-      raw: jest.fn().mockRejectedValue(new Error('conflicts remain\nfix conflict.ts first')),
+  it.each(['merge', 'cherry-pick', 'revert', 'rebase'] as const)(
+    'runs %s --continue with GIT_EDITOR=true even when the user exports another editor (#2198)',
+    async (operation) => {
+      const git = { revparse: jest.fn().mockResolvedValue('/repo') }
+      const runner = jest.fn().mockResolvedValue('')
+      const original = process.env.GIT_EDITOR
+      process.env.GIT_EDITOR = 'vim'
+      try {
+        await continueOperation(git as never, operation, runner)
+      } finally {
+        if (original === undefined) delete process.env.GIT_EDITOR
+        else process.env.GIT_EDITOR = original
+      }
+      expect(runner).toHaveBeenCalledWith([operation, '--continue'], {
+        cwd: '/repo',
+        env: expect.objectContaining({ GIT_EDITOR: 'true' }),
+      })
     }
+  )
 
-    await expect(continueOperation(git as never, 'merge')).resolves.toEqual({
+  it('returns readable command failures', async () => {
+    const git = { revparse: jest.fn().mockResolvedValue('/repo') }
+    const runner = jest.fn().mockRejectedValue(new Error('conflicts remain\nfix conflict.ts first'))
+
+    await expect(continueOperation(git as never, 'merge', runner)).resolves.toEqual({
       ok: false,
       message: 'conflicts remain',
       details: ['fix conflict.ts first'],

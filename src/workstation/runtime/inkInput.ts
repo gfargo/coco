@@ -1688,6 +1688,15 @@ export function getLogInkInputEvents(
           action({ type: 'setPendingConfirmation', value: undefined }),
         ]
       }
+      // #2198 — the old path spawned `git rebase -i` with piped stdio, so a
+      // terminal editor hung the TUI. The in-TUI plan view (`i`) is the
+      // supported interactive rebase.
+      if (workflowAction?.id === 'interactive-rebase') {
+        return [
+          action({ type: 'setPendingConfirmation', value: undefined }),
+          { type: 'startRebasePlan' },
+        ]
+      }
       if (workflowAction?.id === 'discard-draft') {
         return [
           action({ type: 'setPendingConfirmation', value: undefined }),

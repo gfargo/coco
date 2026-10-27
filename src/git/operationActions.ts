@@ -1,3 +1,5 @@
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
 import { GitOperationType } from './operationData'
@@ -92,9 +94,43 @@ export function isOperationConflictError(message: string | undefined): boolean {
   return /CONFLICT \(|Merge conflict in |Automatic merge failed|could not apply|could not revert|Resolve all conflicts manually/i.test(message || '')
 }
 
+/** Injectable spawn seam for tests; runs git in `cwd` with exactly the `env` given (callers pass the full env). */
+export type OperationRunner = (
+  args: string[],
+  options: { cwd: string; env: Record<string, string | undefined> }
+) => Promise<unknown>
+
+const defaultOperationRunner: OperationRunner = async (args, options) => {
+  try {
+    // Promisified per call, not at module load: importers' tests mock
+    // `child_process` wholesale.
+    return await promisify(execFile)('git', args, {
+      cwd: options.cwd,
+      env: options.env as NodeJS.ProcessEnv,
+      maxBuffer: 16 * 1024 * 1024,
+    })
+  } catch (error) {
+    // Surface git's own stderr, not execFile's echoed command line.
+    const stderr = (error as { stderr?: string }).stderr
+    if (typeof stderr === 'string' && stderr.trim()) {
+      throw new Error(stderr)
+    }
+    throw error
+  }
+}
+
+/**
+ * `<op> --continue` can open an editor (merge / cherry-pick / revert
+ * message, rebase reword). simple-git pipes stdio, so a terminal editor
+ * would wait on a pipe forever and hang the TUI (#2198). Run it through a
+ * scoped `GIT_EDITOR=true` so git keeps the message it already prepared.
+ * The env var, not `-c core.editor`, because `GIT_EDITOR` outranks
+ * `core.editor` — a user with `GIT_EDITOR` exported would still hang.
+ */
 export function continueOperation(
   git: SimpleGit,
-  operation: GitOperationType
+  operation: GitOperationType,
+  runner: OperationRunner = defaultOperationRunner
 ): Promise<BranchActionResult> {
   const command = getOperationCommand(operation, 'continue')
 
@@ -108,7 +144,13 @@ export function continueOperation(
   }
 
   return runAction(
-    () => git.raw(command.args),
+    async () => {
+      const cwd = (await git.revparse(['--show-toplevel'])).trim()
+      await runner(command.args, {
+        cwd,
+        env: { ...process.env, GIT_EDITOR: 'true' },
+      })
+    },
     command.successMessage
   )
 }

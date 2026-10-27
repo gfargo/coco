@@ -18,7 +18,6 @@ import {
   revertCommit,
   autosquashRebase,
   createFixupCommit,
-  startInteractiveRebase,
 } from './historyActions'
 
 jest.mock('child_process', () => ({
@@ -309,7 +308,7 @@ describe('log history actions', () => {
     })
   })
 
-  it('constructs reset and rebase commands with recovery guidance', async () => {
+  it('constructs reset commands with recovery guidance', async () => {
     const git = {
       revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
       raw: jest.fn().mockResolvedValue(''),
@@ -323,17 +322,8 @@ describe('log history actions', () => {
         'Then run `git reset --hard HEAD@{n}` if you need to undo this reset.',
       ],
     })
-    await expect(startInteractiveRebase(git as never, commit)).resolves.toEqual({
-      ok: true,
-      message: 'Started interactive rebase from abcdef1',
-      details: [
-        'Recovery: use `git rebase --abort` while the rebase is in progress.',
-        'After completion, use `git reflog` to recover the previous HEAD if needed.',
-      ],
-    })
 
-    expect(git.raw).toHaveBeenNthCalledWith(1, ['reset', '--mixed', commit.hash])
-    expect(git.raw).toHaveBeenNthCalledWith(2, ['rebase', '-i', `${commit.hash}^`])
+    expect(git.raw).toHaveBeenCalledWith(['reset', '--mixed', commit.hash])
   })
 
   describe('restorePreviousHead (OSS-1606 undo-stack inverse for resetToCommit)', () => {
