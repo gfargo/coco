@@ -2,6 +2,7 @@ import { spawn } from 'child_process'
 import { formatPatch, parsePatch, StructuredPatch, StructuredPatchHunk } from 'diff'
 import { SimpleGit } from 'simple-git'
 import { WorktreeFile } from './statusData'
+import { MACHINE_DIFF_ARGS } from './machineDiff'
 
 export type WorktreeHunkState = 'staged' | 'unstaged'
 
@@ -127,10 +128,10 @@ export async function getWorktreeHunks(
   }
 
   const stagedDiff = file.indexStatus.trim()
-    ? await git.diff(['--staged', '--', file.path])
+    ? await git.diff([...MACHINE_DIFF_ARGS, '--staged', '--', file.path])
     : ''
   const unstagedDiff = file.worktreeStatus.trim()
-    ? await git.diff(['--', file.path])
+    ? await git.diff([...MACHINE_DIFF_ARGS, '--', file.path])
     : ''
   const hunks = [
     ...parseHunks(file.path, 'staged', stagedDiff),

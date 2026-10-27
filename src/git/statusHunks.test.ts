@@ -11,6 +11,7 @@ import {
   unstageHunk,
 } from './statusHunks'
 import { WorktreeFile } from './statusData'
+import { MACHINE_DIFF_ARGS } from './machineDiff'
 
 jest.mock('child_process', () => ({
   spawn: jest.fn(),
@@ -85,7 +86,7 @@ describe('log status hunks', () => {
 
     const overview = await getWorktreeHunks(git as never, unstagedFile)
 
-    expect(git.diff).toHaveBeenCalledWith(['--', 'src/file.ts'])
+    expect(git.diff).toHaveBeenCalledWith([...MACHINE_DIFF_ARGS, '--', 'src/file.ts'])
     expect(overview?.hunks).toHaveLength(1)
     expect(overview?.hunks[0]).toMatchObject({
       id: 'src/file.ts::unstaged-hunk-1',
@@ -100,7 +101,7 @@ describe('log status hunks', () => {
 
     const overview = await getWorktreeHunks(git as never, stagedFile)
 
-    expect(git.diff).toHaveBeenCalledWith(['--staged', '--', 'src/file.ts'])
+    expect(git.diff).toHaveBeenCalledWith([...MACHINE_DIFF_ARGS, '--staged', '--', 'src/file.ts'])
     expect(overview?.hunks[0].state).toBe('staged')
   })
 
