@@ -3974,6 +3974,17 @@ describe('log Ink input interactions', () => {
       expect(getLogInkInputEvents(state, 'y', {}, { stashCount: 1 })).toEqual([])
     })
 
+    it('confirming interactive-rebase opens the rebase plan view instead of spawning an editor (#2198)', () => {
+      const pending = applyLogInkAction(createLogInkState(rows), {
+        type: 'setPendingConfirmation',
+        value: 'interactive-rebase',
+      })
+      expect(getLogInkInputEvents(pending, 'y')).toEqual([
+        { type: 'action', action: { type: 'setPendingConfirmation', value: undefined } },
+        { type: 'startRebasePlan' },
+      ])
+    })
+
     it('pins the cursored path when revert-file opens and confirms against it (#2202)', () => {
       const state = createLogInkState(rows, { activeView: 'status' })
 

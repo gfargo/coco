@@ -93,7 +93,6 @@ import {
     isResetMode,
     resetToCommit,
     revertCommit,
-    startInteractiveRebase,
     createFixupCommit,
     autosquashRebase,
     amendHeadCommit,
@@ -1029,15 +1028,13 @@ export function useWorkflowAction(
         }
         return result
       },
-      'interactive-rebase': async () => {
-        const commit = getSelectedInkCommit(state)
-        if (!commit) return { ok: false, message: 'No commit selected' }
-        return startInteractiveRebase(git, {
-          hash: commit.hash,
-          shortHash: commit.shortHash,
-          message: commit.message,
-        })
-      },
+      // #2198 — confirmed `interactive-rebase` is routed to the rebase plan
+      // view in inkInput; only a direct dispatch lands here, and spawning
+      // `git rebase -i` under piped stdio would hang on a terminal editor.
+      'interactive-rebase': async () => ({
+        ok: false,
+        message: 'Use the rebase plan view: press i on a commit in History',
+      }),
       'create-branch-here': async () => {
         const name = payload?.trim()
         if (!name) return { ok: false, message: 'Branch name required' }
