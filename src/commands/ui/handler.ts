@@ -5,6 +5,8 @@ import { Config } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getRepo } from '../../lib/simple-git/getRepo'
 import { applyHeadlessGitEnv } from '../../lib/simple-git/headlessGit'
+import { assertGitReadyForTui } from '../../lib/simple-git/gitPreflight'
+import { commandExit } from '../../lib/utils/commandExit'
 import { LogArgv, LogOptions } from '../log/config'
 import { GitLogRow, getLogRows } from '../../git/logData'
 import { getStashCommitHashes } from '../../git/stashData'
@@ -130,6 +132,20 @@ async function loadRowsWithStashes(
   return getLogRows(git, logArgv, { extraRefs: stashHashes })
 }
 
+/**
+ * Fail fast, with a plain message, when the TUI cannot run: git missing or
+ * older than the minimum, a bare repo, or a directory outside any repo
+ * (#2205). Otherwise the workstation opens full of errors.
+ */
+async function ensureGitReadyOrExit(git: SimpleGit): Promise<void> {
+  try {
+    await assertGitReadyForTui(git)
+  } catch (error) {
+    process.stderr.write(`coco ui: ${error instanceof Error ? error.message : String(error)}\n`)
+    commandExit(1)
+  }
+}
+
 export async function startCocoUiFromLogArgv(
   logArgv: LogArgv,
   options: StartCocoUiFromLogArgvOptions = {}
@@ -137,6 +153,8 @@ export async function startCocoUiFromLogArgv(
   const config = options.config || loadConfig<Config, LogArgv>(logArgv)
   applyHeadlessGitEnv()
   const git = options.git || getRepo(undefined, { headless: true })
+  // A caller-supplied git (workspace drill-in) was already vetted by the scan.
+  if (!options.git) await ensureGitReadyOrExit(git)
   const repoPath = process.cwd()
 
   // Three-stage boot (#808):
@@ -174,7 +192,11 @@ export async function startCocoUi(argv: UiArgv): Promise<void> {
   // shared helper. After this returns, `process.cwd()` and the git
   // instance are both bound to the targeted repo, so loadConfig
   // walks the right tree and downstream reads stay consistent.
-  const git = applyRepoFlag(argv)
+  // Headless guards (#2199, #2201) apply to the direct `coco ui` path too,
+  // not just the workspace drill-in.
+  applyHeadlessGitEnv()
+  const git = applyRepoFlag(argv, { headless: true })
+  await ensureGitReadyOrExit(git)
   const repoPath = process.cwd()
 
   const config = loadConfig<Config, UiArgv>(argv)

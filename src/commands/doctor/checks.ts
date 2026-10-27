@@ -14,6 +14,7 @@ import {
   totalUsageCost,
 } from '../../lib/langchain/utils/usageLedger'
 import { LLM_PROVIDER_IDS, providerRequiresAuth } from '../../lib/langchain/providers/registry'
+import { probeGitBinary } from '../../lib/simple-git/gitPreflight'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
 
@@ -565,4 +566,24 @@ export async function checkOllamaLiveness(config: Config): Promise<Diagnostic[]>
   }
 
   return diagnostics
+}
+
+/**
+ * Live git probe (#2205): the git binary must exist and meet the minimum
+ * version, since staging and checkout use `git restore` / `git switch`.
+ * Async because it spawns `git --version`, so it sits beside the other
+ * live checks rather than in the sync `runDiagnostics`.
+ */
+export async function checkGitInstallation(
+  probe: typeof probeGitBinary = probeGitBinary
+): Promise<Diagnostic[]> {
+  const result = await probe()
+  if (result.ok) return []
+  return [{
+    severity: 'error',
+    message: result.message,
+    fix: result.reason === 'too-old'
+      ? 'Upgrade git (for example from your distro\'s backports or https://git-scm.com/downloads).'
+      : 'Install git and make sure it is on PATH.',
+  }]
 }

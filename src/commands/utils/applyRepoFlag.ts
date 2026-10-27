@@ -45,7 +45,13 @@ export function applyRepoCwd(argv: Pick<BaseArgvOptions, 'repo'>): string {
  * }
  * ```
  */
-export function applyRepoFlag(argv: Pick<BaseArgvOptions, 'repo'>): ReturnType<typeof getRepo> {
+export function applyRepoFlag(
+  argv: Pick<BaseArgvOptions, 'repo'>,
+  options: { headless?: boolean } = {}
+): ReturnType<typeof getRepo> {
   const repoPath = applyRepoCwd(argv)
-  return argv.repo ? getRepo(repoPath) : getRepo()
+  // Keep the no-options call shape (`getRepo()` / `getRepo(path)`) for the
+  // commands that never asked for a headless instance.
+  if (!options.headless) return argv.repo ? getRepo(repoPath) : getRepo()
+  return getRepo(argv.repo ? repoPath : undefined, options)
 }
