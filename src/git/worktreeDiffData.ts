@@ -2,6 +2,7 @@ import { SimpleGit } from 'simple-git'
 import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
 import { extractSubmoduleChange, renderSubmoduleSummary } from './submoduleDiff'
 import { WorktreeFile } from './statusData'
+import { MACHINE_DIFF_ARGS } from './machineDiff'
 
 export type WorktreeFileDiff = {
   filePath: string
@@ -63,10 +64,10 @@ export async function getWorktreeFileDiff(
   }
 
   const stagedDiff = file.indexStatus.trim()
-    ? await git.diff(['--staged', '--', file.path])
+    ? await git.diff([...MACHINE_DIFF_ARGS, '--staged', '--', file.path])
     : ''
   const unstagedDiff = file.worktreeStatus.trim()
-    ? await git.diff(['--', file.path])
+    ? await git.diff([...MACHINE_DIFF_ARGS, '--', file.path])
     : ''
   let lines = [
     ...(stagedDiff ? sectionLines('Staged changes', stagedDiff) : []),

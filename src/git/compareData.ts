@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { MACHINE_DIFF_ARGS } from './machineDiff'
 
 /**
  * Compare two refs (branches / tags / commits) and return the unified
@@ -22,7 +23,7 @@ export async function getCompareDiff(
   base: string,
   head: string
 ): Promise<string[]> {
-  return (await git.raw(['diff', `${base}..${head}`]))
+  return (await git.raw(['diff', ...MACHINE_DIFF_ARGS, `${base}..${head}`]))
     .split('\n')
     .map((line) => line.replace(/\r$/, ''))
 }
