@@ -30,14 +30,20 @@ function nameComparator(a: WorkspaceRepoSummary, b: WorkspaceRepoSummary): numbe
   return a.name.localeCompare(b.name)
 }
 
+/** Commit time as epoch ms; `%cI` carries the author's UTC offset, so string order is wrong across zones. */
+function commitTime(repo: WorkspaceRepoSummary): number {
+  const parsed = Date.parse(repo.lastCommit?.date ?? '')
+  return Number.isNaN(parsed) ? Number.NEGATIVE_INFINITY : parsed
+}
+
 function recencyComparator(a: WorkspaceRepoSummary, b: WorkspaceRepoSummary): number {
-  const aDate = a.lastCommit?.date ?? ''
-  const bDate = b.lastCommit?.date ?? ''
-  // Newer first — string compare on ISO-8601 dates is correct ordering.
-  if (aDate === bDate) {
+  const aTime = commitTime(a)
+  const bTime = commitTime(b)
+  // Newer first (#2210); repos with no readable commit time sort last.
+  if (aTime === bTime) {
     return nameComparator(a, b)
   }
-  return aDate < bDate ? 1 : -1
+  return aTime < bTime ? 1 : -1
 }
 
 function dirtyComparator(a: WorkspaceRepoSummary, b: WorkspaceRepoSummary): number {

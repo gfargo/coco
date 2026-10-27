@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -15,6 +16,7 @@ import {
   parseDivergence,
   parseHeadRef,
   parseLastCommit,
+  parseStatusV2,
   WorkspaceRepoSummary,
 } from './workspaceData'
 
@@ -153,22 +155,25 @@ describe('workspaceData discovery', () => {
 })
 
 describe('workspaceData per-repo summary', () => {
+  const v2 = (...records: string[]) => records.join('\0') + '\0'
+
   it('captures branch, dirty count, divergence, and last commit', async () => {
     const git = fakeGit((args) => {
-      if (args[0] === 'for-each-ref') {
-        return ['main', 'origin/main'].join(FIELD_SEPARATOR) + '\n'
-      }
       if (args[0] === 'status') {
-        return ' M src/a.ts\n?? src/b.ts\n'
+        return v2(
+          '# branch.oid abc1234abc1234abc1234abc1234abc1234abc12',
+          '# branch.head main',
+          '# branch.upstream origin/main',
+          '# branch.ab +3 -1',
+          '1 .M N... 100644 100644 100644 aaa bbb src/a.ts',
+          '? src/b.ts'
+        )
       }
       if (args[0] === 'log') {
         return (
           ['abc1234', '2026-05-01T12:34:56-04:00', 'feat: thing'].join(FIELD_SEPARATOR) +
           '\n'
         )
-      }
-      if (args[0] === 'rev-list') {
-        return '1\t3\n'
       }
       return ''
     })
@@ -190,14 +195,11 @@ describe('workspaceData per-repo summary', () => {
     expect(summary.error).toBeUndefined()
   })
 
-  it('falls back to a short hash when HEAD is detached', async () => {
+  it('shows a short hash when HEAD is detached', async () => {
     const git = fakeGit((args) => {
-      if (args[0] === 'for-each-ref') return ''
-      if (args[0] === 'status') return ''
-      if (args[0] === 'log') {
-        return ['deadbee', '2026-05-01T00:00:00Z', 'wip'].join(FIELD_SEPARATOR) + '\n'
+      if (args[0] === 'status') {
+        return v2('# branch.oid deadbeefdeadbeefdeadbeefdeadbeefdeadbeef', '# branch.head (detached)')
       }
-      if (args[0] === 'rev-parse') return 'deadbee\n'
       return ''
     })
 
@@ -213,6 +215,87 @@ describe('workspaceData per-repo summary', () => {
     const summary = await getRepoSummary('/tmp/broken', { git })
     expect(summary.error).toBe('not a git repository')
     expect(summary.branch).toBeUndefined()
+  })
+})
+
+describe('parseStatusV2 (#2210)', () => {
+  const v2 = (...records: string[]) => records.join('\0') + '\0'
+
+  it('counts a rename once and skips its original-path field', () => {
+    const out = v2(
+      '# branch.oid abc',
+      '# branch.head main',
+      '2 R. N... 100644 100644 100644 aaa bbb R100 new.ts',
+      'old.ts',
+      '1 .M N... 100644 100644 100644 aaa bbb other.ts',
+      'u UU N... 100644 100644 100644 100644 a b c conflict.ts'
+    )
+    expect(parseStatusV2(out)).toMatchObject({ branch: 'main', dirty: 3 })
+  })
+
+  it('does not count ignored entries or headers', () => {
+    expect(parseStatusV2(v2('# branch.oid abc', '# branch.head main', '! build/'))).toMatchObject({ dirty: 0 })
+  })
+
+  it('reports an unborn branch by name and no ahead/behind without an upstream', () => {
+    expect(parseStatusV2(v2('# branch.oid (initial)', '# branch.head trunk'))).toEqual({
+      branch: 'trunk',
+      ahead: 0,
+      behind: 0,
+      dirty: 0,
+    })
+  })
+
+  it('has no branch for a detached HEAD on an unborn repo', () => {
+    expect(parseStatusV2(v2('# branch.oid (initial)', '# branch.head (detached)')).branch).toBeUndefined()
+  })
+})
+
+describe('getRepoSummary against a real repo (#2210)', () => {
+  let dir: string
+  const run = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' })
+
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-ws-summary-'))
+    run('init', '-q', '-b', 'main')
+    run('config', 'user.email', 't@example.com')
+    run('config', 'user.name', 't')
+    fs.writeFileSync(path.join(dir, 'a.txt'), 'a\n')
+    run('add', '.')
+    run('commit', '-q', '-m', 'init')
+  })
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }))
+
+  it('shows the checked-out branch, not a sibling branch at the same commit', async () => {
+    // "aaa-sibling" sorts before "main", which the old for-each-ref
+    // --points-at=HEAD parse would have picked.
+    run('branch', 'aaa-sibling')
+    const summary = await getRepoSummary(dir)
+    expect(summary.branch).toBe('main')
+    expect(summary.error).toBeUndefined()
+  })
+
+  it('shows a short hash, not a branch name, for a detached HEAD at a branch tip', async () => {
+    run('checkout', '-q', '--detach')
+    const summary = await getRepoSummary(dir)
+    expect(summary.branch).toMatch(/^\([0-9a-f]{7}\)$/)
+  })
+
+  it('computes ahead/behind against the checked-out branch\'s own upstream', async () => {
+    const remote = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-ws-remote-'))
+    try {
+      execFileSync('git', ['init', '-q', '--bare'], { cwd: remote })
+      run('remote', 'add', 'origin', remote)
+      run('push', '-q', '-u', 'origin', 'main')
+      fs.writeFileSync(path.join(dir, 'b.txt'), 'b\n')
+      run('add', '.')
+      run('commit', '-q', '-m', 'local only')
+      run('branch', 'aaa-sibling') // no upstream; must not hide main's divergence
+      const summary = await getRepoSummary(dir)
+      expect(summary).toMatchObject({ branch: 'main', ahead: 1, behind: 0 })
+    } finally {
+      fs.rmSync(remote, { recursive: true, force: true })
+    }
   })
 })
 

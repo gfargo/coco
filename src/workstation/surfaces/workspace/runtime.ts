@@ -97,6 +97,7 @@ import {
   writeWorkspacePreferences,
 } from '../../chrome/workspacePreferences'
 import { isGitWorkingTree } from '../../../git/workspaceData'
+import { createLatestGate } from './latestGate'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
 /**
@@ -572,15 +573,18 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   // refresh (and, once resurrected, `d` refused to remove it again
   // because the store no longer listed it).
   const knownReposRef = React.useRef<ReadonlyArray<string>>(props.knownRepos)
+  // Latest overview load wins (#2210): older results are dropped.
+  const loadGateRef = React.useRef(createLatestGate())
 
   // Background discovery + PR-count refresh on mount.
   React.useEffect(() => {
     let cancelled = false
     dispatch({ type: 'set-loading', loading: true })
     void (async () => {
+      const isCurrent = loadGateRef.current.begin()
       try {
         const overview = await props.loadOverview(props.roots, knownReposRef.current)
-        if (cancelled || unmountedRef.current) return
+        if (cancelled || unmountedRef.current || !isCurrent()) return
         writeCachedWorkspace(props.roots, overview)
         dispatch({ type: 'replace-overview', overview })
         if (props.resume?.selectedRepoPath) {
@@ -597,7 +601,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           if (cancelled || unmountedRef.current) return
           dispatch({ type: 'mark-pull-request-fetched', path })
         })
-        if (cancelled || unmountedRef.current) return
+        if (cancelled || unmountedRef.current || !isCurrent()) return
         dispatch({
           type: 'replace-pull-request-counts',
           counts: pr.counts,
@@ -614,7 +618,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           })
         }
       } catch (err) {
-        if (cancelled || unmountedRef.current) return
+        if (cancelled || unmountedRef.current || !isCurrent()) return
         dispatch({ type: 'set-pull-request-fetching', paths: [] })
         dispatch({ type: 'set-loading', loading: false })
         dispatch({
@@ -637,11 +641,14 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     // stayed on the same ROW NUMBER but a different repo, and Enter
     // drilled into the wrong one. Every other list-mutating flow
     // (add / clone / resume) already anchors by path.
+    // `r` while a load is already running is a no-op (#2210).
+    if (stateRef.current.loading) return
     const focusedPath = selectFocusedRepo(stateRef.current)?.path
+    const isCurrent = loadGateRef.current.begin()
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, knownReposRef.current)
-      if (unmountedRef.current) return
+      if (unmountedRef.current || !isCurrent()) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       if (focusedPath) {
@@ -656,7 +663,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         if (unmountedRef.current) return
         dispatch({ type: 'mark-pull-request-fetched', path })
       })
-      if (unmountedRef.current) return
+      if (unmountedRef.current || !isCurrent()) return
       dispatch({
         type: 'replace-pull-request-counts',
         counts: pr.counts,
@@ -664,7 +671,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       })
       dispatch({ type: 'set-pull-request-fetching', paths: [] })
     } catch (err) {
-      if (unmountedRef.current) return
+      if (unmountedRef.current || !isCurrent()) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
@@ -756,12 +763,15 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'cancel-delete' })
     dispatch({ type: 'set-status', status: `Removed ${target}.` })
     // Refresh discovery so the deleted entry drops out of the list.
+    const isCurrent = loadGateRef.current.begin()
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, knownReposRef.current)
+      if (!isCurrent() || unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
     } catch (err) {
+      if (!isCurrent() || unmountedRef.current) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
@@ -799,13 +809,16 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'set-status', status: `Added ${candidate}.` })
     // Refresh discovery so the new repo lands in the list and the
     // cursor anchors onto it.
+    const isCurrent = loadGateRef.current.begin()
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, knownReposRef.current)
+      if (!isCurrent() || unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       dispatch({ type: 'anchor-cursor-by-path', path: candidate })
     } catch (err) {
+      if (!isCurrent() || unmountedRef.current) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
@@ -857,13 +870,16 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'replace-known-repos', paths: updated })
     dispatch({ type: 'set-focus', focus: 'list' })
     dispatch({ type: 'set-status', status: result.message })
+    const isCurrent = loadGateRef.current.begin()
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, knownReposRef.current)
+      if (!isCurrent() || unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       dispatch({ type: 'anchor-cursor-by-path', path: repoPath })
     } catch (err) {
+      if (!isCurrent() || unmountedRef.current) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
