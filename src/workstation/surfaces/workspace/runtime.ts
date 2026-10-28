@@ -162,6 +162,8 @@ export type WorkspaceStartOptions = {
   roots: ReadonlyArray<string>
   knownRepos?: ReadonlyArray<string>
   maxDepth?: number
+  /** Follow symlinked directories during discovery (`workspace.followSymlinks`). */
+  followSymlinks?: boolean
   appLabel?: string
   theme?: LogInkThemeConfig
   /**
@@ -228,7 +230,12 @@ export async function startWorkspace(
       roots: ReadonlyArray<string>,
       repos: ReadonlyArray<string>,
       onRepoSummary?: (summary: WorkspaceRepoSummary) => void
-    ) => getWorkspaceOverview(roots, { knownRepos: repos, maxDepth: options.maxDepth, onRepoSummary }))
+    ) => getWorkspaceOverview(roots, {
+        knownRepos: repos,
+        maxDepth: options.maxDepth,
+        followSymlinks: options.followSymlinks,
+        onRepoSummary,
+      }))
 
   const loadPullRequestCounts: (
     repos: ReadonlyArray<WorkspaceRepoSummary>,

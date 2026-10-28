@@ -60,6 +60,10 @@ export function resolveWorkspaceMaxDepth(
   return config.workspace?.maxDepth
 }
 
+export function resolveWorkspaceFollowSymlinks(config: Pick<Config, 'workspace'>): boolean | undefined {
+  return config.workspace?.followSymlinks
+}
+
 /**
  * Build the synthetic UI argv the workspace uses to drill into a repo.
  * Mirrors `createLogArgvFromUiArgv` but seeded from the workspace's own
@@ -139,6 +143,7 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
   const roots = resolveWorkspaceRoots(argv, config)
   const knownRepos = resolveWorkspaceKnownRepos(config)
   const maxDepth = resolveWorkspaceMaxDepth(argv, config)
+  const followSymlinks = resolveWorkspaceFollowSymlinks(config)
   const baseCwd = process.cwd()
 
   await runWorkspaceLoop({
@@ -149,6 +154,7 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
         roots,
         knownRepos,
         maxDepth,
+        followSymlinks,
         appLabel: 'coco workspace',
         theme: createUiTheme(config, argv),
         resume,
