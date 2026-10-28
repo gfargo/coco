@@ -25,13 +25,19 @@ function repo(overrides: Partial<WorkspaceRepoSummary>): WorkspaceRepoSummary {
 describe('workspace filter tabs', () => {
   it('cycles forward and backward stably', () => {
     expect(nextWorkspaceTab('all')).toBe('dirty')
-    expect(nextWorkspaceTab('pull-requests')).toBe('all')
-    expect(previousWorkspaceTab('all')).toBe('pull-requests')
+    expect(nextWorkspaceTab('pull-requests')).toBe('errors')
+    expect(nextWorkspaceTab('errors')).toBe('all')
+    expect(previousWorkspaceTab('all')).toBe('errors')
     expect(previousWorkspaceTab('dirty')).toBe('all')
   })
 
   it('labels each tab', () => {
-    expect(WORKSPACE_TABS.map(workspaceTabLabel)).toEqual(['All', 'Dirty', 'Behind', 'PRs'])
+    expect(WORKSPACE_TABS.map(workspaceTabLabel)).toEqual(['All', 'Dirty', 'Behind', 'PRs', 'Errors'])
+  })
+
+  it('errors tab matches only repos whose summary failed (#2210)', () => {
+    expect(matchesWorkspaceTab(repo({ name: 'a', error: 'not a git repository' }), 'errors')).toBe(true)
+    expect(matchesWorkspaceTab(repo({ name: 'a' }), 'errors')).toBe(false)
   })
 
   it('all tab matches every repo', () => {
