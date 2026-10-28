@@ -8,7 +8,9 @@ import { SimpleGit } from 'simple-git'
 import {
   countPorcelainEntries,
   discoverRepos,
+  discoverReposAsync,
   discoverReposInRoot,
+  discoverReposInRootAsync,
   expandHome,
   getRepoSummary,
   getWorkspaceOverview,
@@ -151,6 +153,88 @@ describe('workspaceData discovery', () => {
 
   it('returns an empty list for a missing root', () => {
     expect(discoverReposInRoot('/this/path/should/not/exist')).toEqual([])
+  })
+})
+
+describe('workspaceData async discovery (#2210)', () => {
+  let root: string
+  beforeEach(() => { root = createTempDir() })
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }))
+
+  function buildTree() {
+    makeFakeRepo(root, 'project-a')
+    makeFakeRepo(root, 'group/project-b')
+    makeFakeRepo(root, 'group/deeper/project-c')
+    makeFakeRepo(root, 'node_modules/skipped')
+    makeFakeRepo(root, '.hidden/skipped')
+    const outer = makeFakeRepo(root, 'outer')
+    fs.mkdirSync(path.join(outer, 'vendor', 'inner', '.git'), { recursive: true })
+    fs.mkdirSync(path.join(root, 'plain', 'dir'), { recursive: true })
+    const linkTarget = createTempDir()
+    makeFakeRepo(linkTarget, 'linked-repo')
+    fs.symlinkSync(linkTarget, path.join(root, 'link'))
+    return linkTarget
+  }
+
+  it('finds the same repos as the sync walk, with and without followSymlinks', async () => {
+    const linkTarget = buildTree()
+    try {
+      for (const followSymlinks of [false, true]) {
+        for (const maxDepth of [1, 2, 3]) {
+          const opts = { followSymlinks, maxDepth }
+          expect((await discoverReposInRootAsync(root, opts)).sort()).toEqual(
+            discoverReposInRoot(root, opts).sort()
+          )
+        }
+      }
+    } finally {
+      fs.rmSync(linkTarget, { recursive: true, force: true })
+    }
+  })
+
+  it('merges known repos and drops missing ones, like the sync version', async () => {
+    const inRoot = makeFakeRepo(root, 'in-root')
+    const elsewhere = path.join(createTempDir(), 'elsewhere')
+    fs.mkdirSync(path.join(elsewhere, '.git'), { recursive: true })
+    const ghost = path.join(root, 'does-not-exist')
+
+    const repos = await discoverReposAsync([root], [elsewhere, ghost])
+    expect(repos).toEqual([fs.realpathSync(inRoot), fs.realpathSync(elsewhere)].sort())
+  })
+
+  it('returns an empty list for a missing root', async () => {
+    await expect(discoverReposInRootAsync('/this/path/should/not/exist')).resolves.toEqual([])
+  })
+
+  it('never calls a synchronous fs walker, so the event loop stays free', async () => {
+    buildTree()
+    const realFs = jest.requireActual<typeof import('fs')>('fs')
+    const spies = (['readdirSync', 'realpathSync', 'lstatSync', 'statSync', 'existsSync'] as const).map((name) =>
+      jest.spyOn(realFs, name)
+    )
+    try {
+      // Control: the spies do fire for the synchronous walker.
+      discoverRepos([root], [])
+      expect(spies[0]).toHaveBeenCalled()
+      spies.forEach((spy) => spy.mockClear())
+
+      await discoverReposAsync([root], [])
+      for (const spy of spies) expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spies.forEach((spy) => spy.mockRestore())
+    }
+  })
+
+  it('lets timers run while it walks a wide tree', async () => {
+    for (let i = 0; i < 300; i += 1) fs.mkdirSync(path.join(root, `dir-${i}`, 'sub'), { recursive: true })
+    let ticks = 0
+    const timer = setInterval(() => { ticks += 1 }, 1)
+    try {
+      await discoverReposInRootAsync(root, { maxDepth: 3 })
+    } finally {
+      clearInterval(timer)
+    }
+    expect(ticks).toBeGreaterThan(0)
   })
 })
 

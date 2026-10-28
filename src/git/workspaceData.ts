@@ -1,9 +1,11 @@
 import * as fs from 'node:fs'
+import * as fsp from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { SimpleGit } from 'simple-git'
 import { createHeadlessGit } from '../lib/simple-git/headlessGit'
 
+import { createConcurrencyLimit } from '../lib/utils/createConcurrencyLimit'
 import { mapWithConcurrency } from '../lib/utils/mapWithConcurrency'
 
 const FIELD_SEPARATOR = '\x1f'
@@ -239,6 +241,128 @@ export function discoverRepos(
   return [...all].sort()
 }
 
+/**
+ * Async twin of `canonicalize` for the discovery path: a stale network
+ * mount can park a synchronous `realpathSync` for a long time (#2210).
+ */
+async function canonicalizeAsync(rootPath: string): Promise<string> {
+  const expanded = expandHome(rootPath)
+  try {
+    return await fsp.realpath(expanded)
+  } catch {
+    return expanded
+  }
+}
+
+/** Async twin of `isGitWorkingTree`. */
+export async function isGitWorkingTreeAsync(dir: string): Promise<boolean> {
+  try {
+    const stat = await fsp.lstat(path.join(dir, '.git'))
+    return stat.isDirectory() || stat.isFile()
+  } catch {
+    return false
+  }
+}
+
+/** How many fs calls the async walk keeps in flight at once. */
+const DISCOVERY_FS_CONCURRENCY = 16
+
+/**
+ * Async twin of `discoverReposInRoot` (#2210). The synchronous walk ran
+ * before the first `await` of `getWorkspaceOverview`, so scanning a big
+ * root (bare `coco` from `~`) froze the whole UI, Ctrl-C included, until
+ * it finished. Same rules (depth, prune list, hidden dirs, symlink
+ * policy, canonical de-dupe, stop at the first repo), but every fs call
+ * is a promise bounded by a small limiter, so the event loop keeps
+ * turning while it walks.
+ */
+export async function discoverReposInRootAsync(
+  rootPath: string,
+  options: WorkspaceDiscoveryOptions = {}
+): Promise<string[]> {
+  const maxDepth = options.maxDepth ?? DEFAULT_MAX_DEPTH
+  const pruneDirs = options.pruneDirs ?? DEFAULT_PRUNE_DIRS
+  const followSymlinks = options.followSymlinks ?? false
+  const root = expandHome(rootPath)
+  const limit = createConcurrencyLimit(DISCOVERY_FS_CONCURRENCY)
+
+  try {
+    const rootStat = await limit(() => fsp.stat(root))
+    if (!rootStat.isDirectory()) return []
+  } catch {
+    return []
+  }
+
+  const found: string[] = []
+  const visited = new Set<string>()
+
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    let real: string
+    try {
+      real = await limit(() => fsp.realpath(dir))
+    } catch {
+      return
+    }
+    // Check-and-add happens with no await in between, so concurrent
+    // branches can't both claim the same directory.
+    if (visited.has(real)) return
+    visited.add(real)
+
+    if (await limit(() => isGitWorkingTreeAsync(dir))) {
+      found.push(real)
+      return
+    }
+    if (depth >= maxDepth) return
+
+    let entries: fs.Dirent[]
+    try {
+      entries = await limit(() => fsp.readdir(dir, { withFileTypes: true }))
+    } catch {
+      return
+    }
+
+    await Promise.all(
+      entries.map(async (entry) => {
+        if (entry.name.startsWith('.') || pruneDirs.has(entry.name)) return
+        const child = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          await walk(child, depth + 1)
+        } else if (followSymlinks && entry.isSymbolicLink()) {
+          try {
+            const childStat = await limit(() => fsp.stat(child))
+            if (childStat.isDirectory()) await walk(child, depth + 1)
+          } catch {
+            // Broken symlink — skip silently.
+          }
+        }
+      })
+    )
+  }
+
+  await walk(root, 0)
+  return found
+}
+
+/** Async twin of `discoverRepos`: roots walked in parallel, then known repos merged in. */
+export async function discoverReposAsync(
+  roots: ReadonlyArray<string>,
+  knownRepos: ReadonlyArray<string> = [],
+  options: WorkspaceDiscoveryOptions = {}
+): Promise<string[]> {
+  const all = new Set<string>()
+  const perRoot = await Promise.all(roots.map((root) => discoverReposInRootAsync(root, options)))
+  for (const repos of perRoot) {
+    for (const repo of repos) all.add(repo)
+  }
+  await Promise.all(
+    knownRepos.map(async (known) => {
+      const resolved = await canonicalizeAsync(known)
+      if (await isGitWorkingTreeAsync(resolved)) all.add(resolved)
+    })
+  )
+  return [...all].sort()
+}
+
 export function parseHeadRef(line: string): { branch?: string; upstream?: string } {
   const [branch = '', upstream = ''] = line.split(FIELD_SEPARATOR)
   return {
@@ -393,8 +517,8 @@ export async function getWorkspaceOverview(
   roots: ReadonlyArray<string>,
   options: GetWorkspaceOverviewOptions = {}
 ): Promise<WorkspaceOverview> {
-  const resolvedRoots = roots.map(canonicalize)
-  const repoPaths = discoverRepos(roots, options.knownRepos ?? [], options)
+  const resolvedRoots = await Promise.all(roots.map(canonicalizeAsync))
+  const repoPaths = await discoverReposAsync(roots, options.knownRepos ?? [], options)
   const loader = options.loadSummary ?? ((repoPath: string) => getRepoSummary(repoPath))
   const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY)
   const repos = await mapWithConcurrency(repoPaths, concurrency, loader)
