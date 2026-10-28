@@ -191,6 +191,22 @@ export function discoverReposInRoot(
 
     for (const entry of entries) {
       if (entry.name.startsWith('.')) {
+        // A hidden directory that IS a working tree (`~/.dotfiles`) is
+        // listed, but never descended into: that keeps `.cache`, `.npm`
+        // and friends cheap while not hiding repos kept in dot-folders
+        // (#2210).
+        const hidden = path.join(dir, entry.name)
+        if (entry.isDirectory() && !pruneDirs.has(entry.name) && isGitWorkingTree(hidden)) {
+          try {
+            const hiddenReal = fs.realpathSync(hidden)
+            if (!visited.has(hiddenReal)) {
+              visited.add(hiddenReal)
+              found.push(hiddenReal)
+            }
+          } catch {
+            // Vanished mid-scan — skip.
+          }
+        }
         continue
       }
       if (pruneDirs.has(entry.name)) {
@@ -323,7 +339,23 @@ export async function discoverReposInRootAsync(
 
     await Promise.all(
       entries.map(async (entry) => {
-        if (entry.name.startsWith('.') || pruneDirs.has(entry.name)) return
+        if (entry.name.startsWith('.')) {
+          // Hidden working trees are listed but not descended into (see the sync walk).
+          const hidden = path.join(dir, entry.name)
+          if (entry.isDirectory() && !pruneDirs.has(entry.name) && (await limit(() => isGitWorkingTreeAsync(hidden)))) {
+            try {
+              const hiddenReal = await limit(() => fsp.realpath(hidden))
+              if (!visited.has(hiddenReal)) {
+                visited.add(hiddenReal)
+                found.push(hiddenReal)
+              }
+            } catch {
+              // Vanished mid-scan — skip.
+            }
+          }
+          return
+        }
+        if (pruneDirs.has(entry.name)) return
         const child = path.join(dir, entry.name)
         if (entry.isDirectory()) {
           await walk(child, depth + 1)

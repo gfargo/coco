@@ -267,6 +267,41 @@ describe('getWorkspaceOverview followSymlinks (#2210)', () => {
   })
 })
 
+describe('hidden repositories (#2210)', () => {
+  let root: string
+  beforeEach(() => { root = createTempDir() })
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }))
+
+  it('lists a dot-folder that is itself a repo (sync and async)', async () => {
+    const dotfiles = makeFakeRepo(root, '.dotfiles')
+    const visible = makeFakeRepo(root, 'project')
+    const expected = [fs.realpathSync(dotfiles), fs.realpathSync(visible)].sort()
+
+    expect(discoverReposInRoot(root).sort()).toEqual(expected)
+    expect((await discoverReposInRootAsync(root)).sort()).toEqual(expected)
+  })
+
+  it('still does not descend into hidden directories that are not repos', async () => {
+    // e.g. ~/.cache/<some clone>: the walk must stay cheap.
+    makeFakeRepo(root, '.cache/some-clone')
+    expect(discoverReposInRoot(root)).toEqual([])
+    expect(await discoverReposInRootAsync(root)).toEqual([])
+  })
+
+  it('does not descend into a hidden repo to find repos nested in it', async () => {
+    const dotfiles = makeFakeRepo(root, '.dotfiles')
+    fs.mkdirSync(path.join(dotfiles, 'vendor', 'inner', '.git'), { recursive: true })
+    expect(discoverReposInRoot(root)).toEqual([fs.realpathSync(dotfiles)])
+    expect(await discoverReposInRootAsync(root)).toEqual([fs.realpathSync(dotfiles)])
+  })
+
+  it('keeps pruning named directories even when they are hidden repos', () => {
+    makeFakeRepo(root, '.git-ignored-name')
+    const out = discoverReposInRoot(root, { pruneDirs: new Set(['.git-ignored-name']) })
+    expect(out).toEqual([])
+  })
+})
+
 describe('workspaceData per-repo summary', () => {
   const v2 = (...records: string[]) => records.join('\0') + '\0'
 
