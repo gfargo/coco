@@ -509,6 +509,12 @@ export type GetWorkspaceOverviewOptions = WorkspaceDiscoveryOptions & {
   loadSummary?: (repoPath: string) => Promise<WorkspaceRepoSummary>
   /** Maximum number of repos summarized in parallel. Default 8. */
   concurrency?: number
+  /**
+   * Called as each repo's summary lands, before the whole scan finishes,
+   * so a caller can show rows incrementally instead of waiting on the
+   * slowest repo (#2210). The resolved overview is still complete.
+   */
+  onRepoSummary?: (summary: WorkspaceRepoSummary) => void
 }
 
 const DEFAULT_CONCURRENCY = 8
@@ -521,7 +527,11 @@ export async function getWorkspaceOverview(
   const repoPaths = await discoverReposAsync(roots, options.knownRepos ?? [], options)
   const loader = options.loadSummary ?? ((repoPath: string) => getRepoSummary(repoPath))
   const concurrency = Math.max(1, options.concurrency ?? DEFAULT_CONCURRENCY)
-  const repos = await mapWithConcurrency(repoPaths, concurrency, loader)
+  const repos = await mapWithConcurrency(repoPaths, concurrency, async (repoPath) => {
+    const summary = await loader(repoPath)
+    options.onRepoSummary?.(summary)
+    return summary
+  })
   return {
     roots: resolvedRoots,
     repos,

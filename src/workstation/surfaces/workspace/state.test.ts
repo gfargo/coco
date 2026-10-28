@@ -45,6 +45,47 @@ describe('workspace state reducer', () => {
     expect(baseState.tab).toBe('all')
   })
 
+  describe('merge-repo-summaries (#2210)', () => {
+    it('upserts streamed summaries and keeps every row that was already listed', () => {
+      const merged = applyWorkspaceAction(baseState, {
+        type: 'merge-repo-summaries',
+        repos: [repo({ name: 'bravo', dirty: 9 }), repo({ name: 'delta', dirty: 1 })],
+      })
+      const byName = Object.fromEntries(merged.overview.repos.map((entry) => [entry.name, entry]))
+      expect(Object.keys(byName).sort()).toEqual(['alpha', 'bravo', 'charlie', 'delta'])
+      expect(byName.bravo.dirty).toBe(9)
+    })
+
+    it('does not end the loading state; only replace-overview does', () => {
+      const loading = applyWorkspaceAction(baseState, { type: 'set-loading', loading: true })
+      const merged = applyWorkspaceAction(loading, {
+        type: 'merge-repo-summaries',
+        repos: [repo({ name: 'delta' })],
+      })
+      expect(merged.loading).toBe(true)
+      const done = applyWorkspaceAction(merged, { type: 'replace-overview', overview: merged.overview })
+      expect(done.loading).toBe(false)
+    })
+
+    it('keeps the cursor on the same repo when the sort moves it', () => {
+      // bravo is second under recency; give delta a newer commit so it jumps ahead.
+      const onBravo = applyWorkspaceAction(baseState, { type: 'move-cursor', delta: 1 })
+      expect(selectFocusedRepo(onBravo)?.name).toBe('bravo')
+      const merged = applyWorkspaceAction(onBravo, {
+        type: 'merge-repo-summaries',
+        repos: [repo({ name: 'delta', lastCommit: { hash: 'd', date: '2026-06-01', subject: 'x' } })],
+      })
+      expect(selectVisibleRepos(merged)[0].name).toBe('delta')
+      expect(selectFocusedRepo(merged)?.name).toBe('bravo')
+    })
+
+    it('works from an empty list (first paint of a cold scan)', () => {
+      const empty = createWorkspaceState({ overview: overview([]), roots: ['~/code'] })
+      const merged = applyWorkspaceAction(empty, { type: 'merge-repo-summaries', repos: [repo({ name: 'a' })] })
+      expect(selectFocusedRepo(merged)?.name).toBe('a')
+    })
+  })
+
   it('cycles the sort mode and resets the cursor', () => {
     const moved = applyWorkspaceAction(baseState, { type: 'move-cursor', delta: 2 })
     expect(moved.selectedIndex).toBe(2)
