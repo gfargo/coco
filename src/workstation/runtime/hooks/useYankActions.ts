@@ -91,17 +91,20 @@ export function useYankActions(
   React: typeof ReactTypes,
   deps: UseYankActionsDeps,
 ): UseYankActionsResult {
-  const {
-    clipboardRunner,
-    dispatch,
-    context,
-    state,
-    selected,
-    selectedDetailFile,
-    stashDiffLines,
-    stashDiffParsedFiles,
-    visibleWorktreeFilesGrouped,
-  } = deps
+  const { clipboardRunner, dispatch } = deps
+
+  // Render-fresh snapshot of every input, read at CALL time (#2203). The
+  // view-polymorphic `yankFromActiveView` resolves its target through the
+  // id-first selectors (`getSelectedBranch(state, context)` and friends), so
+  // its inputs include fields no hand-maintained dependency list kept up
+  // with (the `selected*Id` halves of the index/id pairs were missing, so a
+  // change of id at an unchanged index copied the previously cursored row).
+  // It is keystroke-dispatch-only (not in any effect/memo dependency array),
+  // so a callback whose identity never changes is safe, and reading through
+  // the ref makes the staleness impossible. Same pattern as
+  // `useWorkflowAction`.
+  const depsRef = React.useRef(deps)
+  depsRef.current = deps
 
   // Copy an arbitrary string to the system clipboard. Distinct from
   // `yankFromActiveView` which derives the value from the current view
@@ -133,7 +136,18 @@ export function useYankActions(
   // status line. `short=true` opts into the short hash on history /
   // commit-diff views (Y vs y); ignored for ref-only views.
   const yankFromActiveView = React.useCallback(async (short?: boolean) => {
-    const clipboard: ClipboardRunner = clipboardRunner || defaultClipboardRunner
+    const {
+      clipboardRunner: liveClipboardRunner,
+      dispatch,
+      context,
+      state,
+      selected,
+      selectedDetailFile,
+      stashDiffLines,
+      stashDiffParsedFiles,
+      visibleWorktreeFilesGrouped,
+    } = depsRef.current
+    const clipboard: ClipboardRunner = liveClipboardRunner || defaultClipboardRunner
     let value: string | undefined
     let label: string | undefined
 
@@ -298,41 +312,7 @@ export function useYankActions(
     } catch (error) {
       dispatch({ type: 'setStatus', value: `Copy failed: ${(error as Error).message}`, kind: 'error' })
     }
-  }, [
-    clipboardRunner,
-    context.bisect,
-    context.branches,
-    context.issueList,
-    context.pullRequestList,
-    context.remotes,
-    context.stashes,
-    context.submodules,
-    context.tags,
-    dispatch,
-    selected,
-    selectedDetailFile,
-    stashDiffLines,
-    stashDiffParsedFiles,
-    state.activeView,
-    state.branchSort,
-    state.diffPreviewOffset,
-    state.diffSource,
-    state.filter,
-    state.filteredCommits,
-    state.focus,
-    state.sidebarTab,
-    state.selectedBranchIndex,
-    state.selectedIndex,
-    state.selectedIssueIndex,
-    state.selectedPullRequestTriageIndex,
-    state.selectedRemoteIndex,
-    state.selectedStashIndex,
-    state.selectedSubmoduleIndex,
-    state.selectedTagIndex,
-    state.selectedWorktreeFileIndex,
-    state.tagSort,
-    visibleWorktreeFilesGrouped,
-  ])
+  }, [])
 
   return {
     yankText,
