@@ -209,3 +209,80 @@ describe('createRepoChangeWatcher rename survival', () => {
     expect(kinds).toContain('worktree')
   }, 15000)
 })
+
+/**
+ * #2205 — in a linked worktree the per-worktree git dir has no `refs/`;
+ * branch refs live in the common dir. A commit made in ANOTHER worktree
+ * moves `<common>/refs/heads/<branch>`, which the watcher must see.
+ */
+describe('createRepoChangeWatcher in a linked worktree (#2205)', () => {
+  // Same environment-sensitivity as the rename-survival suite above.
+  jest.retryTimes(1, { logErrorsBeforeRetry: true })
+
+  const waitFor = async (predicate: () => boolean, timeoutMs = 5000): Promise<void> => {
+    const deadline = Date.now() + timeoutMs
+    while (!predicate() && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+    }
+  }
+
+  const layout = () => {
+    const root = mkdtempSync(join(tmpdir(), 'coco-wt-watch-'))
+    const common = join(root, 'main', '.git')
+    const worktreeGitDir = join(common, 'worktrees', 'feature')
+    mkdirSync(join(common, 'refs', 'heads'), { recursive: true })
+    mkdirSync(worktreeGitDir, { recursive: true })
+    writeFileSync(join(worktreeGitDir, 'HEAD'), 'ref: refs/heads/feature\n')
+    const repoRoot = join(root, 'feature-checkout')
+    mkdirSync(repoRoot)
+    return { root, common, worktreeGitDir, repoRoot }
+  }
+
+  it('fires when another worktree moves a branch ref in the common dir', async () => {
+    const { root, common, worktreeGitDir, repoRoot } = layout()
+    const kinds: RepoChangeKind[] = []
+    const watcher = createRepoChangeWatcher({
+      repoRoot,
+      gitDir: worktreeGitDir,
+      commonGitDir: common,
+      debounceMs: 50,
+      onChange: (kind) => kinds.push(kind),
+    })
+    try {
+      // Let events from the setup writes above (FSEvents can deliver ones
+      // from just before the watch began) settle, then start from zero so
+      // only the ref write below can satisfy the assertion.
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      kinds.length = 0
+      writeFileSync(join(common, 'refs', 'heads', 'main'), 'abc123\n')
+      await waitFor(() => kinds.length > 0)
+      expect(kinds).toContain('full')
+    } finally {
+      watcher.close()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('still defaults to gitDir/refs/heads for a plain repo (no commonGitDir)', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'coco-plain-watch-'))
+    const gitDir = join(root, '.git')
+    mkdirSync(join(gitDir, 'refs', 'heads'), { recursive: true })
+    const kinds: RepoChangeKind[] = []
+    const watcher = createRepoChangeWatcher({
+      repoRoot: root,
+      gitDir,
+      debounceMs: 50,
+      onChange: (kind) => kinds.push(kind),
+    })
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 400))
+      kinds.length = 0
+      writeFileSync(join(gitDir, 'refs', 'heads', 'main'), 'abc123\n')
+      await waitFor(() => kinds.length > 0)
+      expect(kinds).toContain('full')
+    } finally {
+      watcher.close()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+})

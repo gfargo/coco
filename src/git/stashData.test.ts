@@ -67,7 +67,7 @@ describe('log stash data', () => {
     const git = {
       raw: jest.fn()
         .mockResolvedValueOnce('stash@{0}\x1fabc123\x1fbase111 idx111\x1f2026-04-28 09:00:00 -0400\x1fOn main: save docs')
-        .mockResolvedValueOnce('src/a.ts\nsrc/b.ts\n'),
+        .mockResolvedValueOnce('src/a.ts\0src/b.ts\0'),
     }
 
     await expect(getStashOverview(git as never)).resolves.toEqual({
@@ -83,7 +83,12 @@ describe('log stash data', () => {
         },
       ],
     })
-    expect(parseStashFiles('\n src/a.ts \n\n')).toEqual(['src/a.ts'])
+    // The per-stash call asks git for NUL-separated names (#2205).
+    expect(git.raw).toHaveBeenLastCalledWith(['stash', 'show', '--name-only', '-z', 'stash@{0}'])
+    expect(parseStashFiles('src/a.ts\0src/b.ts\0')).toEqual(['src/a.ts', 'src/b.ts'])
+    // Names are exact: spaces that belong to the name are kept (#2205).
+    expect(parseStashFiles(' lead and trail \0dir/with space.ts\0')).toEqual([' lead and trail ', 'dir/with space.ts'])
+    expect(parseStashFiles('')).toEqual([])
   })
 
   describe('parseStashDiffFiles', () => {

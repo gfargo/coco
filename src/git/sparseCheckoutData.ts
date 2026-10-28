@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'fs'
 import { SimpleGit } from 'simple-git'
+import { resolveGitPath } from './gitPath'
 
 /**
  * Sparse-checkout detection for the TUI (OSS-2056).
@@ -46,7 +47,7 @@ export async function getSparseCheckoutStatus(git: SimpleGit): Promise<SparseChe
     const sparseConfig = await readBoolConfig(git, 'core.sparseCheckout')
     if (!sparseConfig) return EMPTY_STATUS
 
-    const filePath = (await git.raw(['rev-parse', '--git-path', 'info/sparse-checkout'])).trim()
+    const filePath = await resolveGitPath(git, 'info/sparse-checkout', (args) => git.raw(['rev-parse', ...args]))
     if (!filePath || !existsSync(filePath)) return EMPTY_STATUS
 
     const cone = await readBoolConfig(git, 'core.sparseCheckoutCone')
