@@ -98,6 +98,7 @@ import {
 } from '../../chrome/workspacePreferences'
 import { isGitWorkingTree } from '../../../git/workspaceData'
 import { createLatestGate } from './latestGate'
+import { createSummaryBatcher } from './summaryBatcher'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
 /**
@@ -177,7 +178,8 @@ export type WorkspaceStartOptions = {
   /** Override discovery (used by tests). */
   loadOverview?: (
     roots: ReadonlyArray<string>,
-    knownRepos: ReadonlyArray<string>
+    knownRepos: ReadonlyArray<string>,
+    onRepoSummary?: (summary: WorkspaceRepoSummary) => void
   ) => Promise<WorkspaceOverview>
   /**
    * Override gh PR-count fetch (used by tests + when caller already
@@ -222,8 +224,11 @@ export async function startWorkspace(
 
   const loadOverview =
     options.loadOverview ??
-    ((roots: ReadonlyArray<string>, repos: ReadonlyArray<string>) =>
-      getWorkspaceOverview(roots, { knownRepos: repos, maxDepth: options.maxDepth }))
+    ((
+      roots: ReadonlyArray<string>,
+      repos: ReadonlyArray<string>,
+      onRepoSummary?: (summary: WorkspaceRepoSummary) => void
+    ) => getWorkspaceOverview(roots, { knownRepos: repos, maxDepth: options.maxDepth, onRepoSummary }))
 
   const loadPullRequestCounts: (
     repos: ReadonlyArray<WorkspaceRepoSummary>,
@@ -430,7 +435,8 @@ type WorkspaceInkAppProps = {
   knownRepos: ReadonlyArray<string>
   loadOverview: (
     roots: ReadonlyArray<string>,
-    knownRepos: ReadonlyArray<string>
+    knownRepos: ReadonlyArray<string>,
+    onRepoSummary?: (summary: WorkspaceRepoSummary) => void
   ) => Promise<WorkspaceOverview>
   loadPullRequestCounts: (
     repos: ReadonlyArray<WorkspaceRepoSummary>,
@@ -582,8 +588,15 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'set-loading', loading: true })
     void (async () => {
       const isCurrent = loadGateRef.current.begin()
+      // Rows stream in as each repo finishes instead of waiting for the
+      // slowest one (#2210); the final overview below supersedes them.
+      const batcher = createSummaryBatcher((batch) => {
+        if (cancelled || unmountedRef.current || !isCurrent()) return
+        dispatch({ type: 'merge-repo-summaries', repos: batch })
+      })
       try {
-        const overview = await props.loadOverview(props.roots, knownReposRef.current)
+        const overview = await props.loadOverview(props.roots, knownReposRef.current, batcher.push)
+        batcher.cancel()
         if (cancelled || unmountedRef.current || !isCurrent()) return
         writeCachedWorkspace(props.roots, overview)
         dispatch({ type: 'replace-overview', overview })
@@ -618,6 +631,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           })
         }
       } catch (err) {
+        batcher.cancel()
         if (cancelled || unmountedRef.current || !isCurrent()) return
         dispatch({ type: 'set-pull-request-fetching', paths: [] })
         dispatch({ type: 'set-loading', loading: false })
@@ -645,9 +659,14 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     if (stateRef.current.loading) return
     const focusedPath = selectFocusedRepo(stateRef.current)?.path
     const isCurrent = loadGateRef.current.begin()
+    const batcher = createSummaryBatcher((batch) => {
+      if (unmountedRef.current || !isCurrent()) return
+      dispatch({ type: 'merge-repo-summaries', repos: batch })
+    })
     dispatch({ type: 'set-loading', loading: true })
     try {
-      const overview = await props.loadOverview(props.roots, knownReposRef.current)
+      const overview = await props.loadOverview(props.roots, knownReposRef.current, batcher.push)
+      batcher.cancel()
       if (unmountedRef.current || !isCurrent()) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
@@ -671,6 +690,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       })
       dispatch({ type: 'set-pull-request-fetching', paths: [] })
     } catch (err) {
+      batcher.cancel()
       if (unmountedRef.current || !isCurrent()) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({

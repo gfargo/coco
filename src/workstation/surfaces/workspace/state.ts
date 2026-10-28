@@ -119,6 +119,7 @@ export type WorkspaceState = {
 
 export type WorkspaceAction =
   | { type: 'replace-overview'; overview: WorkspaceOverview }
+  | { type: 'merge-repo-summaries'; repos: ReadonlyArray<WorkspaceRepoSummary> }
   | { type: 'anchor-cursor-by-path'; path: string }
   | { type: 'replace-pull-request-counts'; counts: Readonly<Record<string, number>>; authenticated: boolean }
   | { type: 'set-sort'; sort: WorkspaceSortMode }
@@ -295,6 +296,21 @@ export function applyWorkspaceAction(
         overview: action.overview,
         loading: false,
       })
+    }
+    case 'merge-repo-summaries': {
+      // Upsert streamed summaries while a scan is still running (#2210).
+      // Unlike `replace-overview` this keeps `loading` true (the scan has
+      // not finished), never drops a row that was already listed (a
+      // vanished repo is removed by the final replace), and re-anchors the
+      // cursor by path because the sort may move the focused row.
+      const focusedPath = selectFocusedRepo(state)?.path
+      const byPath = new Map(state.overview.repos.map((repo) => [repo.path, repo]))
+      for (const repo of action.repos) byPath.set(repo.path, repo)
+      const repos = [...byPath.values()].sort((a, b) => a.path.localeCompare(b.path))
+      const next = rectifySelection({ ...state, overview: { ...state.overview, repos } })
+      if (!focusedPath) return next
+      const idx = selectVisibleRepos(next).findIndex((repo) => repo.path === focusedPath)
+      return idx < 0 ? next : { ...next, selectedIndex: idx }
     }
     case 'anchor-cursor-by-path': {
       const visible = selectVisibleRepos(state)

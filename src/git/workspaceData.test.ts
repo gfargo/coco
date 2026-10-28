@@ -411,4 +411,35 @@ describe('workspaceData overview', () => {
       fs.rmSync(root, { recursive: true, force: true })
     }
   })
+
+  it('reports each repo as it finishes instead of waiting for the slowest (#2210)', async () => {
+    const root = createTempDir()
+    try {
+      makeFakeRepo(root, 'fast')
+      makeFakeRepo(root, 'slow')
+      let releaseSlow!: () => void
+      const slowGate = new Promise<void>((resolve) => { releaseSlow = resolve })
+      const loadSummary = async (repoPath: string): Promise<WorkspaceRepoSummary> => {
+        if (path.basename(repoPath) === 'slow') await slowGate
+        return { path: repoPath, name: path.basename(repoPath), ahead: 0, behind: 0, dirty: 0 }
+      }
+      const seen: string[] = []
+
+      const overviewPromise = getWorkspaceOverview([root], {
+        loadSummary,
+        onRepoSummary: (summary) => seen.push(summary.name),
+      })
+
+      // The fast repo is reported while the slow one is still hanging.
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      expect(seen).toEqual(['fast'])
+
+      releaseSlow()
+      const overview = await overviewPromise
+      expect(seen).toEqual(['fast', 'slow'])
+      expect(overview.repos.map((entry) => entry.name).sort()).toEqual(['fast', 'slow'])
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true })
+    }
+  })
 })
