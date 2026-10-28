@@ -15,34 +15,35 @@ const view = (activeView: string, extra: Partial<LogInkState> = {}) =>
 
 type Case = {
   name: string
-  action: string
+  /** The action fields each emitted event must carry. */
+  expected: Record<string, string>
   state: LogInkState
   context: LogInkInputContext
   index: keyof LogInkState
 }
 const CASES: Case[] = [
-  { name: 'branches', action: 'moveBranch', state: view('branches'), context: { branchCount: 25, branchIds: ids(25) }, index: 'selectedBranchIndex' },
-  { name: 'tags', action: 'moveTag', state: view('tags'), context: { tagCount: 25, tagIds: ids(25) }, index: 'selectedTagIndex' },
-  { name: 'stash', action: 'moveStash', state: view('stash'), context: { stashCount: 25, stashIds: ids(25) }, index: 'selectedStashIndex' },
-  { name: 'reflog', action: 'moveReflog', state: view('reflog'), context: { reflogCount: 25 }, index: 'selectedReflogIndex' },
-  { name: 'remotes', action: 'moveRemote', state: view('remotes'), context: { remoteCount: 25, remoteListIds: ids(25) }, index: 'selectedRemoteIndex' },
-  { name: 'submodules', action: 'moveSubmodule', state: view('submodules'), context: { submoduleCount: 25, submoduleListIds: ids(25) }, index: 'selectedSubmoduleIndex' },
-  { name: 'issues', action: 'moveIssue', state: view('issues'), context: { issueCount: 25, issueListIds: ids(25) }, index: 'selectedIssueIndex' },
-  { name: 'pull-request-triage', action: 'movePullRequestTriage', state: view('pull-request-triage'), context: { pullRequestTriageCount: 25, pullRequestTriageListIds: ids(25) }, index: 'selectedPullRequestTriageIndex' },
-  { name: 'worktrees', action: 'moveWorktreeListEntry', state: view('worktrees'), context: { worktreeListCount: 25, worktreeListIds: ids(25) }, index: 'selectedWorktreeListIndex' },
-  { name: 'status files', action: 'moveWorktreeFile', state: view('status'), context: { worktreeFileCount: 25 }, index: 'selectedWorktreeFileIndex' },
-  { name: 'conflicts', action: 'moveConflictFile', state: view('conflicts'), context: { conflictFileCount: 25 }, index: 'selectedConflictFileIndex' },
+  { name: 'branches', expected: { type: 'moveList', list: 'branch' }, state: view('branches'), context: { branchCount: 25, branchIds: ids(25) }, index: 'selectedBranchIndex' },
+  { name: 'tags', expected: { type: 'moveList', list: 'tag' }, state: view('tags'), context: { tagCount: 25, tagIds: ids(25) }, index: 'selectedTagIndex' },
+  { name: 'stash', expected: { type: 'moveList', list: 'stash' }, state: view('stash'), context: { stashCount: 25, stashIds: ids(25) }, index: 'selectedStashIndex' },
+  { name: 'reflog', expected: { type: 'moveList', list: 'reflog' }, state: view('reflog'), context: { reflogCount: 25 }, index: 'selectedReflogIndex' },
+  { name: 'remotes', expected: { type: 'moveList', list: 'remote' }, state: view('remotes'), context: { remoteCount: 25, remoteListIds: ids(25) }, index: 'selectedRemoteIndex' },
+  { name: 'submodules', expected: { type: 'moveList', list: 'submodule' }, state: view('submodules'), context: { submoduleCount: 25, submoduleListIds: ids(25) }, index: 'selectedSubmoduleIndex' },
+  { name: 'issues', expected: { type: 'moveList', list: 'issue' }, state: view('issues'), context: { issueCount: 25, issueListIds: ids(25) }, index: 'selectedIssueIndex' },
+  { name: 'pull-request-triage', expected: { type: 'moveList', list: 'pullRequestTriage' }, state: view('pull-request-triage'), context: { pullRequestTriageCount: 25, pullRequestTriageListIds: ids(25) }, index: 'selectedPullRequestTriageIndex' },
+  { name: 'worktrees', expected: { type: 'moveList', list: 'worktreeList' }, state: view('worktrees'), context: { worktreeListCount: 25, worktreeListIds: ids(25) }, index: 'selectedWorktreeListIndex' },
+  { name: 'status files', expected: { type: 'moveWorktreeFile' }, state: view('status'), context: { worktreeFileCount: 25 }, index: 'selectedWorktreeFileIndex' },
+  { name: 'conflicts', expected: { type: 'moveList', list: 'conflictFile' }, state: view('conflicts'), context: { conflictFileCount: 25 }, index: 'selectedConflictFileIndex' },
 ]
 
 const apply = (state: LogInkState, events: LogInkInputEvent[]) =>
   events.reduce((s, event) => (event.type === 'action' ? applyLogInkAction(s, event.action) : s), state)
 
 describe('PgUp / PgDn on list views (#2203)', () => {
-  it.each(CASES)('$name: PgDn / PgUp emit the list\'s own move, not the history `page`', ({ action, state, context }) => {
+  it.each(CASES)('$name: PgDn / PgUp emit the list\'s own move, not the history `page`', ({ expected, state, context }) => {
     const down = getLogInkInputEvents(state, '', { pageDown: true }, context)
     const up = getLogInkInputEvents(state, '', { pageUp: true }, context)
-    expect(down).toEqual([expect.objectContaining({ type: 'action', action: expect.objectContaining({ type: action, delta: 10 }) })])
-    expect(up).toEqual([expect.objectContaining({ type: 'action', action: expect.objectContaining({ type: action, delta: -10 }) })])
+    expect(down).toEqual([expect.objectContaining({ type: 'action', action: expect.objectContaining({ ...expected, delta: 10 }) })])
+    expect(up).toEqual([expect.objectContaining({ type: 'action', action: expect.objectContaining({ ...expected, delta: -10 }) })])
     expect(JSON.stringify([down, up])).not.toContain('"type":"page"')
   })
 
@@ -64,13 +65,13 @@ describe('PgUp / PgDn on list views (#2203)', () => {
 
   it('carries the id of the target row for the id-mirrored lists', () => {
     const events = getLogInkInputEvents(view('branches'), '', { pageDown: true }, { branchCount: 25, branchIds: ids(25) })
-    expect(events[0]).toMatchObject({ action: { type: 'moveBranch', delta: 10, id: 'id10' } })
+    expect(events[0]).toMatchObject({ action: { type: 'moveList', list: 'branch', delta: 10, id: 'id10' } })
   })
 
   it('pages a sidebar tab list the same way as its dedicated view', () => {
     const sidebar = { ...createLogInkState(rows), activeView: 'history', focus: 'sidebar', sidebarTab: 'tags' } as LogInkState
     const events = getLogInkInputEvents(sidebar, '', { pageDown: true }, { tagCount: 25, tagIds: ids(25) })
-    expect(events[0]).toMatchObject({ action: { type: 'moveTag', delta: 10 } })
+    expect(events[0]).toMatchObject({ action: { type: 'moveList', list: 'tag', delta: 10 } })
   })
 
   describe('sidebar header focus', () => {
@@ -84,7 +85,7 @@ describe('PgUp / PgDn on list views (#2203)', () => {
     it('PgDn drops the header focus first, then pages', () => {
       const events = getLogInkInputEvents(header, '', { pageDown: true }, ctx)
       expect(events[0]).toEqual({ type: 'action', action: { type: 'setSidebarHeaderFocused', value: false } })
-      expect(events[1]).toMatchObject({ action: { type: 'moveTag', delta: 10 } })
+      expect(events[1]).toMatchObject({ action: { type: 'moveList', list: 'tag', delta: 10 } })
     })
   })
 
@@ -110,7 +111,7 @@ describe('PgUp / PgDn on list views (#2203)', () => {
 
     it('blame keeps its own paging', () => {
       const events = getLogInkInputEvents(view('blame'), '', { pageDown: true }, { blameLineCount: 40 })
-      expect(events).toEqual([{ type: 'action', action: { type: 'moveBlame', delta: 10, count: 40 } }])
+      expect(events).toEqual([{ type: 'action', action: { type: 'moveList', list: 'blame', delta: 10, count: 40 } }])
     })
   })
 })

@@ -40,7 +40,7 @@ export function handleFileHistoryInput(
       return context.fileHistoryCommitCount
         ? [
           action({
-            type: 'moveFileHistory',
+            type: 'moveList', list: 'fileHistory',
             delta: -context.fileHistoryCommitCount,
             count: context.fileHistoryCommitCount,
           }),
@@ -53,7 +53,7 @@ export function handleFileHistoryInput(
       return context.fileHistoryCommitCount
         ? [
           action({
-            type: 'moveFileHistory',
+            type: 'moveList', list: 'fileHistory',
             delta: context.fileHistoryCommitCount,
             count: context.fileHistoryCommitCount,
           }),
@@ -66,12 +66,12 @@ export function handleFileHistoryInput(
     // so the router's shared movement chain can keep checking other views.
     case 'move-up':
       return context.fileHistoryCommitCount
-        ? [action({ type: 'moveFileHistory', delta: -1, count: context.fileHistoryCommitCount })]
+        ? [action({ type: 'moveList', list: 'fileHistory', delta: -1, count: context.fileHistoryCommitCount })]
         : null
 
     case 'move-down':
       return context.fileHistoryCommitCount
-        ? [action({ type: 'moveFileHistory', delta: 1, count: context.fileHistoryCommitCount })]
+        ? [action({ type: 'moveList', list: 'fileHistory', delta: 1, count: context.fileHistoryCommitCount })]
         : null
 
     // View-local paging (#1387) — the generic `page` fallback moves the
@@ -79,12 +79,12 @@ export function handleFileHistoryInput(
     // the view matches, mirroring jump-top/jump-bottom above.
     case 'page-up':
       return context.fileHistoryCommitCount
-        ? [action({ type: 'moveFileHistory', delta: -10, count: context.fileHistoryCommitCount })]
+        ? [action({ type: 'moveList', list: 'fileHistory', delta: -10, count: context.fileHistoryCommitCount })]
         : []
 
     case 'page-down':
       return context.fileHistoryCommitCount
-        ? [action({ type: 'moveFileHistory', delta: 10, count: context.fileHistoryCommitCount })]
+        ? [action({ type: 'moveList', list: 'fileHistory', delta: 10, count: context.fileHistoryCommitCount })]
         : []
 
     // Enter drills into the diff for the commit under the cursor (#COCO-14).
