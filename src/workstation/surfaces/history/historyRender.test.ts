@@ -458,3 +458,49 @@ describe('formatHistoryFetchArgs', () => {
     expect(formatHistoryFetchArgs({})).toBe('none')
   })
 })
+
+// #2204 — end-to-end: a hostile commit subject, author and ref must not put
+// a terminal control sequence into anything the history panel renders.
+describe('renderHistoryPanel with hostile commit content (#2204)', () => {
+  const ESC = '\u001b'
+  const OSC52 = `${ESC}]52;c;ZXZpbA==\u0007`
+
+  // Flatten every string child in the rendered tree.
+  function allText(node: unknown, out: string[] = []): string[] {
+    if (typeof node === 'string') { out.push(node); return out }
+    if (Array.isArray(node)) { node.forEach((child) => allText(child, out)); return out }
+    if (node && typeof node === 'object' && 'props' in node) {
+      allText((node as { props: StubProps }).props.children, out)
+    }
+    return out
+  }
+
+  it('emits no escape, BEL or carriage return for a crafted subject, author or ref', () => {
+    const rows = [
+      makeCommit({
+        shortHash: 'ddd4444',
+        hash: 'ddd4444',
+        message: `feat: ${OSC52}pwned\rsubject`,
+        author: `Eve${OSC52}`,
+        refs: [`HEAD -> main${OSC52}`],
+      }),
+    ]
+    const state = { ...createLogInkState(rows), rows, commits: rows, filteredCommits: rows } as LogInkState
+    // The history panel renders through stub components, so descend by
+    // rendering each function component to its element tree.
+    const expand = (node: unknown): unknown => {
+      if (node && typeof node === 'object' && 'type' in node) {
+        const element = node as ReactElement
+        if (typeof element.type === 'function') {
+          return expand((element.type as (props: unknown) => unknown)(element.props))
+        }
+        const props = element.props as StubProps
+        return { props: { children: Array.isArray(props.children) ? props.children.map(expand) : expand(props.children) } }
+      }
+      return node
+    }
+    const text = allText(expand(render(state))).join('')
+    expect(text).toContain('feat:')
+    expect(text).not.toMatch(/[\u001b\u0007\r]/)
+  })
+})

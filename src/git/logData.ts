@@ -611,7 +611,10 @@ export async function getCommitFilePreview(
       line.startsWith(' ')
     ))
     .slice(0, limit)
-    .map(stripDisplayControl)
+  // NOT sanitised here (#2204): these lines are also the source of
+  // `extractDiffHunk` -> `git apply`, so a CRLF file's `\r` must survive.
+  // Control bytes are neutralised when the lines are rendered
+  // (`stripTerminalControl` in the cell-layout helpers).
 
   // #884 — replace LFS pointer hunks and submodule "Subproject
   // commit" hunks with one-line summaries. Both detections are

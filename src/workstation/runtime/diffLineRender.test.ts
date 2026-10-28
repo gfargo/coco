@@ -44,6 +44,38 @@ function render(line: string, spans?: Map<string, SyntaxSpan[]>, maxCells = 80):
   return renderDiffLine(createElement, Text, line, theme, spans, maxCells, 'k')
 }
 
+const ESC = '\u001b'
+const OSC52 = `${ESC}]52;c;ZXZpbA==\u0007`
+
+describe('renderDiffLine neutralises hostile content at render time (#2204)', () => {
+  const allText = (tree: unknown) => leaves(tree).map((s) => s.text).join('')
+
+  it('strips an OSC 52 clipboard write and a bare carriage return from a plain line', () => {
+    const text = allText(render(`+safe${OSC52}tail\r`))
+    expect(text).not.toContain(ESC)
+    expect(text).not.toContain('\u0007')
+    expect(text).not.toContain('\r')
+    expect(text.startsWith('+safe')).toBe(true)
+  })
+
+  it('strips them from syntax-highlighted spans too, while the highlight still resolves', () => {
+    // The span map is keyed on the RAW line content, so highlighting keeps
+    // working; only the emitted segments are cleaned.
+    const code = `const x = 1${OSC52}\r`
+    const spans: SyntaxSpan[] = [{ start: 0, end: 5, token: 'keyword' }, { start: 5, end: code.length, token: 'plain' }]
+    const segs = leaves(render(`+${code}`, new Map([[code, spans]])))
+    const joined = segs.map((s) => s.text).join('')
+    expect(joined).not.toMatch(/[\u001b\u0007\r]/)
+    expect(segs.find((s) => s.text === 'const')?.color).toBe('magenta')
+  })
+
+  it('leaves the line value itself untouched (diff lines are also fed to git apply)', () => {
+    const line = '+two\r'
+    render(line)
+    expect(line).toBe('+two\r')
+  })
+})
+
 describe('renderDiffLine', () => {
   it('falls back to a single plain Text when no spans are available', () => {
     const tree = render('+const x = 1')
