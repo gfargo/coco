@@ -196,6 +196,11 @@ export const schema = {
               "type": "number",
               "description": "Maximum depth to recurse into each configured root when looking for `.git/` directories. Stops descending as soon as a directory is identified as a repo.",
               "default": 3
+            },
+            "followSymlinks": {
+              "type": "boolean",
+              "description": "Follow symlinked directories while scanning the configured roots. Off by default so a symlink cycle or a link out to a huge tree can't blow up discovery; turn it on when your repos are reachable only through links (e.g. `~/code/work` -> `/Volumes/work`). Directories already visited via their real path are never walked twice.",
+              "default": false
             }
           },
           "additionalProperties": false,

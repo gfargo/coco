@@ -238,6 +238,35 @@ describe('workspaceData async discovery (#2210)', () => {
   })
 })
 
+describe('getWorkspaceOverview followSymlinks (#2210)', () => {
+  let root: string
+  let target: string
+  beforeEach(() => {
+    root = createTempDir()
+    target = createTempDir()
+    makeFakeRepo(target, 'linked-repo')
+    fs.symlinkSync(target, path.join(root, 'link'))
+  })
+  afterEach(() => {
+    fs.rmSync(root, { recursive: true, force: true })
+    fs.rmSync(target, { recursive: true, force: true })
+  })
+
+  const loadSummary = async (repoPath: string): Promise<WorkspaceRepoSummary> => ({
+    path: repoPath, name: path.basename(repoPath), ahead: 0, behind: 0, dirty: 0,
+  })
+
+  it('does not follow symlinked directories by default', async () => {
+    const overview = await getWorkspaceOverview([root], { loadSummary })
+    expect(overview.repos).toEqual([])
+  })
+
+  it('follows them when the option is set, as the workspace config now allows', async () => {
+    const overview = await getWorkspaceOverview([root], { loadSummary, followSymlinks: true })
+    expect(overview.repos.map((entry) => entry.name)).toEqual(['linked-repo'])
+  })
+})
+
 describe('hidden repositories (#2210)', () => {
   let root: string
   beforeEach(() => { root = createTempDir() })
