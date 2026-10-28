@@ -34,6 +34,10 @@ describe('retryOnIndexLock (#2201)', () => {
   it('recognizes both git phrasings of the lock error', () => {
     expect(isIndexLockError(lockError().message)).toBe(true)
     expect(isIndexLockError('Another git process seems to be running ... .git/index.lock')).toBe(true)
+    // Config-file lock (remote / stack actions write .git/config).
+    expect(isIndexLockError('error: could not lock config file .git/config: File exists')).toBe(true)
+    // A ref race is a lost compare-and-swap, not lock contention: never retried.
+    expect(isIndexLockError("error: cannot lock ref 'refs/heads/x': is at abc but expected def")).toBe(false)
     expect(isIndexLockError('fatal: bad revision')).toBe(false)
   })
 })

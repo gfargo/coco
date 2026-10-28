@@ -1,6 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { getInProgressOperation } from './historyActions'
 import { ReflogViewEntry, splitReflogSubject } from './reflogData'
+import { retryOnIndexLock } from './actionErrors'
 
 /**
  * Reflog "time machine" actions (#0.67). The reflog view's whole value is
@@ -21,7 +22,7 @@ async function runAction(
   successMessage: string
 ): Promise<ReflogActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
     return { ok: true, message: successMessage }
   } catch (error) {
     return { ok: false, message: (error as Error).message }

@@ -3,6 +3,7 @@ import { promisify } from 'util'
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
 import { GitOperationType } from './operationData'
+import { retryOnIndexLock } from './actionErrors'
 
 type OperationCommand = {
   args: string[]
@@ -18,7 +19,7 @@ function compactOutputLines(output: string): string[] {
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
 
     return {
       ok: true,
