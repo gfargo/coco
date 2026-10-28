@@ -42,12 +42,7 @@ export type WorkspacePullRequestCounts = {
  * for remotes. Falls back to undefined on any read failure.
  */
 export function readOriginRemoteUrl(repoPath: string): string | undefined {
-  const candidates = [
-    path.join(repoPath, '.git', 'config'),
-    // Worktrees and submodules use a .git pointer file. Best effort —
-    // we'll just skip if the pointer resolution gets complicated.
-  ]
-  for (const candidate of candidates) {
+  for (const candidate of resolveGitConfigCandidates(repoPath)) {
     try {
       const text = fs.readFileSync(candidate, 'utf8')
       const url = extractOriginUrl(text)
@@ -59,6 +54,38 @@ export function readOriginRemoteUrl(repoPath: string): string | undefined {
     }
   }
   return undefined
+}
+
+/**
+ * Config files that can hold a repo's remotes, most specific first (#2210).
+ * A plain repo has `.git/config`. A linked worktree or submodule has a
+ * `.git` POINTER FILE (`gitdir: <path>`): for a worktree that git dir
+ * carries a `commondir` file naming the main repo's git dir, where the
+ * remotes live; a submodule's git dir (`.git/modules/<name>`) has its own
+ * `config`. Reading only `<repo>/.git/config` found nothing for either,
+ * so those repos never got PR counts.
+ */
+export function resolveGitConfigCandidates(repoPath: string): string[] {
+  const dotGit = path.join(repoPath, '.git')
+  let gitDir = dotGit
+  try {
+    if (fs.statSync(dotGit).isFile()) {
+      const match = /^gitdir:\s*(.+)$/m.exec(fs.readFileSync(dotGit, 'utf8'))
+      if (!match) return []
+      gitDir = path.resolve(repoPath, match[1].trim())
+    }
+  } catch {
+    return []
+  }
+  const candidates: string[] = []
+  try {
+    const commonDir = fs.readFileSync(path.join(gitDir, 'commondir'), 'utf8').trim()
+    if (commonDir) candidates.push(path.join(path.resolve(gitDir, commonDir), 'config'))
+  } catch {
+    // Not a linked worktree.
+  }
+  candidates.push(path.join(gitDir, 'config'))
+  return candidates
 }
 
 export function extractOriginUrl(configText: string): string | undefined {
