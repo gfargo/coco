@@ -2,10 +2,11 @@ import { SimpleGit } from 'simple-git'
 import { BranchActionResult, deleteBranch } from './branchActions'
 import { BranchRef } from './branchData'
 import { WorktreeEntry } from './worktreeData'
+import { retryOnIndexLock } from './actionErrors'
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
 
     return {
       ok: true,

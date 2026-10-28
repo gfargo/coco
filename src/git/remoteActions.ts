@@ -1,6 +1,7 @@
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
 import { rejectFlagLike } from './forgeArgGuards'
+import { retryOnIndexLock } from './actionErrors'
 
 /**
  * Remote maintenance actions (#0.71 — expanded git ops).
@@ -26,7 +27,7 @@ async function runAction(
   successMessage: string
 ): Promise<BranchActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
     return { ok: true, message: successMessage }
   } catch (error) {
     return { ok: false, message: (error as Error).message }

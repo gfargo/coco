@@ -3,7 +3,12 @@
  * or a blocked credential prompt reads the same wherever it surfaces.
  */
 
-const INDEX_LOCK_PATTERN = /index\.lock|Unable to create '[^']*\.lock'/i
+// Lock-file contention in any of its wordings: the index (`index.lock`),
+// a ref or other lock file (`Unable to create '...lock'`), and config
+// writes (`could not lock config file ...: File exists`). A ref RACE
+// ("cannot lock ref ... is at X but expected Y") is deliberately not here:
+// retrying that would just repeat a lost compare-and-swap.
+const INDEX_LOCK_PATTERN = /index\.lock|Unable to create '[^']*\.lock'|could not lock config file/i
 const AUTH_FAILURE_PATTERN =
   /terminal prompts disabled|could not read (?:Username|Password)|Authentication failed|Permission denied \(publickey|Host key verification failed|No supported authentication methods|passphrase|Enter PIN/i
 
