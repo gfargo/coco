@@ -491,6 +491,45 @@ function resolveEdgeJumpEvents(
   ]
 }
 
+/** Rows a PgUp / PgDn moves a list cursor (same step as the generic `page`). */
+const LIST_PAGE_STEP = 10
+
+/**
+ * PgUp / PgDn for the list-shaped views (#2203). Before this the keys fell
+ * through to the generic `{ type: 'page' }`, which moves the HISTORY cursor:
+ * invisible on every view except History, so paging branches, tags, the
+ * status file list, conflicts and the rest silently did nothing visible.
+ * Returns undefined when no list owns the keyboard, so the caller keeps its
+ * existing fallback.
+ */
+function resolveListPageEvents(
+  state: LogInkState,
+  context: LogInkInputContext,
+  sign: 1 | -1
+): LogInkInputEvent[] | undefined {
+  const delta = sign * LIST_PAGE_STEP
+
+  if (state.activeView === 'status' && state.focus === 'commits' && context.worktreeFileCount) {
+    return [action({ type: 'moveWorktreeFile', delta, fileCount: context.worktreeFileCount })]
+  }
+
+  const listEvents = listMoveEvents(state, context, delta)
+  if (listEvents) {
+    // Mirror ↑/↓ and the edge jumps: with the sidebar header focused,
+    // paging up is a no-op and paging down first drops the header focus
+    // (otherwise the selection would move under a header that still
+    // renders as focused).
+    if (state.focus === 'sidebar' && state.sidebarHeaderFocused) {
+      return sign < 0
+        ? []
+        : [action({ type: 'setSidebarHeaderFocused', value: false }), ...listEvents]
+    }
+    return listEvents
+  }
+
+  return handleConflictsInput(state, '', {}, context, sign < 0 ? 'page-up' : 'page-down') ?? undefined
+}
+
 /**
  * Resolve which inspector action context applies for the current
  * state. Today only history commits expose actions in the inspector
@@ -2946,6 +2985,11 @@ export function getLogInkInputEvents(
       return fileHistoryPageUpEvents
     }
 
+    const listPageUpEvents = resolveListPageEvents(state, context, -1)
+    if (listPageUpEvents) {
+      return listPageUpEvents
+    }
+
     return [action({ type: 'page', delta: -10 })]
   }
 
@@ -2983,6 +3027,11 @@ export function getLogInkInputEvents(
     const fileHistoryPageDownEvents = handleFileHistoryInput(state, inputValue, key, context, 'page-down')
     if (fileHistoryPageDownEvents) {
       return fileHistoryPageDownEvents
+    }
+
+    const listPageDownEvents = resolveListPageEvents(state, context, 1)
+    if (listPageDownEvents) {
+      return listPageDownEvents
     }
 
     return [action({ type: 'page', delta: 10 })]
