@@ -28,6 +28,19 @@ import { handleFileHistoryInput } from '../surfaces/fileHistory/input'
 import { handleRebaseInput } from '../surfaces/rebase/input'
 import { handleOverlayInput } from './overlayInput'
 import { resolveQuitEvents } from './quitGuard'
+import {
+  isBranchActionTarget,
+  isIssueActionTarget,
+  isPullRequestTriageActionTarget,
+  isReflogActionTarget,
+  isRemotesActionTarget,
+  isStashActionTarget,
+  isSubmodulesActionTarget,
+  isTagActionTarget,
+  isWorktreeActionTarget,
+  listEdgeEvents,
+  listMoveEvents,
+} from './listNavigation'
 
 export type LogInkInputKey = {
   backspace?: boolean
@@ -356,25 +369,6 @@ function action(actionValue: LogInkAction): LogInkInputEvent {
 }
 
 /**
- * Resolve the id at the post-move index for a `moveBranch`/`moveTag`/
- * `moveStash` dispatch (#1452 dual-write). `ids` is the sorted +
- * filtered id list in render order; undefined when the caller hasn't
- * threaded it through `LogInkInputContext` yet (e.g. a test harness
- * exercising only `count`), in which case the move still dispatches —
- * it just carries no `id` payload.
- */
-function resolveMoveTargetId(
-  ids: string[] | undefined,
-  currentIndex: number,
-  delta: number,
-  count: number,
-): string | undefined {
-  if (!ids || count === 0) return undefined
-  const newIndex = Math.max(0, Math.min(currentIndex + delta, count - 1))
-  return ids[newIndex]
-}
-
-/**
  * Resolve the events for a top/bottom edge jump (Home/End, and `gg`/`G`
  * once routed through here). Mirrors the ↑/↓ (`k`/`j`) movement ladder
  * below, branch for branch, substituting a delta of ±the target list's
@@ -477,85 +471,9 @@ function resolveEdgeJumpEvents(
     ]
   }
 
-  if (isBranchActionTarget(state) && context.branchCount) {
-    return [action({
-      type: 'moveBranch',
-      delta: sign * context.branchCount,
-      count: context.branchCount,
-      id: resolveMoveTargetId(context.branchIds, state.selectedBranchIndex, sign * context.branchCount, context.branchCount),
-    })]
-  }
-
-  if (isTagActionTarget(state) && context.tagCount) {
-    return [action({
-      type: 'moveTag',
-      delta: sign * context.tagCount,
-      count: context.tagCount,
-      id: resolveMoveTargetId(context.tagIds, state.selectedTagIndex, sign * context.tagCount, context.tagCount),
-    })]
-  }
-
-  if (isStashActionTarget(state) && context.stashCount) {
-    return [action({
-      type: 'moveStash',
-      delta: sign * context.stashCount,
-      count: context.stashCount,
-      id: resolveMoveTargetId(context.stashIds, state.selectedStashIndex, sign * context.stashCount, context.stashCount),
-    })]
-  }
-
-  if (isReflogActionTarget(state) && context.reflogCount) {
-    return [action({ type: 'moveReflog', delta: sign * context.reflogCount, count: context.reflogCount })]
-  }
-
-  if (isRemotesActionTarget(state) && context.remoteCount) {
-    return [action({
-      type: 'moveRemote',
-      delta: sign * context.remoteCount,
-      count: context.remoteCount,
-      id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, sign * context.remoteCount, context.remoteCount),
-    })]
-  }
-
-  if (isSubmodulesActionTarget(state) && context.submoduleCount) {
-    return [action({
-      type: 'moveSubmodule',
-      delta: sign * context.submoduleCount,
-      count: context.submoduleCount,
-      id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, sign * context.submoduleCount, context.submoduleCount),
-    })]
-  }
-
-  if (isIssueActionTarget(state) && context.issueCount) {
-    return [action({
-      type: 'moveIssue',
-      delta: sign * context.issueCount,
-      count: context.issueCount,
-      id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, sign * context.issueCount, context.issueCount),
-    })]
-  }
-
-  if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
-    return [action({
-      type: 'movePullRequestTriage',
-      delta: sign * context.pullRequestTriageCount,
-      count: context.pullRequestTriageCount,
-      id: resolveMoveTargetId(
-        context.pullRequestTriageListIds,
-        state.selectedPullRequestTriageIndex,
-        sign * context.pullRequestTriageCount,
-        context.pullRequestTriageCount,
-      ),
-    })]
-  }
-
-  if (isWorktreeActionTarget(state) && context.worktreeListCount) {
-    return [action({
-      type: 'moveWorktreeListEntry',
-      delta: sign * context.worktreeListCount,
-      count: context.worktreeListCount,
-      id: resolveMoveTargetId(context.worktreeListIds, state.selectedWorktreeListIndex, sign * context.worktreeListCount, context.worktreeListCount),
-    })]
+  const listEdgeEvents_ = listEdgeEvents(state, context, sign)
+  if (listEdgeEvents_) {
+    return listEdgeEvents_
   }
 
   const conflictsJumpEvents = handleConflictsInput(state, '', {}, context, edge === 'top' ? 'jump-top' : 'jump-bottom')
@@ -698,19 +616,6 @@ function buildApplyHunkEvents(
 }
 
 /**
- * Per-entity action-target predicates. The promoted views (`branches`,
- * `tags`, `stash`, `worktrees`) each scope a set of ops to their
- * dedicated surface. The same ops also fire when the user has the
- * sidebar focused on the matching tab — that's how in-sidebar
- * selection (#791 follow-up) lets the user checkout / apply / drop
- * without leaving the workstation view.
- */
-function isBranchActionTarget(state: LogInkState): boolean {
-  return (state.activeView === 'branches' && state.focus === 'commits') ||
-    (state.focus === 'sidebar' && state.sidebarTab === 'branches')
-}
-
-/**
  * The promoted-view half of `isBranchActionTarget`, without the sidebar
  * fallback. Use this for ops that `branchesHints` advertises (#2155) but
  * the sidebar footer does not — inheriting them onto the sidebar tab turns
@@ -719,16 +624,6 @@ function isBranchActionTarget(state: LogInkState): boolean {
  */
 function isBranchesViewTarget(state: LogInkState): boolean {
   return state.activeView === 'branches' && state.focus === 'commits'
-}
-
-function isTagActionTarget(state: LogInkState): boolean {
-  return (state.activeView === 'tags' && state.focus === 'commits') ||
-    (state.focus === 'sidebar' && state.sidebarTab === 'tags')
-}
-
-function isStashActionTarget(state: LogInkState): boolean {
-  return (state.activeView === 'stash' && state.focus === 'commits') ||
-    (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
 }
 
 /**
@@ -749,15 +644,6 @@ function isHistoryRangeTarget(state: LogInkState): boolean {
     state.filteredCommits.length > 0 &&
     !state.pendingCommitFocused &&
     !state.filter
-}
-
-/**
- * Reflog has no sidebar tab — only the dedicated promoted view (#781).
- * The condition stays as a single helper anyway so navigation handlers
- * can read it the same way they do for the other promoted views.
- */
-function isReflogActionTarget(state: LogInkState): boolean {
-  return state.activeView === 'reflog' && state.focus === 'commits'
 }
 
 /**
@@ -829,45 +715,6 @@ export function isCreateStashView(view: LogInkView): boolean {
 /** True when the S/U/P registry fallback (sync/pull/push current branch) may fire on this view. */
 export function isRemoteOpFallbackView(view: LogInkView): boolean {
   return REMOTE_OP_FALLBACK_VIEWS.includes(view)
-}
-
-/**
- * Submodules has no sidebar tab either — only the dedicated promoted
- * view (#932). Same shape as `isReflogActionTarget`.
- */
-function isSubmodulesActionTarget(state: LogInkState): boolean {
-  return state.activeView === 'submodules' && state.focus === 'commits'
-}
-
-/**
- * Remotes has no sidebar tab — only the dedicated promoted view
- * (#0.71). Same shape as `isReflogActionTarget` / `isSubmodulesActionTarget`.
- */
-function isRemotesActionTarget(state: LogInkState): boolean {
-  return state.activeView === 'remotes' && state.focus === 'commits'
-}
-
-/**
- * Issue triage list (#882 phase 3). Same shape as the other promoted
- * read-only views — j/k move the cursor when the commits pane is
- * focused on the dedicated view.
- */
-function isIssueActionTarget(state: LogInkState): boolean {
-  return state.activeView === 'issues' && state.focus === 'commits'
-}
-
-/**
- * Pull-request triage list (#882 phase 3). Distinct from the existing
- * `pull-request` single-PR action panel — this is the multi-PR list
- * surface and its cursor lives in `selectedPullRequestTriageIndex`.
- */
-function isPullRequestTriageActionTarget(state: LogInkState): boolean {
-  return state.activeView === 'pull-request-triage' && state.focus === 'commits'
-}
-
-function isWorktreeActionTarget(state: LogInkState): boolean {
-  return (state.activeView === 'worktrees' && state.focus === 'commits') ||
-    (state.focus === 'sidebar' && state.sidebarTab === 'worktrees')
 }
 
 /**
@@ -2923,44 +2770,9 @@ export function getLogInkInputEvents(
       return []
     }
 
-    if (isBranchActionTarget(state) && context.branchCount) {
-      return [action({
-        type: 'moveBranch',
-        delta: -1,
-        count: context.branchCount,
-        id: resolveMoveTargetId(context.branchIds, state.selectedBranchIndex, -1, context.branchCount),
-      })]
-    }
-
-    if (isTagActionTarget(state) && context.tagCount) {
-      return [action({
-        type: 'moveTag',
-        delta: -1,
-        count: context.tagCount,
-        id: resolveMoveTargetId(context.tagIds, state.selectedTagIndex, -1, context.tagCount),
-      })]
-    }
-
-    if (isStashActionTarget(state) && context.stashCount) {
-      return [action({
-        type: 'moveStash',
-        delta: -1,
-        count: context.stashCount,
-        id: resolveMoveTargetId(context.stashIds, state.selectedStashIndex, -1, context.stashCount),
-      })]
-    }
-
-    if (isReflogActionTarget(state) && context.reflogCount) {
-      return [action({ type: 'moveReflog', delta: -1, count: context.reflogCount })]
-    }
-
-    if (isRemotesActionTarget(state) && context.remoteCount) {
-      return [action({
-        type: 'moveRemote',
-        delta: -1,
-        count: context.remoteCount,
-        id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, -1, context.remoteCount),
-      })]
+    const earlierListEvents = listMoveEvents(state, context, -1, 1)
+    if (earlierListEvents) {
+      return earlierListEvents
     }
 
     const blameMoveUpEvents = handleBlameInput(state, inputValue, key, context, 'move-up')
@@ -2973,45 +2785,9 @@ export function getLogInkInputEvents(
       return fileHistoryMoveUpEvents
     }
 
-    if (isSubmodulesActionTarget(state) && context.submoduleCount) {
-      return [action({
-        type: 'moveSubmodule',
-        delta: -1,
-        count: context.submoduleCount,
-        id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, -1, context.submoduleCount),
-      })]
-    }
-
-    if (isIssueActionTarget(state) && context.issueCount) {
-      return [action({
-        type: 'moveIssue',
-        delta: -1,
-        count: context.issueCount,
-        id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, -1, context.issueCount),
-      })]
-    }
-
-    if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
-      return [action({
-        type: 'movePullRequestTriage',
-        delta: -1,
-        count: context.pullRequestTriageCount,
-        id: resolveMoveTargetId(
-          context.pullRequestTriageListIds,
-          state.selectedPullRequestTriageIndex,
-          -1,
-          context.pullRequestTriageCount,
-        ),
-      })]
-    }
-
-    if (isWorktreeActionTarget(state) && context.worktreeListCount) {
-      return [action({
-        type: 'moveWorktreeListEntry',
-        delta: -1,
-        count: context.worktreeListCount,
-        id: resolveMoveTargetId(context.worktreeListIds, state.selectedWorktreeListIndex, -1, context.worktreeListCount),
-      })]
+    const laterListEvents = listMoveEvents(state, context, -1, 2)
+    if (laterListEvents) {
+      return laterListEvents
     }
 
     // Extracted to `surfaces/conflicts/input.ts` (#COCO-1064).
@@ -3100,44 +2876,9 @@ export function getLogInkInputEvents(
       return [action({ type: 'setSidebarHeaderFocused', value: false })]
     }
 
-    if (isBranchActionTarget(state) && context.branchCount) {
-      return [action({
-        type: 'moveBranch',
-        delta: 1,
-        count: context.branchCount,
-        id: resolveMoveTargetId(context.branchIds, state.selectedBranchIndex, 1, context.branchCount),
-      })]
-    }
-
-    if (isTagActionTarget(state) && context.tagCount) {
-      return [action({
-        type: 'moveTag',
-        delta: 1,
-        count: context.tagCount,
-        id: resolveMoveTargetId(context.tagIds, state.selectedTagIndex, 1, context.tagCount),
-      })]
-    }
-
-    if (isStashActionTarget(state) && context.stashCount) {
-      return [action({
-        type: 'moveStash',
-        delta: 1,
-        count: context.stashCount,
-        id: resolveMoveTargetId(context.stashIds, state.selectedStashIndex, 1, context.stashCount),
-      })]
-    }
-
-    if (isReflogActionTarget(state) && context.reflogCount) {
-      return [action({ type: 'moveReflog', delta: 1, count: context.reflogCount })]
-    }
-
-    if (isRemotesActionTarget(state) && context.remoteCount) {
-      return [action({
-        type: 'moveRemote',
-        delta: 1,
-        count: context.remoteCount,
-        id: resolveMoveTargetId(context.remoteListIds, state.selectedRemoteIndex, 1, context.remoteCount),
-      })]
+    const earlierListEvents = listMoveEvents(state, context, 1, 1)
+    if (earlierListEvents) {
+      return earlierListEvents
     }
 
     const blameMoveDownEvents = handleBlameInput(state, inputValue, key, context, 'move-down')
@@ -3150,45 +2891,9 @@ export function getLogInkInputEvents(
       return fileHistoryMoveDownEvents
     }
 
-    if (isSubmodulesActionTarget(state) && context.submoduleCount) {
-      return [action({
-        type: 'moveSubmodule',
-        delta: 1,
-        count: context.submoduleCount,
-        id: resolveMoveTargetId(context.submoduleListIds, state.selectedSubmoduleIndex, 1, context.submoduleCount),
-      })]
-    }
-
-    if (isIssueActionTarget(state) && context.issueCount) {
-      return [action({
-        type: 'moveIssue',
-        delta: 1,
-        count: context.issueCount,
-        id: resolveMoveTargetId(context.issueListIds, state.selectedIssueIndex, 1, context.issueCount),
-      })]
-    }
-
-    if (isPullRequestTriageActionTarget(state) && context.pullRequestTriageCount) {
-      return [action({
-        type: 'movePullRequestTriage',
-        delta: 1,
-        count: context.pullRequestTriageCount,
-        id: resolveMoveTargetId(
-          context.pullRequestTriageListIds,
-          state.selectedPullRequestTriageIndex,
-          1,
-          context.pullRequestTriageCount,
-        ),
-      })]
-    }
-
-    if (isWorktreeActionTarget(state) && context.worktreeListCount) {
-      return [action({
-        type: 'moveWorktreeListEntry',
-        delta: 1,
-        count: context.worktreeListCount,
-        id: resolveMoveTargetId(context.worktreeListIds, state.selectedWorktreeListIndex, 1, context.worktreeListCount),
-      })]
+    const laterListEvents = listMoveEvents(state, context, 1, 2)
+    if (laterListEvents) {
+      return laterListEvents
     }
 
     // Extracted to `surfaces/conflicts/input.ts` (#COCO-1064).
