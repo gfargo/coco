@@ -273,11 +273,62 @@ export function countPorcelainEntries(output: string): number {
   return output.split('\n').filter((line) => line.length > 0).length
 }
 
+export type ParsedStatusV2 = {
+  /** Checked-out branch; `(sha)` when detached; undefined for an unborn HEAD with no name. */
+  branch?: string
+  ahead: number
+  behind: number
+  dirty: number
+}
+
 /**
- * Resolve a per-repo summary. One git instance per repo, three
- * batched reads (HEAD ref + status + last commit) plus an optional
- * fourth for upstream divergence. All errors are caught and reported
- * via `error` so a single unhealthy repo never poisons the workspace.
+ * Parse `git status --porcelain=v2 --branch -z` (#2210). One process
+ * answers what used to take `for-each-ref --points-at=HEAD` (which lists
+ * EVERY branch at HEAD's commit, sorted by name, so the row could show a
+ * sibling branch and compute ahead/behind against its upstream), a
+ * status, and a `rev-list`. `branch.head` is the branch actually checked
+ * out. With `-z` every record is NUL-terminated and a rename (`2 `) is
+ * followed by one extra NUL field holding the original path.
+ */
+export function parseStatusV2(output: string): ParsedStatusV2 {
+  const result: ParsedStatusV2 = { ahead: 0, behind: 0, dirty: 0 }
+  let oid: string | undefined
+  let head: string | undefined
+  const records = output.split('\0')
+
+  for (let i = 0; i < records.length; i += 1) {
+    const record = records[i]
+    if (record.startsWith('# branch.oid ')) {
+      oid = record.slice('# branch.oid '.length)
+    } else if (record.startsWith('# branch.head ')) {
+      head = record.slice('# branch.head '.length)
+    } else if (record.startsWith('# branch.ab ')) {
+      const match = /\+(\d+) -(\d+)/.exec(record)
+      if (match) {
+        result.ahead = Number(match[1])
+        result.behind = Number(match[2])
+      }
+    } else if (record.startsWith('2 ')) {
+      result.dirty += 1
+      i += 1 // skip the original-path field
+    } else if (record.startsWith('1 ') || record.startsWith('u ') || record.startsWith('? ')) {
+      result.dirty += 1
+    }
+  }
+
+  if (head === '(detached)') {
+    result.branch = oid && oid !== '(initial)' ? `(${oid.slice(0, 7)})` : undefined
+  } else if (head) {
+    result.branch = head
+  }
+  return result
+}
+
+/**
+ * Resolve a per-repo summary: one `status --porcelain=v2 --branch` for
+ * branch, upstream divergence and dirty count, plus the last commit. All
+ * errors are caught and reported via `error` so a single unhealthy repo
+ * never poisons the workspace.
  */
 export async function getRepoSummary(
   repoPath: string,
@@ -295,14 +346,8 @@ export async function getRepoSummary(
   const git = options.git ?? createHeadlessGit(resolved)
 
   try {
-    const [headOutput, statusOutput, lastCommitOutput] = await Promise.all([
-      git.raw([
-        'for-each-ref',
-        `--format=%(refname:short)${FIELD_SEPARATOR}%(upstream:short)`,
-        '--points-at=HEAD',
-        'refs/heads',
-      ]),
-      git.raw(['status', '--porcelain']),
+    const [statusOutput, lastCommitOutput] = await Promise.all([
+      git.raw(['status', '--porcelain=v2', '--branch', '-z']),
       git
         .raw([
           'log',
@@ -312,40 +357,12 @@ export async function getRepoSummary(
         .catch(() => ''),
     ])
 
-    const headLine = headOutput.split('\n').map((line) => line.trim()).find(Boolean) || ''
-    const parsedHead = parseHeadRef(headLine)
-
-    if (parsedHead.branch) {
-      summary.branch = parsedHead.branch
-    } else {
-      // Detached HEAD — show short hash. Falls back to undefined on
-      // an empty repo (no commits yet).
-      try {
-        const sha = (await git.raw(['rev-parse', '--short', 'HEAD'])).trim()
-        summary.branch = sha ? `(${sha})` : undefined
-      } catch {
-        summary.branch = undefined
-      }
-    }
-
-    summary.dirty = countPorcelainEntries(statusOutput)
+    const status = parseStatusV2(statusOutput)
+    summary.branch = status.branch
+    summary.ahead = status.ahead
+    summary.behind = status.behind
+    summary.dirty = status.dirty
     summary.lastCommit = parseLastCommit(lastCommitOutput)
-
-    if (parsedHead.upstream && parsedHead.branch) {
-      try {
-        const divergence = await git.raw([
-          'rev-list',
-          '--left-right',
-          '--count',
-          `${parsedHead.upstream}...${parsedHead.branch}`,
-        ])
-        const { ahead, behind } = parseDivergence(divergence)
-        summary.ahead = ahead
-        summary.behind = behind
-      } catch {
-        // Upstream might not be fetched locally; treat as 0/0.
-      }
-    }
   } catch (err) {
     summary.error = err instanceof Error ? err.message : String(err)
   }
