@@ -3493,7 +3493,7 @@ export function getLogInkInputEvents(
     }
     return [
       action({ type: 'toggleMark', view: 'branches', id }),
-      action({ type: 'moveBranch', delta: 1, count: context.branchCount }),
+      action({ type: 'moveList', list: 'branch', delta: 1, count: context.branchCount }),
     ]
   }
 
@@ -3532,7 +3532,7 @@ export function getLogInkInputEvents(
     }
     return [
       action({ type: 'toggleMark', view: 'stash', id }),
-      action({ type: 'moveStash', delta: 1, count: context.stashCount }),
+      action({ type: 'moveList', list: 'stash', delta: 1, count: context.stashCount }),
     ]
   }
 

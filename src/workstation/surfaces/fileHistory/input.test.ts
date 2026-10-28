@@ -52,7 +52,7 @@ describe('handleFileHistoryInput', () => {
     it('jumps to the first commit and sets an echo status when commits exist', () => {
       const { state, context } = fileHistoryState({ fileHistoryCommitCount: 25 })
       expect(handleFileHistoryInput(state, 'g', {}, context, 'jump-top')).toEqual([
-        { type: 'action', action: { type: 'moveFileHistory', delta: -25, count: 25 } },
+        { type: 'action', action: { type: 'moveList', list: 'fileHistory', delta: -25, count: 25 } },
         { type: 'action', action: { type: 'setStatus', value: 'jumped to first commit', ttl: 'echo' } },
       ])
     })
@@ -60,7 +60,7 @@ describe('handleFileHistoryInput', () => {
     it('jumps to the last commit and sets an echo status when commits exist', () => {
       const { state, context } = fileHistoryState({ fileHistoryCommitCount: 25 })
       expect(handleFileHistoryInput(state, 'G', {}, context, 'jump-bottom')).toEqual([
-        { type: 'action', action: { type: 'moveFileHistory', delta: 25, count: 25 } },
+        { type: 'action', action: { type: 'moveList', list: 'fileHistory', delta: 25, count: 25 } },
         { type: 'action', action: { type: 'setStatus', value: 'jumped to last commit', ttl: 'echo' } },
       ])
     })
@@ -76,10 +76,10 @@ describe('handleFileHistoryInput', () => {
     it('moves by one commit when commits exist', () => {
       const { state, context } = fileHistoryState({ fileHistoryCommitCount: 25 })
       expect(handleFileHistoryInput(state, 'k', {}, context, 'move-up')).toEqual([
-        { type: 'action', action: { type: 'moveFileHistory', delta: -1, count: 25 } },
+        { type: 'action', action: { type: 'moveList', list: 'fileHistory', delta: -1, count: 25 } },
       ])
       expect(handleFileHistoryInput(state, 'j', {}, context, 'move-down')).toEqual([
-        { type: 'action', action: { type: 'moveFileHistory', delta: 1, count: 25 } },
+        { type: 'action', action: { type: 'moveList', list: 'fileHistory', delta: 1, count: 25 } },
       ])
     })
 
@@ -94,10 +94,10 @@ describe('handleFileHistoryInput', () => {
     it('pages by ten commits when commits exist', () => {
       const { state, context } = fileHistoryState({ fileHistoryCommitCount: 25 })
       expect(handleFileHistoryInput(state, '', { pageUp: true }, context, 'page-up')).toEqual([
-        { type: 'action', action: { type: 'moveFileHistory', delta: -10, count: 25 } },
+        { type: 'action', action: { type: 'moveList', list: 'fileHistory', delta: -10, count: 25 } },
       ])
       expect(handleFileHistoryInput(state, '', { pageDown: true }, context, 'page-down')).toEqual([
-        { type: 'action', action: { type: 'moveFileHistory', delta: 10, count: 25 } },
+        { type: 'action', action: { type: 'moveList', list: 'fileHistory', delta: 10, count: 25 } },
       ])
     })
 

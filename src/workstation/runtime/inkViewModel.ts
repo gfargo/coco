@@ -1142,7 +1142,7 @@ export type LogInkAction =
   // scope) since the reducer has no access to `LogInkContext`. Written
   // to `selected*Id` alongside the index; undefined when the dispatch
   // site couldn't resolve it (e.g. a test harness omitting the id list).
-  | { type: 'moveBranch'; delta: number; count: number; id?: string }
+  | { type: 'moveList'; list: ListId; delta: number; count: number; id?: string }
   | { type: 'resetBranchSelection' }
   | { type: 'setSidebarHeaderFocused'; value: boolean }
   | { type: 'setStatusGroupHeaderFocused'; value: boolean }
@@ -1153,17 +1153,8 @@ export type LogInkAction =
   | { type: 'resetInspectorActionIndex' }
   | { type: 'setBootLoading'; value: boolean }
   | { type: 'setRemoteOp'; value: RemoteOpState | undefined }
-  | { type: 'moveTag'; delta: number; count: number; id?: string }
-  | { type: 'moveStash'; delta: number; count: number; id?: string }
-  | { type: 'moveReflog'; delta: number; count: number }
-  | { type: 'moveSubmodule'; delta: number; count: number; id?: string }
-  | { type: 'moveRemote'; delta: number; count: number; id?: string }
-  | { type: 'moveBlame'; delta: number; count: number }
-  | { type: 'moveIssue'; delta: number; count: number; id?: string }
-  | { type: 'movePullRequestTriage'; delta: number; count: number; id?: string }
   | { type: 'cycleIssueFilter' }
   | { type: 'cyclePullRequestTriageFilter' }
-  | { type: 'moveWorktreeListEntry'; delta: number; count: number; id?: string }
   // OSS-1001 / #1671 — re-syncs each promoted view's `selected*Index` to
   // wherever its `selected*Id` now sits after a background context
   // refresh reorders/inserts/removes rows (or clears the id when it no
@@ -1171,7 +1162,6 @@ export type LogInkAction =
   // right after the fresh context lands; see `refreshRectification.ts`
   // for how the snapshot is computed.
   | { type: 'rectifyPromotedSelections'; snapshot: RefreshRectificationSnapshot }
-  | { type: 'moveConflictFile'; delta: number; count: number }
   | { type: 'moveToBottom' }
   | { type: 'moveToTop' }
   | { type: 'nextSidebarTab' }
@@ -1192,7 +1182,6 @@ export type LogInkAction =
   | { type: 'navigateOpenDiffForWorktreeFile'; fileIndex: number }
   | { type: 'navigateOpenBlameForPath'; path: string }
   | { type: 'navigateOpenFileHistoryForPath'; path: string }
-  | { type: 'moveFileHistory'; delta: number; count: number }
   | { type: 'navigateOpenDiffForStash'; ref: string; stashIndex?: number }
   | { type: 'navigateOpenDiffForPullRequest'; number: number; pullRequestIndex?: number }
   | { type: 'navigateOpenDiffForCompare'; base: LogInkCompareRef; head: LogInkCompareRef }
@@ -1357,6 +1346,46 @@ function filterCommits(commits: GitLogCommitRow[], filter: string): GitLogCommit
     )
     .sort((a, b) => b.score - a.score || a.index - b.index)
     .map((entry) => entry.commit)
+}
+
+/**
+ * The cursor-bearing lists the generic `moveList` action drives (#2219).
+ * `index` is the cursor position; `id`, where a list has one, is its id
+ * mirror (#1452), preferred by the selectors in `selection.ts`.
+ */
+export type ListId =
+  | 'branch'
+  | 'tag'
+  | 'stash'
+  | 'reflog'
+  | 'remote'
+  | 'submodule'
+  | 'issue'
+  | 'pullRequestTriage'
+  | 'worktreeList'
+  | 'blame'
+  | 'fileHistory'
+  | 'conflictFile'
+
+type NumberKeys<T> = { [K in keyof T]-?: T[K] extends number ? K : never }[keyof T]
+type OptionalStringKeys<T> = { [K in keyof T]-?: T[K] extends string | undefined ? (undefined extends T[K] ? K : never) : never }[keyof T]
+
+const LIST_CURSOR_KEYS: Record<
+  ListId,
+  { index: NumberKeys<LogInkState>; id?: OptionalStringKeys<LogInkState> }
+> = {
+  branch: { index: 'selectedBranchIndex', id: 'selectedBranchId' },
+  tag: { index: 'selectedTagIndex', id: 'selectedTagId' },
+  stash: { index: 'selectedStashIndex', id: 'selectedStashId' },
+  reflog: { index: 'selectedReflogIndex' },
+  remote: { index: 'selectedRemoteIndex', id: 'selectedRemoteId' },
+  submodule: { index: 'selectedSubmoduleIndex', id: 'selectedSubmoduleId' },
+  issue: { index: 'selectedIssueIndex', id: 'selectedIssueId' },
+  pullRequestTriage: { index: 'selectedPullRequestTriageIndex', id: 'selectedPullRequestTriageId' },
+  worktreeList: { index: 'selectedWorktreeListIndex', id: 'selectedWorktreeListId' },
+  blame: { index: 'selectedBlameIndex' },
+  fileHistory: { index: 'selectedFileHistoryIndex' },
+  conflictFile: { index: 'selectedConflictFileIndex' },
 }
 
 function clampIndex(index: number, length: number): number {
@@ -2286,13 +2315,21 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         statusGroupHeaderFocused: false,
       }
     }
-    case 'moveBranch':
-      return {
+    case 'moveList': {
+      // One cursor-move for every list (#2219). Each list keeps an index and,
+      // for most, an id mirror (#1452 dual-write); the table says which state
+      // fields belong to which list. The id is resolved by the dispatch site
+      // (the reducer has no access to `LogInkContext`) and written alongside
+      // the index; undefined clears it, e.g. a test harness that omits the id
+      // list. Lists with no id mirror (reflog, blame, ...) ignore `id`.
+      const keys = LIST_CURSOR_KEYS[action.list]
+      const moved: LogInkState = {
         ...state,
-        selectedBranchIndex: clampIndex(state.selectedBranchIndex + action.delta, action.count),
-        selectedBranchId: action.id,
+        [keys.index]: clampIndex(state[keys.index] + action.delta, action.count),
         pendingKey: undefined,
       }
+      return keys.id ? { ...moved, [keys.id]: action.id } : moved
+    }
     case 'resetBranchSelection':
       // Snap the branches sidebar / view cursor back to position 0.
       // Used after a successful checkout (#806 follow-up): combined
@@ -2382,69 +2419,6 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         ...state,
         remoteOp: action.value,
       }
-    case 'moveTag':
-      return {
-        ...state,
-        selectedTagIndex: clampIndex(state.selectedTagIndex + action.delta, action.count),
-        selectedTagId: action.id,
-        pendingKey: undefined,
-      }
-    case 'moveStash':
-      return {
-        ...state,
-        selectedStashIndex: clampIndex(state.selectedStashIndex + action.delta, action.count),
-        selectedStashId: action.id,
-        pendingKey: undefined,
-      }
-    case 'moveReflog':
-      return {
-        ...state,
-        selectedReflogIndex: clampIndex(state.selectedReflogIndex + action.delta, action.count),
-        pendingKey: undefined,
-      }
-    case 'moveSubmodule':
-      return {
-        ...state,
-        selectedSubmoduleIndex: clampIndex(state.selectedSubmoduleIndex + action.delta, action.count),
-        selectedSubmoduleId: action.id,
-        pendingKey: undefined,
-      }
-    case 'moveRemote':
-      return {
-        ...state,
-        selectedRemoteIndex: clampIndex(state.selectedRemoteIndex + action.delta, action.count),
-        selectedRemoteId: action.id,
-        pendingKey: undefined,
-      }
-    case 'moveBlame':
-      return {
-        ...state,
-        selectedBlameIndex: clampIndex(state.selectedBlameIndex + action.delta, action.count),
-        pendingKey: undefined,
-      }
-    case 'moveFileHistory':
-      return {
-        ...state,
-        selectedFileHistoryIndex: clampIndex(state.selectedFileHistoryIndex + action.delta, action.count),
-        pendingKey: undefined,
-      }
-    case 'moveIssue':
-      return {
-        ...state,
-        selectedIssueIndex: clampIndex(state.selectedIssueIndex + action.delta, action.count),
-        selectedIssueId: action.id,
-        pendingKey: undefined,
-      }
-    case 'movePullRequestTriage':
-      return {
-        ...state,
-        selectedPullRequestTriageIndex: clampIndex(
-          state.selectedPullRequestTriageIndex + action.delta,
-          action.count
-        ),
-        selectedPullRequestTriageId: action.id,
-        pendingKey: undefined,
-      }
     case 'cycleIssueFilter':
       // Advance the preset, snap the cursor to the top of the
       // (newly filtered) list — same UX rule as `cycleBranchSort`.
@@ -2465,21 +2439,8 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         selectedPullRequestTriageId: undefined,
         pendingKey: undefined,
       }
-    case 'moveWorktreeListEntry':
-      return {
-        ...state,
-        selectedWorktreeListIndex: clampIndex(state.selectedWorktreeListIndex + action.delta, action.count),
-        selectedWorktreeListId: action.id,
-        pendingKey: undefined,
-      }
     case 'rectifyPromotedSelections':
       return applyRefreshRectification(state, action.snapshot)
-    case 'moveConflictFile':
-      return {
-        ...state,
-        selectedConflictFileIndex: clampIndex(state.selectedConflictFileIndex + action.delta, action.count),
-        pendingKey: undefined,
-      }
     case 'cycleBranchSort':
       return {
         ...state,

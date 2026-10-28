@@ -14,7 +14,7 @@
  * phases around them; the Home/End ladder has no such handlers and walks
  * both phases back to back.
  */
-import type { LogInkAction, LogInkState } from './inkViewModel'
+import type { ListId, LogInkState } from './inkViewModel'
 import type { LogInkInputContext, LogInkInputEvent } from './inkInput'
 
 /**
@@ -107,20 +107,9 @@ export function isWorktreeActionTarget(state: LogInkState): boolean {
     (state.focus === 'sidebar' && state.sidebarTab === 'worktrees')
 }
 
-type ListMoveActionType =
-  | 'moveBranch'
-  | 'moveTag'
-  | 'moveStash'
-  | 'moveReflog'
-  | 'moveRemote'
-  | 'moveSubmodule'
-  | 'moveIssue'
-  | 'movePullRequestTriage'
-  | 'moveWorktreeListEntry'
-
 type ListNavigator = {
-  /** The reducer action this list's cursor moves with. */
-  action: ListMoveActionType
+  /** The list whose cursor `moveList` moves. */
+  list: ListId
   /** Whether the keyboard currently drives this list. */
   isTarget: (state: LogInkState) => boolean
   /** Row count of the list (falsy: nothing to move through). */
@@ -135,15 +124,15 @@ type ListNavigator = {
 
 /** In the router's historical precedence order. */
 export const LIST_NAVIGATORS: ReadonlyArray<ListNavigator> = [
-  { action: 'moveBranch', isTarget: isBranchActionTarget, count: (c) => c.branchCount, ids: (c) => c.branchIds, index: (s) => s.selectedBranchIndex, phase: 1 },
-  { action: 'moveTag', isTarget: isTagActionTarget, count: (c) => c.tagCount, ids: (c) => c.tagIds, index: (s) => s.selectedTagIndex, phase: 1 },
-  { action: 'moveStash', isTarget: isStashActionTarget, count: (c) => c.stashCount, ids: (c) => c.stashIds, index: (s) => s.selectedStashIndex, phase: 1 },
-  { action: 'moveReflog', isTarget: isReflogActionTarget, count: (c) => c.reflogCount, index: (s) => s.selectedReflogIndex, phase: 1 },
-  { action: 'moveRemote', isTarget: isRemotesActionTarget, count: (c) => c.remoteCount, ids: (c) => c.remoteListIds, index: (s) => s.selectedRemoteIndex, phase: 1 },
-  { action: 'moveSubmodule', isTarget: isSubmodulesActionTarget, count: (c) => c.submoduleCount, ids: (c) => c.submoduleListIds, index: (s) => s.selectedSubmoduleIndex, phase: 2 },
-  { action: 'moveIssue', isTarget: isIssueActionTarget, count: (c) => c.issueCount, ids: (c) => c.issueListIds, index: (s) => s.selectedIssueIndex, phase: 2 },
-  { action: 'movePullRequestTriage', isTarget: isPullRequestTriageActionTarget, count: (c) => c.pullRequestTriageCount, ids: (c) => c.pullRequestTriageListIds, index: (s) => s.selectedPullRequestTriageIndex, phase: 2 },
-  { action: 'moveWorktreeListEntry', isTarget: isWorktreeActionTarget, count: (c) => c.worktreeListCount, ids: (c) => c.worktreeListIds, index: (s) => s.selectedWorktreeListIndex, phase: 2 },
+  { list: 'branch', isTarget: isBranchActionTarget, count: (c) => c.branchCount, ids: (c) => c.branchIds, index: (s) => s.selectedBranchIndex, phase: 1 },
+  { list: 'tag', isTarget: isTagActionTarget, count: (c) => c.tagCount, ids: (c) => c.tagIds, index: (s) => s.selectedTagIndex, phase: 1 },
+  { list: 'stash', isTarget: isStashActionTarget, count: (c) => c.stashCount, ids: (c) => c.stashIds, index: (s) => s.selectedStashIndex, phase: 1 },
+  { list: 'reflog', isTarget: isReflogActionTarget, count: (c) => c.reflogCount, index: (s) => s.selectedReflogIndex, phase: 1 },
+  { list: 'remote', isTarget: isRemotesActionTarget, count: (c) => c.remoteCount, ids: (c) => c.remoteListIds, index: (s) => s.selectedRemoteIndex, phase: 1 },
+  { list: 'submodule', isTarget: isSubmodulesActionTarget, count: (c) => c.submoduleCount, ids: (c) => c.submoduleListIds, index: (s) => s.selectedSubmoduleIndex, phase: 2 },
+  { list: 'issue', isTarget: isIssueActionTarget, count: (c) => c.issueCount, ids: (c) => c.issueListIds, index: (s) => s.selectedIssueIndex, phase: 2 },
+  { list: 'pullRequestTriage', isTarget: isPullRequestTriageActionTarget, count: (c) => c.pullRequestTriageCount, ids: (c) => c.pullRequestTriageListIds, index: (s) => s.selectedPullRequestTriageIndex, phase: 2 },
+  { list: 'worktreeList', isTarget: isWorktreeActionTarget, count: (c) => c.worktreeListCount, ids: (c) => c.worktreeListIds, index: (s) => s.selectedWorktreeListIndex, phase: 2 },
 ]
 
 function moveEvent(
@@ -154,10 +143,12 @@ function moveEvent(
   delta: number,
 ): LogInkInputEvent {
   const ids = navigator.ids
-  const action = ids
-    ? { type: navigator.action, delta, count, id: resolveMoveTargetId(ids(context), navigator.index(state), delta, count) }
-    : { type: navigator.action, delta, count }
-  return { type: 'action', action: action as LogInkAction }
+  return {
+    type: 'action',
+    action: ids
+      ? { type: 'moveList', list: navigator.list, delta, count, id: resolveMoveTargetId(ids(context), navigator.index(state), delta, count) }
+      : { type: 'moveList', list: navigator.list, delta, count },
+  }
 }
 
 /**

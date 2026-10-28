@@ -49,7 +49,7 @@ describe('handleBlameInput', () => {
     it('jumps to the first line and sets an echo status when lines exist', () => {
       const { state, context } = blameState({ blameLineCount: 40 })
       expect(handleBlameInput(state, 'g', {}, context, 'jump-top')).toEqual([
-        { type: 'action', action: { type: 'moveBlame', delta: -40, count: 40 } },
+        { type: 'action', action: { type: 'moveList', list: 'blame', delta: -40, count: 40 } },
         { type: 'action', action: { type: 'setStatus', value: 'jumped to first line', ttl: 'echo' } },
       ])
     })
@@ -57,7 +57,7 @@ describe('handleBlameInput', () => {
     it('jumps to the last line and sets an echo status when lines exist', () => {
       const { state, context } = blameState({ blameLineCount: 40 })
       expect(handleBlameInput(state, 'G', {}, context, 'jump-bottom')).toEqual([
-        { type: 'action', action: { type: 'moveBlame', delta: 40, count: 40 } },
+        { type: 'action', action: { type: 'moveList', list: 'blame', delta: 40, count: 40 } },
         { type: 'action', action: { type: 'setStatus', value: 'jumped to last line', ttl: 'echo' } },
       ])
     })
@@ -73,10 +73,10 @@ describe('handleBlameInput', () => {
     it('moves by one line when lines exist', () => {
       const { state, context } = blameState({ blameLineCount: 40 })
       expect(handleBlameInput(state, 'k', {}, context, 'move-up')).toEqual([
-        { type: 'action', action: { type: 'moveBlame', delta: -1, count: 40 } },
+        { type: 'action', action: { type: 'moveList', list: 'blame', delta: -1, count: 40 } },
       ])
       expect(handleBlameInput(state, 'j', {}, context, 'move-down')).toEqual([
-        { type: 'action', action: { type: 'moveBlame', delta: 1, count: 40 } },
+        { type: 'action', action: { type: 'moveList', list: 'blame', delta: 1, count: 40 } },
       ])
     })
 
@@ -91,10 +91,10 @@ describe('handleBlameInput', () => {
     it('pages by ten lines when lines exist', () => {
       const { state, context } = blameState({ blameLineCount: 40 })
       expect(handleBlameInput(state, '', { pageUp: true }, context, 'page-up')).toEqual([
-        { type: 'action', action: { type: 'moveBlame', delta: -10, count: 40 } },
+        { type: 'action', action: { type: 'moveList', list: 'blame', delta: -10, count: 40 } },
       ])
       expect(handleBlameInput(state, '', { pageDown: true }, context, 'page-down')).toEqual([
-        { type: 'action', action: { type: 'moveBlame', delta: 10, count: 40 } },
+        { type: 'action', action: { type: 'moveList', list: 'blame', delta: 10, count: 40 } },
       ])
     })
 

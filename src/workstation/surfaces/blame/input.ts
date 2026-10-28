@@ -44,7 +44,7 @@ export function handleBlameInput(
     case 'jump-top':
       return context.blameLineCount
         ? [
-          action({ type: 'moveBlame', delta: -context.blameLineCount, count: context.blameLineCount }),
+          action({ type: 'moveList', list: 'blame', delta: -context.blameLineCount, count: context.blameLineCount }),
           action({ type: 'setStatus', value: 'jumped to first line', ttl: 'echo' }),
         ]
         : []
@@ -53,7 +53,7 @@ export function handleBlameInput(
     case 'jump-bottom':
       return context.blameLineCount
         ? [
-          action({ type: 'moveBlame', delta: context.blameLineCount, count: context.blameLineCount }),
+          action({ type: 'moveList', list: 'blame', delta: context.blameLineCount, count: context.blameLineCount }),
           action({ type: 'setStatus', value: 'jumped to last line', ttl: 'echo' }),
         ]
         : []
@@ -63,12 +63,12 @@ export function handleBlameInput(
     // the router's shared movement chain can keep checking other views.
     case 'move-up':
       return context.blameLineCount
-        ? [action({ type: 'moveBlame', delta: -1, count: context.blameLineCount })]
+        ? [action({ type: 'moveList', list: 'blame', delta: -1, count: context.blameLineCount })]
         : null
 
     case 'move-down':
       return context.blameLineCount
-        ? [action({ type: 'moveBlame', delta: 1, count: context.blameLineCount })]
+        ? [action({ type: 'moveList', list: 'blame', delta: 1, count: context.blameLineCount })]
         : null
 
     // View-local paging (#1387) — the generic `page` fallback moves the
@@ -76,12 +76,12 @@ export function handleBlameInput(
     // the view matches, mirroring jump-top/jump-bottom above.
     case 'page-up':
       return context.blameLineCount
-        ? [action({ type: 'moveBlame', delta: -10, count: context.blameLineCount })]
+        ? [action({ type: 'moveList', list: 'blame', delta: -10, count: context.blameLineCount })]
         : []
 
     case 'page-down':
       return context.blameLineCount
-        ? [action({ type: 'moveBlame', delta: 10, count: context.blameLineCount })]
+        ? [action({ type: 'moveList', list: 'blame', delta: 10, count: context.blameLineCount })]
         : []
 
     // `L` opens file-history for the path under blame.

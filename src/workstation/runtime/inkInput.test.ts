@@ -366,7 +366,7 @@ describe('log Ink input interactions', () => {
 
   it('snaps promoted-view selection to 0 when the filter changes', () => {
     let state = createLogInkState(rows)
-    state = applyLogInkAction(state, { type: 'moveBranch', delta: 5, count: 10 })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 5, count: 10 })
     expect(state.selectedBranchIndex).toBe(5)
 
     state = applyLogInkAction(state, { type: 'setFilter', value: 'feature' })
@@ -1924,19 +1924,19 @@ describe('log Ink input interactions', () => {
     const downEvents = getLogInkInputEvents(state, 'j', {}, { submoduleCount: 3 })
     expect(downEvents).toContainEqual({
       type: 'action',
-      action: { type: 'moveSubmodule', delta: 1, count: 3 },
+      action: { type: 'moveList', list: 'submodule', delta: 1, count: 3 },
     })
 
     const upEvents = getLogInkInputEvents(state, 'k', {}, { submoduleCount: 3 })
     expect(upEvents).toContainEqual({
       type: 'action',
-      action: { type: 'moveSubmodule', delta: -1, count: 3 },
+      action: { type: 'moveList', list: 'submodule', delta: -1, count: 3 },
     })
 
     // Zero submodules → no move action (falls through to the default).
     const emptyEvents = getLogInkInputEvents(state, 'j', {}, { submoduleCount: 0 })
     expect(emptyEvents.find((e) =>
-      e.type === 'action' && (e.action as { type: string }).type === 'moveSubmodule'
+      e.type === 'action' && (e.action as { type: string; list?: string }).type === 'moveList' && (e.action as { list?: string }).list === 'submodule'
     )).toBeUndefined()
   })
 
@@ -2216,10 +2216,10 @@ describe('log Ink input interactions', () => {
       const branchIds = ['a', 'b', 'c', 'd', 'e']
 
       expect(getLogInkInputEvents(state, '', { end: true }, { branchCount: 5, branchIds })).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: 5, count: 5, id: 'e' } },
       ])
       expect(getLogInkInputEvents(state, '', { home: true }, { branchCount: 5, branchIds })).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: -5, count: 5, id: 'a' } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: -5, count: 5, id: 'a' } },
       ])
     })
 
@@ -2271,7 +2271,7 @@ describe('log Ink input interactions', () => {
 
       expect(getLogInkInputEvents(state, '', { end: true }, { branchCount: 5, branchIds })).toEqual([
         { type: 'action', action: { type: 'setSidebarHeaderFocused', value: false } },
-        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: 5, count: 5, id: 'e' } },
       ])
     })
 
@@ -2286,10 +2286,10 @@ describe('log Ink input interactions', () => {
       expect(bottomCommand).toBeDefined()
 
       expect(getLogInkPaletteExecuteEvents(topCommand!, state, context)).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: -5, count: 5, id: 'a' } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: -5, count: 5, id: 'a' } },
       ])
       expect(getLogInkPaletteExecuteEvents(bottomCommand!, state, context)).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: 5, count: 5, id: 'e' } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: 5, count: 5, id: 'e' } },
       ])
 
       // Omitting context (existing call sites) degrades to the previous
@@ -2308,7 +2308,7 @@ describe('log Ink input interactions', () => {
 
       const bottom = getLogInkInputEvents(state, 'G', {}, { blameLineCount: 120 })
       expect(bottom.find((event) =>
-        event.type === 'action' && event.action.type === 'moveBlame' && event.action.delta === 120
+        event.type === 'action' && event.action.type === 'moveList' && event.action.list === 'blame' && event.action.delta === 120
       )).toBeDefined()
       expect(bottom.find((event) =>
         event.type === 'action' && event.action.type === 'moveToBottom'
@@ -2317,7 +2317,7 @@ describe('log Ink input interactions', () => {
       const armed = applyLogInkAction(state, { type: 'setPendingKey', value: 'g' })
       const top = getLogInkInputEvents(armed, 'g', {}, { blameLineCount: 120 })
       expect(top.find((event) =>
-        event.type === 'action' && event.action.type === 'moveBlame' && event.action.delta === -120
+        event.type === 'action' && event.action.type === 'moveList' && event.action.list === 'blame' && event.action.delta === -120
       )).toBeDefined()
       expect(top.find((event) =>
         event.type === 'action' && event.action.type === 'moveToTop'
@@ -2330,7 +2330,7 @@ describe('log Ink input interactions', () => {
 
       const events = getLogInkInputEvents(state, '', { pageDown: true }, { fileHistoryCommitCount: 40 })
       expect(events.find((event) =>
-        event.type === 'action' && event.action.type === 'moveFileHistory' && event.action.delta === 10
+        event.type === 'action' && event.action.type === 'moveList' && event.action.list === 'fileHistory' && event.action.delta === 10
       )).toBeDefined()
       expect(events.find((event) =>
         event.type === 'action' && event.action.type === 'page'
@@ -2362,13 +2362,13 @@ describe('log Ink input interactions', () => {
 
       const end = getLogInkInputEvents(state, '', { end: true }, { blameLineCount: 120 })
       expect(end).toEqual([
-        { type: 'action', action: { type: 'moveBlame', delta: 120, count: 120 } },
+        { type: 'action', action: { type: 'moveList', list: 'blame', delta: 120, count: 120 } },
         { type: 'action', action: { type: 'setStatus', value: 'jumped to last line', ttl: 'echo' } },
       ])
 
       const home = getLogInkInputEvents(state, '', { home: true }, { blameLineCount: 120 })
       expect(home).toEqual([
-        { type: 'action', action: { type: 'moveBlame', delta: -120, count: 120 } },
+        { type: 'action', action: { type: 'moveList', list: 'blame', delta: -120, count: 120 } },
         { type: 'action', action: { type: 'setStatus', value: 'jumped to first line', ttl: 'echo' } },
       ])
     })
@@ -4223,7 +4223,7 @@ describe('log Ink input interactions', () => {
         { branchCount: 5 }
       )
       expect(events).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: 1, count: 5 } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: 1, count: 5 } },
       ])
     })
 
@@ -4323,10 +4323,10 @@ describe('log Ink input interactions', () => {
       // (at index 0, ↑ sets sidebarHeaderFocused instead of moving).
       const state = { ...sidebarBranchesState(), activeView: 'status' as const, selectedBranchIndex: 2 }
       const down = getLogInkInputEvents(state, '', { downArrow: true }, { branchCount: 5, worktreeFileCount: 4 })
-      expect(down).toEqual([{ type: 'action', action: { type: 'moveBranch', delta: 1, count: 5 } }])
+      expect(down).toEqual([{ type: 'action', action: { type: 'moveList', list: 'branch', delta: 1, count: 5 } }])
 
       const up = getLogInkInputEvents(state, '', { upArrow: true }, { branchCount: 5, worktreeFileCount: 4 })
-      expect(up).toEqual([{ type: 'action', action: { type: 'moveBranch', delta: -1, count: 5 } }])
+      expect(up).toEqual([{ type: 'action', action: { type: 'moveList', list: 'branch', delta: -1, count: 5 } }])
     })
 
     // #1452 dual-write — when the caller threads the sorted+filtered id
@@ -4345,26 +4345,26 @@ describe('log Ink input interactions', () => {
 
       const branchDown = getLogInkInputEvents(state, '', { downArrow: true }, { branchCount: 5, branchIds })
       expect(branchDown).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: 1, count: 5, id: 'c' } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: 1, count: 5, id: 'c' } },
       ])
 
       const branchUp = getLogInkInputEvents(state, '', { upArrow: true }, { branchCount: 5, branchIds })
       expect(branchUp).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: -1, count: 5, id: 'a' } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: -1, count: 5, id: 'a' } },
       ])
 
       const tagIds = ['t1', 't2', 't3']
       const tagState = { ...state, activeView: 'tags' as const }
       const tagDown = getLogInkInputEvents(tagState, '', { downArrow: true }, { tagCount: 3, tagIds })
       expect(tagDown).toEqual([
-        { type: 'action', action: { type: 'moveTag', delta: 1, count: 3, id: 't3' } },
+        { type: 'action', action: { type: 'moveList', list: 'tag', delta: 1, count: 3, id: 't3' } },
       ])
 
       const stashIds = ['stash@{0}', 'stash@{1}', 'stash@{2}']
       const stashState = { ...state, activeView: 'stash' as const }
       const stashDown = getLogInkInputEvents(stashState, '', { downArrow: true }, { stashCount: 3, stashIds })
       expect(stashDown).toEqual([
-        { type: 'action', action: { type: 'moveStash', delta: 1, count: 3, id: 'stash@{2}' } },
+        { type: 'action', action: { type: 'moveList', list: 'stash', delta: 1, count: 3, id: 'stash@{2}' } },
       ])
     })
 
@@ -4373,7 +4373,7 @@ describe('log Ink input interactions', () => {
       const state = { ...createLogInkState(rows), activeView: 'branches' as const, selectedBranchIndex: 2 }
       const down = getLogInkInputEvents(state, '', { downArrow: true }, { branchCount: 3, branchIds })
       expect(down).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: 1, count: 3, id: 'c' } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: 1, count: 3, id: 'c' } },
       ])
     })
 
@@ -4390,14 +4390,14 @@ describe('log Ink input interactions', () => {
         worktreeListCount: 3, worktreeListIds,
       })
       expect(down).toEqual([
-        { type: 'action', action: { type: 'moveWorktreeListEntry', delta: 1, count: 3, id: '/repo-b' } },
+        { type: 'action', action: { type: 'moveList', list: 'worktreeList', delta: 1, count: 3, id: '/repo-b' } },
       ])
 
       const up = getLogInkInputEvents(state, '', { upArrow: true }, {
         worktreeListCount: 3, worktreeListIds,
       })
       expect(up).toEqual([
-        { type: 'action', action: { type: 'moveWorktreeListEntry', delta: -1, count: 3, id: '/repo' } },
+        { type: 'action', action: { type: 'moveList', list: 'worktreeList', delta: -1, count: 3, id: '/repo' } },
       ])
     })
 
@@ -4414,14 +4414,14 @@ describe('log Ink input interactions', () => {
         issueCount: 3, issueListIds,
       })
       expect(down).toEqual([
-        { type: 'action', action: { type: 'moveIssue', delta: 1, count: 3, id: '12' } },
+        { type: 'action', action: { type: 'moveList', list: 'issue', delta: 1, count: 3, id: '12' } },
       ])
 
       const up = getLogInkInputEvents(state, '', { upArrow: true }, {
         issueCount: 3, issueListIds,
       })
       expect(up).toEqual([
-        { type: 'action', action: { type: 'moveIssue', delta: -1, count: 3, id: '1' } },
+        { type: 'action', action: { type: 'moveList', list: 'issue', delta: -1, count: 3, id: '1' } },
       ])
     })
 
@@ -4437,14 +4437,14 @@ describe('log Ink input interactions', () => {
         pullRequestTriageCount: 3, pullRequestTriageListIds,
       })
       expect(down).toEqual([
-        { type: 'action', action: { type: 'movePullRequestTriage', delta: 1, count: 3, id: '21' } },
+        { type: 'action', action: { type: 'moveList', list: 'pullRequestTriage', delta: 1, count: 3, id: '21' } },
       ])
 
       const up = getLogInkInputEvents(state, '', { upArrow: true }, {
         pullRequestTriageCount: 3, pullRequestTriageListIds,
       })
       expect(up).toEqual([
-        { type: 'action', action: { type: 'movePullRequestTriage', delta: -1, count: 3, id: '3' } },
+        { type: 'action', action: { type: 'moveList', list: 'pullRequestTriage', delta: -1, count: 3, id: '3' } },
       ])
     })
 
@@ -4460,7 +4460,7 @@ describe('log Ink input interactions', () => {
         })
         expect(events).toEqual([
           { type: 'action', action: { type: 'toggleMark', view: 'branches', id: 'feat/a' } },
-          { type: 'action', action: { type: 'moveBranch', delta: 1, count: 3 } },
+          { type: 'action', action: { type: 'moveList', list: 'branch', delta: 1, count: 3 } },
         ])
       })
 
@@ -4543,7 +4543,7 @@ describe('log Ink input interactions', () => {
         })
         expect(events).toEqual([
           { type: 'action', action: { type: 'toggleMark', view: 'stash', id: 'stash@{0}' } },
-          { type: 'action', action: { type: 'moveStash', delta: 1, count: 3 } },
+          { type: 'action', action: { type: 'moveList', list: 'stash', delta: 1, count: 3 } },
         ])
       })
 
@@ -5593,7 +5593,7 @@ describe('log Ink input interactions', () => {
       const state = { ...sidebarBranchesState(), selectedBranchIndex: 2 }
       const events = getLogInkInputEvents(state, '', { upArrow: true }, { branchCount: 5 })
       expect(events).toEqual([
-        { type: 'action', action: { type: 'moveBranch', delta: -1, count: 5 } },
+        { type: 'action', action: { type: 'moveList', list: 'branch', delta: -1, count: 5 } },
       ])
     })
 
