@@ -22,6 +22,8 @@ export type LogInkConflictsInputSlot =
   | 'move'
   | 'jump-top'
   | 'jump-bottom'
+  | 'page-up'
+  | 'page-down'
   | 'enter'
   | 'row-action'
 
@@ -120,6 +122,19 @@ export function handleConflictsInput(
           action({ type: 'moveConflictFile', delta: context.conflictFileCount, count: context.conflictFileCount }),
           action({ type: 'setStatus', value: 'jumped to last conflict', ttl: 'echo' }),
         ]
+        : []
+
+    // View-local paging (#2203): without this the generic `page` fallback
+    // moves the hidden history cursor beneath the conflicts view. Always
+    // handled once the view matches, like jump-top / jump-bottom.
+    case 'page-up':
+      return context.conflictFileCount
+        ? [action({ type: 'moveConflictFile', delta: -10, count: context.conflictFileCount })]
+        : []
+
+    case 'page-down':
+      return context.conflictFileCount
+        ? [action({ type: 'moveConflictFile', delta: 10, count: context.conflictFileCount })]
         : []
 
     case 'enter': {
