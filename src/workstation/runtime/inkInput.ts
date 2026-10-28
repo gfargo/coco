@@ -67,6 +67,7 @@ export type LogInkInputEvent =
   | { type: 'cancelChangelog' }
   | { type: 'runAiConflictResolution' }
   | { type: 'cancelConflictResolution' }
+  | { type: 'cancelRemoteOp' }
   | { type: 'acceptConflictProposal' }
   | { type: 'acceptAllConflictProposals' }
   | { type: 'editConflictProposal' }
@@ -1836,6 +1837,14 @@ export function getLogInkInputEvents(
   // Esc cancels any in-flight AI call from any view.
   if (state.conflictResolution?.status === 'loading' && key.escape) {
     return [{ type: 'cancelConflictResolution' }]
+  }
+
+  // Abandon an in-flight fetch / pull / push (#2199). The history surface
+  // is replaced by the remote-op loader while one runs, so Esc has nothing
+  // else to mean there; same "Esc cancels any in-flight call" convention
+  // as the AI cases above.
+  if (state.remoteOp && key.escape) {
+    return [{ type: 'cancelRemoteOp' }]
   }
 
   // Pending AI draft confirmation (audit finding #7). When the AI

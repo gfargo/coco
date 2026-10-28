@@ -120,6 +120,7 @@ import { renderMainPanel } from '../runtime/mainPanel'
 import { renderDetailPanel } from '../runtime/detailPanel'
 import { renderOnboardingOverlay } from '../runtime/overlays'
 import { getLogInkRuntimeContext, type LogInkRuntimeContextValue } from '../runtime/runtimeContext'
+import { createCancellableGit } from '../../lib/simple-git/cancellableGit'
 
 const PANE_BY_FOCUS: Record<LogInkFocus, LogInkVisiblePane> = {
   sidebar: 'sidebar',
@@ -1005,7 +1006,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // array stay byte-identical. The callback is keystroke-dispatch-only
   // (the `runWorkflowAction` input event) — not in any effect/memo dep
   // array — so co-locating it is identity-safe.
-  const { runWorkflowAction } = useWorkflowAction(React, {
+  const { runWorkflowAction, cancelRemoteOp } = useWorkflowAction(React, {
+    createCancellableGit,
     git,
     context,
     state,
@@ -1231,6 +1233,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     cancelChangelog,
     startConflictResolution,
     cancelConflictResolution,
+    cancelRemoteOp,
     acceptConflictProposal,
     acceptAllConflictProposals,
     editConflictProposal,

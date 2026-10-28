@@ -186,6 +186,8 @@ export type UseInputHandlerDeps = {
   /** AI conflict-resolution callbacks (`useConflictResolutionActions`). */
   startConflictResolution: () => Promise<void>
   cancelConflictResolution: () => void
+  /** Esc during a fetch / pull / push (`useWorkflowAction`). */
+  cancelRemoteOp: () => void
   acceptConflictProposal: () => Promise<void>
   acceptAllConflictProposals: () => Promise<void>
   editConflictProposal: () => Promise<void>
@@ -288,6 +290,7 @@ export function useInputHandler(
     cancelChangelog,
     startConflictResolution,
     cancelConflictResolution,
+    cancelRemoteOp,
     acceptConflictProposal,
     acceptAllConflictProposals,
     editConflictProposal,
@@ -681,6 +684,8 @@ export function useInputHandler(
         void startConflictResolution()
       } else if (event.type === 'cancelConflictResolution') {
         cancelConflictResolution()
+      } else if (event.type === 'cancelRemoteOp') {
+        cancelRemoteOp()
       } else if (event.type === 'acceptConflictProposal') {
         void acceptConflictProposal()
       } else if (event.type === 'acceptAllConflictProposals') {
