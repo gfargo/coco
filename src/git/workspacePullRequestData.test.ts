@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -307,3 +308,53 @@ describe('getWorkspacePullRequestCounts', () => {
 function indexAfterRepoFlag(args: string[]): number {
   return args.indexOf('-R') + 1
 }
+
+describe('readOriginRemoteUrl finds remotes behind .git pointer files (#2210)', () => {
+  let root: string
+  beforeEach(() => { root = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-pr-remote-')) })
+  afterEach(() => fs.rmSync(root, { recursive: true, force: true }))
+
+  const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' })
+
+  it('reads a plain repo, as before', () => {
+    const repo = path.join(root, 'plain')
+    fs.mkdirSync(repo)
+    git(repo, 'init', '-q')
+    git(repo, 'remote', 'add', 'origin', 'https://github.com/o/plain.git')
+    expect(readOriginRemoteUrl(repo)).toBe('https://github.com/o/plain.git')
+  })
+
+  it('reads the main repo\'s origin for a linked worktree', () => {
+    const main = path.join(root, 'main')
+    fs.mkdirSync(main)
+    git(main, 'init', '-q', '-b', 'main')
+    git(main, 'config', 'user.email', 't@example.com')
+    git(main, 'config', 'user.name', 't')
+    fs.writeFileSync(path.join(main, 'a.txt'), 'a\n')
+    git(main, 'add', '.')
+    git(main, 'commit', '-q', '-m', 'init')
+    git(main, 'remote', 'add', 'origin', 'https://github.com/o/main.git')
+    const wt = path.join(root, 'wt')
+    git(main, 'worktree', 'add', '-q', '-b', 'feature', wt)
+    // `.git` in the worktree is a pointer FILE, so the old lookup found nothing.
+    expect(fs.statSync(path.join(wt, '.git')).isFile()).toBe(true)
+    expect(readOriginRemoteUrl(wt)).toBe('https://github.com/o/main.git')
+  })
+
+  it('reads the submodule\'s own config through its gitdir pointer', () => {
+    const sub = path.join(root, 'super', 'libs', 'dep')
+    const modules = path.join(root, 'super', '.git', 'modules', 'dep')
+    fs.mkdirSync(sub, { recursive: true })
+    fs.mkdirSync(modules, { recursive: true })
+    fs.writeFileSync(path.join(sub, '.git'), 'gitdir: ../../.git/modules/dep\n')
+    fs.writeFileSync(path.join(modules, 'config'), '[remote "origin"]\n\turl = https://github.com/o/dep.git\n')
+    expect(readOriginRemoteUrl(sub)).toBe('https://github.com/o/dep.git')
+  })
+
+  it('returns undefined for a malformed pointer file instead of throwing', () => {
+    const repo = path.join(root, 'odd')
+    fs.mkdirSync(repo)
+    fs.writeFileSync(path.join(repo, '.git'), 'not a pointer\n')
+    expect(readOriginRemoteUrl(repo)).toBeUndefined()
+  })
+})
