@@ -182,6 +182,16 @@ function formatStatusCell(
   spinnerFrame: string,
   ascii: boolean
 ): WorkspaceListColumn {
+  // A repo whose summary failed (#2210) must not read as a clean one in a
+  // different colour: lead with the error marker and drop the zeroed counts.
+  if (repo.error) {
+    return {
+      text: truncateCells(`${pickWorkstationGlyph('cross', ascii)} error`, width),
+      width,
+      key: 'status',
+      tone: 'warn',
+    }
+  }
   const tokens: string[] = []
   if (repo.dirty > 0) {
     tokens.push(`${pickWorkstationGlyph('filled', ascii)}${repo.dirty}`)
@@ -336,12 +346,14 @@ export function buildWorkspaceListRows(
       columns.push(formatDateCell(repo, widths.date, dateMode, now, ascii))
     }
     if (widths.subject !== undefined) {
-      const subject = repo.lastCommit?.subject ?? pickWorkstationGlyph('dash', ascii)
+      // For a failed repo the subject column carries git's reason.
+      const errorLine = repo.error?.split('\n').map((line) => line.trim()).find(Boolean)
+      const subject = errorLine ?? repo.lastCommit?.subject ?? pickWorkstationGlyph('dash', ascii)
       columns.push({
         text: truncateCells(subject, widths.subject),
         width: widths.subject,
         key: 'subject',
-        tone: repo.lastCommit?.subject ? 'default' : 'dim',
+        tone: errorLine ? 'warn' : repo.lastCommit?.subject ? 'default' : 'dim',
       })
     }
     if (widths.path !== undefined) {
@@ -475,6 +487,9 @@ export function buildWorkspaceSidebar(state: WorkspaceState, ascii = false): Wor
         count = repos.filter((repo) => (counts[repo.path] ?? 0) > 0).length
         break
       }
+      case 'errors':
+        count = repos.filter((repo) => Boolean(repo.error)).length
+        break
       case 'all':
       default:
         count = repos.length

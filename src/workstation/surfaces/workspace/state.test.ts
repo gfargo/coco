@@ -87,7 +87,7 @@ describe('workspace state reducer', () => {
     const next = applyWorkspaceAction(baseState, { type: 'cycle-tab', direction: 'next' })
     expect(next.tab).toBe('dirty')
     const prev = applyWorkspaceAction(baseState, { type: 'cycle-tab', direction: 'previous' })
-    expect(prev.tab).toBe('pull-requests')
+    expect(prev.tab).toBe('errors')
   })
 
   it('hides repos with no open PRs when the pull-requests tab is active', () => {

@@ -82,6 +82,50 @@ describe('workspace render builders', () => {
     expect(docs.columns[2].tone).toBe('dim')
   })
 
+  describe('repos whose summary failed (#2210)', () => {
+    const broken = createWorkspaceState({
+      overview: overview([
+        repo({ name: 'fine', branch: 'main' }),
+        repo({
+          name: 'broken',
+          branch: undefined,
+          error: 'fatal: detected dubious ownership in repository at /tmp/broken\nTo add an exception run: git config ...',
+        }),
+      ]),
+      roots: ['~/code'],
+    })
+
+    it('marks the status cell and puts git\'s first error line in the subject column', () => {
+      const rows = buildWorkspaceListRows(broken, { width: 160, dateMode: 'absolute' })
+      const fine = rows.find((row) => row.repo.name === 'fine')!
+      const bad = rows.find((row) => row.repo.name === 'broken')!
+      const [, , status, , subject] = bad.columns
+      expect(status.text).toContain('✗')
+      expect(status.text).toContain('error')
+      expect(status.tone).toBe('warn')
+      expect(subject.text).toContain('dubious ownership')
+      expect(subject.tone).toBe('warn')
+      // A clean repo is untouched: dim placeholder, not an error token.
+      expect(fine.columns[2].text.trim()).toBe('·')
+    })
+
+    it('uses the ASCII marker on ascii terminals', () => {
+      const rows = buildWorkspaceListRows(broken, { width: 160, dateMode: 'absolute', ascii: true })
+      const bad = rows.find((row) => row.repo.name === 'broken')!
+      expect(bad.columns[2].text).toContain('x error')
+    })
+
+    it('counts failed repos on the Errors sidebar tab', () => {
+      const tab = buildWorkspaceSidebar(broken).find((row) => row.tab === 'errors')!
+      expect(tab).toMatchObject({ label: 'Errors', count: 1, disabled: false })
+    })
+
+    it('the Errors tab lists only the failed repos', () => {
+      const onTab = applyWorkspaceAction(broken, { type: 'set-tab', tab: 'errors' })
+      expect(buildWorkspaceListRows(onTab).map((row) => row.repo.name)).toEqual(['broken'])
+    })
+  })
+
   it('includes pr count in the status cell when gh is authenticated', () => {
     const next = applyWorkspaceAction(state, {
       type: 'replace-pull-request-counts',
