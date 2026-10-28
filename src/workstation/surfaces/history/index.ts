@@ -669,7 +669,8 @@ function renderRemoteOpLoader(
     h(Text, undefined, ''),
     h(Text, { color: accent }, track),
     h(Text, undefined, ''),
-    h(Text, { dimColor: true }, `Talking to the remote ${pickWorkstationGlyph('dash', theme.ascii)} history refreshes automatically.`)))
+    h(Text, { dimColor: true }, `Talking to the remote ${pickWorkstationGlyph('dash', theme.ascii)} history refreshes automatically.`),
+    h(Text, { dimColor: true }, 'Esc to cancel')))
 }
 
 export function renderHistoryPanel(

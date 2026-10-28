@@ -3997,6 +3997,16 @@ describe('log Ink input interactions', () => {
       expect(getLogInkInputEvents(pending, 'y')[0]).toEqual({ type: 'revertSelectedFile', path: 'src/foo.ts' })
     })
 
+    it('Esc during a fetch / pull / push asks the runtime to cancel it (#2199)', () => {
+      const state = { ...createLogInkState(rows), remoteOp: { kind: 'push' as const, label: 'Pushing to origin…' } }
+      expect(getLogInkInputEvents(state, '', { escape: true })).toEqual([{ type: 'cancelRemoteOp' }])
+    })
+
+    it('Esc does not emit cancelRemoteOp when no remote op is running (#2199)', () => {
+      const events = getLogInkInputEvents(createLogInkState(rows), '', { escape: true })
+      expect(events).not.toContainEqual({ type: 'cancelRemoteOp' })
+    })
+
     it('emits yankFromActiveView from status only when a worktree path is selected', () => {
       const state = createLogInkState(rows, { activeView: 'status' })
 
