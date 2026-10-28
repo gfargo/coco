@@ -4,6 +4,7 @@ import { BranchActionResult } from './branchActions'
 import { rejectFlagLike } from './forgeArgGuards'
 import { getInProgressOperationType } from './operationData'
 import { retryOnIndexLock } from './actionErrors'
+import { runGitProcess, type GitProcessRunner } from './gitProcess'
 
 function compactOutputLines(output: string): string[] {
   return output
@@ -542,17 +543,24 @@ export function createFixupCommit(
 }
 
 /**
- * `git rebase -i --autosquash <target>^` with the sequence editor
- * disabled (`-c sequence.editor=true`), so git applies the generated
- * todo — fixups folded into their targets — without ever opening an
- * editor. `-c` keeps the override scoped to this one invocation instead
- * of mutating the shared SimpleGit env (which would silently break the
- * user-facing `i` interactive rebase). Fixup entries reuse the target's
- * message, so $GIT_EDITOR is never opened either.
+ * Fold `fixup!` commits into their targets: `git rebase -i --autosquash
+ * <target>^`, run non-interactively. `GIT_SEQUENCE_EDITOR=true` makes git
+ * apply the generated todo (fixups already folded under their targets)
+ * without opening an editor, and `GIT_EDITOR=true` keeps a `squash!` entry's
+ * combined message from ever waiting on one (#2198). Both are set on the
+ * child process only, so they cannot leak into the shared SimpleGit
+ * environment or the user-facing `i` interactive rebase, and they override
+ * whatever editors the user has configured.
+ *
+ * This runs through `execFile`, not `git.raw(['-c', 'sequence.editor=true',
+ * ...])`: simple-git blocks that form ("Configuring sequence.editor is not
+ * permitted without enabling allowUnsafeEditor"), which made this workflow
+ * fail every time.
  */
 export function autosquashRebase(
   git: SimpleGit,
-  commit: HistoryCommitRef | undefined
+  commit: HistoryCommitRef | undefined,
+  runner: GitProcessRunner = runGitProcess
 ): Promise<BranchActionResult> {
   if (!commit) {
     return Promise.resolve({
@@ -563,7 +571,13 @@ export function autosquashRebase(
 
   return guardNoInProgressOperation(git).then((blocked) => (
     blocked || runAction(
-      () => git.raw(['-c', 'sequence.editor=true', 'rebase', '-i', '--autosquash', `${commit.hash}^`]),
+      async () => {
+        const cwd = (await git.revparse(['--show-toplevel'])).trim()
+        await runner(['rebase', '-i', '--autosquash', `${commit.hash}^`], {
+          cwd,
+          env: { ...process.env, GIT_SEQUENCE_EDITOR: 'true', GIT_EDITOR: 'true' },
+        })
+      },
       `Autosquashed fixups into ${commit.shortHash}`
     )
   )).then((result) => ({
