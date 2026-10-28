@@ -15,6 +15,13 @@ import { applyCommitSplitPlan, type CommitSplitPlan } from './split'
 
 const emptyHunkInventory = { hunks: [], byId: new Map(), byFile: new Map() } as never
 
+// Each test builds a real repo and drives several `git` subprocesses
+// (add, apply --cached, commit, reset). That is ~2 s on an idle machine,
+// which leaves Jest's default 5 s with little margin: under a loaded full
+// run the suite took 20+ s and individual tests timed out although nothing
+// was wrong. Same convention as the other subprocess-heavy suites.
+jest.setTimeout(30_000)
+
 describe('applyCommitSplitPlan with partially staged files (#2129)', () => {
   let dir: string
   let git: SimpleGit
