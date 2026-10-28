@@ -230,10 +230,20 @@ export function useHistoryCursorSync(
         })
         return
     }
+    // The dependency list is deliberately field-by-field rather than the whole
+    // `state` / `context`: this effect jumps the history cursor, so it must
+    // not re-run on unrelated state churn. It must, however, list EVERYTHING
+    // `getSelectedBranch` / `getSelectedTag` / `getSelectedStash` read. Those
+    // resolve by ID first and fall back to the index, so the `selected*Id`
+    // fields are inputs too (#2203): leaving them out meant an id change that
+    // kept the same index (e.g. a reset to row 0) resolved a different row
+    // without the sync ever re-running.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     dispatch, context.branches, context.tags, context.stashes,
     state.activeView, state.focus, state.sidebarTab,
     state.selectedBranchIndex, state.selectedTagIndex, state.selectedStashIndex,
+    state.selectedBranchId, state.selectedTagId, state.selectedStashId,
     state.branchSort, state.tagSort, state.filter,
     state.filteredCommits,
   ])
