@@ -15,6 +15,7 @@ import { createThrottledRunner } from '../../lib/watcher/throttledRunner'
 import { CommandHandler } from '../../lib/types'
 import { Logger } from '../../lib/utils/logger'
 import { WatchArgv } from './config'
+import { resolveRevParsePath } from '../../git/gitPath'
 
 export type WatchEvent =
   | { type: 'ready'; repoRoot: string; operations: AgentOperation[]; scope: 'staged' | 'worktree' }
@@ -178,9 +179,11 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
 
   const runner = createThrottledRunner(intervalMs, runOnce)
   const gitDir = (await context.git!.revparse(['--absolute-git-dir'])).trim()
+  const commonGitDir = await resolveRevParsePath(context.git!, ['--git-common-dir'])
   const watcher = createRepoChangeWatcher({
     repoRoot,
     gitDir,
+    commonGitDir: commonGitDir || undefined,
     debounceMs,
     onChange: () => runner.trigger(),
   })

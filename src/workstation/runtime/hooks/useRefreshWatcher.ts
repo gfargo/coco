@@ -30,6 +30,7 @@ import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import type { LogInkRefreshKind, LogInkRefreshWatcher } from '../../chrome/refreshWatcher'
 import { createRefreshWatcher } from '../../chrome/refreshWatcher'
+import { resolveRevParsePath } from '../../../git/gitPath'
 
 export type UseRefreshWatcherDeps = {
   /** The active frame's `git`. Drives `revparse` + scopes the watcher. */
@@ -113,9 +114,10 @@ export function useRefreshWatcher(
 
     void (async () => {
       try {
-        const [repoRoot, gitDir] = await Promise.all([
+        const [repoRoot, gitDir, commonGitDir] = await Promise.all([
           git.revparse(['--show-toplevel']),
           git.revparse(['--absolute-git-dir']),
+          resolveRevParsePath(git, ['--git-common-dir']),
         ])
         if (cancelled) {
           return
@@ -123,6 +125,7 @@ export function useRefreshWatcher(
         watcher = createRefreshWatcher({
           repoRoot: repoRoot.trim(),
           gitDir: gitDir.trim(),
+          commonGitDir: commonGitDir || undefined,
           // Editor saves and git background processes can produce a steady
           // drip of fs events on busy repos. The default 250ms debounce
           // was tight enough that the watcher fired ~once per second; 750

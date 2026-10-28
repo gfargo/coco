@@ -113,7 +113,7 @@ describe('log operation data', () => {
     writeFileSync(mergeHead, 'abc123')
 
     const git = {
-      revparse: jest.fn().mockImplementation(async (args: string[]) => join(tempDir, args.at(-1) as string)),
+      revparse: jest.fn().mockImplementation(async (args: string[]) => join(tempDir, args[args.indexOf('--git-path') + 1])),
     }
 
     try {
@@ -139,6 +139,11 @@ describe('log operation data', () => {
     const git = {
       raw: jest.fn().mockRejectedValue(new Error('missing config')),
       revparse: jest.fn().mockImplementation(async (args: string[]) => {
+        // `--git-path hooks` (resolveGitPath adds --show-toplevel/--prefix
+        // after it); a bare `--show-toplevel` asks for the repo root.
+        if (args[0] === '--git-path') {
+          return hooksPath
+        }
         if (args.includes('--show-toplevel')) {
           return root
         }
