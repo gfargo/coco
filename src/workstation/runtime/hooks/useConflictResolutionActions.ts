@@ -28,6 +28,7 @@ import {
   getConflictFileRegions,
 } from '../../../git/conflictRegionActions'
 import { stageConflictResolved } from '../../../git/operationActions'
+import { runWithTerminalHandedOff } from '../editorHandoff'
 import type { LogInkAction, LogInkConflictProposal, LogInkState } from '../inkViewModel'
 import type { LogInkContext } from '../types'
 
@@ -268,16 +269,12 @@ export function useConflictResolutionActions(
       const editor = editorArgs[0] || 'vi'
       const out = process.stdout
       const stdin = process.stdin
-      const ENTER_ALT = '\x1b[?1049h'
-      const EXIT_ALT = '\x1b[?1049l'
-      const SHOW_CURSOR = '\x1b[?25h'
-      const HIDE_CURSOR = '\x1b[?25l'
 
       let editorOk = false
       try {
-        stdin.setRawMode?.(false)
-        out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
-        const result = spawnSync(editor, [...editorArgs.slice(1), file], { stdio: 'inherit' })
+        const result = runWithTerminalHandedOff({ stdin, out }, () =>
+          spawnSync(editor, [...editorArgs.slice(1), file], { stdio: 'inherit' })
+        )
         if (result.error) {
           dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
         } else if (result.signal || (typeof result.status === 'number' && result.status !== 0)) {
@@ -286,8 +283,6 @@ export function useConflictResolutionActions(
           editorOk = true
         }
       } finally {
-        out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
-        stdin.setRawMode?.(true)
         resumeRef?.current?.()
       }
 
