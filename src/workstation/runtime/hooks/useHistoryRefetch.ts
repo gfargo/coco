@@ -97,6 +97,16 @@ export function useHistoryRefetch(
     historyRefetchGenerationRef,
   } = deps
 
+  // `logArgv` is read through a ref, not listed in the effect deps. It is an
+  // object: a caller that hands over a fresh-but-equal one on a re-render
+  // would otherwise fire a full `git log` and bump the shared generation
+  // counter, which makes the boot loader's and the refresher's legitimate
+  // results look stale (#1870). Only a graph, filter or repo-frame change
+  // is a reason to refetch. `LogInkApp` is rendered once today, so the
+  // prop is stable either way; this keeps the hook from relying on that.
+  const logArgvRef = React.useRef(logArgv)
+  logArgvRef.current = logArgv
+
   const historyRefetchInitialized = React.useRef(false)
   const historyRefetchRequestRef = React.useRef(0)
   const historyRefetchPrevRef = React.useRef<{
@@ -104,6 +114,7 @@ export function useHistoryRefetch(
     fetchArgs: LogInkState['historyFetchArgs']
   } | undefined>(undefined)
   React.useEffect(() => {
+    const logArgv = logArgvRef.current
     if (!logArgv) return
     const prev = historyRefetchPrevRef.current
     historyRefetchPrevRef.current = {
@@ -169,5 +180,5 @@ export function useHistoryRefetch(
       setHasMoreCommits(matched >= LOG_INTERACTIVE_DEFAULT_LIMIT)
       dispatch({ type: 'setStatus', value: plan.successStatus(matched), kind: 'success' })
     })()
-  }, [dispatch, git, logArgv, historyFetchArgs, fullGraph])
+  }, [dispatch, git, historyFetchArgs, fullGraph])
 }
