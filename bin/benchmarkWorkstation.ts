@@ -10,8 +10,12 @@
  * fan-out) and measures:
  *
  *   - cold boot → first paint (the boot-context load + initial log fetch)
- *   - keystroke → paint latency for j/k scrolling, a view switch,
- *     filter typing, and a repo-frame drill-in
+ *   - keystroke → paint latency for j/k scrolling in both the single-line
+ *     and the stacked (rail) renderers, at the boot depth and again after
+ *     paging in up to 20k commits, plus a view switch, filter typing, and
+ *     a repo-frame drill-in
+ *   - the load-more pager, the branch-cursor anchored fetch, and the
+ *     fs-watcher full refresh, each with its git spawn count
  *   - git subprocess spawns per interaction (the #1364 signal)
  *
  * "Paint" here means the same state + derived view-model computation
@@ -19,6 +23,13 @@
  * `buildFilteredLists`) — this harness never mounts Ink or produces
  * real terminal output, the same approximation `inkInput.test.ts`
  * already relies on to validate behavior without rendering.
+ *
+ * The boot and refresh phases call the runtime's own loaders
+ * (`loadLogInkContext`, `getLogRows`, `buildHistoryRefetchArgv`) and the
+ * stacked renderer's `fillStackedWindow`, so a refactor that moves or
+ * changes them breaks this script at import time instead of letting it
+ * drift (#2207). The "50k" fixture only ever measured 1000 rows until the
+ * load-more phase started paging it.
  *
  * Usage:
  *   npm run bench:workstation                       # all three scales
@@ -35,9 +46,17 @@ import * as fs from 'node:fs'
 import * as os from 'node:os'
 import * as path from 'node:path'
 
-import { simpleGit, type SimpleGit } from 'simple-git'
+import { simpleGit } from 'simple-git'
 
-import { getLogRows, LOG_INTERACTIVE_DEFAULT_LIMIT, type LogArgv } from '../src/commands/log/data'
+import type { LogArgv } from '../src/commands/log/config'
+import {
+  COMMIT_CONTEXT_DEFAULT_LIMIT,
+  getCommitRows,
+  getLogRows,
+  getLogRowsAnchoredOn,
+  LOG_INTERACTIVE_DEFAULT_LIMIT,
+} from '../src/git/logData'
+import { getStashCommitHashes } from '../src/git/stashData'
 import {
   applyLogInkAction,
   createLogInkState,
@@ -46,21 +65,10 @@ import {
 import { getLogInkInputEvents, type LogInkInputKey } from '../src/workstation/runtime/inkInput'
 import { getVisibleLogInkHistory } from '../src/workstation/chrome/historyRows'
 import { buildFilteredLists } from '../src/workstation/runtime/hooks/buildFilteredLists'
+import { loadLogInkContext } from '../src/workstation/runtime/hooks/useContextRefresh'
+import { buildHistoryRefetchArgv } from '../src/workstation/runtime/historyRefetchResolver'
 import { createRepoFrameRuntime } from '../src/workstation/runtime/repoFrameFactory'
-import type { LogInkContext } from '../src/workstation/runtime/types'
-import { getBranchOverview } from '../src/git/branchData'
-import { getForgePullRequestOverview } from '../src/git/forgeActions'
-import { getTagOverview } from '../src/git/tagData'
-import { getWorktreeOverview } from '../src/git/statusData'
-import { getStashOverview } from '../src/git/stashData'
-import { getWorktreeListOverview } from '../src/git/worktreeData'
-import { getGitOperationOverview } from '../src/git/operationData'
-import { getProviderOverview } from '../src/git/providerData'
-import { getReflogOverview } from '../src/git/reflogData'
-import { getBisectStatus } from '../src/git/bisectData'
-import { getLfsAttributeStatus } from '../src/git/lfsAttributes'
-import { getSubmoduleOverview } from '../src/git/submoduleData'
-import { getRemoteOverview } from '../src/git/remoteData'
+import { fillStackedWindow, stackedItemLineCost } from '../src/workstation/surfaces/history'
 
 import { withSpawnCount } from './lib/gitSpawnCounter'
 import {
@@ -76,6 +84,8 @@ type PhaseResult = {
   phase: string
   durationMs: number
   spawnCount: number
+  /** Context worth printing next to the numbers, e.g. how many commits a paging phase reached. */
+  note?: string
 }
 
 type FixtureResult = {
@@ -85,6 +95,15 @@ type FixtureResult = {
   generationMs: number
   phases: PhaseResult[]
 }
+
+/** Rows asked of the single-line history renderer, roughly a 40-line terminal. */
+const RENDER_ROWS = 30
+/** Terminal-line budget handed to the stacked (rail) renderer. */
+const RAIL_LINE_BUDGET = 40
+/** How deep the load-more phase pages before stopping, matching the issue's 20k-commit scenario. */
+const PAGING_TARGET_COMMITS = 20_000
+/** Keystrokes per scroll phase. */
+const SCROLL_KEYSTROKES = 20
 
 function hrNowMs(): number {
   return Number(process.hrtime.bigint()) / 1_000_000
@@ -99,57 +118,15 @@ async function timePhase<T>(
   return { phase, durationMs: hrNowMs() - startedAt, spawnCount, result }
 }
 
-function toPhaseResult(entry: { phase: string; durationMs: number; spawnCount: number }): PhaseResult {
-  return { phase: entry.phase, durationMs: entry.durationMs, spawnCount: entry.spawnCount }
-}
-
-async function safe<T>(promise: Promise<T>): Promise<T | undefined> {
-  try {
-    return await promise
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * Mirrors `loadLogInkContext` in `src/workstation/runtime/app.ts` —
- * that function is module-private (not exported), and this harness is
- * scoped to land without touching production code, so the same set of
- * boot-time overview fetches is reproduced here from the public
- * building blocks app.ts itself calls.
- */
-async function loadWorkstationBootContext(git: SimpleGit): Promise<LogInkContext> {
-  const [branches, pullRequest, tags, worktree, stashes, worktreeList, operation, provider, reflog, bisect, lfs, submodules, remotes] =
-    await Promise.all([
-      safe(getBranchOverview(git)),
-      safe(getForgePullRequestOverview(git)),
-      safe(getTagOverview(git)),
-      safe(getWorktreeOverview(git)),
-      safe(getStashOverview(git)),
-      safe(getWorktreeListOverview(git)),
-      safe(getGitOperationOverview(git)),
-      safe(getProviderOverview(git)),
-      safe(getReflogOverview(git)),
-      safe(getBisectStatus(git)),
-      safe(getLfsAttributeStatus(git)),
-      safe(getSubmoduleOverview(git)),
-      safe(getRemoteOverview(git)),
-    ])
-
+function toPhaseResult(
+  entry: { phase: string; durationMs: number; spawnCount: number },
+  note?: string
+): PhaseResult {
   return {
-    bisect,
-    branches,
-    lfs,
-    operation,
-    provider,
-    pullRequest,
-    reflog,
-    remotes,
-    stashes,
-    submodules,
-    tags,
-    worktree,
-    worktreeList,
+    phase: entry.phase,
+    durationMs: entry.durationMs,
+    spawnCount: entry.spawnCount,
+    ...(note ? { note } : {}),
   }
 }
 
@@ -184,11 +161,17 @@ async function runFixtureBenchmark(scale: WorkstationFixtureScale): Promise<Fixt
     const git = simpleGit(fixture.dir)
     const argv = buildBenchLogArgv()
     const phases: PhaseResult[] = []
+    // The renderer's real defaults: the `fullGraphSpacing` row after every
+    // commit and the date-bucket dividers are both on, and they are what
+    // `renderHistoryPanel` passes (see `surfaces/history/index.ts`).
+    const renderOptions = { fullGraphSpacing: true, dateBucketingNow: new Date() }
+    // Stacked (rail) rows skip the spacing row, as `renderHistoryPanel` does.
+    const railOptions = { dateBucketingNow: renderOptions.dateBucketingNow }
 
     const boot = await timePhase('boot', async () => {
       const [rows, context] = await Promise.all([
         getLogRows(git, argv, { limit: LOG_INTERACTIVE_DEFAULT_LIMIT }),
-        loadWorkstationBootContext(git),
+        loadLogInkContext(git),
       ])
       return { rows, context }
     })
@@ -200,21 +183,32 @@ async function runFixtureBenchmark(scale: WorkstationFixtureScale): Promise<Fixt
     })
     const context = boot.result.context
 
-    const scrollDown = await timePhase('scroll-down', () => {
-      for (let i = 0; i < 20; i++) {
-        state = applyKeystroke(state, 'j')
-        getVisibleLogInkHistory(state, 30)
-      }
-    })
-    phases.push(toPhaseResult(scrollDown))
+    const scrollPhase = async (
+      phase: string,
+      key: string,
+      render: () => unknown
+    ): Promise<void> => {
+      const timed = await timePhase(phase, () => {
+        for (let i = 0; i < SCROLL_KEYSTROKES; i++) {
+          state = applyKeystroke(state, key)
+          render()
+        }
+      })
+      phases.push(toPhaseResult(timed, `${state.commits.length} commits loaded`))
+    }
+    const renderSingle = () => getVisibleLogInkHistory(state, RENDER_ROWS, renderOptions)
+    const renderRail = () =>
+      fillStackedWindow(state, RAIL_LINE_BUDGET, railOptions, (item) =>
+        stackedItemLineCost(item, {
+          fullGraph: state.fullGraph,
+          bucketed: Boolean(railOptions.dateBucketingNow),
+        })
+      )
 
-    const scrollUp = await timePhase('scroll-up', () => {
-      for (let i = 0; i < 20; i++) {
-        state = applyKeystroke(state, 'k')
-        getVisibleLogInkHistory(state, 30)
-      }
-    })
-    phases.push(toPhaseResult(scrollUp))
+    await scrollPhase('scroll-down', 'j', renderSingle)
+    await scrollPhase('scroll-up', 'k', renderSingle)
+    await scrollPhase('rail-scroll', 'j', renderRail)
+    await scrollPhase('rail-scroll-up', 'k', renderRail)
 
     const viewSwitch = await timePhase('view-switch', () => {
       // `g` `b` — the which-key chord that jumps to the branches view.
@@ -232,12 +226,78 @@ async function runFixtureBenchmark(scale: WorkstationFixtureScale): Promise<Fixt
       for (const char of 'fix') {
         state = applyKeystroke(state, char)
         buildFilteredLists(context, state.filter, { branchSort: state.branchSort, tagSort: state.tagSort })
-        getVisibleLogInkHistory(state, 30)
+        getVisibleLogInkHistory(state, RENDER_ROWS, renderOptions)
       }
     })
     phases.push(toPhaseResult(filterTyping))
     state = applyKeystroke(state, '', { escape: true })
     state = applyKeystroke(state, '', { escape: true })
+
+    // Mirrors `loadMoreCommits` in `useLoadMoreHistory`: page forward by the
+    // main-ordering offset (#1337) with the stash hashes as extra roots,
+    // appending each page, until the target depth or the end of history.
+    // The stash hashes are re-read for every page, as the real loader does.
+    const loadMore = await timePhase('load-more', async () => {
+      let hasMore = state.commits.length >= LOG_INTERACTIVE_DEFAULT_LIMIT
+      while (hasMore && state.commits.length < PAGING_TARGET_COMMITS) {
+        const stashHashes = await getStashCommitHashes(git).catch(() => [])
+        const page = await getLogRows(git, argv, {
+          limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+          skip: state.mainHistoryCommitCount,
+          extraRefs: stashHashes,
+        })
+        const pageCommits = getCommitRows(page).length
+        if (page.length > 0) {
+          state = applyLogInkAction(state, {
+            type: 'appendRows',
+            rows: page,
+            mainOrderingCount: pageCommits,
+          })
+        }
+        hasMore = pageCommits >= LOG_INTERACTIVE_DEFAULT_LIMIT
+      }
+    })
+    phases.push(toPhaseResult(loadMore, `${state.commits.length} commits loaded`))
+
+    // The same keystrokes again, now over the deep list: this is where
+    // render cost that grows with the loaded window (#2208) shows up.
+    await scrollPhase('scroll-at-depth', 'j', renderSingle)
+    await scrollPhase('rail-scroll-at-depth', 'j', renderRail)
+
+    // Mirrors `loadCommitContext`: the user cursors a branch whose target
+    // commit is far outside the loaded window, so an anchored `git log`
+    // runs and its rows are merged in. Resolving the target is setup, not
+    // the interaction, so it stays outside the timed region.
+    const branchCommitTotal = fixture.spec.branchCount * fixture.spec.commitsPerBranch
+    const mainCommits = Math.max(fixture.spec.totalCommits - branchCommitTotal, 1)
+    const anchorHash = (await git.revparse([`main~${Math.floor((mainCommits - 1) * 0.9)}`])).trim()
+    const cursorSync = await timePhase('cursor-sync', async () => {
+      const rows = await getLogRowsAnchoredOn(git, argv, anchorHash, {
+        limit: COMMIT_CONTEXT_DEFAULT_LIMIT,
+      })
+      if (rows.length > 0) {
+        state = applyLogInkAction(state, { type: 'appendRows', rows })
+      }
+      getVisibleLogInkHistory(state, RENDER_ROWS, renderOptions)
+    })
+    phases.push(toPhaseResult(cursorSync, `${state.commits.length} commits loaded`))
+
+    // What an fs-watcher `'full'` event runs (`useRefreshWatcher`): a silent
+    // context refresh plus a history refresh that replaces the head window.
+    const watcherRefresh = await timePhase('watcher-refresh', async () => {
+      const [, fresh] = await Promise.all([
+        loadLogInkContext(git, { silent: true }),
+        (async () => {
+          const stashHashes = await getStashCommitHashes(git).catch(() => [])
+          return getLogRows(git, buildHistoryRefetchArgv(argv, state.fullGraph, undefined), {
+            limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+            extraRefs: stashHashes,
+          })
+        })(),
+      ])
+      state = applyLogInkAction(state, { type: 'replaceRows', rows: fresh })
+    })
+    phases.push(toPhaseResult(watcherRefresh))
 
     const drillIn = await timePhase('frame-drill-in', async () => {
       // Synthetic fixtures don't carry real submodules, so the drill-in
@@ -253,7 +313,7 @@ async function runFixtureBenchmark(scale: WorkstationFixtureScale): Promise<Fixt
       })
       const activeFrame = state.repoStack[state.repoStack.length - 1]
       const frameRuntime = createRepoFrameRuntime(activeFrame, git)
-      await loadWorkstationBootContext(frameRuntime.git)
+      await loadLogInkContext(frameRuntime.git)
     })
     phases.push(toPhaseResult(drillIn))
 
@@ -281,7 +341,12 @@ function printSummary(results: FixtureResult[], baseline?: FixtureResult[]): voi
     )
     const priorFixture = baseline?.find((entry) => entry.scale === result.scale)
     for (const phase of result.phases) {
-      console.log(formatRow(phase.phase, `${phase.durationMs.toFixed(2)}ms  (${phase.spawnCount} git spawns)`))
+      console.log(
+        formatRow(
+          phase.phase,
+          `${phase.durationMs.toFixed(2)}ms  (${phase.spawnCount} git spawns)${phase.note ? `  [${phase.note}]` : ''}`
+        )
+      )
       const prior = priorFixture?.phases.find((entry) => entry.phase === phase.phase)
       if (prior) {
         const deltaMs = phase.durationMs - prior.durationMs
@@ -337,12 +402,23 @@ function readBaseline(): FixtureResult[] | undefined {
  * deliberately generous to avoid flaking on throttled CI runners.
  */
 const SMALL_FIXTURE_BUDGET: Record<string, { maxMs: number; maxSpawns: number }> = {
-  boot: { maxMs: 4_000, maxSpawns: 80 },
-  'scroll-down': { maxMs: 200, maxSpawns: 0 },
-  'scroll-up': { maxMs: 200, maxSpawns: 0 },
-  'view-switch': { maxMs: 100, maxSpawns: 0 },
-  'filter-typing': { maxMs: 200, maxSpawns: 0 },
-  'frame-drill-in': { maxMs: 4_000, maxSpawns: 80 },
+  boot: { maxMs: 10_000, maxSpawns: 80 },
+  'scroll-down': { maxMs: 500, maxSpawns: 0 },
+  'scroll-up': { maxMs: 500, maxSpawns: 0 },
+  'rail-scroll': { maxMs: 2_000, maxSpawns: 0 },
+  'rail-scroll-up': { maxMs: 2_000, maxSpawns: 0 },
+  'view-switch': { maxMs: 500, maxSpawns: 0 },
+  'filter-typing': { maxMs: 500, maxSpawns: 0 },
+  // 100 commits never fills a page, so there is nothing to page in.
+  'load-more': { maxMs: 2_000, maxSpawns: 0 },
+  'scroll-at-depth': { maxMs: 500, maxSpawns: 0 },
+  'rail-scroll-at-depth': { maxMs: 2_000, maxSpawns: 0 },
+  'cursor-sync': { maxMs: 4_000, maxSpawns: 2 },
+  // A watcher event refreshes the whole context plus the head of the log.
+  // The ceiling sits just above today's count so a regression fails; the
+  // perf work in #2209 should ratchet it down.
+  'watcher-refresh': { maxMs: 10_000, maxSpawns: 40 },
+  'frame-drill-in': { maxMs: 10_000, maxSpawns: 80 },
 }
 
 function checkBudget(result: FixtureResult): boolean {
