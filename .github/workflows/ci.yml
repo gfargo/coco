@@ -174,3 +174,11 @@ jobs:
 
       - name: Run diff-condensing benchmark gate
         run: npm run bench -- --check
+
+      # Workstation benchmark, 100-commit fixture only. Git spawn counts are
+      # deterministic and are the real gate; the timing ceilings are several
+      # times what a runner needs so they only catch a pathological slowdown.
+      # It also fails when the script stops compiling against the runtime
+      # (it once imported a removed module and nobody noticed, #2207).
+      - name: Run workstation benchmark gate
+        run: npm run bench:workstation -- --fixture=small
