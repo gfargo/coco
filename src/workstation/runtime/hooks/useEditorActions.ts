@@ -36,6 +36,7 @@
 
 import type * as ReactTypes from 'react'
 import { spawnSync } from 'node:child_process'
+import { runWithTerminalHandedOff } from '../editorHandoff'
 import type { LogInkAction } from '../inkViewModel'
 import { ensureConfigFile, resolveConfigPath, type CocoConfigScope } from '../configFiles'
 
@@ -74,16 +75,12 @@ export function useEditorActions(
     const editorPrefixArgs = editorArgs.slice(1)
     const out = process.stdout
     const stdin = process.stdin
-    const ENTER_ALT = '\x1b[?1049h'
-    const EXIT_ALT = '\x1b[?1049l'
-    const SHOW_CURSOR = '\x1b[?25h'
-    const HIDE_CURSOR = '\x1b[?25l'
     try {
-      // Drop into the primary buffer + cooked mode so the editor
-      // doesn't inherit our raw-mode keystrokes.
-      stdin.setRawMode?.(false)
-      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
-      const result = spawnSync(editor, [...editorPrefixArgs, path], { stdio: 'inherit' })
+      // Cooked mode + primary buffer for the editor, and any keystrokes it
+      // leaves unread are discarded on the way back (#1871).
+      const result = runWithTerminalHandedOff({ stdin, out }, () =>
+        spawnSync(editor, [...editorPrefixArgs, path], { stdio: 'inherit' })
+      )
       if (result.error) {
         dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
       } else if (result.signal) {
@@ -97,10 +94,8 @@ export function useEditorActions(
         dispatch({ type: 'setStatus', value: `Edited ${path}`, kind: 'success' })
       }
     } finally {
-      // Re-enter the alt screen + raw mode + hidden cursor; nudge React
-      // so the freshly-restored screen actually paints.
-      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
-      stdin.setRawMode?.(true)
+      // The alt screen and raw mode are back; nudge React so the
+      // freshly-restored screen actually paints.
       resumeRef?.current?.()
     }
     // Worktree status may have changed (e.g. user saved an edit) — silent
