@@ -525,7 +525,7 @@ function renderStackedCommitHistoryRow(
  * headers and graph rows are always 1 line). Used to replace the old
  * fixed-divisor estimate with a measurement of what will actually render.
  */
-function stackedItemLineCost(
+export function stackedItemLineCost(
   item: LogInkHistoryItem,
   options: { fullGraph: boolean; bucketed: boolean; remoteNames?: string[] }
 ): number {
@@ -551,7 +551,7 @@ function stackedItemLineCost(
  * A floor of 2 items always renders (matching the old `Math.max(2, …)`
  * floor) even if that overflows a pathologically small budget.
  */
-function fillStackedWindow(
+export function fillStackedWindow(
   state: LogInkState,
   lineBudget: number,
   options: GetVisibleLogInkHistoryOptions,
