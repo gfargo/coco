@@ -377,7 +377,27 @@ export function flushWorkspaceTrace(): void {
   }
 }
 
-function installWorkspaceDebugHandlers(): void {
+/**
+ * Registering a listener for a signal replaces Node's default action for it
+ * (terminate), so a handler that only logged and flushed made `Ctrl-C` stop
+ * working wherever the TTY is in cooked mode, such as while `$EDITOR` runs
+ * (#1873). Log and flush, then take the listener off and, if nothing else is
+ * handling the signal (`terminalLifecycle` exits on SIGTERM itself), send it
+ * again so the process dies exactly as it would without the debug flag.
+ */
+function traceSignalWithoutSwallowingIt(signal: 'SIGINT' | 'SIGTERM'): void {
+  const handler = (): void => {
+    workspaceDebug(signal)
+    flushWorkspaceTrace()
+    process.removeListener(signal, handler)
+    if (process.listenerCount(signal) === 0) {
+      process.kill(process.pid, signal)
+    }
+  }
+  process.on(signal, handler)
+}
+
+export function installWorkspaceDebugHandlers(): void {
   if (workspaceDebugInstalled || !workspaceDebugEnabled()) return
   workspaceDebugInstalled = true
   process.on('uncaughtException', (err) => {
@@ -392,8 +412,8 @@ function installWorkspaceDebugHandlers(): void {
     workspaceDebug(`process.exit code=${code}`)
     flushWorkspaceTrace()
   })
-  process.on('SIGINT', () => { workspaceDebug('SIGINT'); flushWorkspaceTrace() })
-  process.on('SIGTERM', () => { workspaceDebug('SIGTERM'); flushWorkspaceTrace() })
+  traceSignalWithoutSwallowingIt('SIGINT')
+  traceSignalWithoutSwallowingIt('SIGTERM')
   workspaceDebug(`debug buffer opened pid=${process.pid} cwd=${process.cwd()}`)
 }
 
