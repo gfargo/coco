@@ -1,4 +1,4 @@
-import { GitLogCommitRow, GitLogRow, getCommitRows } from '../../git/logData'
+import { GitLogCommitRow, GitLogRow, getCommitRows, hideStashHelperCommits } from '../../git/logData'
 import { hashesMatchAny } from '../../git/hashes'
 import type { RebasePlanRow } from '../../git/rebasePlanActions'
 import {
@@ -1887,8 +1887,11 @@ function applyRefreshRectification(
   return { ...state, ...patch }
 }
 
-function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
-  // Wholesale row replacement after a server-side re-fetch (#776).
+function replaceRows(state: LogInkState, fetchedRows: GitLogRow[]): LogInkState {
+  // Wholesale row replacement after a server-side re-fetch (#776). The
+  // paging offset counts git's rows; the graph hides stash plumbing (#2159).
+  const fetchedCommitCount = getCommitRows(fetchedRows).length
+  const rows = hideStashHelperCommits(fetchedRows)
   const commits = getCommitRows(rows)
   const filteredCommits = filterCommits(commits, state.filter)
   // Preserve the cursor by HASH when the previously selected commit is
@@ -1910,7 +1913,7 @@ function replaceRows(state: LogInkState, rows: GitLogRow[]): LogInkState {
     filteredCommits,
     // A wholesale replacement IS the main ordering's fresh window, so
     // the pagination offset resets to its commit count (#1337).
-    mainHistoryCommitCount: commits.length,
+    mainHistoryCommitCount: fetchedCommitCount,
     selectedIndex: preservedIndex >= 0 ? preservedIndex : 0,
     selectedFileIndex: 0,
     pendingCommitFocused: false,
@@ -1963,9 +1966,13 @@ function appendRows(
     }
     nextRows.push(row)
   }
+  // Stash plumbing stays out of the graph (#2159). The pagination offset
+  // advances by the caller's `mainOrderingCount`, git's own count, so
+  // hiding here cannot desync `--skip`.
+  const visibleRows = hideStashHelperCommits(nextRows)
 
   const seen = new Set<string>()
-  const commits = getCommitRows(nextRows).filter((commit) => {
+  const commits = getCommitRows(visibleRows).filter((commit) => {
     if (seen.has(commit.hash)) {
       return false
     }
@@ -1980,7 +1987,7 @@ function appendRows(
 
   return {
     ...state,
-    rows: nextRows,
+    rows: visibleRows,
     commits,
     filteredCommits,
     // Only main-ordering pages advance the pagination offset (#1337);
@@ -2041,6 +2048,9 @@ export function createLogInkState(
   rows: GitLogRow[],
   options: CreateLogInkStateOptions = {}
 ): LogInkState {
+  // Paging counts git's rows; the graph shows them without stash plumbing (#2159).
+  const fetchedCommitCount = getCommitRows(rows).length
+  rows = hideStashHelperCommits(rows)
   const commits = getCommitRows(rows)
   const initialView: LogInkView = options.activeView || 'history'
 
@@ -2050,7 +2060,7 @@ export function createLogInkState(
     rows,
     commits,
     filteredCommits: commits,
-    mainHistoryCommitCount: commits.length,
+    mainHistoryCommitCount: fetchedCommitCount,
     selectedIndex: 0,
     selectedFileIndex: 0,
     selectedWorktreeFileIndex: 0,

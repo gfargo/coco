@@ -503,9 +503,7 @@ export async function getLogRowsAnchoredOn(
   // ref that starts with a dash (or collides with a filename) is
   // treated as a ref, not an option.
   baseArgs.push('--end-of-options', targetHash)
-  // Cursor-sync to a stash anchors on the stash commit, which walks its
-  // index / untracked helpers too; hide them like the main window does.
-  return hideStashHelperCommits(parseLogOutput(await git.raw(baseArgs)))
+  return parseLogOutput(await git.raw(baseArgs))
 }
 
 /**
@@ -540,8 +538,12 @@ const STASH_HELPER_SUBJECT = /^(index on|untracked files on) [^:]+: /
  *
  * A commit counts as a stash tip when its hash is in `knownStashes`, or when
  * its subject has the stash form and a non-first parent loaded here has the
- * helper form. Only rows the TUI loads with stash roots go through this, so
- * `coco log`'s ASCII graph is untouched.
+ * helper form. The workstation reducer applies it as rows enter state
+ * (`createLogInkState`, `replaceRows`, `appendRows`), after the paging
+ * counts are taken from the rows git returned: hiding inside `getLogRows`
+ * made a 1000-row page come back short, which read as "no more history"
+ * and stopped paging. `coco log` never calls it, so its ASCII graph is
+ * untouched.
  */
 export function hideStashHelperCommits(rows: GitLogRow[], knownStashes: readonly string[] = []): GitLogRow[] {
   const known = new Set(knownStashes)
@@ -590,10 +592,7 @@ export async function getLogRows(
   // translation catalog (#1708 — 'does not have any commits yet' /
   // 'bad default revision' are only the English strings).
   try {
-    const rows = parseLogOutput(await git.raw(buildLogArgs(argv, options)))
-    // The TUI passes the stash commits as extra roots; that is the only
-    // caller whose rows contain stash plumbing worth hiding (#2159).
-    return options.extraRefs?.length ? hideStashHelperCommits(rows, options.extraRefs) : rows
+    return parseLogOutput(await git.raw(buildLogArgs(argv, options)))
   } catch (err: unknown) {
     if (await isEmptyRepo(git)) {
       return []
