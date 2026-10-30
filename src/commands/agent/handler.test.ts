@@ -258,7 +258,7 @@ describe('agent command handler', () => {
       await handler(argv({ operation: 'capabilities' }))
 
       expect(JSON.parse(stdout)).toEqual({
-        error: { code: 'OPERATION_FAILED', message: 'config file is malformed JSON', retryable: false },
+        error: { code: 'OPERATION_FAILED', category: 'internal', message: 'config file is malformed JSON', retryable: false },
       })
       expect(process.exitCode).toBe(1)
     })

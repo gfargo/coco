@@ -702,7 +702,7 @@ describe('generateAgentPrDraft (#1823)', () => {
   }) as AgentTaskInput
 
   beforeEach(() => {
-    contextModule.readPullRequestBranches.mockResolvedValue({ head: 'feat/x', defaultBase: 'main' })
+    contextModule.readPullRequestBranches.mockResolvedValue({ head: 'feat/x', defaultBase: 'main', defaultBaseRef: 'origin/main' })
   })
 
   it('drafts title and body from the branch against the default base', async () => {
@@ -712,8 +712,9 @@ describe('generateAgentPrDraft (#1823)', () => {
     if (result.status !== 'completed') throw new Error('expected a completed envelope')
     expect(result.operation).toBe('pr-draft')
     expect(result.data).toEqual({ base: 'main', head: 'feat/x', title: 'Add x', body: 'Body text.', draft: true })
+    // The diff runs against the remote-tracking ref; the request targets `main`.
     expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual({
-      kind: 'repository', scope: { type: 'branch', base: 'main' },
+      kind: 'repository', scope: { type: 'branch', base: 'origin/main' },
     })
   })
 
@@ -725,10 +726,10 @@ describe('generateAgentPrDraft (#1823)', () => {
   })
 
   it('refuses a detached HEAD and the base branch itself', async () => {
-    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: undefined, defaultBase: 'main' })
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: undefined, defaultBase: 'main', defaultBaseRef: 'main' })
     await expect(generateAgentPrDraft(repoInput(), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_REVISION' })
 
-    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: 'main', defaultBase: 'main' })
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: 'main', defaultBase: 'main', defaultBaseRef: 'origin/main' })
     await expect(generateAgentPrDraft(repoInput(), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
   })
 
@@ -847,6 +848,20 @@ describe('generateAgentSplitPlan (#1824)', () => {
     expect(result.warnings.some((w) => w.includes('validation kept failing'))).toBe(true)
   })
 
+  it('reports CONTEXT_TOO_LARGE when the inventories alone exceed the budget', async () => {
+    mockGetApiKeyForModel.mockReturnValue('test-key')
+    mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'test-provider' } as never)
+    mockResolveDynamicService.mockReturnValue({ model: 'test-model' } as never)
+    mockGetTokenCounterForProvider.mockResolvedValue(((text: string) => text.length) as never)
+    mockLoadConfig.mockReturnValueOnce({
+      service: { tokenLimit: 10, authentication: { type: 'None' }, streaming: { enabled: false }, provider: 'test-provider' },
+      prompt: undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    await expect(generateAgentSplitPlan(stagedInput(), makeContext(undefined))).rejects.toMatchObject({ code: 'CONTEXT_TOO_LARGE' })
+    expect(planner).not.toHaveBeenCalled()
+  })
+
   it('refuses non-staged sources, dryRun, and an empty index', async () => {
     await expect(generateAgentSplitPlan(stagedInput({}, { kind: 'summary', summary: 'x' }), makeContext(undefined)))
       .rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE' })
@@ -921,6 +936,17 @@ describe('batch request schema (#2045)', () => {
     [['pr-draft']],
   ])('rejects operations %j', (operations) => {
     expect(AgentBatchRequestSchema.safeParse({ operations }).success).toBe(false)
+  })
+})
+
+// #1823 review: a `branch` source given as the remote-tracking ref targets
+// the branch name, and "on the base branch" is still caught.
+describe('generateAgentPrDraft with a remote-tracking branch source', () => {
+  const contextModule = jest.requireMock('./context') as { readPullRequestBranches: jest.Mock }
+  it('reports the branch name and refuses when on it', async () => {
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: 'main', defaultBase: 'main', defaultBaseRef: 'origin/main' })
+    const input = { ...baseInput, source: { kind: 'repository', scope: { type: 'branch', base: 'origin/main' } }, options: AgentOptionsSchema.parse({}) } as AgentTaskInput
+    await expect(generateAgentPrDraft(input, makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
   })
 })
 

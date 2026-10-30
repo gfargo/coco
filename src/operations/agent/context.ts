@@ -503,7 +503,11 @@ async function repositoryText(
     case 'branch': {
       const base = await resolveCommitRevision(context, source.scope.base)
       const head = await resolveCommitRevision(context, source.scope.head || 'HEAD')
-      return runAgentGit(context, ['diff', ...safeDiffOptions, `${base}..${head}`, '--'])
+      // Three dots: what the branch changed since it left `base` (the
+      // merge-base), as a pull request shows it. Two dots compared the two
+      // tips, so once `base` moved ahead its new commits showed up reversed
+      // in a branch review or PR draft (#1823 review). `range` keeps two.
+      return runAgentGit(context, ['diff', ...safeDiffOptions, `${base}...${head}`, '--'])
     }
     case 'range': {
       const from = await resolveCommitRevision(context, source.scope.from)
@@ -1279,7 +1283,7 @@ export async function readRepoCapabilitiesContext(context: AgentOperationContext
  */
 export async function readPullRequestBranches(
   context: AgentOperationContext,
-): Promise<{ head?: string; defaultBase: string }> {
+): Promise<{ head?: string; defaultBase: string; defaultBaseRef: string }> {
   let head: string | undefined
   try {
     head = (await runAgentGit(context, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).trim() || undefined
@@ -1287,9 +1291,14 @@ export async function readPullRequestBranches(
     head = undefined
   }
   let defaultBase: string | undefined
+  // The ref to diff against: the remote-tracking branch when that is where
+  // the default came from, since the local one can be stale or missing (a
+  // CI clone, a fresh worktree). `defaultBase` is the name a PR targets.
+  let defaultBaseRef: string | undefined
   try {
     const remoteHead = (await runAgentGit(context, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])).trim()
     defaultBase = remoteHead.replace(/^origin\//, '') || undefined
+    defaultBaseRef = remoteHead || undefined
   } catch {
     defaultBase = undefined
   }
@@ -1297,7 +1306,7 @@ export async function readPullRequestBranches(
     const config = loadConfig<Record<string, unknown>, Record<string, unknown>>({}, { cwd: context.repoRoot })
     defaultBase = typeof config.defaultBranch === 'string' && config.defaultBranch ? config.defaultBranch : 'main'
   }
-  return { head, defaultBase }
+  return { head, defaultBase, defaultBaseRef: defaultBaseRef ?? defaultBase }
 }
 
 const NAME_STATUS: Record<string, FileChange['status']> = {
