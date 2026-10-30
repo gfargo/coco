@@ -204,10 +204,83 @@ export const RecapDataSchema = z.object({
   summary: z.string(),
 }).strict()
 
+/**
+ * Error categories (#1844): a client that does not recognize a specific code
+ * can still handle its class.
+ *
+ * - `input`: the request itself is wrong; fix it before retrying.
+ * - `repository`: the repository state does not allow the operation (nothing
+ *   staged, unknown repo, a hook rejected the commit).
+ * - `safety`: refused by a safety or confinement rule.
+ * - `authentication`: no usable provider credentials.
+ * - `generation`: the model ran but its output was unusable.
+ * - `provider`: the LLM provider or the network to it failed.
+ * - `cancelled`: the caller cancelled.
+ * - `internal`: anything not classified more precisely.
+ */
+export const AGENT_ERROR_CATEGORIES = [
+  'input',
+  'repository',
+  'safety',
+  'authentication',
+  'generation',
+  'provider',
+  'cancelled',
+  'internal',
+] as const
+
+export type AgentErrorCategory = typeof AGENT_ERROR_CATEGORIES[number]
+
+/**
+ * Every error code an agent operation can return, with its category. This is
+ * the one list: `AgentOperationError` only accepts these codes, so emitting
+ * a new one without publishing it does not compile (#1844).
+ *
+ * Forward compatibility: coco may add codes within protocol version 1. A
+ * client should treat a code it does not know as `OPERATION_FAILED` and use
+ * `category` and `retryable` to decide what to do.
+ */
+export const AGENT_ERROR_CODE_CATEGORIES = {
+  INVALID_INPUT: 'input',
+  INVALID_JSON: 'input',
+  INVALID_OPERATION: 'input',
+  INVALID_REVISION: 'input',
+  UNSUPPORTED_OPERATION: 'input',
+  UNSUPPORTED_SOURCE: 'input',
+  UNSUPPORTED_MODE: 'input',
+  CONTEXT_TOO_LARGE: 'input',
+  EXPLAIN_RANGE_TOO_LARGE: 'input',
+  INVALID_REPOSITORY: 'repository',
+  REPOSITORY_MISMATCH: 'repository',
+  NO_CHANGES: 'repository',
+  EMPTY_INDEX: 'repository',
+  BLAME_FAILED: 'repository',
+  HOOK_FAILED: 'repository',
+  REPOSITORY_OUTSIDE_ROOT: 'safety',
+  UNSAFE_SOURCE: 'safety',
+  AUTHENTICATION_REQUIRED: 'authentication',
+  GENERATION_FAILED: 'generation',
+  RATE_LIMITED: 'provider',
+  PROVIDER_UNAVAILABLE: 'provider',
+  QUOTA_EXCEEDED: 'provider',
+  CANCELLED: 'cancelled',
+  OPERATION_FAILED: 'internal',
+} as const satisfies Record<string, AgentErrorCategory>
+
+export type AgentErrorCode = keyof typeof AGENT_ERROR_CODE_CATEGORIES
+
+export const AGENT_ERROR_CODES = Object.keys(AGENT_ERROR_CODE_CATEGORIES) as [AgentErrorCode, ...AgentErrorCode[]]
+
+export const AgentErrorCodeSchema = z.enum(AGENT_ERROR_CODES).describe(
+  'Machine-readable failure code. New codes may be added within protocol version 1; treat an unknown code as OPERATION_FAILED.',
+)
+
 export const AgentErrorSchema = z.object({
-  code: z.string(),
+  code: AgentErrorCodeSchema,
+  category: z.enum(AGENT_ERROR_CATEGORIES).describe('Class of the failure, for clients that do not recognize the code.'),
   message: z.string(),
-  retryable: z.boolean(),
+  retryable: z.boolean().describe('True when the same request may succeed if sent again later (a rate limit or a transient provider or network failure).'),
+  retryAfterMs: z.number().int().nonnegative().optional().describe('How long the provider asked to wait before retrying, when it said.'),
   details: z.unknown().optional(),
 }).strict()
 
