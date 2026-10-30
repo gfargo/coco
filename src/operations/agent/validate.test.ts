@@ -9,6 +9,19 @@ import { join } from 'path'
 import { CommitlintRulesDataSchema, CommitValidateDataSchema, createAgentSuccessSchema } from './schemas'
 import { runCommitlintRules, runCommitValidate } from './validate'
 
+// @commitlint/core is ESM-only and cannot load under jest on Node 22; the
+// real rule output is covered in commitlintValidator.test.ts (subprocess).
+jest.mock('../../lib/utils/commitlintValidator', () => {
+  const actual = jest.requireActual('../../lib/utils/commitlintValidator')
+  return {
+    ...actual,
+    lintWithBuiltInConventionalRules: jest.fn(async (message: string) => {
+      const header = message.split('\n')[0]
+      const errors = header.length > 72 ? [{ rule: 'header-max-length', message: 'header must not be longer than 72 characters' }] : []
+      return { valid: errors.length === 0, errors, warnings: [] }
+    }),
+  }
+})
 jest.mock('../../lib/langchain/utils/getLlm', () => ({
   getLlm: jest.fn(() => { throw new Error('commit-validate must not create an LLM') }),
 }))
@@ -20,6 +33,8 @@ jest.mock('../../lib/config/utils/loadConfig', () => ({
 }))
 
 describe('runCommitValidate', () => {
+  const lintMock = jest.requireMock('../../lib/utils/commitlintValidator').lintWithBuiltInConventionalRules as jest.Mock
+
   let repo: string
   beforeEach(() => { repo = mkdtempSync(join(tmpdir(), 'coco-validate-')) })
   afterEach(() => rmSync(repo, { recursive: true, force: true }))
@@ -31,10 +46,12 @@ describe('runCommitValidate', () => {
     expect(createAgentSuccessSchema('commit-validate', CommitValidateDataSchema).safeParse(result).success).toBe(true)
   })
 
-  it('names the rule a message breaks', async () => {
-    const result = await runCommitValidate({ version: 1, message: `feat: ${'x'.repeat(120)}` }, repo)
+  it('returns the rule each finding comes from', async () => {
+    const message = `feat: ${'x'.repeat(120)}`
+    const result = await runCommitValidate({ version: 1, message }, repo)
+    expect(lintMock).toHaveBeenCalledWith(message)
     expect(result.data.valid).toBe(false)
-    expect(result.data.errors.map((e) => e.rule)).toContain('header-max-length')
+    expect(result.data.errors).toEqual([{ rule: 'header-max-length', message: 'header must not be longer than 72 characters' }])
   })
 
   it('flags a pass as advisory when the repository has its own config, without executing it', async () => {

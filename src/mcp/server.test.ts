@@ -110,6 +110,17 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
     connect = jest.fn()
   },
 }))
+// @commitlint/core is ESM-only and cannot load under jest on Node 22. The
+// commitlint tools' lint call is stubbed here; real rule output is covered
+// in commitlintValidator.test.ts (subprocess).
+jest.mock('../lib/utils/commitlintValidator', () => ({
+  ...jest.requireActual('../lib/utils/commitlintValidator'),
+  lintWithBuiltInConventionalRules: jest.fn(async (message: string) => {
+    const header = message.split('\n')[0]
+    const errors = header.length > 72 ? [{ rule: 'header-max-length', message: 'header must not be longer than 72 characters' }] : []
+    return { valid: errors.length === 0, errors, warnings: [] }
+  }),
+}))
 jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: class MockStdioServerTransport {},
 }))
