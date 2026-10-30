@@ -8,6 +8,7 @@
  * of #890. No behavior change.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -74,8 +75,8 @@ export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: 
         const branchPadded = padCells(truncateCells(branchLabel, branchColWidth), branchColWidth)
         return h(Text, {
           key: `worktree-${index}`,
-          bold: isSelected,
           dimColor: !isSelected && !entry.current,
+          ...selectionRowProps(theme, isSelected, focused),
         }, truncateCells(
           `${cursor} ${marker} ${branchPadded} ${stateLabel.padEnd(6)} ${entry.path}`,
           width - 4

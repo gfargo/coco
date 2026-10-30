@@ -6,6 +6,7 @@
  * remove / set-url / prune) live in the input + workflow layers.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -79,8 +80,8 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
         )
         return h(Text, {
           key: `remote-${index}`,
-          bold: isSelected,
           dimColor: !isSelected,
+          ...selectionRowProps(theme, isSelected, focused),
         }, lineText)
       })
 

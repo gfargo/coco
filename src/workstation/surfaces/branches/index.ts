@@ -8,6 +8,7 @@
  * of #890. No behavior change.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -132,19 +133,26 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
         // The checked-out branch is painted green (matching its green
         // HEAD marker) so "where am I?" reads at a glance. NO_COLOR
         // themes fall back to the `*` glyph alone.
-        const currentColor = branch.current && !theme.noColor ? theme.colors.success : undefined
+        // The cursor row uses the shared selection treatment (#2162), which
+        // the bold alone used here was a weak version of. Child colours are
+        // suppressed under its background, as in history, so the row stays
+        // readable on every theme.
+        const selection = selectionRowProps(theme, isSelected, focused)
+        const onSelection = Boolean(selection.backgroundColor || selection.inverse)
+        const currentColor = branch.current && !theme.noColor && !onSelection ? theme.colors.success : undefined
+        const markerColor = onSelection ? undefined : glyphColor
         if (truncated !== fullText) {
           return h(Text, {
             key: `branch-${index}`,
-            bold: isSelected,
             dimColor: lineDim,
             color: currentColor,
+            ...selection,
           }, truncated)
         }
         return h(Text, {
           key: `branch-${index}`,
-          bold: isSelected,
           dimColor: lineDim,
+          ...selection,
         },
         cursorAndPad,
         // The marker carries the sync-state colour; an explicit
@@ -154,7 +162,7 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
         // no-upstream kinds return undefined from
         // `getBranchRowMarkerColor`, so those markers inherit the
         // row's dim and read as quiet chrome.
-        h(Text, { color: glyphColor, dimColor: glyphColor ? false : undefined },
+        h(Text, { color: markerColor, dimColor: markerColor ? false : undefined },
           glyph),
         // Name span: green for the current branch (dimColor:false keeps
         // it bright), otherwise it inherits the row's normal styling.

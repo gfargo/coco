@@ -24,7 +24,9 @@ exports[`renderRemotesSurface structural snapshot — divergent push URL 1`] = `
     </Text>
   </Box>
   <Text
+    backgroundColor="#1a3a4a"
     bold={true}
+    color="#ffffff"
     dimColor={false}
   >
     &gt; origin git@github.com:gfargo/coco.git ↑ git@github.com:me/fork.git
@@ -87,7 +89,9 @@ exports[`renderRemotesSurface structural snapshot — populated 1`] = `
     </Text>
   </Box>
   <Text
+    backgroundColor="#1a3a4a"
     bold={true}
+    color="#ffffff"
     dimColor={false}
   >
     &gt; origin git@github.com:gfargo/coco.git

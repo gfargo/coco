@@ -7,6 +7,7 @@
  * of #890. No behavior change.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -152,8 +153,8 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
         // message stays the focal point).
         return h(Text, {
           key: `stash-${index}`,
-          bold: isSelected,
           dimColor: !isSelected,
+          ...selectionRowProps(theme, isSelected, focused),
         },
         `${cursor}${markGlyph}`,
         cell(stash.ref, refCol),

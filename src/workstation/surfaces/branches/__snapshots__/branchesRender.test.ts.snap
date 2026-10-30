@@ -55,22 +55,16 @@ exports[`renderBranchesSurface structural snapshot — populated 1`] = `
     </Text>
   </Box>
   <Text
+    backgroundColor="#1a3a4a"
     bold={true}
+    color="#ffffff"
     dimColor={false}
   >
     &gt; 
-    <Text
-      color="green"
-      dimColor={false}
-    >
+    <Text>
       *
     </Text>
-    <Text
-      color="green"
-      dimColor={false}
-    >
-       main     
-    </Text>
+     main     
     <Text
       dimColor={true}
     >

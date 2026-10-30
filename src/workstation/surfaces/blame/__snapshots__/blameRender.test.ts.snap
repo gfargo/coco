@@ -101,7 +101,9 @@ exports[`renderBlameSurface structural snapshot — populated 1`] = `
       src/example.ts
   </Text>
   <Text
+    backgroundColor="#1a3a4a"
     bold={true}
+    color="#ffffff"
   >
     <Text
       dimColor={true}
@@ -110,9 +112,7 @@ exports[`renderBlameSurface structural snapshot — populated 1`] = `
     </Text>
     const answer = 42
   </Text>
-  <Text
-    bold={false}
-  >
+  <Text>
     <Text
       dimColor={true}
     >

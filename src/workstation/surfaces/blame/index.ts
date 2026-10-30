@@ -16,6 +16,7 @@
  * `app.ts`.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { formatLogInkBlameEmpty, formatLogInkLoading } from '../../chrome/surfaceStates'
 import { expandTabs, cellWidth, padCells, truncateCells } from '../../chrome/text'
@@ -117,7 +118,7 @@ export function renderBlameSurface(
         const content = truncateCells(expandTabs(line.content), contentWidth)
         return h(Text, {
           key: `blame-${index}`,
-          bold: isSelected,
+          ...selectionRowProps(theme, isSelected, focused),
         },
         h(Text, { dimColor: true }, gutter),
         content)
