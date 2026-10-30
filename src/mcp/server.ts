@@ -30,6 +30,7 @@ import {
     CommitApplyRequestSchema,
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
+    agentErrorPayload,
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
@@ -432,7 +433,7 @@ function registerCommitApplyTool(server: McpServer, boundRoot: string | undefine
     } catch (error) {
       const failure = toAgentOperationError(error)
       const errorPayload = {
-        error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+        error: agentErrorPayload(failure),
       }
       return {
         isError: true,
@@ -483,7 +484,7 @@ function registerRepoResource(
           uri: resourceUri.href,
           mimeType: 'application/json',
           text: JSON.stringify({
-            error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+            error: agentErrorPayload(failure),
           }, null, 2),
         }],
       }
@@ -1080,7 +1081,7 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     } catch (error) {
       const failure = toAgentOperationError(error)
       const errorPayload = {
-        error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+        error: agentErrorPayload(failure),
       }
       return {
         isError: true,

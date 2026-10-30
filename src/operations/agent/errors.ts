@@ -1,10 +1,11 @@
 import { z } from 'zod'
 
 import {
+    extractHttpStatus,
     extractRetryAfterMs,
+    isAuthError,
     isQuotaExceededError,
-    isRateLimitError,
-    isRetryableError,
+    isTransientProviderFailure,
 } from '../../lib/langchain/errorHandler'
 import {
     LangChainAuthenticationError,
@@ -64,11 +65,25 @@ function classifyProviderError(error: unknown): AgentOperationError | undefined 
   if (error instanceof LangChainNetworkError || error instanceof LangChainTimeoutError) {
     return new AgentOperationError('PROVIDER_UNAVAILABLE', message, true)
   }
-  if (error instanceof LangChainError) return undefined
-  if (isRateLimitError(error)) {
+  if (error instanceof LangChainError) {
+    // The generic wrap (5xx, SDK timeouts) records transience in context;
+    // the operations reach this path far more often than a raw error.
+    return error.context?.transient === true
+      ? new AgentOperationError('PROVIDER_UNAVAILABLE', message, true, undefined, contextRetryAfterMs(error))
+      : undefined
+  }
+  // Raw SDK errors that bypassed coco's provider layer: structured fields
+  // only (status, code, class name), never message text, so a git error
+  // naming `src/timeout.ts` or a ref `fix/429` is not called retryable.
+  if (isAuthError(error)) {
+    return new AgentOperationError('AUTHENTICATION_REQUIRED', message, false)
+  }
+  const status = extractHttpStatus(error)
+  const code = (error as { code?: unknown } | null)?.code
+  if (status === 429 || code === 429 || code === 'rate_limit_exceeded') {
     return new AgentOperationError('RATE_LIMITED', message, true, undefined, extractRetryAfterMs(error))
   }
-  if (isRetryableError(error)) {
+  if (isTransientProviderFailure(error)) {
     return new AgentOperationError('PROVIDER_UNAVAILABLE', message, true, undefined, extractRetryAfterMs(error))
   }
   return undefined
@@ -116,3 +131,19 @@ export function createAgentFailureEnvelope(
     },
   }
 }
+
+/**
+ * The `error` object of a failure response, for the few surfaces that build
+ * their own envelope (commit-apply, resources, capabilities) instead of
+ * `createAgentFailureEnvelope`, so they carry the same fields (#1844 review).
+ */
+export function agentErrorPayload(error: AgentOperationError) {
+  return {
+    code: error.code,
+    category: AGENT_ERROR_CODE_CATEGORIES[error.code],
+    message: error.message,
+    retryable: error.retryable,
+    ...(error.retryAfterMs === undefined ? {} : { retryAfterMs: error.retryAfterMs }),
+  }
+}
+

@@ -106,3 +106,42 @@ describe('createAgentFailureEnvelope', () => {
     expect(envelope.error.category).toBe('repository')
   })
 })
+
+// #1844 review: classification must use the path operations actually take
+// (the generic wrap), and must not trust message text.
+describe('toAgentOperationError review cases', () => {
+  const { handleLangChainError } = jest.requireActual('../../lib/langchain/errorHandler') as typeof import('../../lib/langchain/errorHandler')
+  const wrapped = (raw: unknown) => {
+    try { handleLangChainError(raw, 'Chain execution failed') } catch (error) { return error }
+    throw new Error('expected a throw')
+  }
+
+  it('classifies a wrapped 503 and an SDK timeout as transient', () => {
+    expect(toAgentOperationError(wrapped(Object.assign(new Error('Service Unavailable'), { status: 503 })))).toMatchObject({ code: 'PROVIDER_UNAVAILABLE', retryable: true })
+    const timeout = Object.assign(new Error('Request timed out.'), { name: 'APIConnectionTimeoutError' })
+    expect(toAgentOperationError(wrapped(timeout))).toMatchObject({ code: 'PROVIDER_UNAVAILABLE', retryable: true })
+  })
+
+  it('keeps a wrapped non-transient provider error non-retryable', () => {
+    expect(toAgentOperationError(wrapped(Object.assign(new Error('Bad Request'), { status: 400 })))).toMatchObject({ code: 'OPERATION_FAILED', retryable: false })
+  })
+
+  it.each([
+    'fatal: could not read src/timeout.ts',
+    'ambiguous ref fix/429-handling',
+    'Unexpected token at position 429',
+    'rate limit setting is invalid in config',
+  ])('does not call a plain error retryable because of its message: %s', (message) => {
+    expect(toAgentOperationError(new Error(message))).toMatchObject({ code: 'OPERATION_FAILED', retryable: false })
+  })
+
+  it('maps a raw auth rejection to AUTHENTICATION_REQUIRED even if it mentions a timeout', () => {
+    const raw = Object.assign(new Error('token refresh timeout'), { status: 401 })
+    expect(toAgentOperationError(raw)).toMatchObject({ code: 'AUTHENTICATION_REQUIRED', retryable: false })
+  })
+
+  it('drops an unusable Retry-After instead of returning Infinity', () => {
+    const raw = Object.assign(new Error('Too Many Requests'), { status: 429, headers: { 'retry-after': '9'.repeat(400) } })
+    expect(toAgentOperationError(raw).retryAfterMs).toBeUndefined()
+  })
+})

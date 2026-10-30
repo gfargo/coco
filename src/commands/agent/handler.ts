@@ -18,6 +18,7 @@ import {
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
     CondenseDiffRequestSchema,
+    agentErrorPayload,
     createAgentFailureEnvelope,
     createAgentInputJsonSchema,
     createAgentOperationContext,
@@ -161,7 +162,7 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
       emit(await runCapabilities(repoRoot))
     } catch (error) {
       const failure = toAgentOperationError(error)
-      emit({ error: { code: failure.code, message: failure.message, retryable: failure.retryable } })
+      emit({ error: agentErrorPayload(failure) })
       process.exitCode = failure.code === 'CANCELLED' ? 130 : 1
     } finally {
       process.removeListener('SIGINT', abort)

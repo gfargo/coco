@@ -407,7 +407,11 @@ export async function lintWithBuiltInConventionalRules(
   options: LintOptions = {},
 ): Promise<DetailedValidationResult> {
   const { lint } = await import('@commitlint/core')
-  const result = await lint(message, BUILT_IN_CONVENTIONAL_RULES, options)
+  // commitlint skips messages matching its default ignores (merge, revert,
+  // fixup!/amend!, semver bumps), and its merge pattern matches on any line.
+  // A validation tool must not pass "garbage subject\n\nMerge branch x"
+  // that way, so the defaults are off (#1845 review).
+  const result = await lint(message, BUILT_IN_CONVENTIONAL_RULES, { defaultIgnores: false, ...options })
   return {
     valid: result.valid,
     errors: result.errors.map((error) => ({ rule: error.name, message: error.message })),

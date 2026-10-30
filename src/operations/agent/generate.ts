@@ -633,14 +633,17 @@ export async function generateAgentPrDraft(
   input: AgentTaskInput,
   context: AgentOperationContext,
 ): Promise<AgentSuccessEnvelope<PrDraftData> | AgentPlannedEnvelope> {
-  const { head, defaultBase } = await readPullRequestBranches(context)
+  const { head, defaultBase, defaultBaseRef } = await readPullRequestBranches(context)
   if (!head) {
     throw new AgentOperationError('INVALID_REVISION', 'pr-draft needs a checked-out branch; HEAD is detached.')
   }
   const sourceBase = input.source.kind === 'repository' && input.source.scope.type === 'branch'
     ? input.source.scope.base
     : undefined
-  const base = input.options.base ?? sourceBase ?? defaultBase
+  // The ref the diff runs against, and the branch name the request targets
+  // (a remote-tracking ref like `origin/main` targets `main`).
+  const baseRef = input.options.base ?? sourceBase ?? defaultBaseRef
+  const base = input.options.base ?? (sourceBase ? sourceBase.replace(/^origin\//, '') : defaultBase)
   if (base === head) {
     throw new AgentOperationError(
       'INVALID_INPUT',
@@ -648,7 +651,7 @@ export async function generateAgentPrDraft(
     )
   }
   const source: ChangeSource = input.source.kind === 'repository' && input.source.scope.type !== 'range'
-    ? { kind: 'repository', scope: { type: 'branch', base } }
+    ? { kind: 'repository', scope: { type: 'branch', base: baseRef } }
     : input.source
   const result = await generateAgentChangelog({ ...input, source }, context)
   if (result.status === 'planned') {
@@ -706,6 +709,8 @@ export async function generateAgentSplitPlan(
     variables: COMMIT_SPLIT_PROMPT.inputVariables,
     fallback: COMMIT_SPLIT_PROMPT,
   })
+  // The inventories are not trimmable: when they alone exceed the budget,
+  // report CONTEXT_TOO_LARGE rather than an unclassified failure (#1824 review).
   const budgeted = await enforcePromptBudget({
     prompt,
     variables: {
@@ -721,6 +726,11 @@ export async function generateAgentSplitPlan(
     tokenizer: runtime.tokenizer,
     maxTokens: runtime.config.service.tokenLimit || 4096,
     summaryKey: 'summary',
+  }).catch((error: unknown) => {
+    throw new AgentOperationError(
+      'CONTEXT_TOO_LARGE',
+      `The staged changes are too large to plan within the token budget: ${error instanceof Error ? error.message : String(error)}`,
+    )
   })
 
   report(context, 'Generating split plan…', 0.4)
@@ -732,7 +742,7 @@ export async function generateAgentSplitPlan(
     hunkInventory,
     logger: context.logger,
     tokenizer: runtime.tokenizer,
-    metadata: { command: 'agent', provider: runtime.provider, model: runtime.model, conventional },
+    metadata: { command: 'agent', surface: context.surface, provider: runtime.provider, model: runtime.model, conventional },
     signal: context.signal,
     validateGroupMessage: conventional ? (message) => validateConventionalCommitMessage(message) : undefined,
   })
