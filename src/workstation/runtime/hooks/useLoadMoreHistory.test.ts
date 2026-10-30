@@ -206,6 +206,42 @@ describe('loadCommitContext status', () => {
     })
   })
 
+  // #2209 — cursoring through several far-away refs let every anchored
+  // fetch land and append, growing the loaded history by a window per ref.
+  it('drops a superseded fetch instead of appending its rows', async () => {
+    let resolveFirst: (rows: GitLogRow[]) => void = () => undefined
+    const newerRow = { hash: 'newer', subject: 'newer' } as unknown as GitLogRow
+    getLogRowsAnchoredOnMock
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveFirst = resolve }))
+      .mockResolvedValueOnce([newerRow])
+    const deps = buildDeps()
+    useLoadMoreHistory(loaderReact, deps as never)
+    const load = deps.loadCommitContextRef.current as unknown as (
+      target: { hash: string; label: string }
+    ) => Promise<void>
+
+    const first = load({ hash: 'old', label: 'tag old' })
+    await load({ hash: 'newer', label: 'tag newer' })
+    resolveFirst([anchoredRow])
+    await first
+
+    const appended = deps.dispatch.mock.calls
+      .filter(([action]) => action.type === 'appendRows')
+      .map(([action]) => action.rows)
+    expect(appended).toEqual([[newerRow]])
+  })
+
+  it('asks for one page of context around the target', async () => {
+    getLogRowsAnchoredOnMock.mockResolvedValue([anchoredRow])
+    const deps = buildDeps()
+    useLoadMoreHistory(loaderReact, deps as never)
+    await (deps.loadCommitContextRef.current as unknown as (
+      target: { hash: string; label: string }
+    ) => Promise<void>)({ hash: 'abc123', label: 'main' })
+
+    expect(getLogRowsAnchoredOnMock.mock.calls[0][3]).toEqual({ limit: 1000 })
+  })
+
   it('leaves the existing warning status on the no-rows path unchanged', async () => {
     getLogRowsAnchoredOnMock.mockResolvedValue([])
     const deps = buildDeps()

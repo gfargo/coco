@@ -1,6 +1,6 @@
 import { makeHookHarness } from '../../../test/builders/makeHookHarness'
 import { createLogInkState, type LogInkState } from '../inkViewModel'
-import { useHistoryCursorSync } from './useHistoryCursorSync'
+import { CURSOR_SYNC_LOAD_DEBOUNCE_MS, useHistoryCursorSync } from './useHistoryCursorSync'
 
 // #2203 — the cursor-sync effect resolves the cursored branch / tag / stash
 // through the id-first selectors, but its dependency list named only the
@@ -51,5 +51,64 @@ describe('useHistoryCursorSync re-syncs when only the selection id changes (#220
     harness.render((React) => useHistoryCursorSync(React, { dispatch, context, state }))
     harness.render((React) => useHistoryCursorSync(React, { dispatch, context, state: { ...state } }))
     expect(jumps()).toEqual([BRAVO])
+  })
+})
+
+// #2209 — cursoring onto a ref whose commit is not loaded starts an anchored
+// `git log`. Holding `j` through old tags used to start one per row passed.
+// The fetch now waits for the cursor to rest.
+describe('useHistoryCursorSync debounces the anchored context load (#2209)', () => {
+  const FAR_A = 'ccccccc3333333333333333333333333333333cc'
+  const FAR_B = 'ddddddd4444444444444444444444444444444dd'
+  const farContext = {
+    branches: { localBranches: [ref('far-a', FAR_A), ref('far-b', FAR_B)], remoteBranches: [], dirty: false },
+    tags: { tags: [] },
+    stashes: { stashes: [] },
+  } as never
+  const loadCalls: string[] = []
+  const load = async (target: { hash: string }) => { loadCalls.push(target.hash) }
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    dispatch.mockClear()
+    loadCalls.length = 0
+  })
+  afterEach(() => jest.useRealTimers())
+
+  function renderAt(harness: ReturnType<typeof makeHookHarness>, index: number) {
+    const result = harness.render((React) =>
+      useHistoryCursorSync(React, { dispatch, context: farContext, state: branches({ selectedBranchIndex: index, selectedBranchId: undefined }) })
+    )
+    result.current = load as never
+    return result
+  }
+
+  it('fires one fetch, for the ref the cursor rests on', () => {
+    const harness = makeHookHarness()
+    renderAt(harness, 0)
+    jest.advanceTimersByTime(CURSOR_SYNC_LOAD_DEBOUNCE_MS - 10)
+    renderAt(harness, 1)
+    jest.advanceTimersByTime(CURSOR_SYNC_LOAD_DEBOUNCE_MS - 10)
+    expect(loadCalls).toEqual([])
+
+    jest.advanceTimersByTime(20)
+    expect(loadCalls).toEqual([FAR_B])
+  })
+
+  it('retries a ref whose fetch was cancelled when the cursor comes back', () => {
+    const harness = makeHookHarness()
+    renderAt(harness, 0)
+    renderAt(harness, 1)
+    renderAt(harness, 0)
+    jest.advanceTimersByTime(CURSOR_SYNC_LOAD_DEBOUNCE_MS)
+    expect(loadCalls).toEqual([FAR_A])
+  })
+
+  it('does not fire after the hook unmounts', () => {
+    const harness = makeHookHarness()
+    renderAt(harness, 0)
+    harness.unmount()
+    jest.advanceTimersByTime(CURSOR_SYNC_LOAD_DEBOUNCE_MS * 2)
+    expect(loadCalls).toEqual([])
   })
 })
