@@ -484,6 +484,18 @@ describe('renderFooter', () => {
       expect(ctx).not.toContain('y yank')
     })
 
+    // #2160 — a capped list says so with `g? more`, but only when it fits
+    // beside the surviving hints: it must never displace one.
+    it('shows g? more when hints were left out and there is room for it', () => {
+      expect(contextualText(renderBranches(200))).toMatch(/g\? more$/)
+    })
+
+    it('leaves g? more out rather than drop a real hint at 80 columns', () => {
+      const ctx = contextualText(renderBranches(80))
+      expect(ctx).toContain('enter checkout')
+      expect(ctx).not.toContain('g? more')
+    })
+
     it('fits the branches footer within 120 columns', () => {
       const tree = renderBranches(120)
       const ctx = contextualText(tree)

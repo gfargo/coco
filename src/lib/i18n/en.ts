@@ -297,6 +297,7 @@ export const en: Catalog = {
   'keymap.footer.cCherryPick': 'c cherry-pick',
   'keymap.footer.hApplyHunk': 'H apply hunk',
   'keymap.footer.escBack': 'esc back',
+  'keymap.footer.gMore': 'g? more',
   'keymap.footer.hunk': '[/] hunk',
   'keymap.footer.cCheckout': 'C checkout',
   'keymap.footer.vSelect': 'v select',

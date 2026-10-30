@@ -1,4 +1,5 @@
 import {
+    FOOTER_CONTEXTUAL_HINT_CAP,
     LOG_INK_KEY_BINDINGS,
     combineLogInkBreadcrumbSegments,
     filterLogInkPaletteCommands,
@@ -15,6 +16,22 @@ import {
 import { en } from '../../lib/i18n/en'
 import { t } from '../../lib/i18n/t'
 
+/**
+ * What the footer receives for a view whose full hint list, most useful
+ * first, is `contextual` (#2160): the first FOOTER_CONTEXTUAL_HINT_CAP,
+ * `esc back` pinned into the global cluster, and `more` when any were left out.
+ */
+function footer(contextual: string[], global: string[]) {
+  const escBack = 'esc back'
+  const rest = contextual.filter((hint) => hint !== escBack)
+  const pinned = contextual.includes(escBack) && !global.includes(escBack) ? [escBack, ...global] : global
+  return {
+    contextual: rest.slice(0, FOOTER_CONTEXTUAL_HINT_CAP),
+    global: pinned,
+    ...(rest.length > FOOTER_CONTEXTUAL_HINT_CAP ? { more: true } : {}),
+  }
+}
+
 describe('log Ink keymap', () => {
   it('returns view-aware contextual hints alongside persistent globals', () => {
     expect(getLogInkFooterHints({
@@ -22,23 +39,21 @@ describe('log Ink keymap', () => {
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual({
+    })).toEqual(
       // `c/R/Z/i mutate` is the compact chip for cherry-pick / revert /
       // reset / interactive-rebase — full descriptions in ? help and
       // the palette. `B/gT new` covers create-branch-here / create-tag-here.
-      contextual: ['↑/↓ move', 'enter diff', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'v range', 'y/Y yank', '/ search'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+      footer(['↑/↓ move', 'enter diff', '/ search', 'c/R/Z/i mutate', 'f fixup', 'B/gT new', 'm compare', 'v range', 'y/Y yank'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
 
     expect(getLogInkFooterHints({
       activeView: 'status',
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual({
-      contextual: ['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'e/c compose'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+    })).toEqual(
+      footer(['↑/↓ files', 'enter hunks', 'space stage', 'A stage all', 'z revert', 'e/c compose'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
 
     expect(getLogInkFooterHints({
       activeView: 'diff',
@@ -72,10 +87,9 @@ describe('log Ink keymap', () => {
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual({
-      contextual: ['e edit', 'c commit', 'a amend', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+    })).toEqual(
+      footer(['e edit', 'c commit', 'a amend', 'A stage all', '+ stage…', 'S split', 'I AI draft', 'esc back'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
 
     // Split-plan overlay claims the footer while open — underlying
     // view's bindings are all intercepted, so surfacing them would
@@ -87,10 +101,9 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
       splitPlanStatus: 'ready',
-    })).toEqual({
-      contextual: ['↑/↓ scroll', 'pg up/dn', 'g/G top/bot', 'y apply', 'r regen', 'esc cancel'],
-      global: ['q quit'],
-    })
+    })).toEqual(
+      footer(['↑/↓ scroll', 'pg up/dn', 'g/G top/bot', 'y apply', 'r regen', 'esc cancel'], ['q quit']),
+    )
 
     expect(getLogInkFooterHints({
       activeView: 'compose',
@@ -98,10 +111,9 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
       splitPlanStatus: 'loading',
-    })).toEqual({
-      contextual: ['generating plan…', 'esc cancel'],
-      global: ['q quit'],
-    })
+    })).toEqual(
+      footer(['generating plan…', 'esc cancel'], ['q quit']),
+    )
 
     expect(getLogInkFooterHints({
       activeView: 'compose',
@@ -109,61 +121,55 @@ describe('log Ink keymap', () => {
       focus: 'commits',
       showHelp: false,
       splitPlanStatus: 'applying',
-    })).toEqual({
-      contextual: ['applying split…'],
-      global: [],
-    })
+    })).toEqual(
+      footer(['applying split…'], []),
+    )
 
     expect(getLogInkFooterHints({
       activeView: 'branches',
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual({
-      contextual: ['↑/↓ branches', 'enter checkout', 'M merge', 'P push', 'S sync', 'Z reset', '+ new', 'x/v mark', 'D delete', 'r rebase', 'm compare', 's sort', 'y yank'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+    })).toEqual(
+      footer(['↑/↓ branches', 'enter checkout', 'M merge', 'P push', 'S sync', 'Z reset', '+ new', 'x/v mark', 'D delete', 'r rebase', 'm compare', 's sort', 'y yank'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
 
     expect(getLogInkFooterHints({
       activeView: 'tags',
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual({
-      contextual: ['↑/↓ tags', '+ new', 'P push', 'T delete', 'm compare', 's sort', 'y yank'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+    })).toEqual(
+      footer(['↑/↓ tags', '+ new', 'P push', 'T delete', 'm compare', 's sort', 'y yank'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
 
     expect(getLogInkFooterHints({
       activeView: 'stash',
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual({
-      contextual: ['↑/↓ stashes', 'enter diff', 'a/A apply', 'p pop', 'R rename', 'b branch', 'x/v mark', 'X drop · u undo'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+    })).toEqual(
+      footer(['↑/↓ stashes', 'enter diff', 'a/A apply', 'p pop', 'R rename', 'b branch', 'x/v mark', 'X drop · u undo'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
 
     expect(getLogInkFooterHints({
       filterMode: false,
       focus: 'sidebar',
       showHelp: false,
-    })).toEqual({
+    })).toEqual(
       // Sidebar focused with no per-tab context (no items / status tab):
       // generic "drill into the dedicated view" hint. ←/→ now switches
       // tabs (in-sidebar selection PR — vertical axis is items).
-      contextual: ['←/→ tab', '1-5 jump', 'enter open', 'tab focus'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+      footer(['←/→ tab', '1-5 jump', 'enter open', 'tab focus'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
 
     expect(getLogInkFooterHints({
       filterMode: false,
       focus: 'detail',
       showHelp: false,
-    })).toEqual({
-      contextual: ['↑/↓ files', 'pgup/pgdn diff', 'tab focus'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+    })).toEqual(
+      footer(['↑/↓ files', 'pgup/pgdn diff', 'tab focus'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
   })
 
   describe('diff view split/unified hint (#785)', () => {
@@ -229,11 +235,11 @@ describe('log Ink keymap', () => {
       showHelp: false,
       sidebarTab: 'branches',
       sidebarItemCount: 5,
-    }).contextual).toEqual([
+    }).contextual).toEqual(footer([
       '↑/↓ branches', '←/→ tab', 'enter checkout',
       'F fetch', 'U pull', 'P push',
       'D delete', 'R rename', 'u upstream',
-    ])
+    ], []).contextual)
 
     expect(getLogInkFooterHints({
       filterMode: false,
@@ -293,43 +299,39 @@ describe('log Ink keymap', () => {
       filterMode: true,
       focus: 'commits',
       showHelp: false,
-    })).toEqual({
-      contextual: ['enter apply', 'esc cancel', 'ctrl+u clear'],
-      global: ['q quit'],
-    })
+    })).toEqual(
+      footer(['enter apply', 'esc cancel', 'ctrl+u clear'], ['q quit']),
+    )
 
     expect(getLogInkFooterHints({
       filterMode: false,
       focus: 'commits',
       showHelp: true,
-    })).toEqual({
+    })).toEqual(
       // Honest help footer (#1355): every advertised key is live in
       // the help handler; / opens the overlay's type-to-filter.
-      contextual: ['? close', '/ filter', 'j/k scroll'],
-      global: ['q quit'],
-    })
+      footer(['? close', '/ filter', 'j/k scroll'], ['q quit']),
+    )
 
     expect(getLogInkFooterHints({
       filterMode: false,
       focus: 'commits',
       showHelp: true,
       helpFilterMode: true,
-    })).toEqual({
+    })).toEqual(
       // While typing a help filter, `? close` / `/ filter` / `j/k scroll`
       // no longer apply — the input swallows them (#1431).
-      contextual: ['enter keep', 'esc clear', 'type to filter'],
-      global: ['q quit'],
-    })
+      footer(['enter keep', 'esc clear', 'type to filter'], ['q quit']),
+    )
 
     expect(getLogInkFooterHints({
       filterMode: false,
       focus: 'commits',
       showCommandPalette: true,
       showHelp: false,
-    })).toEqual({
-      contextual: [': close', 'D/T/X confirm', 'I/M AI'],
-      global: ['? help', 'q quit'],
-    })
+    })).toEqual(
+      footer([': close', 'D/T/X confirm', 'I/M AI'], ['? help', 'q quit']),
+    )
   })
 
   it('groups help into the active view (leading, #1355) and Global', () => {
@@ -643,10 +645,11 @@ describe('log Ink keymap', () => {
       // the hints name what the user keeps, not the git flag.
       expect(hints.contextual).toContain('u incoming')
       expect(hints.contextual).toContain('U yours')
-      expect(hints.contextual).toContain('o edit')
+      // `C continue` is kept by the cap (#2160); `o edit` is reachable via g?.
       expect(hints.contextual).toContain('C continue*')
       expect(hints.contextual).toContain('enter diff')
-      expect(hints.global).toEqual(['g jump', '< back', '? help', ': cmds', 'q quit'])
+      expect(hints.more).toBe(true)
+      expect(hints.global).toEqual(['esc back', 'g jump', '< back', '? help', ': cmds', 'q quit'])
     })
 
     it('includes gx in chord continuations for the g prefix', () => {
@@ -806,7 +809,8 @@ describe('PR triage review flow hints (#1363)', () => {
       focus: 'commits',
       showHelp: false,
     })
-    expect(hints.contextual).toEqual(['j/k lines', '[/] file', 'C checkout', 'd split', 'esc back'])
+    expect(hints.contextual).toEqual(['j/k lines', '[/] file', 'C checkout', 'd split'])
+    expect(hints.global[0]).toBe('esc back')
     // The stash/commit-diff mutate verbs must not leak in — the PR's
     // files aren't in the local worktree.
     expect(hints.contextual).not.toContain('c cherry-pick')
@@ -814,3 +818,30 @@ describe('PR triage review flow hints (#1363)', () => {
     expect(hints.contextual).not.toContain('o edit')
   })
 })
+
+// #2160 — footer hints are capped, and `esc back` is never what falls off.
+describe('footer hint cap (#2160)', () => {
+  const views = ['history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash', 'worktrees', 'pullRequest', 'pullRequestTriage', 'issues', 'conflicts', 'reflog', 'submodules', 'remotes', 'fileHistory', 'workspace', 'changelog'] as const
+
+  it('keeps every view at or under the cap, with esc back in the global cluster', () => {
+    for (const activeView of views) {
+      for (const focus of ['commits', 'sidebar'] as const) {
+        const hints = getLogInkFooterHints({ activeView, focus, filterMode: false, showHelp: false, sidebarTab: 'branches', sidebarItemCount: 3 })
+        expect(hints.contextual.length).toBeLessThanOrEqual(FOOTER_CONTEXTUAL_HINT_CAP)
+        expect(hints.contextual).not.toContain('esc back')
+      }
+    }
+  })
+
+  it('keeps the essential keys of the views whose lists were reordered', () => {
+    expect(getLogInkFooterHints({ activeView: 'history', focus: 'commits', filterMode: false, showHelp: false }).contextual).toContain('/ search')
+    expect(getLogInkFooterHints({ activeView: 'conflicts', focus: 'commits', filterMode: false, showHelp: false }).contextual).toContain('C continue*')
+  })
+
+  it('leaves chord continuations uncapped', () => {
+    const chord = getLogInkFooterHints({ activeView: 'history', focus: 'commits', filterMode: false, showHelp: false, pendingKey: 'g' })
+    expect(chord.more).toBeUndefined()
+    expect(chord.contextual.length).toBeGreaterThan(FOOTER_CONTEXTUAL_HINT_CAP)
+  })
+})
+
