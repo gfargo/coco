@@ -13,6 +13,7 @@ import {
     getLogInkPaletteCommands,
     getLogInkViewKeyBindings,
 } from './inkKeymap'
+import type { LogInkView } from './inkViewModel'
 import { en } from '../../lib/i18n/en'
 import { t } from '../../lib/i18n/t'
 
@@ -60,10 +61,9 @@ describe('log Ink keymap', () => {
       filterMode: false,
       focus: 'commits',
       showHelp: false,
-    })).toEqual({
-      contextual: ['j/k lines', '[/] hunk', 'v select', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'],
-      global: ['g jump', '< back', '? help', ': cmds', 'q quit'],
-    })
+    })).toEqual(
+      footer(['j/k lines', '[/] hunk', 'v select', 'space stage', 'a stage file', 'z discard', 'o edit', 'esc back'], ['g jump', '< back', '? help', ': cmds', 'q quit']),
+    )
 
     // Hunk-apply (#782): commit-diff and stash-diff hints surface `H`.
     expect(getLogInkFooterHints({
@@ -821,7 +821,7 @@ describe('PR triage review flow hints (#1363)', () => {
 
 // #2160 — footer hints are capped, and `esc back` is never what falls off.
 describe('footer hint cap (#2160)', () => {
-  const views = ['history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash', 'worktrees', 'pullRequest', 'pullRequestTriage', 'issues', 'conflicts', 'reflog', 'submodules', 'remotes', 'fileHistory', 'workspace', 'changelog'] as const
+  const views: LogInkView[] = ['history', 'status', 'diff', 'compose', 'branches', 'tags', 'stash', 'worktrees', 'pull-request', 'pull-request-triage', 'issues', 'conflicts', 'reflog', 'bisect', 'changelog', 'submodules', 'remotes', 'blame', 'file-history', 'rebase']
 
   it('keeps every view at or under the cap, with esc back in the global cluster', () => {
     for (const activeView of views) {
