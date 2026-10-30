@@ -126,7 +126,7 @@ function extractHttpStatus(error: unknown): number | undefined {
  * `getDefaultServiceApiKey`'s locally-missing-key check (before any
  * request) produced `LangChainAuthenticationError`.
  */
-function isAuthError(error: unknown): boolean {
+export function isAuthError(error: unknown): boolean {
   const status = extractHttpStatus(error)
   if (status === 401 || status === 403) return true
   if (!error || typeof error !== 'object') return false
@@ -157,7 +157,7 @@ const QUOTA_MESSAGE_PATTERNS = [
  * work. Checked before {@link isRateLimitError} since a quota 429 satisfies
  * that predicate too.
  */
-function isQuotaExceededError(error: unknown): boolean {
+export function isQuotaExceededError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const err = error as { code?: string | number; error?: { code?: string; type?: string }; message?: string }
   const code = err.code ?? err.error?.code
@@ -176,7 +176,7 @@ function isQuotaExceededError(error: unknown): boolean {
  * provider message via the generic execution-error wrap, with no
  * rate-limit-specific guidance.
  */
-function isRateLimitError(error: unknown): boolean {
+export function isRateLimitError(error: unknown): boolean {
   if (extractHttpStatus(error) === 429) return true
   if (!error || typeof error !== 'object') return false
   const err = error as { code?: string | number; message?: string }
@@ -186,6 +186,40 @@ function isRateLimitError(error: unknown): boolean {
     return RATE_LIMIT_MESSAGE_PATTERNS.some((pattern) => message.includes(pattern))
   }
   return false
+}
+
+type HeaderBag = Headers | Record<string, string | string[] | undefined>
+
+function readHeader(headers: HeaderBag | undefined, name: string): string | undefined {
+  if (!headers) return undefined
+  if (typeof (headers as Headers).get === 'function') return (headers as Headers).get(name) ?? undefined
+  const record = headers as Record<string, string | string[] | undefined>
+  const key = Object.keys(record).find((candidate) => candidate.toLowerCase() === name)
+  const value = key === undefined ? undefined : record[key]
+  return Array.isArray(value) ? value[0] : value
+}
+
+/**
+ * How long the provider asked the caller to wait, in milliseconds, from a
+ * `retry-after-ms` header (OpenAI) or a standard `Retry-After` header (delta
+ * seconds or an HTTP date). Looks at `error.headers` and
+ * `error.response.headers`, the two places provider SDKs keep them.
+ * `undefined` when there is no usable hint (#1844).
+ */
+export function extractRetryAfterMs(error: unknown, now: number = Date.now()): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const err = error as { headers?: HeaderBag; response?: { headers?: HeaderBag } }
+  for (const headers of [err.headers, err.response?.headers]) {
+    const ms = readHeader(headers, 'retry-after-ms')
+    if (ms !== undefined && /^\d+(\.\d+)?$/.test(ms.trim())) return Math.round(Number(ms))
+    const after = readHeader(headers, 'retry-after')
+    if (after === undefined) continue
+    const trimmed = after.trim()
+    if (/^\d+(\.\d+)?$/.test(trimmed)) return Math.round(Number(trimmed) * 1000)
+    const date = Date.parse(trimmed)
+    if (!Number.isNaN(date)) return Math.max(0, date - now)
+  }
+  return undefined
 }
 
 /**
@@ -251,9 +285,11 @@ export function handleLangChainError(
     const provider = additionalContext?.provider as string | undefined
     const message = extractErrorMessage(error)
 
+    const retryAfterMs = extractRetryAfterMs(error)
     throw new LangChainRateLimitError(message, provider, {
       originalError: error instanceof Error ? error.name : typeof error,
       originalMessage: message,
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
       context,
       ...additionalContext
     })

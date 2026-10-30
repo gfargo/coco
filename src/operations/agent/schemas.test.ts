@@ -259,7 +259,7 @@ describe('agent output schemas', () => {
     version: AGENT_PROTOCOL_VERSION,
     ok: false as const,
     operation: 'changelog' as const,
-    error: { code: 'GENERATION_FAILED', message: 'no result', retryable: false },
+    error: { code: 'GENERATION_FAILED', category: 'generation', message: 'no result', retryable: false },
   }
 
   it('accepts only the matching success, planned, and failure envelopes', () => {
