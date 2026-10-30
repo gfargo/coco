@@ -416,9 +416,9 @@ export function useLoadMoreHistory(
 
   const loadCommitContext = React.useCallback(async (
     target: { hash: string; label: string }
-  ): Promise<void> => {
+  ): Promise<{ superseded?: boolean } | void> => {
     const snap = loadCommitContextStateRef.current
-    if (!snap.logArgv) return
+    if (!snap.logArgv) return {}
     const requestId = ++loadCommitContextRequestRef.current
     const superseded = () => loadCommitContextRequestRef.current !== requestId
     // #1384 — frame-tag the anchored fetch; see `loadMoreCommits`.
@@ -440,7 +440,7 @@ export function useLoadMoreHistory(
         limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
       })
       // A newer request owns the status line and the merge now.
-      if (superseded()) return
+      if (superseded()) return { superseded: true }
       // #1384 — drop the resolve when the repo-frame stack changed
       // mid-flight: the anchored rows belong to the frame that issued
       // the fetch, and `appendRows` would splice them into whichever
@@ -449,7 +449,7 @@ export function useLoadMoreHistory(
         mounted: mountedRef.current,
         issuedAtDepth,
         currentDepth: loadCommitContextStateRef.current.repoFrameDepth,
-      })) return
+      })) return {}
       if (rows.length > 0) {
         dispatch({ type: 'appendRows', rows })
         // Explicitly clear the loading status here rather than relying
@@ -472,7 +472,7 @@ export function useLoadMoreHistory(
         })
       }
     } catch (error) {
-      if (superseded()) return
+      if (superseded()) return { superseded: true }
       // Same frame-scoped drop for the failure path (#1384): a stale
       // frame's error message would mislabel the ACTIVE frame's state.
       if (!isStaleFrameResolve({

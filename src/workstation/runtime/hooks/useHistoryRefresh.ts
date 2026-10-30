@@ -52,7 +52,9 @@ export type UseHistoryRefreshDeps = {
 }
 
 export type UseHistoryRefreshResult = {
-  refreshHistoryRows: () => Promise<void>
+  refreshHistoryRows: (options?: { fromWatcher?: boolean }) => Promise<void>
+  /** `Date.now()` when a history refresh not issued by the watcher last started; 0 before any. */
+  lastSelfHistoryRefreshAtRef: ReactTypes.MutableRefObject<number>
 }
 
 export function useHistoryRefresh(
@@ -76,7 +78,10 @@ export function useHistoryRefresh(
    * called after any operation that creates or rewrites history locally
    * so the history view reflects reality.
    */
-  const refreshHistoryRows = React.useCallback(async () => {
+  const lastSelfHistoryRefreshAtRef = React.useRef(0)
+
+  const refreshHistoryRows = React.useCallback(async (options: { fromWatcher?: boolean } = {}) => {
+    if (!options.fromWatcher) lastSelfHistoryRefreshAtRef.current = Date.now()
     try {
       // #1384 — capture the repo-frame depth BEFORE the awaits.
       const issuedAtDepth = repoFrameDepthRef.current
@@ -127,5 +132,5 @@ export function useHistoryRefresh(
     } catch { /* ignore — stale rows beat blank rows */ }
   }, [dispatch, git, logArgv, setHasMoreCommits, historyFetchArgs, fullGraph, historyRefetchGenerationRef])
 
-  return { refreshHistoryRows }
+  return { refreshHistoryRows, lastSelfHistoryRefreshAtRef }
 }

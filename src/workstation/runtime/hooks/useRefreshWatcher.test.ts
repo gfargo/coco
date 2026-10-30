@@ -76,3 +76,35 @@ describe('isSelfRefreshEcho', () => {
     expect(isSelfRefreshEcho('full', 500, 0)).toBe(false)
   })
 })
+
+// Review follow-up to #2209: many workflows (branch/tag create and delete,
+// stash create and drop) refresh only the context. The watcher's history
+// refresh is then what updates the graph's refs, so the echo mute must
+// skip only the half coco already did.
+describe('applyRefreshKind skips only the halves coco already refreshed', () => {
+  const actions = () => ({
+    refreshContext: jest.fn(async () => undefined),
+    refreshWorktreeContext: jest.fn(async () => undefined),
+    refreshHistoryRows: jest.fn(async () => undefined),
+  })
+
+  it('still refreshes history after a context-only self refresh', () => {
+    const a = actions()
+    applyRefreshKind('full', a, { context: true, history: false })
+    expect(a.refreshContext).not.toHaveBeenCalled()
+    expect(a.refreshHistoryRows).toHaveBeenCalledWith({ fromWatcher: true })
+  })
+
+  it('skips both when coco refreshed both', () => {
+    const a = actions()
+    applyRefreshKind('full', a, { context: true, history: true })
+    expect(a.refreshContext).not.toHaveBeenCalled()
+    expect(a.refreshHistoryRows).not.toHaveBeenCalled()
+  })
+
+  it('tags its own history refresh so it does not count as coco\'s', () => {
+    const a = actions()
+    applyRefreshKind('full', a)
+    expect(a.refreshHistoryRows).toHaveBeenCalledWith({ fromWatcher: true })
+  })
+})

@@ -451,7 +451,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // History refresh callback (#1418 app.ts decomposition). Re-fetches the
   // head of the commit log after any operation that creates or rewrites
   // history locally. Owned by `useHistoryRefresh`.
-  const { refreshHistoryRows } = useHistoryRefresh(React, {
+  const { refreshHistoryRows, lastSelfHistoryRefreshAtRef } = useHistoryRefresh(React, {
     git,
     logArgv,
     dispatch,
@@ -498,6 +498,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     refreshWorktreeContext,
     refreshHistoryRows,
     lastSelfRefreshAtRef,
+    lastSelfHistoryRefreshAtRef,
   })
 
   // Per-repo sidebar tab persistence (#21). Resolve the repo root, look

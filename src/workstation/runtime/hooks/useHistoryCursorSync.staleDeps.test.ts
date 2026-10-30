@@ -112,3 +112,43 @@ describe('useHistoryCursorSync debounces the anchored context load (#2209)', () 
     expect(loadCalls).toEqual([])
   })
 })
+
+// Review follow-up to #2209: a fetch superseded by a newer one has its rows
+// dropped, so its hash must not stay "attempted", or coming back to that ref
+// reports it unreachable instead of fetching it.
+describe('useHistoryCursorSync retries a ref whose fetch was superseded', () => {
+  const FAR = 'eeeeeee5555555555555555555555555555555ee'
+  const farContext = {
+    branches: { localBranches: [ref('far', FAR)], remoteBranches: [], dirty: false },
+    tags: { tags: [] },
+    stashes: { stashes: [] },
+  } as never
+
+  beforeEach(() => { jest.useFakeTimers(); dispatch.mockClear() })
+  afterEach(() => jest.useRealTimers())
+
+  it('fetches again on return instead of reporting unreachable', async () => {
+    const harness = makeHookHarness()
+    const calls: string[] = []
+    const load = async (target: { hash: string }) => { calls.push(target.hash); return { superseded: true } }
+    const renderOnFar = () => {
+      const r = harness.render((React) =>
+        useHistoryCursorSync(React, { dispatch, context: farContext, state: branches({ selectedBranchIndex: 0, selectedBranchId: undefined }) })
+      )
+      r.current = load as never
+    }
+    renderOnFar()
+    jest.advanceTimersByTime(CURSOR_SYNC_LOAD_DEBOUNCE_MS)
+    await Promise.resolve(); await Promise.resolve()
+
+    // Leave and come back (a re-render with a new commit list re-runs the sync).
+    harness.render((React) =>
+      useHistoryCursorSync(React, { dispatch, context: farContext, state: { ...branches({ selectedBranchIndex: 0 }), filteredCommits: [] } as never })
+    ).current = load as never
+    jest.advanceTimersByTime(CURSOR_SYNC_LOAD_DEBOUNCE_MS)
+
+    expect(calls).toEqual([FAR, FAR])
+    const statuses = dispatch.mock.calls.map(([action]) => action.value).filter(Boolean)
+    expect(statuses.some((value: string) => /unreachable/.test(value))).toBe(false)
+  })
+})

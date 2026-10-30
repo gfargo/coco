@@ -54,13 +54,20 @@ export type UseRefreshWatcherDeps = {
    * Mirrors the manual `r` handler in `useInputHandler.ts` which already
    * calls both `refreshContext()` and `refreshHistoryRows()`.
    */
-  refreshHistoryRows: () => Promise<unknown>
+  refreshHistoryRows: (options?: { fromWatcher?: boolean }) => Promise<unknown>
   /**
-   * When coco last refreshed for a change it made itself
+   * When coco last refreshed the context for a change it made itself
    * (`useContextRefresh`). A `'full'` event shortly after is the watcher
-   * seeing that same change, so it is skipped (#2209).
+   * seeing that same change, so its context half is skipped (#2209).
    */
   lastSelfRefreshAtRef: ReactTypes.MutableRefObject<number>
+  /**
+   * Same for the history rows (`useHistoryRefresh`). Tracked apart from
+   * the context: many workflows (branch/tag create and delete, stash
+   * create and drop) refresh only the context, and the watcher's history
+   * refresh is what then updates the graph's ref decorations.
+   */
+  lastSelfHistoryRefreshAtRef: ReactTypes.MutableRefObject<number>
 }
 
 /**
@@ -99,12 +106,14 @@ export function applyRefreshKind(
   actions: {
     refreshContext: (options?: { silent?: boolean; fromWatcher?: boolean }) => Promise<unknown>
     refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<unknown>
-    refreshHistoryRows: () => Promise<unknown>
+    refreshHistoryRows: (options?: { fromWatcher?: boolean }) => Promise<unknown>
   },
+  /** Halves of a `'full'` refresh that coco already did itself and can skip. */
+  skip: { context?: boolean; history?: boolean } = {},
 ): void {
   if (kind === 'full') {
-    void actions.refreshContext({ silent: true, fromWatcher: true })
-    void actions.refreshHistoryRows()
+    if (!skip.context) void actions.refreshContext({ silent: true, fromWatcher: true })
+    if (!skip.history) void actions.refreshHistoryRows({ fromWatcher: true })
   } else {
     void actions.refreshWorktreeContext({ silent: true })
   }
@@ -125,7 +134,7 @@ export function useRefreshWatcher(
   React: typeof ReactTypes,
   deps: UseRefreshWatcherDeps,
 ): void {
-  const { git, mountedRef, refreshContext, refreshWorktreeContext, refreshHistoryRows, lastSelfRefreshAtRef } = deps
+  const { git, mountedRef, refreshContext, refreshWorktreeContext, refreshHistoryRows, lastSelfRefreshAtRef, lastSelfHistoryRefreshAtRef } = deps
 
   // Live refresh: watch .git metadata + the working tree root and reload
   // context when something changes outside the TUI (editor save, external
@@ -161,13 +170,17 @@ export function useRefreshWatcher(
             if (!mountedRef.current) {
               return
             }
-            if (isSelfRefreshEcho(kind, Date.now(), lastSelfRefreshAtRef.current)) {
-              return
-            }
+            // Each half of a full refresh is skipped only when coco itself
+            // just refreshed that half; a context-only self-refresh still
+            // lets the history refresh run.
+            const now = Date.now()
             applyRefreshKind(kind, {
               refreshContext,
               refreshWorktreeContext,
               refreshHistoryRows,
+            }, {
+              context: isSelfRefreshEcho(kind, now, lastSelfRefreshAtRef.current),
+              history: isSelfRefreshEcho(kind, now, lastSelfHistoryRefreshAtRef.current),
             })
           },
         })
