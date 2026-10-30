@@ -235,7 +235,7 @@ describe('PR diff surface (#1363)', () => {
 
   it('renders the empty-patch hint for a diff-less PR', () => {
     const text = flattenText(buildPr({ lines: [] }))
-    expect(text).toContain('No diff to display for this pull request.')
+    expect(text).toContain('No diff to display for this pull request. Press esc to go back.')
   })
 
   it('segments the patch per file and tracks the file containing the scroll offset', () => {

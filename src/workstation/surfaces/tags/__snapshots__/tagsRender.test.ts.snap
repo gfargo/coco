@@ -26,7 +26,7 @@ exports[`renderTagsSurface structural snapshot — empty 1`] = `
   <Text
     dimColor={true}
   >
-    No tags found. Tags created via git tag &lt;name&gt; will appear here.
+    No tags yet. Press + to create one.
   </Text>
 </Box>
 `;

@@ -171,7 +171,7 @@ exports[`renderHistoryPanel structural snapshot — empty repo 1`] = `
   <Text
     dimColor={true}
   >
-    No commits yet. Make your first commit to populate the history.
+    No commits yet. Press gs to stage files, then gc to write the first commit.
   </Text>
 </Box>
 `;

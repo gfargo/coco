@@ -26,7 +26,7 @@ exports[`renderReflogSurface structural snapshot — empty 1`] = `
   <Text
     dimColor={true}
   >
-    No reflog entries. Activity in this repo will appear here over time.
+    No reflog entries yet. Press gh to return to history.
   </Text>
 </Box>
 `;
