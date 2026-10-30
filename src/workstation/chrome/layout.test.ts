@@ -52,14 +52,11 @@ describe('log Ink layout', () => {
     // ceiling so all the additional terminal width flows to the
     // history graph (the dominant view by user intent).
     expect(layout.sidebarWidth).toBe(32)
-    // Inspector mirrors the same shape: 200 * 0.22 = 44 → clamped
-    // at the 32-cell maximum.
-    expect(layout.detailWidth).toBe(32)
-    // Main panel gets everything else — at 200 cols that's
-    // 200 - 32 - 32 = 136 cells for the commit graph. On wider
-    // terminals (250, 300+ cols) the side panels stay at 32 and the
-    // graph keeps growing.
-    expect(layout.mainPanelWidth).toBe(136)
+    // The wide-tier inspector grows (#2158): 200 * 0.30 = 60, within the
+    // 60 cap and leaving the main panel above its 100-cell floor.
+    expect(layout.detailWidth).toBe(60)
+    // Main panel gets everything else: 200 - 32 - 60 = 108.
+    expect(layout.mainPanelWidth).toBe(108)
   })
 
   it('keeps the sidebar pinned at 32 across very wide terminals', () => {
@@ -71,11 +68,10 @@ describe('log Ink layout', () => {
 
     expect(huge.sidebarWidth).toBe(32)
     expect(insane.sidebarWidth).toBe(32)
-    // Main panel keeps growing linearly: 300 - 32 - 32 = 236;
-    // 500 - 32 - 32 = 436. The graph view gets all the extra real
-    // estate.
-    expect(huge.mainPanelWidth).toBe(236)
-    expect(insane.mainPanelWidth).toBe(436)
+    // The inspector stops at 60 (#2158), so the main panel keeps growing
+    // linearly: 300 - 32 - 60 = 208; 500 - 32 - 60 = 408.
+    expect(huge.mainPanelWidth).toBe(208)
+    expect(insane.mainPanelWidth).toBe(408)
   })
 
   it('holds the wide-tier floor at 28 so the sidebar doesn\'t shrink at the 159→160 boundary', () => {
@@ -96,7 +92,7 @@ describe('log Ink layout', () => {
     expect(wideEdge.sidebarWidth).toBeGreaterThanOrEqual(normalEdge.sidebarWidth)
   })
 
-  it('clamps the inspector at rest to its 20-32 cell range above the rail tier', () => {
+  it('clamps the inspector at rest to its 20-32 cell range below the wide tier, and 60 in it', () => {
     // 100 columns is the lower bound of the tight tier — rail
     // collapse no longer applies, so the at-rest clamp wins.
     // 100 * 0.22 = 22 → in the 20-32 range, no clamp needed.
@@ -105,7 +101,8 @@ describe('log Ink layout', () => {
 
     expect(tight.density).toBe('tight')
     expect(tight.detailWidth).toBe(22)
-    expect(huge.detailWidth).toBe(32)
+    // Wide tier (#2158): grows toward 30% of the width, capped at 60.
+    expect(huge.detailWidth).toBe(60)
   })
 
   // #2157 — pane widths no longer follow focus. `inspectorFocused` /
@@ -572,5 +569,35 @@ describe('log Ink layout', () => {
       expect(layout.visiblePane).toBe('main')
       expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(140)
     })
+  })
+})
+
+// #2158 — on a wide terminal the inspector takes room the main panel
+// cannot use, never room history rows need.
+describe('wide-tier inspector width (#2158)', () => {
+  const widths = (columns: number) => {
+    const layout = getLogInkLayout({ columns, rows: 50 } as never)
+    return { main: layout.mainPanelWidth, detail: layout.detailWidth, sidebar: layout.sidebarWidth }
+  }
+
+  it('grows the inspector on wide terminals', () => {
+    expect(widths(200).detail).toBe(60)
+    expect(widths(180).detail).toBe(48)
+  })
+
+  it('keeps the main panel at 100 columns or more when it grows', () => {
+    for (const columns of [170, 180, 200, 240]) expect(widths(columns).main).toBeGreaterThanOrEqual(100)
+  })
+
+  it('leaves the normal tier and the bottom of the wide tier unchanged', () => {
+    expect(widths(120).detail).toBe(26)
+    expect(widths(160).detail).toBe(32)
+  })
+
+  it('still tiles the three panes across the terminal', () => {
+    for (const columns of [160, 200, 260]) {
+      const { main, detail, sidebar } = widths(columns)
+      expect(main + detail + sidebar).toBe(columns)
+    }
   })
 })
