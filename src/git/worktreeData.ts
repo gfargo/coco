@@ -63,16 +63,27 @@ async function isWorktreeDirty(git: SimpleGit, path: string): Promise<boolean> {
   }
 }
 
-export async function getWorktreeListOverview(git: SimpleGit): Promise<WorktreeOverview> {
+/**
+ * `snapshot.statusOutput` is the current worktree's `git status --porcelain`
+ * output when the caller already has it (the context loader takes one per
+ * refresh). It answers the current worktree's dirtiness, so only the others
+ * spawn their own `git status` (#2209).
+ */
+export async function getWorktreeListOverview(
+  git: SimpleGit,
+  snapshot: { statusOutput?: string } = {}
+): Promise<WorktreeOverview> {
   const currentPath = (await git.revparse(['--show-toplevel'])).trim()
   const worktrees = parseWorktreeList(await git.raw(['worktree', 'list', '--porcelain']))
 
   return {
     currentPath,
-    worktrees: await Promise.all(worktrees.map(async (worktree) => ({
-      ...worktree,
-      current: worktree.path === currentPath,
-      dirty: await isWorktreeDirty(git, worktree.path),
-    }))),
+    worktrees: await Promise.all(worktrees.map(async (worktree) => {
+      const current = worktree.path === currentPath
+      const dirty = current && snapshot.statusOutput !== undefined
+        ? Boolean(snapshot.statusOutput.trim())
+        : await isWorktreeDirty(git, worktree.path)
+      return { ...worktree, current, dirty }
+    })),
   }
 }
