@@ -144,6 +144,9 @@ jest.mock('../operations/agent', () => {
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
     runBlame: (...args: unknown[]) => mockRunBlame(...args),
     runLint: (...args: unknown[]) => mockRunLint(...args),
+    // Real implementations: zero-token, no model call (#1845).
+    runCommitValidate: (jest.requireActual('../operations/agent/validate') as typeof import('../operations/agent/validate')).runCommitValidate,
+    runCommitlintRules: (jest.requireActual('../operations/agent/validate') as typeof import('../operations/agent/validate')).runCommitlintRules,
     runCommitApply: (...args: unknown[]) => mockRunCommitApply(...args),
     runCapabilities: (...args: unknown[]) => mockRunCapabilities(...args),
   }
@@ -274,7 +277,7 @@ describe('createCocoMcpServer', () => {
     }
   }
 
-  it('registers nine read-only tools including coco_condense_diff, coco_repo_context, coco_blame, coco_lint, and coco_capabilities', () => {
+  it('registers eleven read-only tools including coco_condense_diff, coco_repo_context, coco_blame, coco_lint, the commitlint tools, and coco_capabilities', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -286,6 +289,8 @@ describe('createCocoMcpServer', () => {
       'coco_repo_context',
       'coco_blame',
       'coco_lint',
+      'coco_commit_validate',
+      'coco_commitlint_rules',
       'coco_capabilities',
     ])
     // The four LLM-generation tools share the AgentTaskInputSchema and have
@@ -1343,6 +1348,50 @@ describe('createCocoMcpServer', () => {
       }, makeExtra())
 
       expect(server.server.listRoots).not.toHaveBeenCalled()
+    })
+  })
+
+  // #1845 — zero-token commit message tools.
+  describe('coco_commit_validate / coco_commitlint_rules', () => {
+    it('validates a message with no repository and reports the rule that failed', async () => {
+      // Deferred mode, no `repo`, no client roots: no repository resolves.
+      createCocoMcpServer()
+
+      const result = await registrations.get('coco_commit_validate')!.handler({
+        message: `feat: ${'x'.repeat(120)}`,
+      }, makeExtra())
+
+      expect(result).toMatchObject({
+        structuredContent: {
+          ok: true,
+          operation: 'commit-validate',
+          data: { valid: false, rulesSource: 'built-in-conventional', repositoryConfig: 'unknown' },
+        },
+      })
+      const data = (result.structuredContent as { data: { errors: { rule: string }[] } }).data
+      expect(data.errors.map((e) => e.rule)).toContain('header-max-length')
+    })
+
+    it('passes a conforming message', async () => {
+      // Deferred mode, no `repo`, no client roots: no repository resolves.
+      createCocoMcpServer()
+      const result = await registrations.get('coco_commit_validate')!.handler({ message: 'fix(mcp): fetch roots once' }, makeExtra())
+      expect(result).toMatchObject({ structuredContent: { ok: true, data: { valid: true, errors: [] } } })
+    })
+
+    it('still refuses a repository outside the client roots', async () => {
+      const server = createCocoMcpServer() as unknown as { server: { getClientCapabilities: jest.Mock; listRoots: jest.Mock } }
+      server.server.getClientCapabilities.mockReturnValue({ roots: {} })
+      server.server.listRoots.mockResolvedValue({ roots: [{ uri: 'file:///workspace' }] })
+      const isPathWithinRootMock = jest.requireMock('../operations/agent').isPathWithinRoot as jest.Mock
+      isPathWithinRootMock.mockImplementation((child: string, root: string) => child.startsWith(root))
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/elsewhere/repo')
+      try {
+        const result = await registrations.get('coco_commitlint_rules')!.handler({ repo: '/elsewhere/repo' }, makeExtra())
+        expect(result).toMatchObject({ isError: true, structuredContent: { error: { code: 'REPOSITORY_OUTSIDE_ROOT' } } })
+      } finally {
+        isPathWithinRootMock.mockImplementation(() => true)
+      }
     })
   })
 })

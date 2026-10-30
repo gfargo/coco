@@ -387,3 +387,39 @@ export async function validateCommitMessage(
     }
   }
 }
+
+/** One commitlint finding with the rule that produced it. */
+export type CommitlintFinding = { rule: string; message: string }
+
+export type DetailedValidationResult = {
+  valid: boolean
+  errors: CommitlintFinding[]
+  warnings: CommitlintFinding[]
+}
+
+/**
+ * Like {@link validateConventionalCommitMessage}, but keeps the rule name on
+ * each finding so a caller can act on the specific rule (#1845). Never
+ * discovers or executes repository commitlint configuration.
+ */
+export async function lintWithBuiltInConventionalRules(
+  message: string,
+  options: LintOptions = {},
+): Promise<DetailedValidationResult> {
+  const { lint } = await import('@commitlint/core')
+  const result = await lint(message, BUILT_IN_CONVENTIONAL_RULES, options)
+  return {
+    valid: result.valid,
+    errors: result.errors.map((error) => ({ rule: error.name, message: error.message })),
+    warnings: result.warnings.map((warning) => ({ rule: warning.name, message: warning.message })),
+  }
+}
+
+/** The built-in conventional rules as one readable line each. */
+export function describeBuiltInConventionalRules(): string[] {
+  return getBuiltInConventionalRulesContext()
+    .split('\n')
+    .filter((line) => line.startsWith('- '))
+    .map((line) => line.slice(2))
+}
+
