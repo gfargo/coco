@@ -113,6 +113,12 @@ export const AgentOptionsSchema = z.object({
   timeframe: z.string().min(1).max(100).optional().describe(
     'Human-readable window for the summary, e.g. "last week" or "yesterday". Honored by: recap. Ignored by other operations.',
   ),
+  severity: z.number().int().min(1).max(10).optional().describe(
+    'Return only findings with severity >= this threshold (1-10), the same scale as `coco review --severity`. ' +
+    'A filter, not a gate: the call still succeeds, and a warning says how many findings were left out. ' +
+    'Filtering happens after generation, so it does not reduce token cost. Omit to return every finding. ' +
+    'Honored by: review. Ignored by other operations.',
+  ),
   trustRepositoryConfig: z.boolean().default(false).describe(
     'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety. Honored by: all operations, agent CLI only -- not present in the MCP input schema.',
   ),
