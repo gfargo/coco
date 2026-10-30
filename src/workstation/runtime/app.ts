@@ -476,7 +476,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // `refreshContext` and `refreshWorktreeContext` — the two async callbacks
   // that re-fetch git metadata. Also owns the per-frame monotonic
   // request-id refs that sequence overlapping refreshes.
-  const { refreshContext, refreshWorktreeContext } = useContextRefresh(React, {
+  const { refreshContext, refreshWorktreeContext, lastSelfRefreshAtRef } = useContextRefresh(React, {
     git,
     runtimesLength: runtimes.length,
     worktree: context.worktree,
@@ -497,6 +497,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     refreshContext,
     refreshWorktreeContext,
     refreshHistoryRows,
+    lastSelfRefreshAtRef,
   })
 
   // Per-repo sidebar tab persistence (#21). Resolve the repo root, look

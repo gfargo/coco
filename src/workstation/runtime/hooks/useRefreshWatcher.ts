@@ -38,7 +38,7 @@ export type UseRefreshWatcherDeps = {
   /** Mount flag — `onChange` no-ops once the component unmounts. */
   mountedRef: ReactTypes.MutableRefObject<boolean>
   /** Frame-tagged full-context refresher (`refreshContext`) from `app.ts`. */
-  refreshContext: (options?: { silent?: boolean }) => Promise<void>
+  refreshContext: (options?: { silent?: boolean; fromWatcher?: boolean }) => Promise<void>
   /**
    * Frame-tagged worktree-only refresher (`refreshWorktreeContext`) from
    * `app.ts`.
@@ -55,6 +55,31 @@ export type UseRefreshWatcherDeps = {
    * calls both `refreshContext()` and `refreshHistoryRows()`.
    */
   refreshHistoryRows: () => Promise<unknown>
+  /**
+   * When coco last refreshed for a change it made itself
+   * (`useContextRefresh`). A `'full'` event shortly after is the watcher
+   * seeing that same change, so it is skipped (#2209).
+   */
+  lastSelfRefreshAtRef: ReactTypes.MutableRefObject<number>
+}
+
+/**
+ * How long after coco's own refresh a `'full'` watcher event is treated as
+ * its echo. A mutation's fs events end before coco refreshes, and the
+ * watcher fires 750 ms after the last event, so the echo lands well inside
+ * this. An outside change in the same window is picked up by the next
+ * event or a manual `r`.
+ */
+export const SELF_REFRESH_MUTE_MS = 1500
+
+/**
+ * Whether a watcher event should be dropped as the echo of coco's own
+ * refresh. Only `'full'` events are muted: they are the expensive ones
+ * (every context loader plus history), and the self-refresh already
+ * reloaded all of it. A worktree-only event stays cheap and is kept.
+ */
+export function isSelfRefreshEcho(kind: LogInkRefreshKind, now: number, lastSelfRefreshAt: number): boolean {
+  return kind === 'full' && lastSelfRefreshAt > 0 && now - lastSelfRefreshAt < SELF_REFRESH_MUTE_MS
 }
 
 /**
@@ -72,13 +97,13 @@ export type UseRefreshWatcherDeps = {
 export function applyRefreshKind(
   kind: LogInkRefreshKind,
   actions: {
-    refreshContext: (options?: { silent?: boolean }) => Promise<unknown>
+    refreshContext: (options?: { silent?: boolean; fromWatcher?: boolean }) => Promise<unknown>
     refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<unknown>
     refreshHistoryRows: () => Promise<unknown>
   },
 ): void {
   if (kind === 'full') {
-    void actions.refreshContext({ silent: true })
+    void actions.refreshContext({ silent: true, fromWatcher: true })
     void actions.refreshHistoryRows()
   } else {
     void actions.refreshWorktreeContext({ silent: true })
@@ -100,7 +125,7 @@ export function useRefreshWatcher(
   React: typeof ReactTypes,
   deps: UseRefreshWatcherDeps,
 ): void {
-  const { git, mountedRef, refreshContext, refreshWorktreeContext, refreshHistoryRows } = deps
+  const { git, mountedRef, refreshContext, refreshWorktreeContext, refreshHistoryRows, lastSelfRefreshAtRef } = deps
 
   // Live refresh: watch .git metadata + the working tree root and reload
   // context when something changes outside the TUI (editor save, external
@@ -134,6 +159,9 @@ export function useRefreshWatcher(
           debounceMs: 750,
           onChange: (kind) => {
             if (!mountedRef.current) {
+              return
+            }
+            if (isSelfRefreshEcho(kind, Date.now(), lastSelfRefreshAtRef.current)) {
               return
             }
             applyRefreshKind(kind, {
