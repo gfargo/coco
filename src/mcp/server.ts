@@ -35,6 +35,7 @@ import {
     createAgentOperationContext,
     describeRepoResolutionFailure,
     digestOf,
+    expandChangeSource,
     getBranchContext,
     getRecentLog,
     getRepoConfig,
@@ -328,6 +329,7 @@ function registerGenerationTool(
       })
       const result = await runAgentOperation(operation, {
         ...input,
+        source: await expandChangeSource(input.source, context),
         options: { ...input.options, trustRepositoryConfig: false },
       }, context)
       return {

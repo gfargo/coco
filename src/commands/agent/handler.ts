@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
 
 import {
+    expandChangeSource,
     AgentOperation,
     AgentOperationError,
     AgentTaskInputSchema,
@@ -251,7 +252,7 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
         signal: controller.signal,
         surface: 'agent-cli',
       })
-      emit(await runAgentOperation(operation, input, context))
+      emit(await runAgentOperation(operation, { ...input, source: await expandChangeSource(input.source, context) }, context))
     }
   } catch (error) {
     const normalized = error instanceof SyntaxError
