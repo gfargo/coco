@@ -38,7 +38,9 @@ design → tasks).
 - **Node ≥ 22** (`.nvmrc` = 22.22.2). The test toolchain breaks on older Node.
 - **Respect the layering.** `src/lib/` must not import from `git/`, `workstation/`, or
   `commands/`. If a shared type seems to require an upward import, move the type down
-  into `lib/` instead. (A few legacy violations exist; don't add more.)
+  into `lib/` instead. `npm run lint` enforces this (`no-restricted-imports` in
+  `.eslintrc`); the files that predate the rule are on a frozen allowlist there —
+  remove entries as you fix them, never add one.
 - **Forge work goes through the adapter.** Add capabilities to the `ForgeActions` type
   in `src/git/forgeActions.ts` and implement for every provider (or return an explicit
   "unsupported on <forge>" result). Never branch on provider inside a surface.

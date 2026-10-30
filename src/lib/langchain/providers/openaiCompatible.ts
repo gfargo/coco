@@ -1,5 +1,5 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models'
-import type { Config } from '../../../commands/types'
+import type { Config } from '../../config/types'
 import type { LLMProvider } from '../types'
 import { createOpenAiLlm } from './openai'
 import type { CreateLlmArgs, ProviderDefinition } from './types'

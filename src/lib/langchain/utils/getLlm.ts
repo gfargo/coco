@@ -1,4 +1,4 @@
-import { Config } from '../../../commands/types'
+import { Config } from '../../config/types'
 import { LLMModel, LLMProvider } from '../types'
 import { getApiKeyForModel } from '../utils'
 import { LangChainExecutionError, LangChainConfigurationError } from '../errors'
