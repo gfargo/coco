@@ -53,11 +53,14 @@ export function getAsciiDialect(): boolean {
  * on whitespace where possible; falls back to mid-word splits when a single
  * word is wider than the budget. Preserves blank input as a single empty
  * line so `value.split('\n').flatMap(wrapCells)` round-trips cleanly.
+ * A non-positive budget (a hidden pane is laid out at width 0) fits
+ * nothing, so it yields one empty line rather than the unwrapped text,
+ * which Ink would render as a row overflowing the frame (#1869).
  */
 export function wrapCells(rawValue: string, width: number): string[] {
   const value = stripTerminalControl(rawValue)
   if (width < 1) {
-    return [value]
+    return ['']
   }
   if (cellWidth(value) <= width) {
     return [value]

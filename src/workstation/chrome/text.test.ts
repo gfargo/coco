@@ -160,6 +160,13 @@ describe('log Ink text helpers', () => {
   })
 
   describe('wrapCells', () => {
+    // #1869 — a hidden pane is laid out at width 0 and the detail surface
+    // derives `width - 4` from it; the text must not come back unwrapped.
+    it('returns a single empty line for a non-positive budget', () => {
+      expect(wrapCells('a long subject line that would overflow', 0)).toEqual([''])
+      expect(wrapCells('a long subject line that would overflow', -4)).toEqual([''])
+    })
+
     it('never hangs when the budget is narrower than one wide character', () => {
       // Regression: an empty chunk never shrank `remaining`, spinning
       // the hard-split loop forever. Width 1 vs width-2 CJK chars must
