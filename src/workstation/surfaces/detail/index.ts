@@ -398,7 +398,7 @@ function renderInspectorAtRest(
   width: number,
   theme: LogInkTheme
 ): ReactTypes.ReactElement[] {
-  const innerWidth = width - 4
+  const innerWidth = Math.max(1, width - 4)
   const subjectLines = wrapCells(detail.message, innerWidth).slice(0, 2)
   const metaLine = `${compactHash(detail.hash)} · ${detail.date}`
   const statLine = formatCommitStatLine(detail.stats)
@@ -433,7 +433,7 @@ function renderInspectorNotesSection(
   noteLoaded: boolean,
   focused: boolean
 ): ReactTypes.ReactElement[] {
-  const innerWidth = width - 4
+  const innerWidth = Math.max(1, width - 4)
   const nodes: ReactTypes.ReactElement[] = [
     h(Text, { key: 'notes-spacer' }, ''),
     h(Text, { key: 'notes-title' }, focused ? '[Notes]' : 'Notes:'),
