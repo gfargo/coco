@@ -213,6 +213,11 @@ export function useHistoryCursorSync(
         return cancelPendingLoad
       case 'jump':
         lastSyncedHashRef.current = decision.hash
+        // Loaded now, so the earlier attempt succeeded. Forget it: a later
+        // replaceRows (watcher or post-op refresh) drops anchored rows, and
+        // a stale entry would turn the next visit into a false
+        // "unreachable" instead of a refetch (final review).
+        attemptedContextHashesRef.current.delete(decision.hash)
         dispatch({ type: 'selectCommitByHash', hash: decision.hash })
         dispatch({
           type: 'setStatus',
@@ -220,6 +225,10 @@ export function useHistoryCursorSync(
         })
         return cancelPendingLoad
       case 'load-context': {
+        // The cursor is on a different ref from the one last synced, so
+        // returning to that one must re-check it rather than read as a
+        // duplicate: its rows may have been replaced meanwhile (final review).
+        lastSyncedHashRef.current = undefined
         // Debounced (#2209): holding `j` through old tags used to start
         // a `git log` for every row passed. The fetch fires only once the
         // cursor rests; a move before then re-runs this effect, whose
@@ -245,6 +254,7 @@ export function useHistoryCursorSync(
         return cancelPendingLoad
       }
       case 'unreachable':
+        lastSyncedHashRef.current = undefined
         dispatch({
           type: 'setStatus',
           value: `${decision.target.label} target commit is unreachable — not in any walked ref's history.`,

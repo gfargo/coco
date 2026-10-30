@@ -629,29 +629,40 @@ export function applySeverityThreshold(
  * source (patch, files, summary) is generated from as given, with base and
  * head still read from the repository.
  */
+/** `origin/main` → `main`: the branch a PR targets, from a ref naming it. */
+function toBranchName(ref: string): string {
+  return ref.replace(/^origin\//, '')
+}
+
 export async function generateAgentPrDraft(
   input: AgentTaskInput,
   context: AgentOperationContext,
 ): Promise<AgentSuccessEnvelope<PrDraftData> | AgentPlannedEnvelope> {
-  const { head, defaultBase, defaultBaseRef } = await readPullRequestBranches(context)
+  const { head: checkedOut, defaultBase, defaultBaseRef } = await readPullRequestBranches(context)
+  const branchScope = input.source.kind === 'repository' && input.source.scope.type === 'branch'
+    ? input.source.scope
+    : undefined
+  // A branch source may name its head; the draft describes that branch,
+  // not whatever happens to be checked out (final review).
+  const requestedHead = branchScope?.head && branchScope.head !== 'HEAD' ? branchScope.head : undefined
+  const head = requestedHead ? toBranchName(requestedHead) : checkedOut
   if (!head) {
     throw new AgentOperationError('INVALID_REVISION', 'pr-draft needs a checked-out branch; HEAD is detached.')
   }
-  const sourceBase = input.source.kind === 'repository' && input.source.scope.type === 'branch'
-    ? input.source.scope.base
-    : undefined
   // The ref the diff runs against, and the branch name the request targets
-  // (a remote-tracking ref like `origin/main` targets `main`).
-  const baseRef = input.options.base ?? sourceBase ?? defaultBaseRef
-  const base = input.options.base ?? (sourceBase ? sourceBase.replace(/^origin\//, '') : defaultBase)
+  // (a remote-tracking ref like `origin/main` targets `main`). options.base
+  // is normalised the same way as the source's base.
+  const requestedBase = input.options.base ?? branchScope?.base
+  const baseRef = requestedBase ?? defaultBaseRef
+  const base = requestedBase ? toBranchName(requestedBase) : defaultBase
   if (base === head) {
     throw new AgentOperationError(
       'INVALID_INPUT',
-      `The current branch is the base branch ('${base}'). Check out a feature branch, or pass options.base.`,
+      `The head branch is the base branch ('${base}'). Check out a feature branch, or pass options.base.`,
     )
   }
   const source: ChangeSource = input.source.kind === 'repository' && input.source.scope.type !== 'range'
-    ? { kind: 'repository', scope: { type: 'branch', base: baseRef } }
+    ? { kind: 'repository', scope: { type: 'branch', base: baseRef, ...(requestedHead ? { head: requestedHead } : {}) } }
     : input.source
   const result = await generateAgentChangelog({ ...input, source }, context)
   if (result.status === 'planned') {

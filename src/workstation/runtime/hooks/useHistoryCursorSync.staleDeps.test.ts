@@ -152,3 +152,44 @@ describe('useHistoryCursorSync retries a ref whose fetch was superseded', () => 
     expect(statuses.some((value: string) => /unreachable/.test(value))).toBe(false)
   })
 })
+
+// Final review: once an anchored load landed and the cursor jumped there, a
+// replaceRows (watcher refresh) dropped those rows, but the hash stayed
+// "attempted", so coming back reported a reachable ref as unreachable.
+describe('useHistoryCursorSync refetches a ref whose loaded rows were replaced', () => {
+  const FAR_A = 'fffffff6666666666666666666666666666666ff'
+  const FAR_B = '0000000777777777777777777777777777777700'
+  const farContext = {
+    branches: { localBranches: [ref('far-a', FAR_A), ref('far-b', FAR_B)], remoteBranches: [], dirty: false },
+    tags: { tags: [] },
+    stashes: { stashes: [] },
+  } as never
+
+  beforeEach(() => { jest.useFakeTimers(); dispatch.mockClear() })
+  afterEach(() => jest.useRealTimers())
+
+  it('loads it again after a replace instead of warning', async () => {
+    const harness = makeHookHarness()
+    const calls: string[] = []
+    const load = async (target: { hash: string }) => { calls.push(target.hash) }
+    const renderWith = (index: number, extra: string[]) => {
+      const state = { ...branches({ selectedBranchIndex: index, selectedBranchId: undefined }) } as LogInkState
+      harness.render((React) =>
+        useHistoryCursorSync(React, { dispatch, context: farContext, state: { ...state, filteredCommits: [...baseState.filteredCommits, ...extra.map(commit)] } as never })
+      ).current = load as never
+    }
+
+    renderWith(0, [])
+    jest.advanceTimersByTime(CURSOR_SYNC_LOAD_DEBOUNCE_MS)
+    await Promise.resolve(); await Promise.resolve()
+    renderWith(0, [FAR_A]) // the anchored rows land: jump
+    renderWith(1, [FAR_A]) // cursor moves on
+    renderWith(1, []) // a watcher replaceRows drops the anchored rows
+    renderWith(0, []) // and the cursor comes back
+    jest.advanceTimersByTime(CURSOR_SYNC_LOAD_DEBOUNCE_MS)
+
+    expect(calls.filter((hash) => hash === FAR_A)).toEqual([FAR_A, FAR_A])
+    const statuses = dispatch.mock.calls.map(([action]) => action.value).filter(Boolean)
+    expect(statuses.some((value: string) => /unreachable/.test(value))).toBe(false)
+  })
+})
