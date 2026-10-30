@@ -503,7 +503,9 @@ export async function getLogRowsAnchoredOn(
   // ref that starts with a dash (or collides with a filename) is
   // treated as a ref, not an option.
   baseArgs.push('--end-of-options', targetHash)
-  return parseLogOutput(await git.raw(baseArgs))
+  // Cursor-sync to a stash anchors on the stash commit, which walks its
+  // index / untracked helpers too; hide them like the main window does.
+  return hideStashHelperCommits(parseLogOutput(await git.raw(baseArgs)))
 }
 
 /**
@@ -525,6 +527,53 @@ export function buildToggleGraphArgs(argv: LogArgv, fullGraph: boolean): LogArgv
   return { ...argv, view: argv.view ?? 'compact' }
 }
 
+const STASH_TIP_SUBJECT = /^(WIP on|On) [^:]+: /
+const STASH_HELPER_SUBJECT = /^(index on|untracked files on) [^:]+: /
+
+/**
+ * Hide stash plumbing from the history graph (#2159). A stash commit has the
+ * stashed base as its first parent, plus an `index on <branch>:` commit and,
+ * with -u, an `untracked files on <branch>:` commit. Those helpers render as
+ * ordinary rows and lanes and dominated the top of history; nobody acts on
+ * them. The stash tip stays (so the stash sidebar can still cursor-sync to
+ * it), shown as a one-parent commit on its base.
+ *
+ * A commit counts as a stash tip when its hash is in `knownStashes`, or when
+ * its subject has the stash form and a non-first parent loaded here has the
+ * helper form. Only rows the TUI loads with stash roots go through this, so
+ * `coco log`'s ASCII graph is untouched.
+ */
+export function hideStashHelperCommits(rows: GitLogRow[], knownStashes: readonly string[] = []): GitLogRow[] {
+  const known = new Set(knownStashes)
+  const byHash = new Map<string, GitLogCommitRow>()
+  for (const row of rows) if (row.type === 'commit') byHash.set(row.hash, row)
+
+  const helperHashes = new Set<string>()
+  const tips = new Set<string>()
+  for (const row of byHash.values()) {
+    if (row.parents.length < 2) continue
+    const extras = row.parents.slice(1)
+    const loadedHelper = extras.some((hash) => STASH_HELPER_SUBJECT.test(byHash.get(hash)?.message ?? ''))
+    const isTip = known.has(row.hash) || (STASH_TIP_SUBJECT.test(row.message) && loadedHelper)
+    if (!isTip) continue
+    tips.add(row.hash)
+    for (const hash of extras) {
+      const helper = byHash.get(hash)
+      if (!helper || STASH_HELPER_SUBJECT.test(helper.message)) helperHashes.add(hash)
+    }
+  }
+  if (tips.size === 0) return rows
+
+  return rows.flatMap((row): GitLogRow[] => {
+    if (row.type !== 'commit') return [row]
+    if (helperHashes.has(row.hash)) return []
+    if (tips.has(row.hash)) {
+      return [{ ...row, parents: row.parents.filter((hash, index) => index === 0 || !helperHashes.has(hash)) }]
+    }
+    return [row]
+  })
+}
+
 export async function getLogRows(
   git: SimpleGit,
   argv: LogArgv,
@@ -541,7 +590,10 @@ export async function getLogRows(
   // translation catalog (#1708 — 'does not have any commits yet' /
   // 'bad default revision' are only the English strings).
   try {
-    return parseLogOutput(await git.raw(buildLogArgs(argv, options)))
+    const rows = parseLogOutput(await git.raw(buildLogArgs(argv, options)))
+    // The TUI passes the stash commits as extra roots; that is the only
+    // caller whose rows contain stash plumbing worth hiding (#2159).
+    return options.extraRefs?.length ? hideStashHelperCommits(rows, options.extraRefs) : rows
   } catch (err: unknown) {
     if (await isEmptyRepo(git)) {
       return []
