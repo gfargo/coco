@@ -72,3 +72,28 @@ describe('getBuiltInConventionalRulesContext (OSS-1326 / #1854)', () => {
     expect(context).not.toContain('sentence-case,start-case')
   })
 })
+
+// #1845 — the detailed variant keeps each finding's rule name.
+describe('lintWithBuiltInConventionalRules', () => {
+  async function lintDetailed(message: string): Promise<{ valid: boolean; errors: { rule: string; message: string }[] }> {
+    const moduleUrl = pathToFileURL(path.resolve(process.cwd(), 'src/lib/utils/commitlintValidator.ts')).href
+    const script = `
+      const loaded = await import(${JSON.stringify(moduleUrl)});
+      const lint = loaded.lintWithBuiltInConventionalRules ?? loaded.default?.lintWithBuiltInConventionalRules;
+      process.stdout.write(JSON.stringify(await lint(${JSON.stringify(message)})));
+    `
+    const { stdout } = await execFileAsync(process.execPath, ['--import', 'tsx', '--input-type=module', '--eval', script], { cwd: process.cwd() })
+    return JSON.parse(stdout)
+  }
+
+  it('names the rule each error comes from', async () => {
+    const result = await lintDetailed(`feat: ${'x'.repeat(120)}`)
+    expect(result.valid).toBe(false)
+    expect(result.errors.map((error) => error.rule)).toContain('header-max-length')
+  })
+
+  it('passes a conforming message', async () => {
+    await expect(lintDetailed('fix(mcp): fetch roots once')).resolves.toMatchObject({ valid: true, errors: [] })
+  })
+})
+

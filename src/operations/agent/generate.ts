@@ -744,6 +744,14 @@ export async function runAgentOperation(
         'lint must be dispatched via runLint, not runAgentOperation.',
         false,
       )
+    case 'commit-validate':
+    case 'commitlint-rules':
+      // Zero-token tools with their own request schemas (validate.ts).
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        `${operation} must be dispatched via runCommitValidate / runCommitlintRules, not runAgentOperation.`,
+        false,
+      )
   }
 }
 

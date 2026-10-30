@@ -43,6 +43,12 @@ import {
     getRepoTree,
     getStagedDiff,
     isPathWithinRoot,
+    CommitlintRulesDataSchema,
+    CommitlintRulesRequest,
+    CommitlintRulesRequestSchema,
+    CommitValidateDataSchema,
+    CommitValidateRequest,
+    CommitValidateRequestSchema,
     LintDataSchema,
     LintRequestSchema,
     MAX_BLAME_EXPLAIN_COMMITS,
@@ -61,6 +67,8 @@ import {
     runCapabilities,
     runCommitApply,
     runCondenseDiff,
+    runCommitlintRules,
+    runCommitValidate,
     runLint,
     runRepoContext,
     toAgentOperationError,
@@ -886,6 +894,81 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
       }
     }
   })
+
+  // Zero-token commit message tools (#1845). No model call, no API key, no
+  // network. Repository commitlint config is executable and is never loaded;
+  // a repository is optional and only used to report whether one defines
+  // its own config, so these work before any repository is known.
+  const registerCommitlintTool = <T extends 'commit-validate' | 'commitlint-rules'>(
+    name: string,
+    operation: T,
+    config: { title: string; description: string; inputSchema: z.ZodObject; dataSchema: z.ZodType },
+    run: (input: never, repoRoot: string | undefined) => Promise<Record<string, unknown>>,
+  ) => {
+    server.registerTool(name, {
+      title: config.title,
+      description: config.description,
+      inputSchema: config.inputSchema,
+      outputSchema: createAgentMcpOutputSchema(operation, config.dataSchema),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    }, async (rawInput, extra) => {
+      try {
+        const input = config.inputSchema.parse(rawInput) as { repo?: string }
+        let resolvedRepoRoot: string | undefined
+        try {
+          resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+          await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
+        } catch (error) {
+          // Confinement violations are refusals, not "no repository".
+          const code = error instanceof AgentOperationError ? error.code : undefined
+          if (code === 'REPOSITORY_OUTSIDE_ROOT' || code === 'REPOSITORY_MISMATCH' || code === 'CANCELLED') throw error
+          resolvedRepoRoot = undefined
+        }
+        const result = await run(input as never, resolvedRepoRoot)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+          structuredContent: result,
+        }
+      } catch (error) {
+        const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+          structuredContent: failure,
+        }
+      }
+    })
+  }
+
+  registerCommitlintTool('coco_commit_validate', 'commit-validate', {
+    title: 'Validate a commit message',
+    description: [
+      "Check a commit message you wrote against coco's built-in Conventional Commits rules, before committing.",
+      'Returns `valid`, plus `errors` and `warnings` each naming the commitlint rule (e.g. `header-max-length`).',
+      'No model call, no API key, no network: call it on every commit, in a draft, validate, repair loop.',
+      "Repository commitlint config is never loaded (it is executable). `repositoryConfig: \"detected\"` means the",
+      "repository defines its own rules, so a pass here is advisory. Read-only.",
+    ].join(' '),
+    inputSchema: CommitValidateRequestSchema,
+    dataSchema: CommitValidateDataSchema,
+  }, (input: CommitValidateRequest, root) => runCommitValidate(input, root))
+
+  registerCommitlintTool('coco_commitlint_rules', 'commitlint-rules', {
+    title: 'List commit message rules',
+    description: [
+      'List the rules coco_commit_validate checks against, one readable line each, so a message can conform on the',
+      "first attempt. These are coco's built-in Conventional Commits rules; repository commitlint config is never",
+      'loaded. `repositoryConfig` reports whether the repository defines its own (by file presence only).',
+      'No model call, no API key, no network. Read-only.',
+    ].join(' '),
+    inputSchema: CommitlintRulesRequestSchema,
+    dataSchema: CommitlintRulesDataSchema,
+  }, (input: CommitlintRulesRequest, root) => runCommitlintRules(input, root))
 
   if (allowWrite) registerCommitApplyTool(server, repoRoot)
 
