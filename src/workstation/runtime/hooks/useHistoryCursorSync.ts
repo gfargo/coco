@@ -71,6 +71,9 @@ import { getSelectedBranch, getSelectedStash, getSelectedTag } from '../selectio
 import type { LogInkContext } from '../types'
 
 /** Forward-reference signature for the bridged targeted-context loader. */
+/** How long the cursor has to rest on a ref before its commits are fetched (#2209). */
+export const CURSOR_SYNC_LOAD_DEBOUNCE_MS = 150
+
 export type LoadCommitContextFn = (target: { hash: string; label: string }) => Promise<void>
 
 export type UseHistoryCursorSyncDeps = {
@@ -114,6 +117,10 @@ export function useHistoryCursorSync(
   // so the race that bit the previous auto-load chain doesn't recur.
   const loadCommitContextRef = React.useRef<LoadCommitContextFn | null>(null)
   React.useEffect(() => {
+    let pendingLoad: ReturnType<typeof setTimeout> | undefined
+    const cancelPendingLoad = () => {
+      if (pendingLoad !== undefined) clearTimeout(pendingLoad)
+    }
     const onBranchTab = state.activeView === 'branches' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'branches')
     const onTagTab = state.activeView === 'tags' ||
@@ -125,7 +132,7 @@ export function useHistoryCursorSync(
     // `refs/stash` tree, visible under `--all` / fullGraph).
     const onStashTab = state.activeView === 'stash' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
-    if (!onBranchTab && !onTagTab && !onStashTab) return
+    if (!onBranchTab && !onTagTab && !onStashTab) return cancelPendingLoad
 
     let targetHash: string | undefined
     let targetLabel: string | undefined
@@ -202,7 +209,7 @@ export function useHistoryCursorSync(
 
     switch (decision.type) {
       case 'noop':
-        return
+        return cancelPendingLoad
       case 'jump':
         lastSyncedHashRef.current = decision.hash
         dispatch({ type: 'selectCommitByHash', hash: decision.hash })
@@ -210,25 +217,34 @@ export function useHistoryCursorSync(
           type: 'setStatus',
           value: `Synced history to ${decision.label} tip`,
         })
-        return
-      case 'load-context':
-        // Mark the hash as attempted BEFORE firing the load so a
-        // re-fire of this effect (state.filteredCommits change while
-        // the load is in flight) doesn't kick off a duplicate
-        // request. The resolver sees the hash in the set and
-        // returns `noop` until the load completes; on completion the
-        // appendRows triggers a final re-fire that either jumps or
-        // returns `unreachable`.
-        attemptedContextHashesRef.current.add(decision.target.hash)
-        void loadCommitContextRef.current?.(decision.target)
-        return
+        return cancelPendingLoad
+      case 'load-context': {
+        // Debounced (#2209): holding `j` through old tags used to start
+        // a `git log` for every row passed. The fetch fires only once the
+        // cursor rests; a move before then re-runs this effect, whose
+        // cleanup cancels the pending one.
+        //
+        // The hash is marked attempted when the fetch fires, not before,
+        // so a cancelled one is retried when the cursor comes back. Once
+        // marked, a re-fire while the load is in flight (state.filteredCommits
+        // change) sees it and returns `noop` instead of a duplicate request;
+        // on completion the appendRows triggers a final re-fire that
+        // either jumps or returns `unreachable`.
+        const target = decision.target
+        pendingLoad = setTimeout(() => {
+          pendingLoad = undefined
+          attemptedContextHashesRef.current.add(target.hash)
+          void loadCommitContextRef.current?.(target)
+        }, CURSOR_SYNC_LOAD_DEBOUNCE_MS)
+        return cancelPendingLoad
+      }
       case 'unreachable':
         dispatch({
           type: 'setStatus',
           value: `${decision.target.label} target commit is unreachable — not in any walked ref's history.`,
           kind: 'warning',
         })
-        return
+        return cancelPendingLoad
     }
     // The dependency list is deliberately field-by-field rather than the whole
     // `state` / `context`: this effect jumps the history cursor, so it must
