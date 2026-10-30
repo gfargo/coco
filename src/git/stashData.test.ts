@@ -269,6 +269,17 @@ describe('log stash data', () => {
     })
   })
 
+  // #2209 — the diff surface parses on every render; results are kept per
+  // lines array.
+  it('parseStashDiffFiles reuses its result for the same lines array only', () => {
+    const lines = ['diff --git a/x.ts b/x.ts', 'index 1..2 100644']
+    expect(parseStashDiffFiles(lines)).toBe(parseStashDiffFiles(lines))
+    expect(parseStashDiffFiles([...lines, 'diff --git a/y.ts b/y.ts'])).toEqual([
+      { path: 'x.ts', startLine: 0 },
+      { path: 'y.ts', startLine: 2 },
+    ])
+  })
+
   // #791 follow-up — the diff surface uses this to decide which file
   // header to highlight as "active" while the user scrolls a multi-file
   // stash patch.

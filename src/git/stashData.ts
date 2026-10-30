@@ -181,7 +181,22 @@ export type StashDiffFile = {
  * `---`/`+++`/`rename to`/`copy to` fallback lines each accept a quoted
  * *or* unquoted form independently and unescape whichever one matched.
  */
+/**
+ * The diff surface asks for this on every render of a stash or PR patch
+ * (#2209), so results are kept per lines array, which only changes when the
+ * diff is reloaded.
+ */
+const stashDiffFilesCache = new WeakMap<readonly string[], StashDiffFile[]>()
+
 export function parseStashDiffFiles(lines: string[]): StashDiffFile[] {
+  const cached = stashDiffFilesCache.get(lines)
+  if (cached) return cached
+  const files = computeStashDiffFiles(lines)
+  stashDiffFilesCache.set(lines, files)
+  return files
+}
+
+function computeStashDiffFiles(lines: string[]): StashDiffFile[] {
   const files: StashDiffFile[] = []
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]

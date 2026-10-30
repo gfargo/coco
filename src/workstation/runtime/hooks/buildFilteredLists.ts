@@ -70,10 +70,36 @@ export type FilteredLists = {
  * logic — including the multi-field match arrays for issues and PRs — is
  * lifted verbatim from the original `app.ts` memos.
  */
+/**
+ * Results per context object, filter and sort modes (#2209). `useFilteredLists`
+ * memoizes its own call, but the sidebar renders through this directly and
+ * re-derived every list on every frame. `context` is replaced, never mutated,
+ * whenever a slice reloads, so its identity is a sound key.
+ */
+const filteredListsCache = new WeakMap<LogInkContext, Map<string, FilteredLists>>()
+
 export function buildFilteredLists(
   context: LogInkContext,
   filter: string | undefined,
   sorts: FilteredListSorts = {},
+): FilteredLists {
+  const key = `${sorts.branchSort ?? ''}\u0000${sorts.tagSort ?? ''}\u0000${filter ?? ''}`
+  let byKey = filteredListsCache.get(context)
+  const cached = byKey?.get(key)
+  if (cached) return cached
+  const lists = computeFilteredLists(context, filter, sorts)
+  if (!byKey) {
+    byKey = new Map()
+    filteredListsCache.set(context, byKey)
+  }
+  byKey.set(key, lists)
+  return lists
+}
+
+function computeFilteredLists(
+  context: LogInkContext,
+  filter: string | undefined,
+  sorts: FilteredListSorts,
 ): FilteredLists {
   // Branches and tags are SORTED before filtering, with the same
   // comparators the surfaces render with (current-branch-first +
