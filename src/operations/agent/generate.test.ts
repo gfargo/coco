@@ -13,6 +13,7 @@ import {
   generateAgentChangelog,
   generateAgentCommitDraft,
   generateAgentRecap,
+  applySeverityThreshold,
   generateAgentReview,
 } from './generate'
 import { AGENT_PROTOCOL_VERSION, AgentOptionsSchema, AgentTaskInput } from './schemas'
@@ -677,3 +678,38 @@ describe('agent generate dryRun planning (OSS-1206)', () => {
     expect(mockGenerateCommitDraft).not.toHaveBeenCalled()
   })
 })
+
+// #1828 — the agent counterpart of `coco review --severity`, as a filter.
+describe('review severity threshold (#1828)', () => {
+  const finding = (severity: number) => ({
+    title: `s${severity}`, summary: 'x', severity, category: 'bug', filePath: 'a.ts',
+  }) as never
+
+  it('keeps findings at or above the threshold and says how many were left out', () => {
+    expect(applySeverityThreshold([finding(9), finding(5), finding(4), finding(1)], 5)).toEqual({
+      kept: [finding(9), finding(5)],
+      omittedWarning: '2 findings below severity 5 were omitted.',
+    })
+    expect(applySeverityThreshold([finding(9), finding(2)], 5).omittedWarning).toBe('1 finding below severity 5 was omitted.')
+  })
+
+  it('returns every finding, with no warning, when there is no threshold or nothing is dropped', () => {
+    expect(applySeverityThreshold([finding(1), finding(9)], undefined)).toEqual({ kept: [finding(1), finding(9)] })
+    expect(applySeverityThreshold([finding(7)], 5)).toEqual({ kept: [finding(7)] })
+  })
+
+  it('filters the review envelope and adds the warning', async () => {
+    mockExecuteChain.mockResolvedValueOnce([finding(3), finding(8)] as never)
+    const input = { ...baseInput, options: AgentOptionsSchema.parse({ severity: 5 }) }
+    const result = await generateAgentReview(input, makeContext(undefined))
+
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.data.findings.map((f) => f.severity)).toEqual([8])
+    expect(result.warnings).toContain('1 finding below severity 5 was omitted.')
+  })
+
+  it.each([0, 11, 2.5, Number.NaN])('rejects severity %p', (severity) => {
+    expect(AgentOptionsSchema.safeParse({ severity }).success).toBe(false)
+  })
+})
+
