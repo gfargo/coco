@@ -1,6 +1,7 @@
 import {
     AgentOperation,
     AgentOptions,
+    AgentTaskInput,
     AgentTaskInputSchema,
     ChangeSource,
     createAgentOperationContext,
@@ -91,7 +92,8 @@ export const handler: CommandHandler<WatchArgv> = async (argv, logger) => {
     dryRun: false,
   }
 
-  const input = AgentTaskInputSchema.parse({ source, options })
+  // `source` is built above as an object, never a shorthand string.
+  const input: AgentTaskInput = { ...AgentTaskInputSchema.parse({ source, options }), source }
 
   const debounceMs = argv.debounce ?? 500
   const intervalMs = argv.interval ?? 15000

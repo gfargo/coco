@@ -12,7 +12,7 @@ import { getRepo } from '../../lib/simple-git/getRepo'
 import { Logger } from '../../lib/utils/logger'
 import { isPathWithinRoot } from '../../lib/utils/pathWithinRoot'
 import { AgentOperationError } from './errors'
-import { AgentOperation, ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
+import { AgentOperation, ChangeSource, ChangeSourceShorthand, CHANGE_SOURCE_SHORTHANDS, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
 
 // Re-export so existing importers (mcp/server.ts, context.test.ts) continue to
 // resolve from this module without changes.
@@ -306,9 +306,61 @@ export async function resolveAgentRepoRoot(
  * All other supplied-source operations (review, changelog, recap with
  * patch/summary/files) do not.
  */
-export function requiresRepository(operation: AgentOperation, source: ChangeSource): boolean {
-  // pr-draft reads the current branch and its base even for a supplied source.
-  return operation === 'commit-draft' || operation === 'pr-draft' || source.kind === 'repository'
+export function requiresRepository(operation: AgentOperation, source: ChangeSource | ChangeSourceShorthand): boolean {
+  // Every shorthand names a repository source; pr-draft reads the current
+  // branch and its base even for a supplied source.
+  return operation === 'commit-draft' || operation === 'pr-draft' || typeof source === 'string' || source.kind === 'repository'
+}
+
+/**
+ * Expand a source shorthand (#2041) into the object form, reading the
+ * repository where the shorthand needs it (the last tag, the default
+ * branch). Objects pass through unchanged.
+ */
+export async function expandChangeSource(
+  source: ChangeSource | ChangeSourceShorthand,
+  context: AgentOperationContext,
+): Promise<ChangeSource> {
+  if (typeof source !== 'string') return source
+  if (source === 'staged' || source === 'worktree') {
+    return { kind: 'repository', scope: { type: source } }
+  }
+  if (source === 'since-last-tag') {
+    let tag = ''
+    try {
+      tag = (await runAgentGit(context, ['describe', '--tags', '--abbrev=0', 'HEAD'])).trim()
+    } catch {
+      // No tag reachable from HEAD: reported below.
+    }
+    if (!tag) {
+      throw new AgentOperationError('INVALID_REVISION', '`since-last-tag` needs a tag reachable from HEAD, and none was found.')
+    }
+    return { kind: 'repository', scope: { type: 'range', from: tag, to: 'HEAD' } }
+  }
+  if (source === 'branch') {
+    return { kind: 'repository', scope: { type: 'branch', base: await defaultBranchRef(context) } }
+  }
+  if (source.startsWith('branch:')) {
+    return { kind: 'repository', scope: { type: 'branch', base: source.slice('branch:'.length) } }
+  }
+  if (/^HEAD~\d+$/.test(source)) {
+    return { kind: 'repository', scope: { type: 'branch', base: source } }
+  }
+  throw new AgentOperationError(
+    'INVALID_INPUT',
+    `Unknown source shorthand '${source}'. Use one of: ${CHANGE_SOURCE_SHORTHANDS.join(', ')}, or a source object.`,
+  )
+}
+
+/** `origin/HEAD`'s target (e.g. `origin/main`), else `main`. */
+async function defaultBranchRef(context: AgentOperationContext): Promise<string> {
+  try {
+    const ref = (await runAgentGit(context, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])).trim()
+    if (ref) return ref
+  } catch {
+    // No origin/HEAD (no remote, or never set): fall through.
+  }
+  return 'main'
 }
 
 export async function createAgentOperationContext(input: {

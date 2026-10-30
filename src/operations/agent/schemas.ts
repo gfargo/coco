@@ -121,6 +121,12 @@ export const AgentOptionsSchema = z.object({
     'Echoed back as `draft` so a caller can open the request as a draft later. coco never opens it. ' +
     'Honored by: pr-draft. Ignored by other operations.',
   ),
+  severity: z.number().int().min(1).max(10).optional().describe(
+    'Return only findings with severity >= this threshold (1-10), the same scale as `coco review --severity`. ' +
+    'A filter, not a gate: the call still succeeds, and a warning says how many findings were left out. ' +
+    'Filtering happens after generation, so it does not reduce token cost. Omit to return every finding. ' +
+    'Honored by: review. Ignored by other operations.',
+  ),
   trustRepositoryConfig: z.boolean().default(false).describe(
     'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety. Honored by: all operations, agent CLI only -- not present in the MCP input schema.',
   ),
@@ -134,10 +140,33 @@ export const AgentOptionsSchema = z.object({
   ),
 }).strict()
 
+/**
+ * Shorthand strings for the common repository sources (#2041), accepted in
+ * place of a `source` object by the generation operations and expanded once
+ * the repository is known (`expandChangeSource`):
+ *
+ * - `staged`, `worktree`: those scopes.
+ * - `since-last-tag`: `range` from the most recent tag (`git describe --tags --abbrev=0`) to HEAD.
+ * - `branch`: `branch` against the default branch (`origin/HEAD`, else `main`).
+ * - `branch:<ref>`: `branch` against `<ref>`.
+ * - `HEAD~N`: `branch` against `HEAD~N`.
+ */
+export const CHANGE_SOURCE_SHORTHANDS = ['staged', 'worktree', 'since-last-tag', 'branch', 'branch:<ref>', 'HEAD~N'] as const
+
+const SHORTHAND_PATTERN = /^(staged|worktree|since-last-tag|branch|branch:(?!-)[^\s\u0000]+|HEAD~\d{1,6})$/
+
+export const ChangeSourceShorthandSchema = z.string().regex(SHORTHAND_PATTERN, {
+  message: `Unknown source shorthand. Use one of: ${CHANGE_SOURCE_SHORTHANDS.join(', ')}, or a source object.`,
+}).describe(`Shorthand for a repository source: ${CHANGE_SOURCE_SHORTHANDS.join(', ')}.`)
+
+export type ChangeSourceShorthand = z.infer<typeof ChangeSourceShorthandSchema>
+
+const ChangeSourceInputSchema = z.union([ChangeSourceShorthandSchema, ChangeSourceSchema])
+
 export const AgentTaskInputSchema = z.object({
   version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
   repo: z.string().min(1).optional(),
-  source: ChangeSourceSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
+  source: ChangeSourceInputSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
   options: AgentOptionsSchema.default({
     conventional: false,
     includeBranchName: false,
@@ -163,7 +192,7 @@ export const McpAgentOptionsSchema = AgentOptionsSchema.omit({ trustRepositoryCo
 export const McpTaskInputSchema = z.object({
   version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
   repo: z.string().min(1).optional(),
-  source: ChangeSourceSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
+  source: ChangeSourceInputSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
   options: McpAgentOptionsSchema.default({
     conventional: false,
     includeBranchName: false,
@@ -554,9 +583,13 @@ export type CondenseDiffData = z.infer<typeof CondenseDiffDataSchema>
 export type CondenseDiffFileResult = z.infer<typeof CondenseDiffFileResultSchema>
 
 export type AgentOperation = z.infer<typeof AgentOperationSchema>
-export type AgentTaskInput = z.infer<typeof AgentTaskInputSchema>
+/** A parsed request: `source` may still be a shorthand string. */
+export type AgentTaskRequest = z.infer<typeof AgentTaskInputSchema>
+/** What operations receive: `source` expanded to an object (see `expandChangeSource`). */
+export type AgentTaskInput = Omit<AgentTaskRequest, 'source'> & { source: z.infer<typeof ChangeSourceSchema> }
 export type AgentOptions = z.infer<typeof AgentOptionsSchema>
-export type McpTaskInput = z.infer<typeof McpTaskInputSchema>
+export type McpTaskRequest = z.infer<typeof McpTaskInputSchema>
+export type McpTaskInput = Omit<McpTaskRequest, 'source'> & { source: z.infer<typeof ChangeSourceSchema> }
 export type McpAgentOptions = z.infer<typeof McpAgentOptionsSchema>
 export type ChangeSource = z.infer<typeof ChangeSourceSchema>
 export type SourceMetadata = z.infer<typeof SourceMetadataSchema>

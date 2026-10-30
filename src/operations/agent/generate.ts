@@ -578,8 +578,32 @@ export async function generateAgentReview(
   })
   findings.sort((a, b) => b.severity - a.severity)
   report(context, 'Completed', 1)
-  const warnings = truncated ? [...resolved.warnings, truncationWarning()] : resolved.warnings
-  return envelope('review', { findings }, warnings, resolved.meta, conventions.provenance)
+  const { kept, omittedWarning } = applySeverityThreshold(findings, input.options.severity)
+  const warnings = [
+    ...resolved.warnings,
+    ...(truncated ? [truncationWarning()] : []),
+    ...(omittedWarning ? [omittedWarning] : []),
+  ]
+  return envelope('review', { findings: kept }, warnings, resolved.meta, conventions.provenance)
+}
+
+/**
+ * The agent `severity` option (#1828): keep findings at or above the
+ * threshold, and say how many were left out so the result is not silently
+ * smaller. No threshold keeps everything.
+ */
+export function applySeverityThreshold(
+  findings: ReviewFeedbackItem[],
+  threshold: number | undefined,
+): { kept: ReviewFeedbackItem[]; omittedWarning?: string } {
+  if (threshold === undefined) return { kept: findings }
+  const kept = findings.filter((finding) => finding.severity >= threshold)
+  const omitted = findings.length - kept.length
+  if (omitted === 0) return { kept }
+  return {
+    kept,
+    omittedWarning: `${omitted} finding${omitted === 1 ? '' : 's'} below severity ${threshold} ${omitted === 1 ? 'was' : 'were'} omitted.`,
+  }
 }
 
 /**
