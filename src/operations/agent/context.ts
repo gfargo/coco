@@ -9,6 +9,7 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import type { Config } from '../../lib/config/types'
 import type { LlmUsageSurface } from '../../lib/langchain/utils/observability'
 import { getRepo } from '../../lib/simple-git/getRepo'
+import type { FileChange } from '../../lib/types'
 import { Logger } from '../../lib/utils/logger'
 import { isPathWithinRoot } from '../../lib/utils/pathWithinRoot'
 import { AgentOperationError } from './errors'
@@ -1297,5 +1298,44 @@ export async function readPullRequestBranches(
     defaultBase = typeof config.defaultBranch === 'string' && config.defaultBranch ? config.defaultBranch : 'main'
   }
   return { head, defaultBase }
+}
+
+const NAME_STATUS: Record<string, FileChange['status']> = {
+  A: 'added',
+  M: 'modified',
+  D: 'deleted',
+  R: 'renamed',
+  C: 'added',
+  T: 'modified',
+}
+
+/**
+ * The staged files and their status, through the hardened agent git runner
+ * (#1824). Rename and copy entries carry the old path.
+ */
+export async function readStagedFileChanges(context: AgentOperationContext): Promise<FileChange[]> {
+  const output = await runAgentGit(context, ['diff', '--cached', '--name-status', '-z', '--find-renames'])
+  const fields = output.split('\0')
+  if (fields[fields.length - 1] === '') fields.pop()
+  const changes: FileChange[] = []
+  for (let i = 0; i < fields.length; ) {
+    const code = fields[i++] ?? ''
+    if (!code) continue
+    const letter = code[0]
+    if (letter === 'R' || letter === 'C') {
+      const oldFilePath = fields[i++]
+      const filePath = fields[i++]
+      if (filePath) changes.push({ filePath, oldFilePath, status: NAME_STATUS[letter], summary: '' })
+    } else {
+      const filePath = fields[i++]
+      if (filePath) changes.push({ filePath, status: NAME_STATUS[letter] ?? 'unknown', summary: '' })
+    }
+  }
+  return changes
+}
+
+/** One staged file's patch, through the hardened agent git runner (#1824). */
+export function readStagedFileDiff(context: AgentOperationContext, filePath: string): Promise<string> {
+  return runAgentGit(context, ['diff', '--cached', '--no-ext-diff', '--no-textconv', '--end-of-options', '--', filePath])
 }
 

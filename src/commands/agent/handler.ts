@@ -30,6 +30,7 @@ import {
     createCommitValidateInputJsonSchema,
     LintDataSchema,
     PrDraftDataSchema,
+    SplitPlanDataSchema,
     LintRequestSchema,
     RecapDataSchema,
     RepoContextDataSchema,
@@ -94,6 +95,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, CommitValidateDataSchema)
     case 'commitlint-rules':
       return createAgentOutputSchema(operation, CommitlintRulesDataSchema)
+    case 'split-plan':
+      return createAgentOutputSchema(operation, SplitPlanDataSchema)
   }
 }
 

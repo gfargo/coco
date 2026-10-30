@@ -26,7 +26,15 @@ import {
     parseLineRange,
 } from '../../commands/blame/render'
 import { BLAME_EXPLAIN_PROMPT } from '../../commands/blame/prompt'
-import { validateConventionalCommitMessage } from '../../lib/utils/commitlintValidator'
+import { getBuiltInConventionalRulesContext, validateConventionalCommitMessage } from '../../lib/utils/commitlintValidator'
+import {
+    collectHunkInventory,
+    COMMIT_SPLIT_PROMPT,
+    CONVENTIONAL_COMMITS_RULES,
+    formatDedupeWarnings,
+    formatHunkInventory,
+} from '../../commands/commit/split'
+import { generateValidatedCommitSplitPlan, NO_PREVIOUS_FEEDBACK_PLACEHOLDER } from '../../commands/commit/splitPlanGenerator'
 import {
     LINT_LOG_FORMAT,
     LintLogCommit,
@@ -65,6 +73,8 @@ import {
     ResolvedChangeContext,
     resolveChangeSource,
     readPullRequestBranches,
+    readStagedFileChanges,
+    readStagedFileDiff,
     readRepoBranchContext,
     readRepoStatusContext,
     readRepoHistoryContext,
@@ -79,6 +89,7 @@ import {
     AgentOptions,
     AgentPlan,
     AgentPlannedEnvelope,
+    SplitPlanData,
     ChangeSource,
     PrDraftData,
     AgentSuccessEnvelope,
@@ -108,7 +119,7 @@ import {
     RepoContextSection,
 } from './schemas'
 
-type SupportedTask = 'review' | 'changelog' | 'recap'
+type SupportedTask = 'review' | 'changelog' | 'recap' | 'commitSplit'
 
 type RuntimeBasics = {
   config: ReturnType<typeof loadConfig<Record<string, unknown>, Record<string, unknown>>>
@@ -275,7 +286,7 @@ async function prepareStructuredCall(input: {
  * real call budgets against -- never a second, potentially-drifting estimate.
  */
 async function buildAgentPlan(input: {
-  task: SupportedTask
+  task: Exclude<SupportedTask, 'commitSplit'>
   context: AgentOperationContext
   options: AgentOptions
   promptTemplate: typeof REVIEW_PROMPT
@@ -654,6 +665,96 @@ export async function generateAgentPrDraft(
   }
 }
 
+/**
+ * Plan a multi-commit split of the staged changes for an agent (#1824): the
+ * planner behind `coco commit --split`, minus everything that is unsafe for
+ * an agent tool. Repository prompts and commitlint config are never loaded
+ * (built-in Conventional Commits rules when `conventional` is set), every git
+ * read goes through the hardened agent runner, and the diff is framed as
+ * untrusted. Returns the plan; nothing is staged or committed.
+ */
+export async function generateAgentSplitPlan(
+  input: AgentTaskInput,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<SplitPlanData>> {
+  if (input.source.kind !== 'repository' || input.source.scope.type !== 'staged') {
+    throw new AgentOperationError(
+      'UNSUPPORTED_SOURCE',
+      'split-plan plans the staged changes: use the `staged` repository source (the default).',
+    )
+  }
+  if (input.options.dryRun) {
+    throw new AgentOperationError('UNSUPPORTED_OPERATION', 'split-plan does not support dryRun.')
+  }
+  const staged = await readStagedFileChanges(context)
+  if (staged.length === 0) {
+    throw new AgentOperationError('NO_CHANGES', 'Nothing is staged to split.')
+  }
+  const resolved = await resolveChangeSource(input.source, context, { trustRepositoryConfig: false })
+  report(context, 'Resolved changes', 0.2)
+  const hunkInventory = await collectHunkInventory(staged, (filePath) => readStagedFileDiff(context, filePath))
+
+  const conventional = Boolean(input.options.conventional)
+  const branchName = input.options.includeBranchName
+    ? (await readPullRequestBranches(context)).head
+    : undefined
+  const runtime = await createRuntime('commitSplit', input.options, context)
+  const prompt = getPrompt({
+    template: COMMIT_SPLIT_PROMPT.template as string,
+    variables: COMMIT_SPLIT_PROMPT.inputVariables,
+    fallback: COMMIT_SPLIT_PROMPT,
+  })
+  const budgeted = await enforcePromptBudget({
+    prompt,
+    variables: {
+      file_inventory: staged.map((change) => `- ${change.filePath}: ${change.status}`).join('\n'),
+      hunk_inventory: formatHunkInventory(hunkInventory),
+      summary: asUntrustedChangeContext(resolved.text),
+      additional_context: input.options.additionalContext ?? '',
+      commit_message_rules: conventional ? `\n${CONVENTIONAL_COMMITS_RULES}` : '',
+      branch_name_context: branchName ? `Current git branch name: ${branchName}` : '',
+      commitlint_rules_context: conventional ? getBuiltInConventionalRulesContext() : '',
+      previous_attempt_feedback: NO_PREVIOUS_FEEDBACK_PLACEHOLDER,
+    },
+    tokenizer: runtime.tokenizer,
+    maxTokens: runtime.config.service.tokenLimit || 4096,
+    summaryKey: 'summary',
+  })
+
+  report(context, 'Generating split plan…', 0.4)
+  const { plan, fallback, dedupeWarnings } = await generateValidatedCommitSplitPlan({
+    llm: runtime.llm,
+    prompt,
+    variables: budgeted.variables,
+    staged,
+    hunkInventory,
+    logger: context.logger,
+    tokenizer: runtime.tokenizer,
+    metadata: { command: 'agent', provider: runtime.provider, model: runtime.model, conventional },
+    signal: context.signal,
+    validateGroupMessage: conventional ? (message) => validateConventionalCommitMessage(message) : undefined,
+  })
+  report(context, 'Completed', 1)
+
+  const warnings = [
+    ...resolved.warnings,
+    ...(budgeted.truncated ? [truncationWarning()] : []),
+    ...(dedupeWarnings?.length ? [formatDedupeWarnings(dedupeWarnings)] : []),
+    ...(fallback ? [`The planner returned a single combined group: ${fallback.reason}`] : []),
+  ]
+  return envelope('split-plan', {
+    groups: plan.groups.map((group) => ({
+      title: group.title,
+      body: group.body ?? '',
+      files: group.files ?? [],
+      hunks: group.hunks ?? [],
+      ...(group.rationale ? { rationale: group.rationale } : {}),
+      unclaimed: Boolean(group.unclaimed),
+    })),
+    ...(fallback ? { fallback: fallback.reason } : {}),
+  }, warnings, resolved.meta)
+}
+
 export async function generateAgentChangelog(
   input: AgentTaskInput,
   context: AgentOperationContext,
@@ -797,6 +898,8 @@ export async function runAgentOperation(
         'lint must be dispatched via runLint, not runAgentOperation.',
         false,
       )
+    case 'split-plan':
+      return generateAgentSplitPlan(input, context)
     case 'commit-validate':
     case 'commitlint-rules':
       // Zero-token tools with their own request schemas (validate.ts).
