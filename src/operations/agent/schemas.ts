@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'commit-validate', 'commitlint-rules'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'pr-draft', 'commit-validate', 'commitlint-rules'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -112,6 +112,14 @@ export const AgentOptionsSchema = z.object({
   ),
   timeframe: z.string().min(1).max(100).optional().describe(
     'Human-readable window for the summary, e.g. "last week" or "yesterday". Honored by: recap. Ignored by other operations.',
+  ),
+  base: gitRevisionSchema.optional().describe(
+    'Base branch the pull/merge request would target. Defaults to the repository\'s default branch (origin/HEAD, ' +
+    'else the configured defaultBranch, else main). Honored by: pr-draft. Ignored by other operations.',
+  ),
+  draft: z.boolean().optional().describe(
+    'Echoed back as `draft` so a caller can open the request as a draft later. coco never opens it. ' +
+    'Honored by: pr-draft. Ignored by other operations.',
   ),
   severity: z.number().int().min(1).max(10).optional().describe(
     'Return only findings with severity >= this threshold (1-10), the same scale as `coco review --severity`. ' +
@@ -211,6 +219,17 @@ export const SourceMetadataSchema = z.object({
   verification: z.enum(['repository-derived', 'head-matched', 'provided-unverified']),
   conventions: ConventionsMetadataSchema.optional(),
 }).strict()
+
+/** `pr-draft` (#1823): what `coco pr create --json` would submit. Never opened. */
+export const PrDraftDataSchema = z.object({
+  base: z.string(),
+  head: z.string(),
+  title: z.string(),
+  body: z.string(),
+  draft: z.boolean(),
+}).strict()
+
+export type PrDraftData = z.infer<typeof PrDraftDataSchema>
 
 export const CommitDraftDataSchema = z.object({
   title: z.string(),

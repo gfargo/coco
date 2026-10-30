@@ -64,6 +64,7 @@ import {
     hasCommitlintConfigAtRoot,
     ResolvedChangeContext,
     resolveChangeSource,
+    readPullRequestBranches,
     readRepoBranchContext,
     readRepoStatusContext,
     readRepoHistoryContext,
@@ -78,6 +79,8 @@ import {
     AgentOptions,
     AgentPlan,
     AgentPlannedEnvelope,
+    ChangeSource,
+    PrDraftData,
     AgentSuccessEnvelope,
     AgentTaskInput,
     AGENT_PROTOCOL_VERSION,
@@ -603,6 +606,54 @@ export function applySeverityThreshold(
   }
 }
 
+/**
+ * Draft a pull/merge request title and body for the current branch (#1823):
+ * the agent counterpart of `coco pr create --json`, through the same
+ * changelog generation over `base..HEAD`, without any forge call. Nothing is
+ * opened; `draft` is echoed for the caller.
+ *
+ * A repository source defaults to the branch against its base. A supplied
+ * source (patch, files, summary) is generated from as given, with base and
+ * head still read from the repository.
+ */
+export async function generateAgentPrDraft(
+  input: AgentTaskInput,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<PrDraftData> | AgentPlannedEnvelope> {
+  const { head, defaultBase } = await readPullRequestBranches(context)
+  if (!head) {
+    throw new AgentOperationError('INVALID_REVISION', 'pr-draft needs a checked-out branch; HEAD is detached.')
+  }
+  const sourceBase = input.source.kind === 'repository' && input.source.scope.type === 'branch'
+    ? input.source.scope.base
+    : undefined
+  const base = input.options.base ?? sourceBase ?? defaultBase
+  if (base === head) {
+    throw new AgentOperationError(
+      'INVALID_INPUT',
+      `The current branch is the base branch ('${base}'). Check out a feature branch, or pass options.base.`,
+    )
+  }
+  const source: ChangeSource = input.source.kind === 'repository' && input.source.scope.type !== 'range'
+    ? { kind: 'repository', scope: { type: 'branch', base } }
+    : input.source
+  const result = await generateAgentChangelog({ ...input, source }, context)
+  if (result.status === 'planned') {
+    return { ...result, operation: 'pr-draft' }
+  }
+  return {
+    ...result,
+    operation: 'pr-draft',
+    data: {
+      base,
+      head,
+      title: result.data.title.trim(),
+      body: result.data.content.trim(),
+      draft: Boolean(input.options.draft),
+    },
+  }
+}
+
 export async function generateAgentChangelog(
   input: AgentTaskInput,
   context: AgentOperationContext,
@@ -712,6 +763,8 @@ export async function runAgentOperation(
       return generateAgentChangelog(input, context, preResolved)
     case 'recap':
       return generateAgentRecap(input, context, preResolved)
+    case 'pr-draft':
+      return generateAgentPrDraft(input, context)
     case 'condense-diff':
       // condense-diff uses its own request schema (CondenseDiffRequest) and is
       // dispatched via runCondenseDiff, not through this shared entry point.

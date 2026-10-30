@@ -50,6 +50,7 @@ import {
     CommitValidateRequest,
     CommitValidateRequestSchema,
     LintDataSchema,
+    PrDraftDataSchema,
     LintRequestSchema,
     MAX_BLAME_EXPLAIN_COMMITS,
     MAX_BLAME_EXPLAIN_LINES,
@@ -84,6 +85,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, ChangelogDataSchema)
     case 'recap':
       return createAgentMcpOutputSchema(operation, RecapDataSchema)
+    case 'pr-draft':
+      return createAgentMcpOutputSchema(operation, PrDraftDataSchema)
     case 'condense-diff':
       return createAgentMcpOutputSchema(operation, CondenseDiffDataSchema)
     case 'repo-context':
@@ -694,6 +697,13 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     'recap',
     'Recap changes',
     'Generate a structured recap from repository changes or supplied context.',
+    repoRoot,
+  )
+  registerGenerationTool(
+    server,
+    'pr-draft',
+    'Draft pull request',
+    'Draft a pull/merge request title and body for the current branch against its base (options.base, default the repository default branch), as `coco pr create --json` would. Returns base, head, title, body and draft. Never opens a request or calls a forge.',
     repoRoot,
   )
 
