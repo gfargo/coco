@@ -46,7 +46,7 @@ export function formatLogInkTagsEmpty({ filter }: LogInkTagsEmptyArgs): string {
   if (filter.trim()) {
     return `No tags match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No tags found. Tags created via git tag <name> will appear here.'
+  return 'No tags yet. Press + to create one.'
 }
 
 export type LogInkStashEmptyArgs = {
@@ -57,7 +57,7 @@ export function formatLogInkStashEmpty({ filter }: LogInkStashEmptyArgs): string
   if (filter.trim()) {
     return `No stashes match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No stashes. Save WIP from the status view (gs) or run git stash from the shell.'
+  return 'No stashes. Press gs to save WIP from the status view, or run git stash from the shell.'
 }
 
 export type LogInkHistoryEmptyArgs = {
@@ -70,9 +70,9 @@ export function formatLogInkHistoryEmpty(args: LogInkHistoryEmptyArgs): string {
     return `No commits match the current filter. Press ctrl+u to clear.`
   }
   if (args.totalCommits === 0) {
-    return 'No commits yet. Make your first commit to populate the history.'
+    return 'No commits yet. Press gs to stage files, then gc to write the first commit.'
   }
-  return 'No commits in view.'
+  return 'No commits in view. Press r to reload history.'
 }
 
 export type LogInkStatusEmptyArgs = {
@@ -103,7 +103,7 @@ export function formatLogInkReflogEmpty({ filter }: LogInkReflogEmptyArgs): stri
   if (filter.trim()) {
     return `No reflog entries match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No reflog entries. Activity in this repo will appear here over time.'
+  return 'No reflog entries yet. Press gh to return to history.'
 }
 
 export type LogInkComposeEmptyArgs = {
@@ -126,7 +126,7 @@ export function formatLogInkSubmodulesEmpty({ filter }: LogInkSubmodulesEmptyArg
   if (filter.trim()) {
     return `No submodules match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No submodules registered. Add one with `git submodule add <url> <path>` from the shell.'
+  return 'No submodules registered. Add one with `git submodule add <url> <path>`, then press r to refresh.'
 }
 
 export type LogInkRemotesEmptyArgs = {
@@ -148,7 +148,7 @@ export function formatLogInkWorktreesEmpty({ filter }: LogInkWorktreesEmptyArgs)
   if (filter.trim()) {
     return `No worktrees match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No linked worktrees.'
+  return 'No linked worktrees. Add one with `git worktree add <path>`, then press r to refresh.'
 }
 
 export type LogInkBlameEmptyArgs = {
@@ -190,7 +190,7 @@ export function formatLogInkIssuesEmpty({ filter }: LogInkIssuesEmptyArgs): stri
   if (filter.trim()) {
     return `No issues match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No issues match the current filter (default: open issues).'
+  return 'No issues match the current filter (default: open issues). Press f to change it.'
 }
 
 export type LogInkPullRequestTriageEmptyArgs = {
@@ -209,7 +209,7 @@ export function formatLogInkPullRequestTriageEmpty({
   if (filter.trim()) {
     return `No ${noun} match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return `No ${noun} match the current filter (default: open).`
+  return `No ${noun} match the current filter (default: open). Press f to change it.`
 }
 
 export type LogInkForgeUnavailableArgs = {
@@ -241,8 +241,8 @@ export function formatLogInkForgeUnauthenticated({
   forge = 'GitHub',
   authHint,
 }: LogInkForgeUnavailableArgs): string {
-  if (authHint) return `${resource} require ${forge} auth. ${authHint}`
-  return `${resource} require the ${forge} CLI. Install \`${cli}\` and run \`${cli} auth login\` to enable triage.`
+  if (authHint) return `${resource} require ${forge} auth. ${authHint} Then press r to refresh.`
+  return `${resource} require the ${forge} CLI. Install \`${cli}\` and run \`${cli} auth login\`, then press r to refresh.`
 }
 
 /**
@@ -253,7 +253,7 @@ export function formatLogInkForgeNoRemote({
   resource,
   forge = 'GitHub',
 }: LogInkForgeUnavailableArgs): string {
-  return `${resource} require a ${forge} remote (origin or fallback). None detected for this repo.`
+  return `${resource} require a ${forge} remote (origin or fallback). None detected for this repo. Press gn to add one.`
 }
 
 export type LogInkPullRequestDiffErrorArgs = {
@@ -278,5 +278,5 @@ export function formatLogInkPullRequestDiffError({
  * the patch is empty (e.g. an empty commit or a fully-reverted PR).
  */
 export function formatLogInkPullRequestDiffEmpty(): string {
-  return 'No diff to display for this pull request.'
+  return 'No diff to display for this pull request. Press esc to go back.'
 }
