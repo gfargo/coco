@@ -11,6 +11,7 @@ import { computeGraphLayout } from '../workstation/chrome/graphLayout'
 import type { LogArgv } from '../commands/log/config'
 import { getCommitRows, getLogRows, getLogRowsAnchoredOn, hideStashHelperCommits, type GitLogRow } from './logData'
 import { getStashCommitHashes } from './stashData'
+import { applyLogInkAction, createLogInkState } from '../workstation/runtime/inkViewModel'
 
 jest.setTimeout(30_000)
 
@@ -38,23 +39,41 @@ describe('stash helper commits in TUI history (#2159)', () => {
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-  it('keeps the stash tips and real commits, drops the helpers', async () => {
+  it('keeps the stash tips and real commits in state, drops the helpers', async () => {
     const stashes = await getStashCommitHashes(simpleGit(dir))
-    const commits = getCommitRows(await getLogRows(simpleGit(dir), argv, { extraRefs: stashes }))
-    const subjects = commits.map((commit) => commit.message)
+    const rows = await getLogRows(simpleGit(dir), argv, { extraRefs: stashes })
+    const state = createLogInkState(rows)
+    const subjects = state.commits.map((commit) => commit.message)
 
     expect(subjects.some((s) => /^(index on|untracked files on) /.test(s))).toBe(false)
     expect(subjects.filter((s) => /^On main: experiment-/.test(s))).toHaveLength(2)
     expect(subjects).toEqual(expect.arrayContaining(['chore: initial', 'chore: baseline']))
-    expect(commits).toHaveLength(4)
-    // Tips keep only their base, so no lane waits for a hidden parent.
-    for (const tip of commits.filter((c) => stashes.includes(c.hash))) expect(tip.parents).toHaveLength(1)
-    expect(computeGraphLayout(commits).maxWidth).toBeLessThanOrEqual(3)
+    expect(state.commits).toHaveLength(4)
+    for (const tip of state.commits.filter((c) => stashes.includes(c.hash))) expect(tip.parents).toHaveLength(1)
+    expect(computeGraphLayout(state.commits).maxWidth).toBeLessThanOrEqual(3)
   })
 
-  it('hides the helpers when cursor-sync anchors on a stash', async () => {
+  // Review follow-up: hiding inside getLogRows made a full page come back
+  // short, which every caller reads as "no more history", so paging stopped
+  // after the first page. getLogRows returns git's rows; the paging offset
+  // counts them; only the graph hides the plumbing.
+  it('keeps paging counts on git\'s rows, not the hidden ones', async () => {
+    const stashes = await getStashCommitHashes(simpleGit(dir))
+    const rows = await getLogRows(simpleGit(dir), argv, { extraRefs: stashes })
+    const fetched = getCommitRows(rows).length
+    expect(fetched).toBeGreaterThan(4)
+    expect(createLogInkState(rows).mainHistoryCommitCount).toBe(fetched)
+
+    const state = applyLogInkAction(createLogInkState([]), { type: 'replaceRows', rows })
+    expect(state.mainHistoryCommitCount).toBe(fetched)
+    expect(state.commits).toHaveLength(4)
+  })
+
+  it('hides the helpers when cursor-sync merges a stash-anchored load', async () => {
     const [tip] = await getStashCommitHashes(simpleGit(dir))
-    const subjects = getCommitRows(await getLogRowsAnchoredOn(simpleGit(dir), argv, tip)).map((c) => c.message)
+    const anchored = await getLogRowsAnchoredOn(simpleGit(dir), argv, tip)
+    const state = applyLogInkAction(createLogInkState([]), { type: 'appendRows', rows: anchored })
+    const subjects = state.commits.map((c) => c.message)
     expect(subjects[0]).toMatch(/^On main: experiment-b/)
     expect(subjects.some((s) => /^(index on|untracked files on) /.test(s))).toBe(false)
   })
