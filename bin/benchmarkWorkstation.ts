@@ -235,7 +235,8 @@ async function runFixtureBenchmark(scale: WorkstationFixtureScale): Promise<Fixt
 
     // Mirrors `loadMoreCommits` in `useLoadMoreHistory`: page forward by the
     // main-ordering offset (#1337) with the stash hashes as extra roots,
-    // appending each page, until the target depth or the end of history.
+    // appending and rendering each page, until the target depth or the end
+    // of history.
     // The stash hashes are re-read for every page, as the real loader does.
     const loadMore = await timePhase('load-more', async () => {
       let hasMore = state.commits.length >= LOG_INTERACTIVE_DEFAULT_LIMIT
@@ -253,6 +254,9 @@ async function runFixtureBenchmark(scale: WorkstationFixtureScale): Promise<Fixt
             rows: page,
             mainOrderingCount: pageCommits,
           })
+          // The app paints after every appended page, which is when the
+          // graph layout for the new rows is computed.
+          renderSingle()
         }
         hasMore = pageCommits >= LOG_INTERACTIVE_DEFAULT_LIMIT
       }

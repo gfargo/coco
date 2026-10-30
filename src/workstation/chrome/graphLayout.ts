@@ -142,126 +142,186 @@ type LayoutNode = {
   after: (Lane | null)[]
 }
 
-export function computeGraphLayout(commits: LayoutCommit[]): GraphLayout {
-  const lanes: (Lane | null)[] = []
-  let nextLaneId = 0
-  const nodes: LayoutNode[] = []
+/** Pass-1 state, kept so a layout can be resumed when commits are appended. */
+type LayoutState = {
+  lanes: (Lane | null)[]
+  nextLaneId: number
+  nodes: LayoutNode[]
+}
 
-  // Pass 1 — assign each commit a column + lane id, snapshotting the
-  // lane state on either side so pass 2 can route the edge rows.
-  for (const commit of commits) {
-    const before = lanes.map((lane) => (lane ? { ...lane } : null))
+/**
+ * Resume state for layouts this module produced. Held off to the side so
+ * `GraphLayout` stays a plain data shape for callers and tests.
+ */
+const resumeState = new WeakMap<GraphLayout, LayoutState>()
 
-    const matching: number[] = []
-    for (let c = 0; c < lanes.length; c += 1) {
-      if (lanes[c]?.expecting === commit.hash) matching.push(c)
-    }
+/** Pass 1 for one commit: assign its column + lane id, snapshotting lanes on either side. */
+function placeCommit(commit: LayoutCommit, state: LayoutState): void {
+  const { lanes } = state
+  const before = lanes.map((lane) => (lane ? { ...lane } : null))
 
-    let column: number
-    let laneId: number
-    if (matching.length === 0) {
-      // Branch tip with no loaded child — open a fresh lane.
-      column = firstFreeColumn(lanes)
-      laneId = nextLaneId
-      nextLaneId += 1
-    } else {
-      // Leftmost expecting lane is our column; the rest converge in.
-      column = matching[0]
-      laneId = lanes[column]!.laneId
-    }
-    for (const c of matching) {
-      if (c !== column) lanes[c] = null
-    }
-
-    const isRoot = commit.parents.length === 0
-    const isMerge = commit.parents.length > 1
-    const bornParents = new Set<number>()
-    const mergedLanes = new Set<number>()
-
-    if (isRoot) {
-      lanes[column] = null
-    } else {
-      lanes[column] = { laneId, expecting: commit.parents[0] }
-      for (let p = 1; p < commit.parents.length; p += 1) {
-        const parentHash = commit.parents[p]
-        // Reuse a lane already waiting for this parent so two merges
-        // that share a parent share its lane.
-        const target = lanes.findIndex((lane) => lane?.expecting === parentHash)
-        if (target === -1) {
-          const born = firstFreeColumn(lanes)
-          const newLaneId = nextLaneId
-          nextLaneId += 1
-          lanes[born] = { laneId: newLaneId, expecting: parentHash }
-          bornParents.add(newLaneId)
-        } else if (target !== column) {
-          // The parent's lane already exists (#1335) — record the
-          // connection so pass 2 emits a connector from the merge dot
-          // to that lane in addition to the lane's own vertical.
-          mergedLanes.add(lanes[target]!.laneId)
-        }
-      }
-    }
-
-    trimTrailingHoles(lanes)
-    const after = lanes.map((lane) => (lane ? { ...lane } : null))
-    nodes.push({ hash: commit.hash, column, laneId, isMerge, isRoot, bornParents, mergedLanes, before, after })
+  const matching: number[] = []
+  for (let c = 0; c < lanes.length; c += 1) {
+    if (lanes[c]?.expecting === commit.hash) matching.push(c)
   }
 
-  // Pass 2 — derive pass-throughs and edge rows (one commit lookahead).
-  const rows: CommitLayoutRow[] = []
+  let column: number
+  let laneId: number
+  if (matching.length === 0) {
+    // Branch tip with no loaded child — open a fresh lane.
+    column = firstFreeColumn(lanes)
+    laneId = state.nextLaneId
+    state.nextLaneId += 1
+  } else {
+    // Leftmost expecting lane is our column; the rest converge in.
+    column = matching[0]
+    laneId = lanes[column]!.laneId
+  }
+  for (const c of matching) {
+    if (c !== column) lanes[c] = null
+  }
+
+  const isRoot = commit.parents.length === 0
+  const isMerge = commit.parents.length > 1
+  const bornParents = new Set<number>()
+  const mergedLanes = new Set<number>()
+
+  if (isRoot) {
+    lanes[column] = null
+  } else {
+    lanes[column] = { laneId, expecting: commit.parents[0] }
+    for (let p = 1; p < commit.parents.length; p += 1) {
+      const parentHash = commit.parents[p]
+      // Reuse a lane already waiting for this parent so two merges
+      // that share a parent share its lane.
+      const target = lanes.findIndex((lane) => lane?.expecting === parentHash)
+      if (target === -1) {
+        const born = firstFreeColumn(lanes)
+        const newLaneId = state.nextLaneId
+        state.nextLaneId += 1
+        lanes[born] = { laneId: newLaneId, expecting: parentHash }
+        bornParents.add(newLaneId)
+      } else if (target !== column) {
+        // The parent's lane already exists (#1335) — record the
+        // connection so pass 2 emits a connector from the merge dot
+        // to that lane in addition to the lane's own vertical.
+        mergedLanes.add(lanes[target]!.laneId)
+      }
+    }
+  }
+
+  trimTrailingHoles(lanes)
+  const after = lanes.map((lane) => (lane ? { ...lane } : null))
+  state.nodes.push({ hash: commit.hash, column, laneId, isMerge, isRoot, bornParents, mergedLanes, before, after })
+}
+
+/** Pass 2 for one commit: pass-throughs and the edge row beneath it (needs one commit of lookahead). */
+function routeRow(node: LayoutNode, next: LayoutNode | undefined): CommitLayoutRow {
+  const passthrough: { laneId: number; column: number }[] = []
+  for (let c = 0; c < node.before.length; c += 1) {
+    const lane = node.before[c]
+    if (!lane) continue
+    if (c === node.column) continue
+    // Lanes converging into this commit merged in the edge row above,
+    // so they are not drawn again on the commit row itself.
+    if (lane.expecting === node.hash) continue
+    passthrough.push({ laneId: lane.laneId, column: c })
+  }
+
+  const edges: LaneEdge[] = []
+  for (let c = 0; c < node.after.length; c += 1) {
+    const lane = node.after[c]
+    if (!lane) continue
+    const emanatesFromDot = lane.laneId === node.laneId || node.bornParents.has(lane.laneId)
+    const from = emanatesFromDot ? node.column : c
+    const to = next && lane.expecting === next.hash ? next.column : c
+    edges.push({ laneId: lane.laneId, from, to })
+    // A merge parent that resolved to this ALREADY-OPEN lane (#1335):
+    // the lane's own vertical (above) keeps its continuity, and this
+    // extra edge draws the connector from the merge dot into the
+    // lane. The renderer composes the two per-cell (├─┤ junctions),
+    // so the second-parent edge is no longer invisible.
+    if (node.mergedLanes.has(lane.laneId) && node.column !== to) {
+      edges.push({ laneId: lane.laneId, from: node.column, to })
+    }
+  }
+
+  const width =
+    Math.max(
+      node.column,
+      ...passthrough.map((p) => p.column),
+      ...edges.flatMap((e) => [e.from, e.to])
+    ) + 1
+
+  return {
+    hash: node.hash,
+    column: node.column,
+    laneId: node.laneId,
+    passthrough,
+    edges,
+    isMerge: node.isMerge,
+    isRoot: node.isRoot,
+    width,
+  }
+}
+
+/**
+ * Lay out `commits[from..]` on top of `state` (which already holds
+ * `commits[0..from)`), reusing `prevRows` for every row whose lookahead is
+ * unchanged. Only the last previous row is re-routed: it had no next
+ * commit before, so its edges ended in place.
+ */
+function layoutFrom(
+  commits: LayoutCommit[],
+  from: number,
+  state: LayoutState,
+  prevRows: CommitLayoutRow[]
+): GraphLayout {
+  for (let i = from; i < commits.length; i += 1) placeCommit(commits[i], state)
+
+  const keep = Math.max(0, from - 1)
+  const rows = prevRows.slice(0, keep)
+  for (let i = keep; i < state.nodes.length; i += 1) {
+    rows.push(routeRow(state.nodes[i], state.nodes[i + 1]))
+  }
   let maxWidth = 1
-  for (let i = 0; i < nodes.length; i += 1) {
-    const node = nodes[i]
-    const next = nodes[i + 1]
+  for (const row of rows) if (row.width > maxWidth) maxWidth = row.width
 
-    const passthrough: { laneId: number; column: number }[] = []
-    for (let c = 0; c < node.before.length; c += 1) {
-      const lane = node.before[c]
-      if (!lane) continue
-      if (c === node.column) continue
-      // Lanes converging into this commit merged in the edge row above,
-      // so they are not drawn again on the commit row itself.
-      if (lane.expecting === node.hash) continue
-      passthrough.push({ laneId: lane.laneId, column: c })
-    }
+  const layout: GraphLayout = { rows, maxWidth }
+  resumeState.set(layout, state)
+  return layout
+}
 
-    const edges: LaneEdge[] = []
-    for (let c = 0; c < node.after.length; c += 1) {
-      const lane = node.after[c]
-      if (!lane) continue
-      const emanatesFromDot = lane.laneId === node.laneId || node.bornParents.has(lane.laneId)
-      const from = emanatesFromDot ? node.column : c
-      const to = next && lane.expecting === next.hash ? next.column : c
-      edges.push({ laneId: lane.laneId, from, to })
-      // A merge parent that resolved to this ALREADY-OPEN lane (#1335):
-      // the lane's own vertical (above) keeps its continuity, and this
-      // extra edge draws the connector from the merge dot into the
-      // lane. The renderer composes the two per-cell (├─┤ junctions),
-      // so the second-parent edge is no longer invisible.
-      if (node.mergedLanes.has(lane.laneId) && node.column !== to) {
-        edges.push({ laneId: lane.laneId, from: node.column, to })
-      }
-    }
+export function computeGraphLayout(commits: LayoutCommit[]): GraphLayout {
+  return layoutFrom(commits, 0, { lanes: [], nextLaneId: 0, nodes: [] }, [])
+}
 
-    const width =
-      Math.max(
-        node.column,
-        ...passthrough.map((p) => p.column),
-        ...edges.flatMap((e) => [e.from, e.to])
-      ) + 1
-    maxWidth = Math.max(maxWidth, width)
+/**
+ * Extend `previous` — the layout of the first `previous.rows.length`
+ * entries of `commits` — to all of `commits` (#2208). Paging appends a
+ * 1000-commit page at a time; laying everything out again on every page
+ * made reaching n commits cost O(n^2). The result equals
+ * `computeGraphLayout(commits)`.
+ *
+ * Falls back to a full layout when `previous` was not produced here or is
+ * not a prefix of `commits` (an anchored context load merges rows in the
+ * middle, not at the end).
+ */
+export function extendGraphLayout(previous: GraphLayout, commits: LayoutCommit[]): GraphLayout {
+  const saved = resumeState.get(previous)
+  const prevCount = previous.rows.length
+  const isPrefix =
+    saved !== undefined &&
+    prevCount <= commits.length &&
+    previous.rows.every((row, i) => row.hash === commits[i].hash)
+  if (!isPrefix) return computeGraphLayout(commits)
+  if (prevCount === commits.length) return previous
 
-    rows.push({
-      hash: node.hash,
-      column: node.column,
-      laneId: node.laneId,
-      passthrough,
-      edges,
-      isMerge: node.isMerge,
-      isRoot: node.isRoot,
-      width,
-    })
+  // Copy the pass-1 state so `previous` stays resumable on its own.
+  const state: LayoutState = {
+    lanes: saved.lanes.map((lane) => (lane ? { ...lane } : null)),
+    nextLaneId: saved.nextLaneId,
+    nodes: saved.nodes.slice(),
   }
-
-  return { rows, maxWidth }
+  return layoutFrom(commits, prevCount, state, previous.rows)
 }
