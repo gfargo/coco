@@ -274,7 +274,7 @@ describe('createCocoMcpServer', () => {
     }
   }
 
-  it('registers nine read-only tools including coco_condense_diff, coco_repo_context, coco_blame, coco_lint, and coco_capabilities', () => {
+  it('registers ten read-only tools including coco_pr_draft, coco_condense_diff, coco_repo_context, coco_blame, coco_lint, and coco_capabilities', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -282,6 +282,7 @@ describe('createCocoMcpServer', () => {
       'coco_review',
       'coco_changelog',
       'coco_recap',
+      'coco_pr_draft',
       'coco_condense_diff',
       'coco_repo_context',
       'coco_blame',

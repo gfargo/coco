@@ -307,7 +307,8 @@ export async function resolveAgentRepoRoot(
  * patch/summary/files) do not.
  */
 export function requiresRepository(operation: AgentOperation, source: ChangeSource): boolean {
-  return operation === 'commit-draft' || source.kind === 'repository'
+  // pr-draft reads the current branch and its base even for a supplied source.
+  return operation === 'commit-draft' || operation === 'pr-draft' || source.kind === 'repository'
 }
 
 export async function createAgentOperationContext(input: {
@@ -1216,3 +1217,33 @@ export async function readRepoCapabilitiesContext(context: AgentOperationContext
     isShallow,
   }
 }
+
+/**
+ * The branch a PR draft is made from and the base it targets (#1823), read
+ * through the hardened agent git runner. `head` is undefined on a detached
+ * HEAD. `defaultBase` is `origin/HEAD`'s branch (without the remote), else
+ * the configured `defaultBranch`, else `main`.
+ */
+export async function readPullRequestBranches(
+  context: AgentOperationContext,
+): Promise<{ head?: string; defaultBase: string }> {
+  let head: string | undefined
+  try {
+    head = (await runAgentGit(context, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).trim() || undefined
+  } catch {
+    head = undefined
+  }
+  let defaultBase: string | undefined
+  try {
+    const remoteHead = (await runAgentGit(context, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])).trim()
+    defaultBase = remoteHead.replace(/^origin\//, '') || undefined
+  } catch {
+    defaultBase = undefined
+  }
+  if (!defaultBase) {
+    const config = loadConfig<Record<string, unknown>, Record<string, unknown>>({}, { cwd: context.repoRoot })
+    defaultBase = typeof config.defaultBranch === 'string' && config.defaultBranch ? config.defaultBranch : 'main'
+  }
+  return { head, defaultBase }
+}
+

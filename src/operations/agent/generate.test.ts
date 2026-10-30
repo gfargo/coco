@@ -13,12 +13,14 @@ import {
   generateAgentChangelog,
   generateAgentCommitDraft,
   generateAgentRecap,
+  generateAgentPrDraft,
   generateAgentReview,
 } from './generate'
 import { AGENT_PROTOCOL_VERSION, AgentOptionsSchema, AgentTaskInput } from './schemas'
 
 jest.mock('./context', () => ({
   resolveChangeSource: jest.fn(),
+  readPullRequestBranches: jest.fn(),
   getConventionsContext: jest.fn().mockReturnValue({ text: '', provenance: null }),
 }))
 jest.mock('../../lib/config/utils/loadConfig')
@@ -677,3 +679,57 @@ describe('agent generate dryRun planning (OSS-1206)', () => {
     expect(mockGenerateCommitDraft).not.toHaveBeenCalled()
   })
 })
+
+// #1823 — PR drafts for agents, without any forge call.
+describe('generateAgentPrDraft (#1823)', () => {
+  const contextModule = jest.requireMock('./context') as {
+    readPullRequestBranches: jest.Mock
+    resolveChangeSource: jest.Mock
+  }
+  const repoInput = (options: Record<string, unknown> = {}, source: unknown = { kind: 'repository', scope: { type: 'staged' } }) => ({
+    ...baseInput,
+    source,
+    options: AgentOptionsSchema.parse(options),
+  }) as AgentTaskInput
+
+  beforeEach(() => {
+    contextModule.readPullRequestBranches.mockResolvedValue({ head: 'feat/x', defaultBase: 'main' })
+  })
+
+  it('drafts title and body from the branch against the default base', async () => {
+    mockExecuteChain.mockResolvedValueOnce({ title: ' Add x ', content: ' Body text. ' } as never)
+    const result = await generateAgentPrDraft(repoInput({ draft: true }), makeContext(undefined))
+
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.operation).toBe('pr-draft')
+    expect(result.data).toEqual({ base: 'main', head: 'feat/x', title: 'Add x', body: 'Body text.', draft: true })
+    expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'repository', scope: { type: 'branch', base: 'main' },
+    })
+  })
+
+  it('uses options.base over the default', async () => {
+    mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+    const result = await generateAgentPrDraft(repoInput({ base: 'release/2.0' }), makeContext(undefined))
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.data).toMatchObject({ base: 'release/2.0', draft: false })
+  })
+
+  it('refuses a detached HEAD and the base branch itself', async () => {
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: undefined, defaultBase: 'main' })
+    await expect(generateAgentPrDraft(repoInput(), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_REVISION' })
+
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: 'main', defaultBase: 'main' })
+    await expect(generateAgentPrDraft(repoInput(), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+
+  it('generates from a supplied summary as given, still reporting base and head', async () => {
+    mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+    const summary = { kind: 'summary', summary: 'Adds x.' }
+    const result = await generateAgentPrDraft(repoInput({}, summary), makeContext(undefined))
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual(summary)
+    expect(result.data).toMatchObject({ base: 'main', head: 'feat/x' })
+  })
+})
+
