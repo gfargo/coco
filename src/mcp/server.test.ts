@@ -1270,4 +1270,79 @@ describe('createCocoMcpServer', () => {
       expect(result).not.toHaveProperty('isError', true)
     })
   })
+
+  describe('client roots are fetched once per tool call (#1826)', () => {
+    type RootsMock = {
+      server: {
+        getClientCapabilities: jest.Mock
+        listRoots: jest.Mock
+      }
+    }
+
+    function deferredServerWithRoots(roots: string[]): RootsMock {
+      const server = createCocoMcpServer() as unknown as RootsMock
+      server.server.getClientCapabilities.mockReturnValue({ roots: {} })
+      server.server.listRoots.mockResolvedValue({ roots: roots.map((root) => ({ uri: `file://${root}` })) })
+      return server
+    }
+
+    const isPathWithinRootMock = jest.requireMock('../operations/agent').isPathWithinRoot as jest.Mock
+
+    afterEach(() => {
+      isPathWithinRootMock.mockImplementation(() => true)
+    })
+
+    it('resolves the repo from the roots and confines it with a single roots/list', async () => {
+      const server = deferredServerWithRoots(['/workspace'])
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/workspace')
+
+      await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+      }, makeExtra())
+
+      expect(server.server.listRoots).toHaveBeenCalledTimes(1)
+    })
+
+    it('fetches again on the next call rather than reusing a stale list', async () => {
+      const server = deferredServerWithRoots(['/workspace'])
+      mockResolveAgentRepoRoot.mockResolvedValue('/workspace')
+
+      for (let i = 0; i < 2; i++) {
+        await registrations.get('coco_review')!.handler({
+          source: { kind: 'summary', summary: 'changed' },
+        }, makeExtra())
+      }
+
+      expect(server.server.listRoots).toHaveBeenCalledTimes(2)
+    })
+
+    it('still rejects an explicit repo outside the declared roots', async () => {
+      const server = deferredServerWithRoots(['/workspace'])
+      isPathWithinRootMock.mockImplementation((child: string, root: string) => child.startsWith(root))
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/elsewhere/repo')
+
+      const result = await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+        repo: '/elsewhere/repo',
+      }, makeExtra())
+
+      expect(result).toMatchObject({
+        isError: true,
+        structuredContent: { ok: false, error: { code: 'REPOSITORY_OUTSIDE_ROOT' } },
+      })
+      expect(server.server.listRoots).toHaveBeenCalledTimes(1)
+    })
+
+    it('skips roots entirely for a client without the roots capability', async () => {
+      const server = createCocoMcpServer() as unknown as RootsMock
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/deferred/repo')
+
+      await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+        repo: '/deferred/repo',
+      }, makeExtra())
+
+      expect(server.server.listRoots).not.toHaveBeenCalled()
+    })
+  })
 })
