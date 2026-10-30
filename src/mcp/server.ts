@@ -35,7 +35,13 @@ import {
     createAgentOperationContext,
     describeRepoResolutionFailure,
     digestOf,
+    AgentBatchRequest,
+    BatchDataSchema,
+    ChangeSource,
     expandChangeSource,
+    McpBatchRequestSchema,
+    McpTaskRequest,
+    runAgentBatch,
     getBranchContext,
     getRecentLog,
     getRepoConfig,
@@ -268,18 +274,36 @@ function makeMcpProgressReporter(
   }
 }
 
+/**
+ * How a generation-style tool parses and runs, when it is not a single
+ * `runAgentOperation` over `McpTaskInputSchema` (the batch tool, #2045).
+ * Repository resolution and confinement stay shared.
+ */
+type GenerationToolSpec = {
+  inputSchema: typeof McpTaskInputSchema | typeof McpBatchRequestSchema
+  outputSchema: ReturnType<typeof createAgentMcpOutputSchema>
+  needsRepository: (input: McpTaskRequest & { operations?: AgentOperation[] }) => boolean
+  run: (
+    input: McpTaskRequest & { operations?: AgentOperation[] },
+    source: ChangeSource,
+    context: AgentOperationContext,
+  ) => Promise<Record<string, unknown>>
+}
+
 function registerGenerationTool(
   server: McpServer,
   operation: AgentOperation,
   title: string,
   description: string,
   boundRoot: string | undefined,
+  spec?: GenerationToolSpec,
 ): void {
+  const inputSchema = spec?.inputSchema ?? McpTaskInputSchema
   server.registerTool(`coco_${operation.replace('-', '_')}`, {
     title,
     description,
-    inputSchema: McpTaskInputSchema,
-    outputSchema: outputSchemaFor(operation),
+    inputSchema,
+    outputSchema: spec?.outputSchema ?? outputSchemaFor(operation),
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -288,9 +312,9 @@ function registerGenerationTool(
     },
   }, async (rawInput, extra) => {
     try {
-      const input = McpTaskInputSchema.parse(rawInput)
+      const input = inputSchema.parse(rawInput) as McpTaskRequest & { operations?: AgentOperation[] }
 
-      const needsRepo = requiresRepository(operation, input.source)
+      const needsRepo = spec ? spec.needsRepository(input) : requiresRepository(operation, input.source)
       let repoRoot: string
       let requireRepository: boolean
 
@@ -341,11 +365,14 @@ function registerGenerationTool(
         surface: 'mcp',
         onProgress,
       })
-      const result = await runAgentOperation(operation, {
-        ...input,
-        source: await expandChangeSource(input.source, context),
-        options: { ...input.options, trustRepositoryConfig: false },
-      }, context)
+      const source = await expandChangeSource(input.source, context)
+      const result = spec
+        ? await spec.run(input, source, context)
+        : await runAgentOperation(operation, {
+          ...input,
+          source,
+          options: { ...input.options, trustRepositoryConfig: false },
+        }, context)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
@@ -708,6 +735,23 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     'Plan a commit split',
     'Plan how to split the staged changes into a sequence of focused commits, as `coco commit --split` would: groups with a title, body, files and hunk ids, validated against the staged state (and built-in Conventional Commits rules with `conventional: true`). Only the staged source is accepted. Repository commitlint config and prompts are never loaded. Planning only: never stages or commits.',
     repoRoot,
+  )
+  registerGenerationTool(
+    server,
+    'batch',
+    'Run several generations on one diff',
+    'Run several of commit-draft, review, changelog and recap, in order, over a single resolution of `source`, and return one envelope per operation sharing the same meta.digest. Saves re-reading the diff for each call. One operation failing does not stop the others. Never creates commits, posts comments or writes files.',
+    repoRoot,
+    {
+      inputSchema: McpBatchRequestSchema,
+      outputSchema: createAgentMcpOutputSchema('batch', BatchDataSchema),
+      needsRepository: (input) => (input.operations ?? []).some((op) => requiresRepository(op, input.source)),
+      run: (input, source, context) => runAgentBatch({
+        ...(input as AgentBatchRequest),
+        source,
+        options: { ...input.options, trustRepositoryConfig: false },
+      }, context),
+    },
   )
   registerGenerationTool(
     server,

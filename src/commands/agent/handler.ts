@@ -2,7 +2,12 @@ import { readFile } from 'node:fs/promises'
 import { z } from 'zod'
 
 import {
+    AgentBatchRequest,
+    AgentBatchRequestSchema,
+    BatchDataSchema,
+    createAgentBatchInputJsonSchema,
     expandChangeSource,
+    runAgentBatch,
     AgentOperation,
     AgentOperationError,
     AgentTaskInputSchema,
@@ -97,6 +102,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, CommitlintRulesDataSchema)
     case 'split-plan':
       return createAgentOutputSchema(operation, SplitPlanDataSchema)
+    case 'batch':
+      return createAgentOutputSchema(operation, BatchDataSchema)
   }
 }
 
@@ -120,6 +127,8 @@ function emitSchema(operation: AgentOperation): void {
       ? createCommitValidateInputJsonSchema()
       : operation === 'commitlint-rules'
       ? createCommitlintRulesInputJsonSchema()
+      : operation === 'batch'
+      ? createAgentBatchInputJsonSchema()
       : createAgentInputJsonSchema(),
     output: z.toJSONSchema(outputSchemaFor(operation)),
   })
@@ -234,8 +243,12 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
         ? await runCommitValidate(input as z.infer<typeof CommitValidateRequestSchema>, repoRoot)
         : await runCommitlintRules(input, repoRoot))
     } else {
-      const input = AgentTaskInputSchema.parse(raw)
-      const needsRepo = requiresRepository(operation, input.source)
+      // batch (#2045) shares this path: the same request plus `operations`.
+      const isBatch = operation === 'batch'
+      const input = isBatch ? AgentBatchRequestSchema.parse(raw) : AgentTaskInputSchema.parse(raw)
+      const needsRepo = isBatch
+        ? (input as AgentBatchRequest).operations.some((op) => requiresRepository(op, input.source))
+        : requiresRepository(operation, input.source)
       let repoRoot: string
       let requireRepository: boolean
 
@@ -286,7 +299,10 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
         signal: controller.signal,
         surface: 'agent-cli',
       })
-      emit(await runAgentOperation(operation, { ...input, source: await expandChangeSource(input.source, context) }, context))
+      const source = await expandChangeSource(input.source, context)
+      emit(isBatch
+        ? await runAgentBatch({ ...(input as AgentBatchRequest), source }, context)
+        : await runAgentOperation(operation, { ...input, source }, context))
     }
   } catch (error) {
     const normalized = error instanceof SyntaxError

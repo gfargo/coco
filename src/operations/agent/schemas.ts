@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'pr-draft', 'commit-validate', 'commitlint-rules', 'split-plan'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'pr-draft', 'commit-validate', 'commitlint-rules', 'split-plan', 'batch'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -1034,3 +1034,39 @@ export const CapabilitiesResultSchema = z.object({
 
 export type CapabilitiesRequest = z.infer<typeof CapabilitiesRequestSchema>
 export type CapabilitiesResult = z.infer<typeof CapabilitiesResultSchema>
+
+// ─── batch operation (#2045) ─────────────────────────────────────────────────
+
+/** Operations a batch can run: the generation operations that share a source. */
+export const BATCHABLE_OPERATIONS = ['commit-draft', 'review', 'changelog', 'recap'] as const
+
+const batchOperationsSchema = z.array(z.enum(BATCHABLE_OPERATIONS)).min(1).max(BATCHABLE_OPERATIONS.length)
+  .refine((operations) => new Set(operations).size === operations.length, 'Each operation may appear at most once.')
+  .describe('Operations to run, in order, over one resolution of `source`. Each at most once.')
+
+/**
+ * Run several generation operations over one resolved source (#2045). An
+ * agent that recaps, reviews and drafts a commit for the same diff used to
+ * pay for resolving it three times.
+ */
+export const AgentBatchRequestSchema = AgentTaskInputSchema.extend({ operations: batchOperationsSchema }).strict()
+export const McpBatchRequestSchema = McpTaskInputSchema.extend({ operations: batchOperationsSchema }).strict()
+
+export function createAgentBatchInputJsonSchema() {
+  return z.toJSONSchema(AgentBatchRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const BatchDataSchema = z.object({
+  results: z.array(z.union([
+    createAgentOutputSchema('commit-draft', CommitDraftDataSchema),
+    createAgentOutputSchema('review', ReviewDataSchema),
+    createAgentOutputSchema('changelog', ChangelogDataSchema),
+    createAgentOutputSchema('recap', RecapDataSchema),
+  ])).describe('One envelope per requested operation, in request order, each with the same meta.digest.'),
+}).strict()
+
+export type BatchableOperation = typeof BATCHABLE_OPERATIONS[number]
+export type AgentBatchRequest = z.infer<typeof AgentBatchRequestSchema>
+export type AgentBatchInput = Omit<AgentBatchRequest, 'source'> & { source: z.infer<typeof ChangeSourceSchema> }
+export type BatchData = z.infer<typeof BatchDataSchema>
+

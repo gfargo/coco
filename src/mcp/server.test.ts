@@ -9,6 +9,7 @@ import {
 import { createCocoMcpServer, resetDeferredUsageTelemetryArmedForTests } from './server'
 
 const mockResolveAgentRepoRoot = jest.fn()
+const mockRunAgentBatch = jest.fn()
 const mockArmNonInteractiveUsageTelemetry = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
@@ -156,6 +157,7 @@ jest.mock('../operations/agent', () => {
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
     runBlame: (...args: unknown[]) => mockRunBlame(...args),
     runLint: (...args: unknown[]) => mockRunLint(...args),
+    runAgentBatch: (...args: unknown[]) => mockRunAgentBatch(...args),
     // Real implementations: zero-token, no model call (#1845).
     runCommitValidate: (jest.requireActual('../operations/agent/validate') as typeof import('../operations/agent/validate')).runCommitValidate,
     runCommitlintRules: (jest.requireActual('../operations/agent/validate') as typeof import('../operations/agent/validate')).runCommitlintRules,
@@ -289,7 +291,7 @@ describe('createCocoMcpServer', () => {
     }
   }
 
-  it('registers thirteen read-only tools including coco_split_plan, coco_pr_draft, coco_condense_diff, coco_repo_context, coco_blame, coco_lint, the commitlint tools, and coco_capabilities', () => {
+  it('registers fourteen read-only tools including coco_split_plan, coco_batch, coco_pr_draft, coco_condense_diff, coco_repo_context, coco_blame, coco_lint, the commitlint tools, and coco_capabilities', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -298,6 +300,7 @@ describe('createCocoMcpServer', () => {
       'coco_changelog',
       'coco_recap',
       'coco_split_plan',
+      'coco_batch',
       'coco_pr_draft',
       'coco_condense_diff',
       'coco_repo_context',
@@ -1429,6 +1432,29 @@ describe('createCocoMcpServer', () => {
 
       expect(result).toMatchObject({ isError: true, structuredContent: { error: { code: 'INVALID_INPUT' } } })
       expect(JSON.stringify(result.structuredContent)).toContain('since-last-tag')
+    })
+  })
+
+  // #2045 — batch tool.
+  describe('coco_batch', () => {
+    it('expands the source once and passes the operations to runAgentBatch', async () => {
+      createServer()
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/repo')
+      mockRunAgentBatch.mockResolvedValueOnce({ ok: true })
+
+      await registrations.get('coco_batch')!.handler({ source: 'staged', operations: ['review', 'commit-draft'] }, makeExtra())
+
+      expect(mockRunAgentBatch.mock.calls.at(-1)?.[0]).toMatchObject({
+        operations: ['review', 'commit-draft'],
+        source: { kind: 'repository', scope: { type: 'staged' } },
+        options: { trustRepositoryConfig: false },
+      })
+    })
+
+    it('rejects a duplicate operation with INVALID_INPUT', async () => {
+      createServer()
+      const result = await registrations.get('coco_batch')!.handler({ operations: ['review', 'review'] }, makeExtra())
+      expect(result).toMatchObject({ isError: true, structuredContent: { error: { code: 'INVALID_INPUT' } } })
     })
   })
 })
