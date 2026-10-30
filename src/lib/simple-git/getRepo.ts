@@ -1,4 +1,5 @@
-import { simpleGit, SimpleGit } from 'simple-git'
+import { SimpleGit } from 'simple-git'
+import { createSimpleGit } from './createSimpleGit'
 import { commandExit } from '../utils/commandExit'
 import { createHeadlessGit } from './headlessGit'
 
@@ -21,7 +22,7 @@ export const getRepo = (baseDir?: string, options: { headless?: boolean } = {}) 
   try {
     git = options.headless
       ? createHeadlessGit(baseDir)
-      : baseDir ? simpleGit(baseDir) : simpleGit()
+      : createSimpleGit(baseDir)
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     process.stderr.write(

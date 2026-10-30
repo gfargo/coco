@@ -1,5 +1,6 @@
 import { execFileSync } from 'child_process'
-import { simpleGit, SimpleGit } from 'simple-git'
+import { SimpleGit } from 'simple-git'
+import { createSimpleGit } from './createSimpleGit'
 
 /**
  * Git hardening for full-screen sessions (`coco ui`, `coco workspace`).
@@ -97,8 +98,7 @@ export function resetHeadlessGitEnvForTests(): void {
 }
 
 export function createHeadlessGit(baseDir?: string): SimpleGit {
-  return simpleGit({
-    ...(baseDir ? { baseDir } : {}),
-    timeout: { block: HEADLESS_GIT_BLOCK_TIMEOUT_MS },
-  })
+  // Built on createSimpleGit: simple-git 4 strips ambient GIT_* variables
+  // unless allow-listed, which would drop the guards set above.
+  return createSimpleGit(baseDir, { timeout: { block: HEADLESS_GIT_BLOCK_TIMEOUT_MS } })
 }

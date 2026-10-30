@@ -110,7 +110,7 @@
   },
   "devDependencies": {
     "@commitlint/types": "^21.0.1",
-    "@gfargo/git-scenarios": "^1.0.0",
+    "@gfargo/git-scenarios": "^1.5.1",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-eslint": "^9.0.5",
     "@rollup/plugin-json": "^6.0.0",
@@ -173,7 +173,7 @@
     "pretty-ms": "7.0.1",
     "react": "19.2.8",
     "react-devtools-core": "8.0.0",
-    "simple-git": "3.36.0",
+    "simple-git": "4.0.2",
     "tiktoken": "^1.0.21",
     "web-tree-sitter": "^0.27.0",
     "yargs": "18.2.0",

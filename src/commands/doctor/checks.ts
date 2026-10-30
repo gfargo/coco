@@ -14,7 +14,7 @@ import {
   totalUsageCost,
 } from '../../lib/langchain/utils/usageLedger'
 import { LLM_PROVIDER_IDS, providerRequiresAuth } from '../../lib/langchain/providers/registry'
-import { simpleGit } from 'simple-git'
+import { createSimpleGit } from '../../lib/simple-git/createSimpleGit'
 import { resolveGitPath } from '../../git/gitPath'
 import { probeGitBinary } from '../../lib/simple-git/gitPreflight'
 
@@ -600,7 +600,7 @@ export type CommitGraphProbeResult =
   | { inRepo: true; hasCommitGraph: false; commitCount: number }
 
 export async function probeCommitGraph(cwd: string = process.cwd()): Promise<CommitGraphProbeResult> {
-  const git = simpleGit(cwd)
+  const git = createSimpleGit(cwd)
   if (!(await git.checkIsRepo())) return { inRepo: false }
   const [single, chain] = await Promise.all([
     resolveGitPath(git, 'objects/info/commit-graph'),

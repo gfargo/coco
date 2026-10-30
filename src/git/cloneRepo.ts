@@ -7,7 +7,7 @@
  * does the filesystem-touching work and reports a friendly result.
  */
 import * as fs from 'fs'
-import { simpleGit } from 'simple-git'
+import { createSimpleGit } from '../lib/simple-git/createSimpleGit'
 import { rejectFlagLike } from './forgeArgGuards'
 
 export type CloneResult = {
@@ -72,7 +72,7 @@ export async function cloneRepo(url: string, targetPath: string): Promise<CloneR
     return { ok: false, message: `${dest} already exists — choose another path.` }
   }
   try {
-    await simpleGit().clone(remote, dest)
+    await createSimpleGit().clone(remote, dest)
     return { ok: true, message: `Cloned into ${dest}` }
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error)

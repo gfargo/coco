@@ -1,4 +1,5 @@
-import { simpleGit, SimpleGit } from 'simple-git'
+import { SimpleGit } from 'simple-git'
+import { createSimpleGit } from './createSimpleGit'
 import { HEADLESS_GIT_BLOCK_TIMEOUT_MS } from './headlessGit'
 
 export type CancellableGit = {
@@ -18,8 +19,9 @@ export type CancellableGit = {
  */
 export function createCancellableGit(baseDir: string): CancellableGit {
   const controller = new AbortController()
-  const git = simpleGit({
-    baseDir,
+  // createSimpleGit, so simple-git 4 still passes the headless guards
+  // (GIT_TERMINAL_PROMPT, the BatchMode SSH command) to the network op.
+  const git = createSimpleGit(baseDir, {
     timeout: { block: HEADLESS_GIT_BLOCK_TIMEOUT_MS },
     abort: controller.signal,
   })

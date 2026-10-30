@@ -1,5 +1,6 @@
 import * as path from 'node:path'
-import { simpleGit, SimpleGit } from 'simple-git'
+import { SimpleGit } from 'simple-git'
+import { createSimpleGit } from '../lib/simple-git/createSimpleGit'
 import { resolveDefaultRemote } from './githubCli'
 
 /**
@@ -40,7 +41,7 @@ export async function resolveRepoIdentifier(
   options: { cwd?: string; git?: SimpleGit } = {}
 ): Promise<string | undefined> {
   try {
-    const git = options.git ?? (options.cwd ? simpleGit({ baseDir: options.cwd }) : simpleGit())
+    const git = options.git ?? (options.cwd ? createSimpleGit(options.cwd) : createSimpleGit())
 
     const resolved = await resolveDefaultRemote(git)
     const fromRemote = resolved ? parseRepoIdentifierFromRemote(resolved.url) : undefined
