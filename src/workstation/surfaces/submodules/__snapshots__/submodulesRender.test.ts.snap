@@ -26,7 +26,7 @@ exports[`renderSubmodulesSurface structural snapshot — empty 1`] = `
   <Text
     dimColor={true}
   >
-    No submodules registered. Add one with \`git submodule add &lt;url&gt; &lt;path&gt;\` from the shell.
+    No submodules registered. Add one with \`git submodule add &lt;url&gt; &lt;path&gt;\`, then press r to refresh.
   </Text>
 </Box>
 `;
@@ -55,7 +55,9 @@ exports[`renderSubmodulesSurface structural snapshot — populated 1`] = `
     </Text>
   </Box>
   <Text
+    backgroundColor="#1a3a4a"
     bold={true}
+    color="#ffffff"
     dimColor={false}
   >
     &gt; vendor/lib vendor/lib abc1234 clean

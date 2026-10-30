@@ -30,11 +30,19 @@ import {
     CommitApplyRequestSchema,
     CommitDraftDataSchema,
     CondenseDiffDataSchema,
+    agentErrorPayload,
     createAgentFailureEnvelope,
     createAgentMcpOutputSchema,
     createAgentOperationContext,
     describeRepoResolutionFailure,
     digestOf,
+    AgentBatchRequest,
+    BatchDataSchema,
+    ChangeSource,
+    expandChangeSource,
+    McpBatchRequestSchema,
+    McpTaskRequest,
+    runAgentBatch,
     getBranchContext,
     getRecentLog,
     getRepoConfig,
@@ -42,7 +50,15 @@ import {
     getRepoTree,
     getStagedDiff,
     isPathWithinRoot,
+    CommitlintRulesDataSchema,
+    CommitlintRulesRequest,
+    CommitlintRulesRequestSchema,
+    CommitValidateDataSchema,
+    CommitValidateRequest,
+    CommitValidateRequestSchema,
     LintDataSchema,
+    PrDraftDataSchema,
+    SplitPlanDataSchema,
     LintRequestSchema,
     MAX_BLAME_EXPLAIN_COMMITS,
     MAX_BLAME_EXPLAIN_LINES,
@@ -60,6 +76,8 @@ import {
     runCapabilities,
     runCommitApply,
     runCondenseDiff,
+    runCommitlintRules,
+    runCommitValidate,
     runLint,
     runRepoContext,
     toAgentOperationError,
@@ -75,6 +93,10 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, ChangelogDataSchema)
     case 'recap':
       return createAgentMcpOutputSchema(operation, RecapDataSchema)
+    case 'pr-draft':
+      return createAgentMcpOutputSchema(operation, PrDraftDataSchema)
+    case 'split-plan':
+      return createAgentMcpOutputSchema(operation, SplitPlanDataSchema)
     case 'condense-diff':
       return createAgentMcpOutputSchema(operation, CondenseDiffDataSchema)
     case 'repo-context':
@@ -82,20 +104,55 @@ function outputSchemaFor(operation: AgentOperation) {
   }
 }
 
+/** The client's declared filesystem roots for one tool call, or `undefined` without the capability. */
+type ClientRoots = () => Promise<string[] | undefined>
+
+/**
+ * Fetch the client's `file://` roots and normalize them. The one place the
+ * URI parsing and path normalization live, so the repo-from-roots lookup and
+ * the confinement check cannot drift apart.
+ */
+async function fetchClientRoots(server: McpServer): Promise<string[] | undefined> {
+  if (!server.server.getClientCapabilities()?.roots) return undefined
+  const { roots } = await server.server.listRoots()
+  return roots.flatMap((root) => {
+    if (!root.uri.startsWith('file://')) return []
+    try {
+      return [resolveAgentDirectoryRoot(fileURLToPath(root.uri))]
+    } catch {
+      return []
+    }
+  })
+}
+
+/**
+ * Per-call memo of the client roots (#1826). Resolving a repo from the roots
+ * and then confining it to them used to send `roots/list` twice per tool
+ * call. Keyed on the request's `extra`, which the SDK creates per call, so
+ * the list is never reused across calls: clients may change their roots
+ * mid-session (`listChanged`).
+ */
+const clientRootsByCall = new WeakMap<object, ClientRoots>()
+
+function clientRootsFor(server: McpServer, call: object): ClientRoots {
+  let roots = clientRootsByCall.get(call)
+  if (!roots) {
+    let pending: Promise<string[] | undefined> | undefined
+    roots = () => (pending ??= fetchClientRoots(server))
+    clientRootsByCall.set(call, roots)
+  }
+  return roots
+}
+
 /**
  * Resolve the first git repository root found among the MCP client's
  * declared roots. Returns `undefined` if the client does not declare
  * roots or none of them contain a git repository.
  */
-async function resolveRepoFromClientRoots(server: McpServer): Promise<string | undefined> {
-  if (!server.server.getClientCapabilities()?.roots) return undefined
-  const { roots } = await server.server.listRoots()
-  for (const root of roots) {
-    if (!root.uri.startsWith('file://')) continue
+async function resolveRepoFromClientRoots(clientRoots: ClientRoots): Promise<string | undefined> {
+  for (const dir of (await clientRoots()) ?? []) {
     try {
-      const dir = resolveAgentDirectoryRoot(fileURLToPath(root.uri))
-      const resolved = await resolveAgentRepoRoot(dir)
-      return resolved
+      return await resolveAgentRepoRoot(dir)
     } catch {
       // Not a git repo or not a valid directory — skip.
     }
@@ -103,19 +160,10 @@ async function resolveRepoFromClientRoots(server: McpServer): Promise<string | u
   return undefined
 }
 
-async function assertClientAllowsRoot(server: McpServer, repoRoot: string): Promise<void> {
-  if (!server.server.getClientCapabilities()?.roots) return
-  const { roots } = await server.server.listRoots()
-  const allowed = roots.some((root) => {
-    if (!root.uri.startsWith('file://')) return false
-    try {
-      const clientRoot = resolveAgentDirectoryRoot(fileURLToPath(root.uri))
-      return isPathWithinRoot(repoRoot, clientRoot)
-    } catch {
-      return false
-    }
-  })
-  if (!allowed) {
+async function assertClientAllowsRoot(clientRoots: ClientRoots, repoRoot: string): Promise<void> {
+  const roots = await clientRoots()
+  if (!roots) return
+  if (!roots.some((clientRoot) => isPathWithinRoot(repoRoot, clientRoot))) {
     throw new AgentOperationError(
       'REPOSITORY_OUTSIDE_ROOT',
       `The MCP client did not expose '${repoRoot}' as an allowed filesystem root.`,
@@ -158,7 +206,7 @@ export function resetDeferredUsageTelemetryArmedForTests(): void {
  *   2. The first git root found in the client's declared roots.
  */
 async function resolveEffectiveRepoRoot(
-  server: McpServer,
+  clientRoots: ClientRoots,
   inputRepo: string | undefined,
   boundRoot: string | undefined,
   signal?: AbortSignal,
@@ -182,7 +230,7 @@ async function resolveEffectiveRepoRoot(
     return repoRoot
   }
 
-  const fromRoots = await resolveRepoFromClientRoots(server)
+  const fromRoots = await resolveRepoFromClientRoots(clientRoots)
   if (fromRoots) {
     await armDeferredUsageTelemetryOnce(fromRoots)
     return fromRoots
@@ -227,18 +275,36 @@ function makeMcpProgressReporter(
   }
 }
 
+/**
+ * How a generation-style tool parses and runs, when it is not a single
+ * `runAgentOperation` over `McpTaskInputSchema` (the batch tool, #2045).
+ * Repository resolution and confinement stay shared.
+ */
+type GenerationToolSpec = {
+  inputSchema: typeof McpTaskInputSchema | typeof McpBatchRequestSchema
+  outputSchema: ReturnType<typeof createAgentMcpOutputSchema>
+  needsRepository: (input: McpTaskRequest & { operations?: AgentOperation[] }) => boolean
+  run: (
+    input: McpTaskRequest & { operations?: AgentOperation[] },
+    source: ChangeSource,
+    context: AgentOperationContext,
+  ) => Promise<Record<string, unknown>>
+}
+
 function registerGenerationTool(
   server: McpServer,
   operation: AgentOperation,
   title: string,
   description: string,
   boundRoot: string | undefined,
+  spec?: GenerationToolSpec,
 ): void {
+  const inputSchema = spec?.inputSchema ?? McpTaskInputSchema
   server.registerTool(`coco_${operation.replace('-', '_')}`, {
     title,
     description,
-    inputSchema: McpTaskInputSchema,
-    outputSchema: outputSchemaFor(operation),
+    inputSchema,
+    outputSchema: spec?.outputSchema ?? outputSchemaFor(operation),
     annotations: {
       readOnlyHint: true,
       destructiveHint: false,
@@ -247,16 +313,16 @@ function registerGenerationTool(
     },
   }, async (rawInput, extra) => {
     try {
-      const input = McpTaskInputSchema.parse(rawInput)
+      const input = inputSchema.parse(rawInput) as McpTaskRequest & { operations?: AgentOperation[] }
 
-      const needsRepo = requiresRepository(operation, input.source)
+      const needsRepo = spec ? spec.needsRepository(input) : requiresRepository(operation, input.source)
       let repoRoot: string
       let requireRepository: boolean
 
       if (needsRepo) {
         // Repository-derived sources and commit-draft require a real repository.
         try {
-          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+          repoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, boundRoot, extra.signal)
         } catch (error) {
           if (error instanceof AgentOperationError && error.code === 'INVALID_REPOSITORY' && operation === 'commit-draft') {
             throw new AgentOperationError(
@@ -267,14 +333,14 @@ function registerGenerationTool(
           }
           throw error
         }
-        await assertClientAllowsRoot(server, repoRoot)
+        await assertClientAllowsRoot(clientRootsFor(server, extra), repoRoot)
         requireRepository = true
       } else {
         // Supplied-source operations: try repo resolution for head verification,
         // but skip it gracefully when no repository is available or declared.
         try {
-          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
-          await assertClientAllowsRoot(server, repoRoot)
+          repoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, boundRoot, extra.signal)
+          await assertClientAllowsRoot(clientRootsFor(server, extra), repoRoot)
           requireRepository = true
         } catch (error) {
           if (error instanceof AgentOperationError) {
@@ -300,10 +366,14 @@ function registerGenerationTool(
         surface: 'mcp',
         onProgress,
       })
-      const result = await runAgentOperation(operation, {
-        ...input,
-        options: { ...input.options, trustRepositoryConfig: false },
-      }, context)
+      const source = await expandChangeSource(input.source, context)
+      const result = spec
+        ? await spec.run(input, source, context)
+        : await runAgentOperation(operation, {
+          ...input,
+          source,
+          options: { ...input.options, trustRepositoryConfig: false },
+        }, context)
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
         structuredContent: result,
@@ -347,8 +417,8 @@ function registerCommitApplyTool(server: McpServer, boundRoot: string | undefine
   }, async (rawInput, extra) => {
     try {
       const input = CommitApplyRequestSchema.parse(rawInput)
-      const repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
-      await assertClientAllowsRoot(server, repoRoot)
+      const repoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, boundRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), repoRoot)
       const context = await createAgentOperationContext({
         repoRoot,
         requireRepository: true,
@@ -363,7 +433,7 @@ function registerCommitApplyTool(server: McpServer, boundRoot: string | undefine
     } catch (error) {
       const failure = toAgentOperationError(error)
       const errorPayload = {
-        error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+        error: agentErrorPayload(failure),
       }
       return {
         isError: true,
@@ -390,8 +460,8 @@ function registerRepoResource(
     mimeType,
   }, async (resourceUri, extra) => {
     try {
-      const repoRoot = await resolveEffectiveRepoRoot(server, undefined, boundRoot, extra.signal)
-      await assertClientAllowsRoot(server, repoRoot)
+      const repoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), undefined, boundRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), repoRoot)
       const context = await createAgentOperationContext({
         repoRoot,
         signal: extra.signal,
@@ -414,7 +484,7 @@ function registerRepoResource(
           uri: resourceUri.href,
           mimeType: 'application/json',
           text: JSON.stringify({
-            error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+            error: agentErrorPayload(failure),
           }, null, 2),
         }],
       }
@@ -660,6 +730,37 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     'Generate a structured recap from repository changes or supplied context.',
     repoRoot,
   )
+  registerGenerationTool(
+    server,
+    'split-plan',
+    'Plan a commit split',
+    'Plan how to split the staged changes into a sequence of focused commits, as `coco commit --split` would: groups with a title, body, files and hunk ids, validated against the staged state (and built-in Conventional Commits rules with `conventional: true`). Only the staged source is accepted. Repository commitlint config and prompts are never loaded. Planning only: never stages or commits.',
+    repoRoot,
+  )
+  registerGenerationTool(
+    server,
+    'batch',
+    'Run several generations on one diff',
+    'Run several of commit-draft, review, changelog and recap, in order, over a single resolution of `source`, and return one envelope per operation sharing the same meta.digest. Saves re-reading the diff for each call. One operation failing does not stop the others. Never creates commits, posts comments or writes files.',
+    repoRoot,
+    {
+      inputSchema: McpBatchRequestSchema,
+      outputSchema: createAgentMcpOutputSchema('batch', BatchDataSchema),
+      needsRepository: (input) => (input.operations ?? []).some((op) => requiresRepository(op, input.source)),
+      run: (input, source, context) => runAgentBatch({
+        ...(input as AgentBatchRequest),
+        source,
+        options: { ...input.options, trustRepositoryConfig: false },
+      }, context),
+    },
+  )
+  registerGenerationTool(
+    server,
+    'pr-draft',
+    'Draft pull request',
+    'Draft a pull/merge request title and body for the current branch against its base (options.base, default the repository default branch), as `coco pr create --json` would. Returns base, head, title, body and draft. Never opens a request or calls a forge.',
+    repoRoot,
+  )
 
   // condense-diff uses its own input schema (CondenseDiffRequestSchema) and
   // dispatches to runCondenseDiff, so it is registered separately rather than
@@ -687,8 +788,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
       const input = McpCondenseDiffRequestSchema.parse(rawInput)
       // repoRoot here shadows the outer parameter, using it as the "boundRoot"
       // to match the single-repo confinement pattern of the other tools.
-      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       const onProgress = makeMcpProgressReporter(extra)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
@@ -738,8 +839,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     const repoContextOperation = 'repo-context' as const
     try {
       const input = RepoContextRequestSchema.parse(rawInput)
-      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
@@ -787,8 +888,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     const operation = 'blame' as const
     try {
       const input = BlameRequestSchema.parse(rawInput)
-      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
@@ -837,8 +938,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     const operation = 'lint' as const
     try {
       const input = LintRequestSchema.parse(rawInput)
-      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
@@ -858,6 +959,81 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
       }
     }
   })
+
+  // Zero-token commit message tools (#1845). No model call, no API key, no
+  // network. Repository commitlint config is executable and is never loaded;
+  // a repository is optional and only used to report whether one defines
+  // its own config, so these work before any repository is known.
+  const registerCommitlintTool = <T extends 'commit-validate' | 'commitlint-rules'>(
+    name: string,
+    operation: T,
+    config: { title: string; description: string; inputSchema: z.ZodObject; dataSchema: z.ZodType },
+    run: (input: never, repoRoot: string | undefined) => Promise<Record<string, unknown>>,
+  ) => {
+    server.registerTool(name, {
+      title: config.title,
+      description: config.description,
+      inputSchema: config.inputSchema,
+      outputSchema: createAgentMcpOutputSchema(operation, config.dataSchema),
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    }, async (rawInput, extra) => {
+      try {
+        const input = config.inputSchema.parse(rawInput) as { repo?: string }
+        let resolvedRepoRoot: string | undefined
+        try {
+          resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+          await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
+        } catch (error) {
+          // Confinement violations are refusals, not "no repository".
+          const code = error instanceof AgentOperationError ? error.code : undefined
+          if (code === 'REPOSITORY_OUTSIDE_ROOT' || code === 'REPOSITORY_MISMATCH' || code === 'CANCELLED') throw error
+          resolvedRepoRoot = undefined
+        }
+        const result = await run(input as never, resolvedRepoRoot)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+          structuredContent: result,
+        }
+      } catch (error) {
+        const failure = createAgentFailureEnvelope(operation, toAgentOperationError(error))
+        return {
+          isError: true,
+          content: [{ type: 'text' as const, text: JSON.stringify(failure, null, 2) }],
+          structuredContent: failure,
+        }
+      }
+    })
+  }
+
+  registerCommitlintTool('coco_commit_validate', 'commit-validate', {
+    title: 'Validate a commit message',
+    description: [
+      "Check a commit message you wrote against coco's built-in Conventional Commits rules, before committing.",
+      'Returns `valid`, plus `errors` and `warnings` each naming the commitlint rule (e.g. `header-max-length`).',
+      'No model call, no API key, no network: call it on every commit, in a draft, validate, repair loop.',
+      "Repository commitlint config is never loaded (it is executable). `repositoryConfig: \"detected\"` means the",
+      "repository defines its own rules, so a pass here is advisory. Read-only.",
+    ].join(' '),
+    inputSchema: CommitValidateRequestSchema,
+    dataSchema: CommitValidateDataSchema,
+  }, (input: CommitValidateRequest, root) => runCommitValidate(input, root))
+
+  registerCommitlintTool('coco_commitlint_rules', 'commitlint-rules', {
+    title: 'List commit message rules',
+    description: [
+      'List the rules coco_commit_validate checks against, one readable line each, so a message can conform on the',
+      "first attempt. These are coco's built-in Conventional Commits rules; repository commitlint config is never",
+      'loaded. `repositoryConfig` reports whether the repository defines its own (by file presence only).',
+      'No model call, no API key, no network. Read-only.',
+    ].join(' '),
+    inputSchema: CommitlintRulesRequestSchema,
+    dataSchema: CommitlintRulesDataSchema,
+  }, (input: CommitlintRulesRequest, root) => runCommitlintRules(input, root))
 
   if (allowWrite) registerCommitApplyTool(server, repoRoot)
 
@@ -889,8 +1065,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
       const input = CapabilitiesRequestSchema.parse(rawInput)
       let resolvedRepoRoot: string | undefined
       try {
-        resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-        await assertClientAllowsRoot(server, resolvedRepoRoot)
+        resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+        await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       } catch {
         // No repository available (or not declared as an allowed client
         // root) -- capabilities degrades to the repo-optional report rather
@@ -905,7 +1081,7 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     } catch (error) {
       const failure = toAgentOperationError(error)
       const errorPayload = {
-        error: { code: failure.code, message: failure.message, retryable: failure.retryable },
+        error: agentErrorPayload(failure),
       }
       return {
         isError: true,

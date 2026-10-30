@@ -2,6 +2,7 @@ import { CommandHandler } from '../../lib/types'
 import { Config } from '../../lib/config/types'
 import { loadConfig } from '../../lib/config/utils/loadConfig'
 import { getRepo } from '../../lib/simple-git/getRepo'
+import { applyHeadlessGitEnv } from '../../lib/simple-git/headlessGit'
 import {
   startWorkspace,
   type WorkspaceResumeState,
@@ -57,6 +58,10 @@ export function resolveWorkspaceMaxDepth(
     return argv.maxDepth
   }
   return config.workspace?.maxDepth
+}
+
+export function resolveWorkspaceFollowSymlinks(config: Pick<Config, 'workspace'>): boolean | undefined {
+  return config.workspace?.followSymlinks
 }
 
 /**
@@ -126,6 +131,7 @@ export async function runWorkspaceLoop(deps: WorkspaceLoopDeps): Promise<void> {
 }
 
 export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
+  applyHeadlessGitEnv()
   // `--repo` still applies — useful if the user wants to scope a
   // single root override and have it interpreted relative to a target
   // directory. The workspace surface itself never operates on a single
@@ -137,6 +143,7 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
   const roots = resolveWorkspaceRoots(argv, config)
   const knownRepos = resolveWorkspaceKnownRepos(config)
   const maxDepth = resolveWorkspaceMaxDepth(argv, config)
+  const followSymlinks = resolveWorkspaceFollowSymlinks(config)
   const baseCwd = process.cwd()
 
   await runWorkspaceLoop({
@@ -147,6 +154,7 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
         roots,
         knownRepos,
         maxDepth,
+        followSymlinks,
         appLabel: 'coco workspace',
         theme: createUiTheme(config, argv),
         resume,
@@ -154,7 +162,7 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
     runUiForRepo: async (repoPath) => {
       const drillArgv = buildDrillInUiArgv(argv)
       const logArgv = createLogArgvFromUiArgv(drillArgv)
-      const git = getRepo(repoPath)
+      const git = getRepo(repoPath, { headless: true })
       await startCocoUiFromLogArgv(logArgv, { git })
     },
   })

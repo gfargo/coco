@@ -20,7 +20,7 @@ import type * as ReactTypes from 'react'
 import { deriveGitignoreOptions } from '../chrome/gitignore'
 import { clampListWindowStart } from '../chrome/layout'
 import { pickThemedSpinnerFrame } from '../chrome/spinner'
-import { truncateCells } from '../chrome/text'
+import { cellWidth, padCells, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
 import { THEME_PRESET_COLORS } from '../chrome/theme'
 import { pickWorkstationGlyph } from '../chrome/glyphs'
@@ -123,6 +123,10 @@ export function describeConfirmationTarget(
   const id = state.pendingConfirmationId
   if (!id) return undefined
   const action = getLogInkWorkflowActionById(id)
+  // #2202 — revert-file acts on the path pinned when the prompt opened.
+  if (id === 'revert-file' && state.pendingConfirmationPayload) {
+    return `file: ${state.pendingConfirmationPayload}`
+  }
   const item = resolvePendingItemAction(id, state, context)
   if (item && (action?.targets !== 'multi' || item.ids.length === 1)) {
     return `${item.kind}: ${item.ids[0]}`
@@ -533,7 +537,7 @@ export function renderCommandPalette(
   bodyRows: number = 0
 ): ReactTypes.ReactElement {
   const { Box, Text } = components
-  const all = getLogInkPaletteCommands()
+  const all = getLogInkPaletteCommands(state.activeView)
   const filtered = filterLogInkPaletteCommands(all, state.paletteFilter, state.paletteRecent)
   const recentSet = new Set(state.paletteRecent)
   const showingRecent = !state.paletteFilter.trim() && state.paletteRecent.length > 0
@@ -557,10 +561,27 @@ export function renderCommandPalette(
   const visible = filtered.slice(startIndex, startIndex + listRows)
 
   const inputLine = `> ${state.paletteFilter}_`
+  const hint = '↑/↓ select · enter run · esc close'
   const matchSummary = filtered.length === 0
     ? 'no matches'
     : `${filtered.length} ${filtered.length === 1 ? 'match' : 'matches'}`
-  const hint = '↑/↓ select · enter run · esc close'
+
+  // The key column fits the longest key on screen (#2161): a fixed 8 let
+  // `page down` shove its label a cell right. Capped so one long chord
+  // cannot starve the label and description columns.
+  const keyWidth = Math.min(14, Math.max(4, ...visible.map((command) => cellWidth(command.keys))))
+  // Entries that share a key (`[` is previous tab in the sidebar and
+  // previous hunk in the diff) say where each applies.
+  const tokensOf = (command: (typeof filtered)[number]) =>
+    command.keyTokens ?? (command.keys ? [command.keys] : [])
+  const keyCounts = new Map<string, number>()
+  for (const command of filtered) {
+    for (const token of new Set(tokensOf(command))) keyCounts.set(token, (keyCounts.get(token) ?? 0) + 1)
+  }
+  const labelFor = (command: (typeof filtered)[number]) =>
+    command.context && tokensOf(command).some((token) => (keyCounts.get(token) ?? 0) > 1)
+      ? `${command.label} (${command.context})`
+      : command.label
 
   const itemLines = filtered.length === 0
     ? [h(Text, { key: 'palette-empty', dimColor: true }, 'No commands match the current filter.')]
@@ -576,7 +597,7 @@ export function renderCommandPalette(
             ? '[confirm]'
             : '[action]'
         : ''
-      const line = `${cursor} ${recentMarker} ${command.keys.padEnd(8)} ${command.label.padEnd(20)} ${kindMarker ? `${kindMarker} ` : ''}${command.description}`
+      const line = `${cursor} ${recentMarker} ${padCells(command.keys, keyWidth)} ${padCells(labelFor(command), 24)} ${kindMarker ? `${kindMarker} ` : ''}${command.description}`
       return h(Text, {
         key: `palette-${command.kind}-${command.id}`,
         bold: isSelected,

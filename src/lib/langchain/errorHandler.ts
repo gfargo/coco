@@ -109,7 +109,7 @@ function extractErrorMessage(error: unknown): string {
 }
 
 /** Best-effort extraction of an HTTP status code across provider SDK error shapes. */
-function extractHttpStatus(error: unknown): number | undefined {
+export function extractHttpStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined
   const err = error as { status?: number; statusCode?: number; response?: { status?: number } }
   if (typeof err.status === 'number') return err.status
@@ -126,7 +126,7 @@ function extractHttpStatus(error: unknown): number | undefined {
  * `getDefaultServiceApiKey`'s locally-missing-key check (before any
  * request) produced `LangChainAuthenticationError`.
  */
-function isAuthError(error: unknown): boolean {
+export function isAuthError(error: unknown): boolean {
   const status = extractHttpStatus(error)
   if (status === 401 || status === 403) return true
   if (!error || typeof error !== 'object') return false
@@ -157,7 +157,7 @@ const QUOTA_MESSAGE_PATTERNS = [
  * work. Checked before {@link isRateLimitError} since a quota 429 satisfies
  * that predicate too.
  */
-function isQuotaExceededError(error: unknown): boolean {
+export function isQuotaExceededError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false
   const err = error as { code?: string | number; error?: { code?: string; type?: string }; message?: string }
   const code = err.code ?? err.error?.code
@@ -176,7 +176,7 @@ function isQuotaExceededError(error: unknown): boolean {
  * provider message via the generic execution-error wrap, with no
  * rate-limit-specific guidance.
  */
-function isRateLimitError(error: unknown): boolean {
+export function isRateLimitError(error: unknown): boolean {
   if (extractHttpStatus(error) === 429) return true
   if (!error || typeof error !== 'object') return false
   const err = error as { code?: string | number; message?: string }
@@ -186,6 +186,68 @@ function isRateLimitError(error: unknown): boolean {
     return RATE_LIMIT_MESSAGE_PATTERNS.some((pattern) => message.includes(pattern))
   }
   return false
+}
+
+type HeaderBag = Headers | Record<string, string | string[] | undefined>
+
+function readHeader(headers: HeaderBag | undefined, name: string): string | undefined {
+  if (!headers) return undefined
+  if (typeof (headers as Headers).get === 'function') return (headers as Headers).get(name) ?? undefined
+  const record = headers as Record<string, string | string[] | undefined>
+  const key = Object.keys(record).find((candidate) => candidate.toLowerCase() === name)
+  const value = key === undefined ? undefined : record[key]
+  return Array.isArray(value) ? value[0] : value
+}
+
+/** A day at most; a non-finite or negative hint is no hint. */
+const MAX_RETRY_AFTER_MS = 24 * 60 * 60 * 1000
+
+function clampRetryAfter(ms: number): number | undefined {
+  if (!Number.isFinite(ms)) return undefined
+  return Math.min(MAX_RETRY_AFTER_MS, Math.max(0, Math.round(ms)))
+}
+
+const TRANSIENT_HTTP_STATUS = new Set([408, 500, 502, 503, 504])
+const TRANSIENT_ERROR_CODES = new Set(['ETIMEDOUT', 'ECONNRESET', 'ECONNABORTED', 'EAI_AGAIN', 'EPIPE', 'UND_ERR_CONNECT_TIMEOUT', 'UND_ERR_SOCKET'])
+
+/**
+ * Whether a provider failure is transient, judged only from structured
+ * fields: HTTP status, error code, and the SDK error class name (OpenAI's
+ * and Anthropic's `APIConnectionTimeoutError` / `APIConnectionError`).
+ * Never from message text, so an error that merely mentions "timeout" or
+ * "429" (a file name, a ref) is not mistaken for one (#1844 review).
+ */
+export function isTransientProviderFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const status = extractHttpStatus(error)
+  if (status !== undefined && TRANSIENT_HTTP_STATUS.has(status)) return true
+  const err = error as { code?: unknown; name?: unknown; cause?: { code?: unknown } }
+  if (typeof err.code === 'string' && TRANSIENT_ERROR_CODES.has(err.code)) return true
+  if (typeof err.cause?.code === 'string' && TRANSIENT_ERROR_CODES.has(err.cause.code)) return true
+  return typeof err.name === 'string' && /^APIConnection(Timeout)?Error$/.test(err.name)
+}
+
+/**
+ * How long the provider asked the caller to wait, in milliseconds, from a
+ * `retry-after-ms` header (OpenAI) or a standard `Retry-After` header (delta
+ * seconds or an HTTP date). Looks at `error.headers` and
+ * `error.response.headers`, the two places provider SDKs keep them.
+ * `undefined` when there is no usable hint (#1844).
+ */
+export function extractRetryAfterMs(error: unknown, now: number = Date.now()): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const err = error as { headers?: HeaderBag; response?: { headers?: HeaderBag } }
+  for (const headers of [err.headers, err.response?.headers]) {
+    const ms = readHeader(headers, 'retry-after-ms')
+    if (ms !== undefined && /^\d+(\.\d+)?$/.test(ms.trim())) return clampRetryAfter(Number(ms))
+    const after = readHeader(headers, 'retry-after')
+    if (after === undefined) continue
+    const trimmed = after.trim()
+    if (/^\d+(\.\d+)?$/.test(trimmed)) return clampRetryAfter(Number(trimmed) * 1000)
+    const date = Date.parse(trimmed)
+    if (!Number.isNaN(date)) return clampRetryAfter(date - now)
+  }
+  return undefined
 }
 
 /**
@@ -251,9 +313,11 @@ export function handleLangChainError(
     const provider = additionalContext?.provider as string | undefined
     const message = extractErrorMessage(error)
 
+    const retryAfterMs = extractRetryAfterMs(error)
     throw new LangChainRateLimitError(message, provider, {
       originalError: error instanceof Error ? error.name : typeof error,
       originalMessage: message,
+      ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
       context,
       ...additionalContext
     })
@@ -272,13 +336,20 @@ export function handleLangChainError(
     )
   }
 
-  // If it's a regular Error, wrap it
+  // If it's a regular Error, wrap it. The status and transience are kept
+  // in the context: the agent layer classifies retryability from them, and
+  // the wrapped error no longer carries the provider's fields (#1844).
   if (error instanceof Error) {
+    const httpStatus = extractHttpStatus(error)
+    const retryAfterMs = extractRetryAfterMs(error)
     throw new LangChainExecutionError(
       `${context}: ${error.message}`,
       {
         originalError: error.name,
         originalMessage: error.message,
+        ...(httpStatus === undefined ? {} : { httpStatus }),
+        ...(isTransientProviderFailure(error) ? { transient: true } : {}),
+        ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
         stack: error.stack,
         context,
         ...additionalContext

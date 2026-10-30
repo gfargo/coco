@@ -71,7 +71,11 @@ import { getSelectedBranch, getSelectedStash, getSelectedTag } from '../selectio
 import type { LogInkContext } from '../types'
 
 /** Forward-reference signature for the bridged targeted-context loader. */
-export type LoadCommitContextFn = (target: { hash: string; label: string }) => Promise<void>
+/** How long the cursor has to rest on a ref before its commits are fetched (#2209). */
+export const CURSOR_SYNC_LOAD_DEBOUNCE_MS = 150
+
+/** `superseded` when a newer anchored fetch replaced this one and its rows were dropped (#2209). */
+export type LoadCommitContextFn = (target: { hash: string; label: string }) => Promise<{ superseded?: boolean } | void>
 
 export type UseHistoryCursorSyncDeps = {
   /** Reducer dispatch — drives the cursor jump + status updates. */
@@ -114,6 +118,10 @@ export function useHistoryCursorSync(
   // so the race that bit the previous auto-load chain doesn't recur.
   const loadCommitContextRef = React.useRef<LoadCommitContextFn | null>(null)
   React.useEffect(() => {
+    let pendingLoad: ReturnType<typeof setTimeout> | undefined
+    const cancelPendingLoad = () => {
+      if (pendingLoad !== undefined) clearTimeout(pendingLoad)
+    }
     const onBranchTab = state.activeView === 'branches' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'branches')
     const onTagTab = state.activeView === 'tags' ||
@@ -125,7 +133,7 @@ export function useHistoryCursorSync(
     // `refs/stash` tree, visible under `--all` / fullGraph).
     const onStashTab = state.activeView === 'stash' ||
       (state.focus === 'sidebar' && state.sidebarTab === 'stashes')
-    if (!onBranchTab && !onTagTab && !onStashTab) return
+    if (!onBranchTab && !onTagTab && !onStashTab) return cancelPendingLoad
 
     let targetHash: string | undefined
     let targetLabel: string | undefined
@@ -202,38 +210,72 @@ export function useHistoryCursorSync(
 
     switch (decision.type) {
       case 'noop':
-        return
+        return cancelPendingLoad
       case 'jump':
         lastSyncedHashRef.current = decision.hash
+        // Loaded now, so the earlier attempt succeeded. Forget it: a later
+        // replaceRows (watcher or post-op refresh) drops anchored rows, and
+        // a stale entry would turn the next visit into a false
+        // "unreachable" instead of a refetch (final review).
+        attemptedContextHashesRef.current.delete(decision.hash)
         dispatch({ type: 'selectCommitByHash', hash: decision.hash })
         dispatch({
           type: 'setStatus',
           value: `Synced history to ${decision.label} tip`,
         })
-        return
-      case 'load-context':
-        // Mark the hash as attempted BEFORE firing the load so a
-        // re-fire of this effect (state.filteredCommits change while
-        // the load is in flight) doesn't kick off a duplicate
-        // request. The resolver sees the hash in the set and
-        // returns `noop` until the load completes; on completion the
-        // appendRows triggers a final re-fire that either jumps or
-        // returns `unreachable`.
-        attemptedContextHashesRef.current.add(decision.target.hash)
-        void loadCommitContextRef.current?.(decision.target)
-        return
+        return cancelPendingLoad
+      case 'load-context': {
+        // The cursor is on a different ref from the one last synced, so
+        // returning to that one must re-check it rather than read as a
+        // duplicate: its rows may have been replaced meanwhile (final review).
+        lastSyncedHashRef.current = undefined
+        // Debounced (#2209): holding `j` through old tags used to start
+        // a `git log` for every row passed. The fetch fires only once the
+        // cursor rests; a move before then re-runs this effect, whose
+        // cleanup cancels the pending one.
+        //
+        // The hash is marked attempted when the fetch fires, not before,
+        // so a cancelled one is retried when the cursor comes back. Once
+        // marked, a re-fire while the load is in flight (state.filteredCommits
+        // change) sees it and returns `noop` instead of a duplicate request;
+        // on completion the appendRows triggers a final re-fire that
+        // either jumps or returns `unreachable`.
+        const target = decision.target
+        pendingLoad = setTimeout(() => {
+          pendingLoad = undefined
+          attemptedContextHashesRef.current.add(target.hash)
+          void loadCommitContextRef.current?.(target)?.then((outcome) => {
+            // A superseded fetch's rows were dropped, so the hash was never
+            // loaded: un-mark it, or returning to this ref would resolve to
+            // "unreachable" instead of fetching it again.
+            if (outcome && outcome.superseded) attemptedContextHashesRef.current.delete(target.hash)
+          })
+        }, CURSOR_SYNC_LOAD_DEBOUNCE_MS)
+        return cancelPendingLoad
+      }
       case 'unreachable':
+        lastSyncedHashRef.current = undefined
         dispatch({
           type: 'setStatus',
           value: `${decision.target.label} target commit is unreachable — not in any walked ref's history.`,
           kind: 'warning',
         })
-        return
+        return cancelPendingLoad
     }
+    // The dependency list is deliberately field-by-field rather than the whole
+    // `state` / `context`: this effect jumps the history cursor, so it must
+    // not re-run on unrelated state churn. It must, however, list EVERYTHING
+    // `getSelectedBranch` / `getSelectedTag` / `getSelectedStash` read. Those
+    // resolve by ID first and fall back to the index, so the `selected*Id`
+    // fields are inputs too (#2203): leaving them out meant an id change that
+    // kept the same index (e.g. a reset to row 0) resolved a different row
+    // without the sync ever re-running.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     dispatch, context.branches, context.tags, context.stashes,
     state.activeView, state.focus, state.sidebarTab,
     state.selectedBranchIndex, state.selectedTagIndex, state.selectedStashIndex,
+    state.selectedBranchId, state.selectedTagId, state.selectedStashId,
     state.branchSort, state.tagSort, state.filter,
     state.filteredCommits,
   ])

@@ -2,7 +2,9 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { simpleGit } from 'simple-git'
+import { createCancellableGit } from './cancellableGit'
 import { createSimpleGit } from './createSimpleGit'
+import { createHeadlessGit } from './headlessGit'
 
 describe('createSimpleGit', () => {
   let repoDir: string
@@ -46,5 +48,15 @@ describe('createSimpleGit', () => {
   it('merges caller-supplied allowEnvironment entries', async () => {
     const git = createSimpleGit(repoDir, { allowEnvironment: ['GIT_COCO_EXTRA'] })
     await expect(git.raw(['var', 'GIT_AUTHOR_IDENT'])).resolves.toContain('Ambient Probe')
+  })
+
+  // The TUI's instances must pass ambient variables too: applyHeadlessGitEnv
+  // puts its prompt and SSH guards in process.env, and simple-git 4 would
+  // strip them from bare instances, silently re-enabling tty prompts.
+  it.each([
+    ['createHeadlessGit', () => createHeadlessGit(repoDir)],
+    ['createCancellableGit', () => createCancellableGit(repoDir).git],
+  ])('%s passes ambient GIT_* variables through to git', async (_name, make) => {
+    await expect(make().raw(['var', 'GIT_AUTHOR_IDENT'])).resolves.toContain('Ambient Probe <ambient@example.com>')
   })
 })

@@ -66,7 +66,10 @@ function surfaceCtx(): SurfaceRenderContext {
   return {
     h: createElement,
     components,
-    state: { ...base, activeView: 'branches', focus: 'commits' },
+    // Cursor on feat/x (index 1): the shared selection treatment (#2162)
+    // owns the cursor row's colour, as in the sidebar test below, so the
+    // current branch shows its green when it is not the selected row.
+    state: { ...base, activeView: 'branches', focus: 'commits', selectedBranchIndex: 1 },
     context,
     contextStatus: createLogInkContextStatus('ready'),
     bodyRows: 30,
@@ -100,3 +103,13 @@ describe('current-branch highlight — sidebar', () => {
     expect(textWithColor(tree, SUCCESS)).not.toContain('feat/x')
   })
 })
+
+// #2162 — the cursor row looks the same in every list.
+describe('shared selection treatment (#2162)', () => {
+  it('uses the selection colours on the branches cursor row and suppresses the current-branch green there', () => {
+    const base = createLogInkState([])
+    const tree = renderBranchesSurface({ ...surfaceCtx(), state: { ...base, activeView: 'branches', focus: 'commits', selectedBranchIndex: 0 } }, 0)
+    expect(textWithColor(tree, SUCCESS)).not.toContain('main')
+  })
+})
+

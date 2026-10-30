@@ -1,7 +1,7 @@
 {
   "name": "git-coco",
   "version": "0.91.0",
-  "description": "git-coco — AI git commits, changelogs, code review, and PR/MR creation, plus a terminal workstation. Works on GitHub, GitHub Enterprise, and GitLab; supports OpenAI, Anthropic, Gemini, Mistral, Azure, Bedrock, and local Ollama.",
+  "description": "git-coco — AI git commits, changelogs, code review, and PR/MR creation, plus a terminal workstation. Works on GitHub, GitHub Enterprise, GitLab, Bitbucket (Cloud and Server), and Gitea/Forgejo/Codeberg; supports OpenAI, Anthropic, Gemini, Mistral, Azure, Bedrock, and local Ollama.",
   "keywords": [
     "git",
     "git-coco",
@@ -28,7 +28,11 @@
     "cli",
     "tui",
     "terminal",
-    "developer-tools"
+    "developer-tools",
+    "bitbucket",
+    "gitea",
+    "forgejo",
+    "codeberg"
   ],
   "author": "gfargo <ghfargo@gmail.com>",
   "license": "MIT",
@@ -106,7 +110,7 @@
   },
   "devDependencies": {
     "@commitlint/types": "^21.0.1",
-    "@gfargo/git-scenarios": "^1.0.0",
+    "@gfargo/git-scenarios": "^1.5.1",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-eslint": "^9.0.5",
     "@rollup/plugin-json": "^6.0.0",

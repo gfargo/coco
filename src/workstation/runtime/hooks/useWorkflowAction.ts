@@ -93,7 +93,6 @@ import {
     isResetMode,
     resetToCommit,
     revertCommit,
-    startInteractiveRebase,
     createFixupCommit,
     autosquashRebase,
     amendHeadCommit,
@@ -121,6 +120,7 @@ import { createSubmoduleRemoteWorkflowHandlers } from './useSubmoduleRemoteWorkf
 import { createForgeTriageWorkflowHandlers } from './useForgeTriageWorkflowActions'
 import type { RepoStackRuntimes } from '../repoStackRuntime'
 import type { LogInkContext } from '../types'
+import type { CancellableGit } from '../../../lib/simple-git/cancellableGit'
 
 // Element types are derived from `LogInkContext` indexed access so they track
 // the real overview shapes without re-importing each one (mirrors the
@@ -306,6 +306,14 @@ export function resolvePendingItemAction(
 }
 
 export type UseWorkflowActionDeps = {
+  /**
+   * Builds the single-use, abortable git instance that fetch / pull / push
+   * run on so Esc can cancel them (#2199). Optional on purpose: when absent
+   * those workflows use the frame's own `git` and are simply not
+   * cancellable, which keeps fakes passed as `git` (tests, embedders)
+   * authoritative. `app.ts` supplies the real `createCancellableGit`.
+   */
+  createCancellableGit?: (repoRoot: string) => CancellableGit
   /** The active frame's `git` handle. */
   git: SimpleGit
   /** The active frame's context — branch / tag / stash / submodule / etc. lists. */
@@ -352,6 +360,8 @@ export type UseWorkflowActionDeps = {
 
 export type UseWorkflowActionResult = {
   runWorkflowAction: (id: string, payload?: string) => Promise<void>
+  /** Esc during a fetch / pull / push: abort every network op in flight (#2199). */
+  cancelRemoteOp: () => void
 }
 
 export function useWorkflowAction(
@@ -390,11 +400,24 @@ export function useWorkflowAction(
   const remoteOpClaimRef = React.useRef(0)
   const pendingItemActionClaimRef = React.useRef(0)
 
+  // Network workflows in flight that Esc can abandon (#2199). A Set, not a
+  // single slot: workflow keystrokes stay live while a remote op runs, so
+  // `F` then `p` can overlap, and Esc should stop everything talking to
+  // the remote rather than only the latest.
+  const activeNetworkOpsRef = React.useRef<Set<CancellableGit>>(new Set())
+
+  const cancelRemoteOp = React.useCallback(() => {
+    const active = activeNetworkOpsRef.current
+    if (active.size === 0) return
+    for (const op of active) op.cancel()
+    depsRef.current.dispatch({ type: 'setStatus', value: 'Cancelling…', kind: 'warning' })
+  }, [])
+
   const runWorkflowAction = React.useCallback(async (id: string, payload?: string) => {
     // Resolve the live snapshot first — every name below shadows what the
     // old closure captured, keeping the ~1,200-line body byte-identical.
     const {
-      git,
+      git: frameGit,
       context,
       state,
       dispatch,
@@ -408,6 +431,22 @@ export function useWorkflowAction(
       forgeProvider,
       filteredReflogList,
     } = depsRef.current
+    // Fetch / pull / push run on a single-use instance Esc can abort
+    // (#2199). Every handler below reads `git`, so shadowing it here keeps
+    // the body unchanged. If the repo root can't be resolved the frame's
+    // own git is used and the op simply isn't cancellable.
+    let cancellable: CancellableGit | undefined
+    const makeCancellable = depsRef.current.createCancellableGit
+    if (makeCancellable && REMOTE_OP_LOADERS[id]) {
+      try {
+        const root = (await frameGit.revparse(['--show-toplevel'])).trim()
+        if (root) cancellable = makeCancellable(root)
+      } catch {
+        cancellable = undefined
+      }
+    }
+    if (cancellable) activeNetworkOpsRef.current.add(cancellable)
+    const git = cancellable?.git ?? frameGit
     // #1384 — capture the repo-frame depth at keystroke time, BEFORE any
     // handler awaits. The invalidation helpers below run after the git /
     // forge mutation resolves; frame-tagging their writes means a
@@ -1029,15 +1068,13 @@ export function useWorkflowAction(
         }
         return result
       },
-      'interactive-rebase': async () => {
-        const commit = getSelectedInkCommit(state)
-        if (!commit) return { ok: false, message: 'No commit selected' }
-        return startInteractiveRebase(git, {
-          hash: commit.hash,
-          shortHash: commit.shortHash,
-          message: commit.message,
-        })
-      },
+      // #2198 — confirmed `interactive-rebase` is routed to the rebase plan
+      // view in inkInput; only a direct dispatch lands here, and spawning
+      // `git rebase -i` under piped stdio would hang on a terminal editor.
+      'interactive-rebase': async () => ({
+        ok: false,
+        message: 'Use the rebase plan view: press i on a commit in History',
+      }),
       'create-branch-here': async () => {
         const name = payload?.trim()
         if (!name) return { ok: false, message: 'Branch name required' }
@@ -1510,7 +1547,12 @@ export function useWorkflowAction(
       dispatch({ type: 'setPendingItemAction', value: pendingItemAction })
     }
     try {
-    const result = await handler()
+    let result = await handler()
+    // An aborted network op fails with simple-git's "Abort signal
+    // received"; say what actually happened instead.
+    if (cancellable?.wasCancelled()) {
+      result = { ok: false, message: 'Cancelled — the remote operation was stopped.' }
+    }
     // #1429 — a recovery prompt raised below resolves `git` from the
     // frame that was ACTIVE when the user answers it, not the one that
     // issued the call. If the user drilled into (or popped out of) a
@@ -1568,7 +1610,11 @@ export function useWorkflowAction(
             )
           : []
       for (const entry of entriesToPush) {
-        dispatch({ type: 'pushUndoEntry', value: entry })
+        // #2197 — record where HEAD landed so `gu` can refuse once it moves.
+        const headAfter = entry.kind === 'reset-to-commit' || entry.kind === 'merge-branch' || entry.kind === 'reset-to-branch'
+          ? await git.revparse(['HEAD']).then((sha) => sha.trim()).catch(() => undefined)
+          : undefined
+        dispatch({ type: 'pushUndoEntry', value: headAfter ? { ...entry, headAfter } as UndoEntry : entry })
       }
     }
     // #1361 — batch delete selection lifecycle. A successful delete
@@ -1956,6 +2002,7 @@ export function useWorkflowAction(
         kind: 'error',
       })
     } finally {
+      if (cancellable) activeNetworkOpsRef.current.delete(cancellable)
       // Always clear the loader — even if a refresh threw — so a
       // failed fetch/pull can't leave the history surface stuck behind
       // the spinner. Ownership check (#1385): only clear when OUR claim
@@ -1982,5 +2029,6 @@ export function useWorkflowAction(
 
   return {
     runWorkflowAction,
+    cancelRemoteOp,
   }
 }

@@ -65,6 +65,19 @@ describe('workspace sort', () => {
     ])
   })
 
+  it('orders commits from different timezones by instant, not by string (#2210)', () => {
+    // 12:00-08:00 is 20:00Z; 15:00+00:00 is earlier. As strings the +00:00
+    // one sorts later ("15" > "12"), which is the wrong order.
+    const out = sortWorkspaceRepos(
+      [
+        repo({ name: 'utc-3pm', lastCommit: { hash: 'a', date: '2026-05-01T15:00:00+00:00', subject: 'x' } }),
+        repo({ name: 'pacific-noon', lastCommit: { hash: 'b', date: '2026-05-01T12:00:00-08:00', subject: 'x' } }),
+      ],
+      'recency'
+    )
+    expect(out.map((entry) => entry.name)).toEqual(['pacific-noon', 'utc-3pm'])
+  })
+
   it('sorts by dirty count desc with recency tiebreaker', () => {
     const out = sortWorkspaceRepos(
       [

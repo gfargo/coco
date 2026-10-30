@@ -9,6 +9,9 @@ import {
     checkCacheHitRate,
     checkDynamicRouting,
     checkEndpointSupport,
+    checkCommitGraph,
+    checkGitInstallation,
+    COMMIT_GRAPH_SUGGEST_THRESHOLD,
     checkOllamaLiveness,
     checkProviderValidity,
     checkUsageBudget,
@@ -617,5 +620,51 @@ describe('checkDynamicRouting', () => {
     expect(diagnostics).toContainEqual(
       expect.objectContaining({ severity: 'info', message: expect.stringContaining('routing is active') })
     )
+  })
+})
+
+describe('checkGitInstallation (#2205)', () => {
+  it('reports nothing when git is present and recent enough', async () => {
+    const probe = jest.fn().mockResolvedValue({ ok: true, version: { major: 2, minor: 39, patch: 2, raw: 'git version 2.39.2' } })
+    await expect(checkGitInstallation(probe)).resolves.toEqual([])
+  })
+
+  it('errors with an upgrade hint for a git that is too old', async () => {
+    const probe = jest.fn().mockResolvedValue({ ok: false, reason: 'too-old', message: 'git 2.17.1 is too old; coco needs 2.24.0 or newer' })
+    const [diagnostic] = await checkGitInstallation(probe)
+    expect(diagnostic.severity).toBe('error')
+    expect(diagnostic.message).toContain('2.17.1')
+    expect(diagnostic.fix).toMatch(/Upgrade git/)
+  })
+
+  it('errors with an install hint when git is missing', async () => {
+    const probe = jest.fn().mockResolvedValue({ ok: false, reason: 'missing', message: 'git was not found on PATH.' })
+    const [diagnostic] = await checkGitInstallation(probe)
+    expect(diagnostic.fix).toMatch(/Install git/)
+  })
+})
+
+// #2209 — without a commit-graph file every `coco ui` history page waits for
+// git to order the whole history topologically.
+describe('checkCommitGraph (#2209)', () => {
+  const big = COMMIT_GRAPH_SUGGEST_THRESHOLD + 2_345
+
+  it('suggests writing a commit-graph for a large repo that has none', async () => {
+    const [diagnostic] = await checkCommitGraph(async () => ({ inRepo: true, commitCount: big, hasCommitGraph: false }))
+    expect(diagnostic.severity).toBe('info')
+    expect(diagnostic.message).toContain('12,345 commits')
+    expect(diagnostic.fix).toMatch(/git commit-graph write --reachable/)
+  })
+
+  it.each([
+    ['a repo that already has one', { inRepo: true as const, commitCount: big, hasCommitGraph: true }],
+    ['a small repo', { inRepo: true as const, commitCount: COMMIT_GRAPH_SUGGEST_THRESHOLD - 1, hasCommitGraph: false }],
+    ['outside a repository', { inRepo: false as const }],
+  ])('stays quiet for %s', async (_label, result) => {
+    await expect(checkCommitGraph(async () => result)).resolves.toEqual([])
+  })
+
+  it('stays quiet when the probe fails', async () => {
+    await expect(checkCommitGraph(async () => { throw new Error('git broke') })).resolves.toEqual([])
   })
 })

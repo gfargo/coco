@@ -1446,7 +1446,7 @@ describe('log Ink view model', () => {
   describe('resetBranchSelection', () => {
     it('snaps selectedBranchIndex to 0', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 5, count: 10 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 5, count: 10 })
       expect(state.selectedBranchIndex).toBe(5)
       state = applyLogInkAction(state, { type: 'resetBranchSelection' })
       expect(state.selectedBranchIndex).toBe(0)
@@ -1460,93 +1460,93 @@ describe('log Ink view model', () => {
   describe('moveBranch / moveTag / moveStash id dual-write (#1452)', () => {
     it('writes selectedBranchId alongside the index when the dispatch site resolved one', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 5, id: 'feature' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 1, count: 5, id: 'feature' })
       expect(state.selectedBranchIndex).toBe(1)
       expect(state.selectedBranchId).toBe('feature')
     })
 
     it('leaves selectedBranchId undefined when the dispatch site could not resolve one', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 5 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 1, count: 5 })
       expect(state.selectedBranchId).toBeUndefined()
     })
 
     it('writes selectedTagId alongside the index', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveTag', delta: 2, count: 5, id: 'v2.0' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'tag', delta: 2, count: 5, id: 'v2.0' })
       expect(state.selectedTagIndex).toBe(2)
       expect(state.selectedTagId).toBe('v2.0')
     })
 
     it('writes selectedStashId alongside the index', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveStash', delta: 1, count: 5, id: 'stash@{1}' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'stash', delta: 1, count: 5, id: 'stash@{1}' })
       expect(state.selectedStashIndex).toBe(1)
       expect(state.selectedStashId).toBe('stash@{1}')
     })
 
     it('writes selectedWorktreeListId alongside the index', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 5, id: '/repo-feature' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'worktreeList', delta: 1, count: 5, id: '/repo-feature' })
       expect(state.selectedWorktreeListIndex).toBe(1)
       expect(state.selectedWorktreeListId).toBe('/repo-feature')
     })
 
     it('leaves selectedWorktreeListId undefined when the dispatch site could not resolve one', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 5 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'worktreeList', delta: 1, count: 5 })
       expect(state.selectedWorktreeListId).toBeUndefined()
     })
 
     it('writes selectedSubmoduleId alongside the index', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveSubmodule', delta: 1, count: 5, id: '/vendor/b' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'submodule', delta: 1, count: 5, id: '/vendor/b' })
       expect(state.selectedSubmoduleIndex).toBe(1)
       expect(state.selectedSubmoduleId).toBe('/vendor/b')
     })
 
     it('leaves selectedSubmoduleId undefined when the dispatch site could not resolve one', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveSubmodule', delta: 1, count: 5 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'submodule', delta: 1, count: 5 })
       expect(state.selectedSubmoduleId).toBeUndefined()
     })
 
     it('writes selectedRemoteId alongside the index', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 5, id: 'upstream' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'remote', delta: 1, count: 5, id: 'upstream' })
       expect(state.selectedRemoteIndex).toBe(1)
       expect(state.selectedRemoteId).toBe('upstream')
     })
 
     it('leaves selectedRemoteId undefined when the dispatch site could not resolve one', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 5 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'remote', delta: 1, count: 5 })
       expect(state.selectedRemoteId).toBeUndefined()
     })
 
     it('writes selectedIssueId alongside the index', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 5, id: '7' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: 1, count: 5, id: '7' })
       expect(state.selectedIssueIndex).toBe(1)
       expect(state.selectedIssueId).toBe('7')
     })
 
     it('leaves selectedIssueId undefined when the dispatch site could not resolve one', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 5 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: 1, count: 5 })
       expect(state.selectedIssueId).toBeUndefined()
     })
 
     it('writes selectedPullRequestTriageId alongside the index', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 5, id: '9' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'pullRequestTriage', delta: 1, count: 5, id: '9' })
       expect(state.selectedPullRequestTriageIndex).toBe(1)
       expect(state.selectedPullRequestTriageId).toBe('9')
     })
 
     it('leaves selectedPullRequestTriageId undefined when the dispatch site could not resolve one', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 5 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'pullRequestTriage', delta: 1, count: 5 })
       expect(state.selectedPullRequestTriageId).toBeUndefined()
     })
   })
@@ -1559,7 +1559,7 @@ describe('log Ink view model', () => {
   describe('id mirror stays consistent across non-move index resets (#1452)', () => {
     it('resetBranchSelection clears selectedBranchId', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 3, count: 10, id: 'feature' })
       expect(state.selectedBranchId).toBe('feature')
       state = applyLogInkAction(state, { type: 'resetBranchSelection' })
       expect(state.selectedBranchIndex).toBe(0)
@@ -1568,7 +1568,7 @@ describe('log Ink view model', () => {
 
     it('cycleBranchSort clears selectedBranchId', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 3, count: 10, id: 'feature' })
       state = applyLogInkAction(state, { type: 'cycleBranchSort' })
       expect(state.selectedBranchIndex).toBe(0)
       expect(state.selectedBranchId).toBeUndefined()
@@ -1576,7 +1576,7 @@ describe('log Ink view model', () => {
 
     it('cycleTagSort clears selectedTagId', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveTag', delta: 3, count: 10, id: 'v2.0' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'tag', delta: 3, count: 10, id: 'v2.0' })
       state = applyLogInkAction(state, { type: 'cycleTagSort' })
       expect(state.selectedTagIndex).toBe(0)
       expect(state.selectedTagId).toBeUndefined()
@@ -1584,7 +1584,7 @@ describe('log Ink view model', () => {
 
     it('navigateOpenDiffForStash sets selectedStashId precisely from action.ref', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveStash', delta: 3, count: 10, id: 'stash@{3}' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'stash', delta: 3, count: 10, id: 'stash@{3}' })
       state = applyLogInkAction(state, { type: 'navigateOpenDiffForStash', ref: 'stash@{7}', stashIndex: 2 })
       expect(state.selectedStashIndex).toBe(2)
       expect(state.selectedStashId).toBe('stash@{7}')
@@ -1592,9 +1592,9 @@ describe('log Ink view model', () => {
 
     it('a filter change clears all three id mirrors', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 10, id: 'feature' })
-      state = applyLogInkAction(state, { type: 'moveTag', delta: 1, count: 10, id: 'v2.0' })
-      state = applyLogInkAction(state, { type: 'moveStash', delta: 1, count: 10, id: 'stash@{1}' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 1, count: 10, id: 'feature' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'tag', delta: 1, count: 10, id: 'v2.0' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'stash', delta: 1, count: 10, id: 'stash@{1}' })
       state = applyLogInkAction(state, { type: 'appendFilter', value: 'x' })
       expect(state.selectedBranchId).toBeUndefined()
       expect(state.selectedTagId).toBeUndefined()
@@ -1613,7 +1613,7 @@ describe('log Ink view model', () => {
   describe('rectifyPromotedSelections (OSS-1001 / #1671)', () => {
     it('moves selectedBranchIndex to the snapshot index and keeps the id', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature-a' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 3, count: 10, id: 'feature-a' })
       expect(state.selectedBranchIndex).toBe(3)
       state = applyLogInkAction(state, {
         type: 'rectifyPromotedSelections',
@@ -1625,7 +1625,7 @@ describe('log Ink view model', () => {
 
     it('clears selectedBranchId and leaves the index untouched when the id no longer resolves', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature-a' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 3, count: 10, id: 'feature-a' })
       state = applyLogInkAction(state, {
         type: 'rectifyPromotedSelections',
         snapshot: { branch: { clear: true } },
@@ -1636,7 +1636,7 @@ describe('log Ink view model', () => {
 
     it('is a no-op for views absent from the snapshot — never fights a resetBranchSelection', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 3, count: 10, id: 'feature-a' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 3, count: 10, id: 'feature-a' })
       state = applyLogInkAction(state, { type: 'resetBranchSelection' })
       expect(state.selectedBranchId).toBeUndefined()
       // An empty snapshot (e.g. the branch id was already unset before
@@ -1648,11 +1648,11 @@ describe('log Ink view model', () => {
 
     it('rectifies tag / stash / worktree / submodule / remote independently in one dispatch', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveTag', delta: 1, count: 10, id: 'v2.0' })
-      state = applyLogInkAction(state, { type: 'moveStash', delta: 1, count: 10, id: 'stash@{1}' })
-      state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 10, id: '/repo-feature' })
-      state = applyLogInkAction(state, { type: 'moveSubmodule', delta: 1, count: 10, id: '/vendor/b' })
-      state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 10, id: 'upstream' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'tag', delta: 1, count: 10, id: 'v2.0' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'stash', delta: 1, count: 10, id: 'stash@{1}' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'worktreeList', delta: 1, count: 10, id: '/repo-feature' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'submodule', delta: 1, count: 10, id: '/vendor/b' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'remote', delta: 1, count: 10, id: 'upstream' })
       state = applyLogInkAction(state, {
         type: 'rectifyPromotedSelections',
         snapshot: {
@@ -1992,17 +1992,17 @@ describe('log Ink view model', () => {
 
     it('moves the conflict file cursor within bounds', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveConflictFile', delta: 1, count: 5 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'conflictFile', delta: 1, count: 5 })
       expect(state.selectedConflictFileIndex).toBe(1)
-      state = applyLogInkAction(state, { type: 'moveConflictFile', delta: 1, count: 5 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'conflictFile', delta: 1, count: 5 })
       expect(state.selectedConflictFileIndex).toBe(2)
     })
 
     it('clamps the conflict file cursor at list bounds', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveConflictFile', delta: -1, count: 3 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'conflictFile', delta: -1, count: 3 })
       expect(state.selectedConflictFileIndex).toBe(0)
-      state = applyLogInkAction(state, { type: 'moveConflictFile', delta: 10, count: 3 })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'conflictFile', delta: 10, count: 3 })
       expect(state.selectedConflictFileIndex).toBe(2)
     })
 
@@ -2296,14 +2296,14 @@ describe('log Ink view model', () => {
     // rather than leaking the other frame's id across the boundary.
     it('pushRepoFrame and popRepoFrame clear the id mirrors', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveBranch', delta: 1, count: 10, id: 'feature' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'branch', delta: 1, count: 10, id: 'feature' })
       expect(state.selectedBranchId).toBe('feature')
 
       const pushed = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
       expect(pushed.selectedBranchId).toBeUndefined()
 
       const insideSubmodule = applyLogInkAction(pushed, {
-        type: 'moveBranch', delta: 1, count: 10, id: 'submodule-branch',
+        type: 'moveList', list: 'branch', delta: 1, count: 10, id: 'submodule-branch',
       })
       const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
       expect(popped.selectedBranchId).toBeUndefined()
@@ -2313,14 +2313,14 @@ describe('log Ink view model', () => {
     // Same discipline for the worktree id mirror (#1452 worktree flip).
     it('pushRepoFrame and popRepoFrame clear selectedWorktreeListId too', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveWorktreeListEntry', delta: 1, count: 10, id: '/repo-feature' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'worktreeList', delta: 1, count: 10, id: '/repo-feature' })
       expect(state.selectedWorktreeListId).toBe('/repo-feature')
 
       const pushed = applyLogInkAction(state, { type: 'pushRepoFrame', label: 'vendor/lib' })
       expect(pushed.selectedWorktreeListId).toBeUndefined()
 
       const insideSubmodule = applyLogInkAction(pushed, {
-        type: 'moveWorktreeListEntry', delta: 1, count: 10, id: '/submodule-worktree',
+        type: 'moveList', list: 'worktreeList', delta: 1, count: 10, id: '/submodule-worktree',
       })
       const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
       expect(popped.selectedWorktreeListId).toBeUndefined()
@@ -2331,8 +2331,8 @@ describe('log Ink view model', () => {
     // submodule/remote flip).
     it('pushRepoFrame and popRepoFrame clear selectedSubmoduleId and selectedRemoteId too', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveSubmodule', delta: 1, count: 10, id: '/vendor/b' })
-      state = applyLogInkAction(state, { type: 'moveRemote', delta: 1, count: 10, id: 'upstream' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'submodule', delta: 1, count: 10, id: '/vendor/b' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'remote', delta: 1, count: 10, id: 'upstream' })
       expect(state.selectedSubmoduleId).toBe('/vendor/b')
       expect(state.selectedRemoteId).toBe('upstream')
 
@@ -2341,7 +2341,7 @@ describe('log Ink view model', () => {
       expect(pushed.selectedRemoteId).toBeUndefined()
 
       const insideSubmodule = applyLogInkAction(pushed, {
-        type: 'moveSubmodule', delta: 1, count: 10, id: '/submodule-vendor',
+        type: 'moveList', list: 'submodule', delta: 1, count: 10, id: '/submodule-vendor',
       })
       const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
       expect(popped.selectedSubmoduleId).toBeUndefined()
@@ -2352,8 +2352,8 @@ describe('log Ink view model', () => {
 
     it('pushRepoFrame and popRepoFrame clear selectedIssueId and selectedPullRequestTriageId too', () => {
       let state = createLogInkState(rows)
-      state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 10, id: '7' })
-      state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 10, id: '9' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: 1, count: 10, id: '7' })
+      state = applyLogInkAction(state, { type: 'moveList', list: 'pullRequestTriage', delta: 1, count: 10, id: '9' })
       expect(state.selectedIssueId).toBe('7')
       expect(state.selectedPullRequestTriageId).toBe('9')
 
@@ -2362,7 +2362,7 @@ describe('log Ink view model', () => {
       expect(pushed.selectedPullRequestTriageId).toBeUndefined()
 
       const insideSubmodule = applyLogInkAction(pushed, {
-        type: 'moveIssue', delta: 1, count: 10, id: '42',
+        type: 'moveList', list: 'issue', delta: 1, count: 10, id: '42',
       })
       const popped = applyLogInkAction(insideSubmodule, { type: 'popRepoFrame' })
       expect(popped.selectedIssueId).toBeUndefined()
@@ -2520,7 +2520,7 @@ describe('log Ink view model', () => {
         baseLabel: 'origin/main',
         generatedAt: 1750000000000,
       })
-      parent = applyLogInkAction(parent, { type: 'moveBranch', delta: 3, count: 10 })
+      parent = applyLogInkAction(parent, { type: 'moveList', list: 'branch', delta: 3, count: 10 })
 
       parent = applyLogInkAction(parent, {
         type: 'setPendingChoice',
@@ -2575,23 +2575,23 @@ describe('issue / pull-request triage navigation (#882 phase 3)', () => {
   it('moveIssue advances the cursor and clamps to count - 1', () => {
     let state = createLogInkState(rows)
 
-    state = applyLogInkAction(state, { type: 'moveIssue', delta: 3, count: 5 })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: 3, count: 5 })
     expect(state.selectedIssueIndex).toBe(3)
 
     // Clamps at count - 1 — no wrap.
-    state = applyLogInkAction(state, { type: 'moveIssue', delta: 10, count: 5 })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: 10, count: 5 })
     expect(state.selectedIssueIndex).toBe(4)
 
     // Negative delta clamps at 0.
-    state = applyLogInkAction(state, { type: 'moveIssue', delta: -99, count: 5 })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: -99, count: 5 })
     expect(state.selectedIssueIndex).toBe(0)
   })
 
   it('movePullRequestTriage advances independently from selectedIssueIndex', () => {
     let state = createLogInkState(rows)
 
-    state = applyLogInkAction(state, { type: 'moveIssue', delta: 2, count: 5 })
-    state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 3 })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: 2, count: 5 })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'pullRequestTriage', delta: 1, count: 3 })
 
     expect(state.selectedIssueIndex).toBe(2)
     expect(state.selectedPullRequestTriageIndex).toBe(1)
@@ -2601,7 +2601,7 @@ describe('issue / pull-request triage navigation (#882 phase 3)', () => {
     let state = createLogInkState(rows)
     state = { ...state, pendingKey: 'g' }
 
-    state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 5 })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: 1, count: 5 })
     expect(state.pendingKey).toBeUndefined()
   })
 
@@ -2652,7 +2652,7 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
 
   it('cycleIssueFilter clears selectedIssueId alongside the index (#1452)', () => {
     let state = createLogInkState(rows)
-    state = applyLogInkAction(state, { type: 'moveIssue', delta: 1, count: 5, id: '7' })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'issue', delta: 1, count: 5, id: '7' })
     expect(state.selectedIssueId).toBe('7')
 
     state = applyLogInkAction(state, { type: 'cycleIssueFilter' })
@@ -2671,7 +2671,7 @@ describe('triage filter preset cycling (#882 phase 6)', () => {
 
   it('cyclePullRequestTriageFilter clears selectedPullRequestTriageId alongside the index (#1452)', () => {
     let state = createLogInkState(rows)
-    state = applyLogInkAction(state, { type: 'movePullRequestTriage', delta: 1, count: 5, id: '9' })
+    state = applyLogInkAction(state, { type: 'moveList', list: 'pullRequestTriage', delta: 1, count: 5, id: '9' })
     expect(state.selectedPullRequestTriageId).toBe('9')
 
     state = applyLogInkAction(state, { type: 'cyclePullRequestTriageFilter' })
@@ -2941,5 +2941,61 @@ describe('undo stack reducer cases (OSS-1606)', () => {
     expect(state.undoStack).toEqual([branchEntry])
     state = applyLogInkAction(state, { type: 'popRepoFrame' })
     expect(state.undoStack).toEqual([branchEntry])
+  })
+})
+
+// #2219 — one generic cursor move for every list.
+describe('moveList', () => {
+  const LISTS = [
+    { list: 'branch', index: 'selectedBranchIndex', id: 'selectedBranchId' },
+    { list: 'tag', index: 'selectedTagIndex', id: 'selectedTagId' },
+    { list: 'stash', index: 'selectedStashIndex', id: 'selectedStashId' },
+    { list: 'reflog', index: 'selectedReflogIndex', id: undefined },
+    { list: 'remote', index: 'selectedRemoteIndex', id: 'selectedRemoteId' },
+    { list: 'submodule', index: 'selectedSubmoduleIndex', id: 'selectedSubmoduleId' },
+    { list: 'issue', index: 'selectedIssueIndex', id: 'selectedIssueId' },
+    { list: 'pullRequestTriage', index: 'selectedPullRequestTriageIndex', id: 'selectedPullRequestTriageId' },
+    { list: 'worktreeList', index: 'selectedWorktreeListIndex', id: 'selectedWorktreeListId' },
+    { list: 'blame', index: 'selectedBlameIndex', id: undefined },
+    { list: 'fileHistory', index: 'selectedFileHistoryIndex', id: undefined },
+    { list: 'conflictFile', index: 'selectedConflictFileIndex', id: undefined },
+  ] as const
+
+  const read = (state: unknown, key: string) => (state as Record<string, unknown>)[key]
+
+  it.each(LISTS)('$list: moves its own index and clamps to [0, count-1]', ({ list, index }) => {
+    const start = createLogInkState([])
+    const down = applyLogInkAction(start, { type: 'moveList', list, delta: 3, count: 5 })
+    expect(read(down, index)).toBe(3)
+    expect(read(applyLogInkAction(down, { type: 'moveList', list, delta: 99, count: 5 }), index)).toBe(4)
+    expect(read(applyLogInkAction(down, { type: 'moveList', list, delta: -99, count: 5 }), index)).toBe(0)
+    expect(read(applyLogInkAction(start, { type: 'moveList', list, delta: 2, count: 0 }), index)).toBe(0)
+  })
+
+  it.each(LISTS)('$list: writes the id mirror when it has one, clears it on a bare move', ({ list, id }) => {
+    const start = createLogInkState([])
+    const withId = applyLogInkAction(start, { type: 'moveList', list, delta: 1, count: 4, id: 'row-1' })
+    const cleared = applyLogInkAction(withId, { type: 'moveList', list, delta: 1, count: 4 })
+    if (id) {
+      expect(read(withId, id)).toBe('row-1')
+      expect(read(cleared, id)).toBeUndefined()
+    } else {
+      // Lists without an id mirror ignore the id entirely.
+      expect(Object.keys(withId as object).filter((key) => key.endsWith('Id') && read(withId, key) === 'row-1')).toEqual([])
+    }
+  })
+
+  it.each(LISTS)('$list: clears a pending chord key', ({ list }) => {
+    const pending = { ...createLogInkState([]), pendingKey: 'g' as const }
+    expect(applyLogInkAction(pending, { type: 'moveList', list, delta: 1, count: 3 }).pendingKey).toBeUndefined()
+  })
+
+  it('moves only the named list', () => {
+    const next = applyLogInkAction(createLogInkState([]), { type: 'moveList', list: 'tag', delta: 2, count: 5, id: 't2' })
+    expect(next.selectedTagIndex).toBe(2)
+    for (const other of ['selectedBranchIndex', 'selectedStashIndex', 'selectedReflogIndex', 'selectedIssueIndex', 'selectedIndex']) {
+      expect(read(next, other)).toBe(0)
+    }
+    expect(next.selectedBranchId).toBeUndefined()
   })
 })

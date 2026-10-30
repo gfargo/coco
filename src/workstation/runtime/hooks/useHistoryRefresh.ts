@@ -20,7 +20,7 @@ import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import type { LogArgv } from '../../../commands/log/config'
 import type { LogInkAction, LogInkState } from '../inkViewModel'
-import { LOG_INTERACTIVE_DEFAULT_LIMIT, getLogRows } from '../../../git/logData'
+import { LOG_INTERACTIVE_DEFAULT_LIMIT, getCommitRows, getLogRows } from '../../../git/logData'
 import { getStashCommitHashes } from '../../../git/stashData'
 import { buildHistoryRefetchArgv } from '../historyRefetchResolver'
 import { isStaleBootLoadResolve } from '../loadMoreResolver'
@@ -43,17 +43,31 @@ export type UseHistoryRefreshDeps = {
    * `isStaleBootLoadResolve`.
    */
   historyRefetchGenerationRef: ReactTypes.MutableRefObject<number>
+  /**
+   * How many main-ordering commits are loaded (`state.mainHistoryCommitCount`).
+   * The refresh refetches at least this many so pages the user already
+   * loaded survive it (#2209).
+   */
+  loadedCommitCount: number
 }
 
 export type UseHistoryRefreshResult = {
-  refreshHistoryRows: () => Promise<void>
+  refreshHistoryRows: (options?: { fromWatcher?: boolean }) => Promise<void>
+  /** `Date.now()` when a history refresh not issued by the watcher last started; 0 before any. */
+  lastSelfHistoryRefreshAtRef: ReactTypes.MutableRefObject<number>
 }
 
 export function useHistoryRefresh(
   React: typeof ReactTypes,
   deps: UseHistoryRefreshDeps,
 ): UseHistoryRefreshResult {
-  const { git, logArgv, dispatch, mountedRef, repoFrameDepthRef, setHasMoreCommits, fullGraph, historyFetchArgs, historyRefetchGenerationRef } = deps
+  const { git, logArgv, dispatch, mountedRef, repoFrameDepthRef, setHasMoreCommits, fullGraph, historyFetchArgs, historyRefetchGenerationRef, loadedCommitCount } = deps
+
+  // Read at call time, not a callback dep: the callback's identity feeds the
+  // fs watcher's effect, and a fresh identity on every page would
+  // re-subscribe it.
+  const loadedCommitCountRef = React.useRef(loadedCommitCount)
+  loadedCommitCountRef.current = loadedCommitCount
 
   /**
    * Re-fetch the head of the commit log and replace `state.rows`.
@@ -64,7 +78,10 @@ export function useHistoryRefresh(
    * called after any operation that creates or rewrites history locally
    * so the history view reflects reality.
    */
-  const refreshHistoryRows = React.useCallback(async () => {
+  const lastSelfHistoryRefreshAtRef = React.useRef(0)
+
+  const refreshHistoryRows = React.useCallback(async (options: { fromWatcher?: boolean } = {}) => {
+    if (!options.fromWatcher) lastSelfHistoryRefreshAtRef.current = Date.now()
     try {
       // #1384 — capture the repo-frame depth BEFORE the awaits.
       const issuedAtDepth = repoFrameDepthRef.current
@@ -87,8 +104,13 @@ export function useHistoryRefresh(
       // Stash commits as graph roots so post-operation refreshes keep the
       // same rich graph the boot loader assembled.
       const stashHashes = await getStashCommitHashes(git).catch(() => [])
+      // A refresh used to refetch only the first 1000 commits and replace
+      // the rows with them, so every watcher event threw away pages the
+      // user had loaded, and a cursor past row 1000 jumped to the top
+      // (#2209). Refetch at least as deep as what is loaded.
+      const limit = Math.max(LOG_INTERACTIVE_DEFAULT_LIMIT, loadedCommitCountRef.current)
       const fresh = await getLogRows(git, mergedArgv, {
-        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+        limit,
         extraRefs: stashHashes,
       })
       const stale = isStaleBootLoadResolve({
@@ -100,11 +122,15 @@ export function useHistoryRefresh(
       })
       if (!stale && fresh) {
         dispatch({ type: 'replaceRows', rows: fresh })
-        // Re-arm pagination from the fresh window (#1337).
-        setHasMoreCommits(computeHasMoreCommits(logArgv, fresh))
+        // Re-arm pagination from the fresh window (#1337). A full window
+        // means git had more to give; measured against what was asked for,
+        // since the window can be deeper than one page.
+        setHasMoreCommits(
+          computeHasMoreCommits(logArgv, fresh) && getCommitRows(fresh).length >= limit
+        )
       }
     } catch { /* ignore — stale rows beat blank rows */ }
   }, [dispatch, git, logArgv, setHasMoreCommits, historyFetchArgs, fullGraph, historyRefetchGenerationRef])
 
-  return { refreshHistoryRows }
+  return { refreshHistoryRows, lastSelfHistoryRefreshAtRef }
 }

@@ -6,6 +6,7 @@ import {
   CONFLICT_SEPARATOR_MARKER,
   CONFLICT_THEIRS_MARKER,
 } from './conflictRegionActions'
+import { resolveGitPath } from './gitPath'
 
 export type GitOperationType = 'none' | 'merge' | 'rebase' | 'cherry-pick' | 'revert'
 
@@ -60,7 +61,7 @@ const UNMERGED_STATUSES = new Set([
 ])
 
 async function pathExists(git: SimpleGit, path: string): Promise<boolean> {
-  return existsSync((await git.revparse(['--git-path', path])).trim())
+  return existsSync(await resolveGitPath(git, path))
 }
 
 export async function getInProgressOperationType(git: SimpleGit): Promise<GitOperationType> {
@@ -192,7 +193,7 @@ async function getConfiguredHooksPath(git: SimpleGit): Promise<string | undefine
 
 export async function getHookOverview(git: SimpleGit): Promise<GitHookOverview> {
   const configuredHooksPath = await getConfiguredHooksPath(git)
-  const gitHooksPath = (await git.revparse(['--git-path', 'hooks'])).trim()
+  const gitHooksPath = await resolveGitPath(git, 'hooks')
   const root = (await git.revparse(['--show-toplevel'])).trim()
   const hooksPath = configuredHooksPath
     ? isAbsolute(configuredHooksPath)

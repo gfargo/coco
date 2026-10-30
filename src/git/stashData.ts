@@ -73,11 +73,14 @@ export function parseStashList(output: string): Omit<StashEntry, 'files'>[] {
     })
 }
 
+/**
+ * Parse `git stash show --name-only -z`. NUL-separated so names are exact
+ * (#2205): without `-z` git C-quotes non-ASCII and special names
+ * (`"caf\303\251.txt"`), and trimming each line would also eat leading or
+ * trailing spaces that are part of a real file name.
+ */
 export function parseStashFiles(output: string): string[] {
-  return output
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
+  return output.split('\0').filter((name) => name.length > 0)
 }
 
 /**
@@ -125,7 +128,7 @@ export async function getStashOverview(git: SimpleGit): Promise<StashOverview> {
   return {
     stashes: await Promise.all(stashes.map(async (stash) => ({
       ...stash,
-      files: parseStashFiles(await git.raw(['stash', 'show', '--name-only', stash.ref])),
+      files: parseStashFiles(await git.raw(['stash', 'show', '--name-only', '-z', stash.ref])),
     }))),
   }
 }
@@ -178,7 +181,22 @@ export type StashDiffFile = {
  * `---`/`+++`/`rename to`/`copy to` fallback lines each accept a quoted
  * *or* unquoted form independently and unescape whichever one matched.
  */
+/**
+ * The diff surface asks for this on every render of a stash or PR patch
+ * (#2209), so results are kept per lines array, which only changes when the
+ * diff is reloaded.
+ */
+const stashDiffFilesCache = new WeakMap<readonly string[], StashDiffFile[]>()
+
 export function parseStashDiffFiles(lines: string[]): StashDiffFile[] {
+  const cached = stashDiffFilesCache.get(lines)
+  if (cached) return cached
+  const files = computeStashDiffFiles(lines)
+  stashDiffFilesCache.set(lines, files)
+  return files
+}
+
+function computeStashDiffFiles(lines: string[]): StashDiffFile[] {
   const files: StashDiffFile[] = []
   for (let i = 0; i < lines.length; i += 1) {
     const line = lines[i]

@@ -13,12 +13,19 @@ import {
   generateAgentChangelog,
   generateAgentCommitDraft,
   generateAgentRecap,
+  generateAgentPrDraft,
+  generateAgentSplitPlan,
+  runAgentBatch,
+  applySeverityThreshold,
   generateAgentReview,
 } from './generate'
 import { AGENT_PROTOCOL_VERSION, AgentOptionsSchema, AgentTaskInput } from './schemas'
 
 jest.mock('./context', () => ({
   resolveChangeSource: jest.fn(),
+  readStagedFileChanges: jest.fn(),
+  readStagedFileDiff: jest.fn(),
+  readPullRequestBranches: jest.fn(),
   getConventionsContext: jest.fn().mockReturnValue({ text: '', provenance: null }),
 }))
 jest.mock('../../lib/config/utils/loadConfig')
@@ -32,6 +39,10 @@ jest.mock('../../lib/langchain/utils/createSchemaParser', () => ({
   createSchemaParser: jest.fn().mockReturnValue({}),
 }))
 jest.mock('../../commands/commit/generateCommitDraft')
+jest.mock('../../commands/commit/splitPlanGenerator', () => ({
+  ...jest.requireActual('../../commands/commit/splitPlanGenerator'),
+  generateValidatedCommitSplitPlan: jest.fn(),
+}))
 
 const mockResolveChangeSource = resolveChangeSource as jest.MockedFunction<typeof resolveChangeSource>
 const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
@@ -677,3 +688,298 @@ describe('agent generate dryRun planning (OSS-1206)', () => {
     expect(mockGenerateCommitDraft).not.toHaveBeenCalled()
   })
 })
+
+// #1823 — PR drafts for agents, without any forge call.
+describe('generateAgentPrDraft (#1823)', () => {
+  const contextModule = jest.requireMock('./context') as {
+    readPullRequestBranches: jest.Mock
+    resolveChangeSource: jest.Mock
+  }
+  const repoInput = (options: Record<string, unknown> = {}, source: unknown = { kind: 'repository', scope: { type: 'staged' } }) => ({
+    ...baseInput,
+    source,
+    options: AgentOptionsSchema.parse(options),
+  }) as AgentTaskInput
+
+  beforeEach(() => {
+    contextModule.readPullRequestBranches.mockResolvedValue({ head: 'feat/x', defaultBase: 'main', defaultBaseRef: 'origin/main' })
+  })
+
+  it('drafts title and body from the branch against the default base', async () => {
+    mockExecuteChain.mockResolvedValueOnce({ title: ' Add x ', content: ' Body text. ' } as never)
+    const result = await generateAgentPrDraft(repoInput({ draft: true }), makeContext(undefined))
+
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.operation).toBe('pr-draft')
+    expect(result.data).toEqual({ base: 'main', head: 'feat/x', title: 'Add x', body: 'Body text.', draft: true })
+    // The diff runs against the remote-tracking ref; the request targets `main`.
+    expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'repository', scope: { type: 'branch', base: 'origin/main' },
+    })
+  })
+
+  it('uses options.base over the default', async () => {
+    mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+    const result = await generateAgentPrDraft(repoInput({ base: 'release/2.0' }), makeContext(undefined))
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.data).toMatchObject({ base: 'release/2.0', draft: false })
+  })
+
+  it('refuses a detached HEAD and the base branch itself', async () => {
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: undefined, defaultBase: 'main', defaultBaseRef: 'main' })
+    await expect(generateAgentPrDraft(repoInput(), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_REVISION' })
+
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: 'main', defaultBase: 'main', defaultBaseRef: 'origin/main' })
+    await expect(generateAgentPrDraft(repoInput(), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+
+  it('generates from a supplied summary as given, still reporting base and head', async () => {
+    mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+    const summary = { kind: 'summary', summary: 'Adds x.' }
+    const result = await generateAgentPrDraft(repoInput({}, summary), makeContext(undefined))
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual(summary)
+    expect(result.data).toMatchObject({ base: 'main', head: 'feat/x' })
+  })
+
+  // Final review: options.base kept its `origin/` prefix, so the base===head
+  // guard missed and data.base was not a branch a forge PR can target.
+  it('normalises a remote-tracking options.base like the source base', async () => {
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: 'main', defaultBase: 'main', defaultBaseRef: 'origin/main' })
+    await expect(generateAgentPrDraft(repoInput({ base: 'origin/main' }), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+
+    mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+    const result = await generateAgentPrDraft(repoInput({ base: 'origin/release' }), makeContext(undefined))
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.data).toMatchObject({ base: 'release' })
+    expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'repository', scope: { type: 'branch', base: 'origin/release' },
+    })
+  })
+
+  // Final review: a branch source's head was dropped, so the draft
+  // described the checked-out branch instead of the requested one.
+  it('drafts the branch a source names as head, not the checked-out one', async () => {
+    mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+    const source = { kind: 'repository', scope: { type: 'branch', base: 'main', head: 'feature-y' } }
+    const result = await generateAgentPrDraft(repoInput({}, source), makeContext(undefined))
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.data).toMatchObject({ base: 'main', head: 'feature-y' })
+    expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'repository', scope: { type: 'branch', base: 'main', head: 'feature-y' },
+    })
+  })
+
+  it('compares a named head against the base, not the checked-out branch', async () => {
+    const source = { kind: 'repository', scope: { type: 'branch', base: 'main', head: 'main' } }
+    await expect(generateAgentPrDraft(repoInput({}, source), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+})
+
+// #1828 — the agent counterpart of `coco review --severity`, as a filter.
+describe('review severity threshold (#1828)', () => {
+  const finding = (severity: number) => ({
+    title: `s${severity}`, summary: 'x', severity, category: 'bug', filePath: 'a.ts',
+  }) as never
+
+  it('keeps findings at or above the threshold and says how many were left out', () => {
+    expect(applySeverityThreshold([finding(9), finding(5), finding(4), finding(1)], 5)).toEqual({
+      kept: [finding(9), finding(5)],
+      omittedWarning: '2 findings below severity 5 were omitted.',
+    })
+    expect(applySeverityThreshold([finding(9), finding(2)], 5).omittedWarning).toBe('1 finding below severity 5 was omitted.')
+  })
+
+  it('returns every finding, with no warning, when there is no threshold or nothing is dropped', () => {
+    expect(applySeverityThreshold([finding(1), finding(9)], undefined)).toEqual({ kept: [finding(1), finding(9)] })
+    expect(applySeverityThreshold([finding(7)], 5)).toEqual({ kept: [finding(7)] })
+  })
+
+  it('filters the review envelope and adds the warning', async () => {
+    mockExecuteChain.mockResolvedValueOnce([finding(3), finding(8)] as never)
+    const input = { ...baseInput, options: AgentOptionsSchema.parse({ severity: 5 }) }
+    const result = await generateAgentReview(input, makeContext(undefined))
+
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.data.findings.map((f) => f.severity)).toEqual([8])
+    expect(result.warnings).toContain('1 finding below severity 5 was omitted.')
+  })
+
+  it.each([0, 11, 2.5, Number.NaN])('rejects severity %p', (severity) => {
+    expect(AgentOptionsSchema.safeParse({ severity }).success).toBe(false)
+  })
+})
+
+// #1824 — agent-safe split planning.
+describe('generateAgentSplitPlan (#1824)', () => {
+  const contextModule = jest.requireMock('./context') as {
+    resolveChangeSource: jest.Mock
+    readStagedFileChanges: jest.Mock
+    readStagedFileDiff: jest.Mock
+    readPullRequestBranches: jest.Mock
+  }
+  const planner = jest.requireMock('../../commands/commit/splitPlanGenerator').generateValidatedCommitSplitPlan as jest.Mock
+  const stagedInput = (options: Record<string, unknown> = {}, source: unknown = { kind: 'repository', scope: { type: 'staged' } }) => ({
+    ...baseInput, source, options: AgentOptionsSchema.parse(options),
+  }) as AgentTaskInput
+
+  beforeEach(() => {
+    planner.mockReset()
+    contextModule.resolveChangeSource.mockResolvedValue({
+      text: 'diff --git a/a.ts b/a.ts', warnings: [],
+      meta: { kind: 'repository', digest: 'sha256:d', verification: 'repository-derived' },
+    })
+    contextModule.readStagedFileChanges.mockResolvedValue([
+      { filePath: 'a.ts', status: 'added', summary: '' },
+      { filePath: 'b.ts', status: 'added', summary: '' },
+    ])
+    contextModule.readStagedFileDiff.mockResolvedValue('')
+    planner.mockResolvedValue({
+      plan: { groups: [
+        { title: 'feat: add a', files: ['a.ts'] },
+        { title: 'chore: misc', body: 'left over', files: ['b.ts'], unclaimed: true },
+      ] },
+      attempts: 1,
+    })
+  })
+
+  it('returns the plan groups', async () => {
+    const result = await generateAgentSplitPlan(stagedInput(), makeContext(undefined))
+    expect(result.operation).toBe('split-plan')
+    expect(result.data.groups).toEqual([
+      { title: 'feat: add a', body: '', files: ['a.ts'], hunks: [], unclaimed: false },
+      { title: 'chore: misc', body: 'left over', files: ['b.ts'], hunks: [], unclaimed: true },
+    ])
+    expect(result.meta.digest).toBe('sha256:d')
+  })
+
+  it('validates group titles against the built-in rules only when conventional is set', async () => {
+    await generateAgentSplitPlan(stagedInput(), makeContext(undefined))
+    expect(planner.mock.calls[0][0].validateGroupMessage).toBeUndefined()
+
+    await generateAgentSplitPlan(stagedInput({ conventional: true }), makeContext(undefined))
+    expect(typeof planner.mock.calls[1][0].validateGroupMessage).toBe('function')
+    expect(planner.mock.calls[1][0].variables.commitlint_rules_context).toContain('Header')
+  })
+
+  it('uses the built-in split prompt and frames the diff as untrusted', async () => {
+    await generateAgentSplitPlan(stagedInput(), makeContext(undefined))
+    const { variables } = planner.mock.calls[0][0]
+    expect(variables.summary).not.toBe('diff --git a/a.ts b/a.ts')
+    expect(variables.summary).toContain('diff --git a/a.ts b/a.ts')
+    expect(variables.file_inventory).toBe('- a.ts: added\n- b.ts: added')
+  })
+
+  it('reports a fallback plan as a warning and in data', async () => {
+    planner.mockResolvedValueOnce({
+      plan: { groups: [{ title: 'chore: changes', files: ['a.ts', 'b.ts'] }] },
+      attempts: 3,
+      fallback: { reason: 'validation kept failing', lastIssues: {} },
+    })
+    const result = await generateAgentSplitPlan(stagedInput(), makeContext(undefined))
+    expect(result.data.fallback).toBe('validation kept failing')
+    expect(result.warnings.some((w) => w.includes('validation kept failing'))).toBe(true)
+  })
+
+  it('reports CONTEXT_TOO_LARGE when the inventories alone exceed the budget', async () => {
+    mockGetApiKeyForModel.mockReturnValue('test-key')
+    mockGetModelAndProviderFromConfig.mockReturnValue({ provider: 'test-provider' } as never)
+    mockResolveDynamicService.mockReturnValue({ model: 'test-model' } as never)
+    mockGetTokenCounterForProvider.mockResolvedValue(((text: string) => text.length) as never)
+    mockLoadConfig.mockReturnValueOnce({
+      service: { tokenLimit: 10, authentication: { type: 'None' }, streaming: { enabled: false }, provider: 'test-provider' },
+      prompt: undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any)
+    await expect(generateAgentSplitPlan(stagedInput(), makeContext(undefined))).rejects.toMatchObject({ code: 'CONTEXT_TOO_LARGE' })
+    expect(planner).not.toHaveBeenCalled()
+  })
+
+  it('refuses non-staged sources, dryRun, and an empty index', async () => {
+    await expect(generateAgentSplitPlan(stagedInput({}, { kind: 'summary', summary: 'x' }), makeContext(undefined)))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE' })
+    await expect(generateAgentSplitPlan(stagedInput({ dryRun: true }), makeContext(undefined)))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' })
+    contextModule.readStagedFileChanges.mockResolvedValueOnce([])
+    await expect(generateAgentSplitPlan(stagedInput(), makeContext(undefined)))
+      .rejects.toMatchObject({ code: 'NO_CHANGES' })
+  })
+})
+
+// #2045 — several operations over one resolution of the source.
+describe('runAgentBatch (#2045)', () => {
+  const contextModule = jest.requireMock('./context') as { resolveChangeSource: jest.Mock }
+  const resolved = {
+    text: 'diff --git a/x b/x',
+    warnings: [],
+    meta: { kind: 'repository', digest: 'sha256:shared', verification: 'repository-derived' },
+  }
+  const batchInput = (operations: string[]) => ({
+    ...baseInput,
+    source: { kind: 'repository', scope: { type: 'staged' } },
+    operations,
+  }) as never
+
+  beforeEach(() => {
+    contextModule.resolveChangeSource.mockReset()
+    contextModule.resolveChangeSource.mockResolvedValue(resolved)
+  })
+
+  it('resolves the source once and returns an envelope per operation with the shared digest', async () => {
+    mockExecuteChain
+      .mockResolvedValueOnce({ title: 'Recap', summary: 's' } as never)
+      .mockResolvedValueOnce({ title: 'Changes', content: 'c' } as never)
+    const result = await runAgentBatch(batchInput(['recap', 'changelog']), makeContext(undefined))
+
+    expect(contextModule.resolveChangeSource).toHaveBeenCalledTimes(1)
+    expect(result.operation).toBe('batch')
+    expect(result.data.results.map((r) => [r.operation, r.ok])).toEqual([['recap', true], ['changelog', true]])
+    expect(result.data.results.map((r) => (r as { meta?: { digest: string } }).meta?.digest)).toEqual(['sha256:shared', 'sha256:shared'])
+    expect(result.meta.digest).toBe('sha256:shared')
+  })
+
+  it('keeps going when one operation fails, returning its failure envelope', async () => {
+    mockExecuteChain
+      .mockRejectedValueOnce(new Error('model broke'))
+      .mockResolvedValueOnce({ title: 'Changes', content: 'c' } as never)
+    const result = await runAgentBatch(batchInput(['recap', 'changelog']), makeContext(undefined))
+
+    expect(result.data.results[0]).toMatchObject({ ok: false, operation: 'recap', error: { code: 'OPERATION_FAILED' } })
+    expect(result.data.results[1]).toMatchObject({ ok: true, operation: 'changelog' })
+  })
+
+  it('stops the whole batch on cancellation', async () => {
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    mockExecuteChain.mockRejectedValueOnce(abort)
+    await expect(runAgentBatch(batchInput(['recap', 'changelog']), makeContext(undefined))).rejects.toMatchObject({ code: 'CANCELLED' })
+  })
+})
+
+describe('batch request schema (#2045)', () => {
+  const { AgentBatchRequestSchema } = jest.requireActual('./schemas') as typeof import('./schemas')
+
+  it('accepts a set of generation operations', () => {
+    expect(AgentBatchRequestSchema.safeParse({ source: 'staged', operations: ['review', 'commit-draft'] }).success).toBe(true)
+  })
+
+  it.each([
+    [[]],
+    [['review', 'review']],
+    [['review', 'lint']],
+    [['pr-draft']],
+  ])('rejects operations %j', (operations) => {
+    expect(AgentBatchRequestSchema.safeParse({ operations }).success).toBe(false)
+  })
+})
+
+// #1823 review: a `branch` source given as the remote-tracking ref targets
+// the branch name, and "on the base branch" is still caught.
+describe('generateAgentPrDraft with a remote-tracking branch source', () => {
+  const contextModule = jest.requireMock('./context') as { readPullRequestBranches: jest.Mock }
+  it('reports the branch name and refuses when on it', async () => {
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: 'main', defaultBase: 'main', defaultBaseRef: 'origin/main' })
+    const input = { ...baseInput, source: { kind: 'repository', scope: { type: 'branch', base: 'origin/main' } }, options: AgentOptionsSchema.parse({}) } as AgentTaskInput
+    await expect(generateAgentPrDraft(input, makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
+})
+

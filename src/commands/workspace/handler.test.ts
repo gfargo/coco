@@ -2,6 +2,7 @@ import {
   buildDrillInUiArgv,
   finalizeWorkspaceExit,
   resolveWorkspaceKnownRepos,
+  resolveWorkspaceFollowSymlinks,
   resolveWorkspaceMaxDepth,
   resolveWorkspaceRoots,
   runWorkspaceLoop,
@@ -69,6 +70,13 @@ describe('workspace handler argv resolution', () => {
     ).toBe(2)
     expect(resolveWorkspaceMaxDepth(argv(), {})).toBeUndefined()
     expect(resolveWorkspaceMaxDepth(argv({ maxDepth: 0 }), { workspace: { maxDepth: 2 } })).toBe(2)
+  })
+
+  it('reads workspace.followSymlinks from config and leaves it unset otherwise (#2210)', () => {
+    expect(resolveWorkspaceFollowSymlinks({ workspace: { followSymlinks: true } })).toBe(true)
+    expect(resolveWorkspaceFollowSymlinks({ workspace: { followSymlinks: false } })).toBe(false)
+    expect(resolveWorkspaceFollowSymlinks({ workspace: {} })).toBeUndefined()
+    expect(resolveWorkspaceFollowSymlinks({})).toBeUndefined()
   })
 
   it('buildDrillInUiArgv produces an interactive history argv', () => {

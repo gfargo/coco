@@ -162,15 +162,18 @@ Three sub-layers:
 
 ## The multi-forge adapter (`src/git/`)
 
-coco targets GitHub, GitHub Enterprise, GitLab, and Bitbucket Cloud through one
+coco targets GitHub, GitHub Enterprise, GitLab, Bitbucket Cloud, Bitbucket Server /
+Data Center, and Gitea/Forgejo (including Codeberg) through one
 abstraction so the workstation never branches on provider at the call site:
 
 - **`parseRemoteUrl(url)`** (in `git/githubCli.ts`) is a host-agnostic remote parser:
   scp-style ssh, ssh/git URLs, and https — for any host — returning `{ host, owner,
   name }` and preserving multi-segment owners (GitLab subgroups).
 - **`detectProvider(host)`** (in `git/providerData.ts`) maps a host to
-  `'github' | 'gitlab' | 'bitbucket' | 'unsupported'`, honoring config host overrides
-  for self-hosted/GHE/vanity domains.
+  `'github' | 'gitlab' | 'bitbucket' | 'bitbucket-server' | 'gitea' | 'unsupported'`,
+  honoring config `forgeHosts` overrides for self-hosted/GHE/vanity domains.
+  `codeberg.org` and hosts containing `gitea` / `forgejo` / `codeberg` map to `gitea`;
+  Bitbucket Server is only reachable through an explicit override.
 - **`ForgeActions`** (in `git/forgeActions.ts`) is the provider-keyed adapter: a single
   interface covering PR/MR list + detail, every PR/MR mutation (comment, label,
   assign, merge, close, approve, request-changes, create, open — by-number and
@@ -182,10 +185,22 @@ abstraction so the workstation never branches on provider at the call site:
   `BITBUCKET_USERNAME`+`BITBUCKET_APP_PASSWORD`). Bitbucket-specific code is split
   across `bitbucketCli.ts` (REST runner), `bitbucketListData.ts`, `bitbucketDetailData.ts`,
   `bitbucketPullRequestActions.ts`, and `bitbucketIssueActions.ts`.
+- **Bitbucket Server / Data Center** also uses `fetch` (auth via `BITBUCKET_SERVER_TOKEN`
+  or `BITBUCKET_SERVER_USERNAME`+`BITBUCKET_SERVER_PASSWORD`), split the same way
+  across the `bitbucketServer*.ts` files.
+- **Gitea / Forgejo / Codeberg** uses `fetch` against each host's own
+  `https://<host>/api/v1` (auth via `GITEA_TOKEN`), split across `giteaCli.ts`,
+  `giteaListData.ts`, `giteaDetailData.ts`, `giteaPullRequestActions.ts`, and
+  `giteaIssueActions.ts`.
 
 When adding a forge capability, add the method to the `ForgeActions` type first, then
 implement it for all providers (or return an explicit "unsupported on <forge>" result),
 then wire the single call site. Never special-case a provider inside a surface.
+
+When adding a whole forge, also update every place that lists the supported forges:
+the `package.json` `description` and `keywords` (what npm renders and searches), the
+README, `AGENTS.md`, this file and `product.md`, and the wiki's Multi-Forge Support
+page. Bitbucket and Gitea each shipped without these (#1853).
 
 ## Testing
 

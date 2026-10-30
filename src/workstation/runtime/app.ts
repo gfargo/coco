@@ -120,6 +120,7 @@ import { renderMainPanel } from '../runtime/mainPanel'
 import { renderDetailPanel } from '../runtime/detailPanel'
 import { renderOnboardingOverlay } from '../runtime/overlays'
 import { getLogInkRuntimeContext, type LogInkRuntimeContextValue } from '../runtime/runtimeContext'
+import { createCancellableGit } from '../../lib/simple-git/cancellableGit'
 
 const PANE_BY_FOCUS: Record<LogInkFocus, LogInkVisiblePane> = {
   sidebar: 'sidebar',
@@ -450,7 +451,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // History refresh callback (#1418 app.ts decomposition). Re-fetches the
   // head of the commit log after any operation that creates or rewrites
   // history locally. Owned by `useHistoryRefresh`.
-  const { refreshHistoryRows } = useHistoryRefresh(React, {
+  const { refreshHistoryRows, lastSelfHistoryRefreshAtRef } = useHistoryRefresh(React, {
     git,
     logArgv,
     dispatch,
@@ -460,6 +461,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     fullGraph: state.fullGraph,
     historyFetchArgs: state.historyFetchArgs,
     historyRefetchGenerationRef,
+    loadedCommitCount: state.mainHistoryCommitCount,
   })
 
   // Render-fresh snapshot of `state` for `refreshContext`'s rectification
@@ -474,7 +476,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // `refreshContext` and `refreshWorktreeContext` — the two async callbacks
   // that re-fetch git metadata. Also owns the per-frame monotonic
   // request-id refs that sequence overlapping refreshes.
-  const { refreshContext, refreshWorktreeContext } = useContextRefresh(React, {
+  const { refreshContext, refreshWorktreeContext, lastSelfRefreshAtRef } = useContextRefresh(React, {
     git,
     runtimesLength: runtimes.length,
     worktree: context.worktree,
@@ -495,6 +497,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     refreshContext,
     refreshWorktreeContext,
     refreshHistoryRows,
+    lastSelfRefreshAtRef,
+    lastSelfHistoryRefreshAtRef,
   })
 
   // Per-repo sidebar tab persistence (#21). Resolve the repo root, look
@@ -1005,7 +1009,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // array stay byte-identical. The callback is keystroke-dispatch-only
   // (the `runWorkflowAction` input event) — not in any effect/memo dep
   // array — so co-locating it is identity-safe.
-  const { runWorkflowAction } = useWorkflowAction(React, {
+  const { runWorkflowAction, cancelRemoteOp } = useWorkflowAction(React, {
+    createCancellableGit,
     git,
     context,
     state,
@@ -1231,6 +1236,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     cancelChangelog,
     startConflictResolution,
     cancelConflictResolution,
+    cancelRemoteOp,
     acceptConflictProposal,
     acceptAllConflictProposals,
     editConflictProposal,

@@ -14,6 +14,7 @@
  * hydration hook.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import { cellWidth, padCells, truncateCells } from '../../chrome/text'
@@ -134,7 +135,7 @@ export function renderFileHistorySurface(
           const subject = truncateCells(commit.subject, subjectWidth)
           return h(
             Text,
-            { key: `fh-${index}`, bold: isSelected },
+            { key: `fh-${index}`, ...selectionRowProps(theme, isSelected, focused) },
             h(Text, { dimColor: true }, gutterPart),
             subject,
           )

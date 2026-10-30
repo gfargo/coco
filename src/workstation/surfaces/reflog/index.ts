@@ -8,6 +8,7 @@
  * of #890. No behavior change.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -85,8 +86,8 @@ export function renderReflogSurface(ctx: SurfaceRenderContext): ReactTypes.React
         )
         return h(Text, {
           key: `reflog-${index}`,
-          bold: isSelected,
           dimColor: !isSelected,
+          ...selectionRowProps(theme, isSelected, focused),
         }, lineText)
       })
 

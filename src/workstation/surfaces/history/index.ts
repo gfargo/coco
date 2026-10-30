@@ -450,7 +450,26 @@ function renderStackedCommitHistoryRow(
     : { node: null, width: 0, chip: undefined }
   const lineOneFixed =
     graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth + chip.width
-  const subject = truncateCells(commit.message, Math.max(8, totalWidth - lineOneFixed))
+  // Trailing refs are filtered against the chip so the branch tip is not
+  // repeated as both a leading chip and a trailing label.
+  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
+  // With refs to show, a long subject leaves them a small slice instead of
+  // filling the row: otherwise tags vanished from nearly every rail row
+  // (#1819 review). The subject still keeps most of the row.
+  const subjectRoom = Math.max(8, totalWidth - lineOneFixed)
+  const refsReserve = bucketed && refs && subjectRoom >= 40
+    ? Math.min(cellWidth(refs.trimStart()) + 1, RAIL_INLINE_REFS_RESERVE)
+    : 0
+  const subject = truncateCells(commit.message, subjectRoom - refsReserve)
+  // Bucketed rail rows (#1819): those refs (tags, origin/HEAD) ride on the
+  // commit row after the subject instead of a detached second line.
+  // Priority is chip, then subject, then these refs: they get only the room
+  // the subject leaves, and are left to the inspector when that is under
+  // RAIL_INLINE_REFS_MIN cells.
+  const inlineRefsRoom = totalWidth - lineOneFixed - cellWidth(subject) - 1
+  const inlineRefs = bucketed && refs && inlineRefsRoom >= RAIL_INLINE_REFS_MIN
+    ? truncateCells(refs.trimStart(), inlineRefsRoom)
+    : ''
 
   const graphChildren = laneSegments && !theme.ascii
     ? renderLaneSegmentSpans(h, Text, laneSegments, theme, graphWidth, `cs${index}`, { suppressColor: selected })
@@ -470,30 +489,28 @@ function renderStackedCommitHistoryRow(
   h(Text, { color: accent, bold: selected || isRecent }, commit.shortHash),
   ' ',
   chip.node,
-  ...renderTypedSubject(h, Text, subject, theme, `${commit.hash}-${index}-stk-subj`, selected))
+  ...renderTypedSubject(h, Text, subject, theme, `${commit.hash}-${index}-stk-subj`, selected),
+  inlineRefs
+    ? h(Text, { key: `${commit.hash}-${index}-stk-refs`, color: muted, dimColor: !selected }, ` ${inlineRefs}`)
+    : null)
 
   // Line 2 — metadata row, padded to align with the start of the
   // shortHash on line 1 so the eye still groups them as one commit.
   // Selection background does not extend here so we don't get a thick
-  // double-row highlight on a tight terminal. Trailing refs are
-  // filtered against the chip so we don't repeat the branch tip both
-  // as a leading chip and a trailing label.
+  // double-row highlight on a tight terminal.
   const indent = ' '.repeat(graphWidth + 1)
-  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
   // When bucketing is active, the bucket header already conveys the
-  // timeframe — a per-row date is redundant. If the commit also has
-  // no refs, line 2 would only show "1d" / "3d" (or a bare `·`),
-  // which at rail widths makes the whole list read as double-spaced
-  // noise. Collapse to a single-line row in that case so the graph
-  // is dense and readable on tiny terminals (#1421).
-  if (bucketed && !refs) {
+  // timeframe, and refs ride inline on line 1 (#1819), so line 2 would
+  // only show a redundant date: a bucketed rail commit is one line, which
+  // keeps the graph dense and readable on tiny terminals (#1421).
+  if (bucketed) {
     return h(Box, {
       key: `${commit.hash}-${index}-stack`,
       flexDirection: 'column',
     }, lineOne)
   }
 
-  const dateText = bucketed && refs ? '' : formatCompactRelativeDate(commit.date, now)
+  const dateText = formatCompactRelativeDate(commit.date, now)
   const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
   const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
   // If both pieces are empty (date unparseable + no refs), show a
@@ -525,16 +542,20 @@ function renderStackedCommitHistoryRow(
  * headers and graph rows are always 1 line). Used to replace the old
  * fixed-divisor estimate with a measurement of what will actually render.
  */
-function stackedItemLineCost(
+export function stackedItemLineCost(
   item: LogInkHistoryItem,
   options: { fullGraph: boolean; bucketed: boolean; remoteNames?: string[] }
 ): number {
   if (item.type !== 'commit') return 1
-  const commit = item.commit
-  const chip = options.fullGraph ? getBranchTipChip(commit.refs, options.remoteNames) : undefined
-  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip, options.remoteNames))
-  return options.bucketed && !refs ? 1 : 2
+  // Bucketed rail commits are always one line (#1819): the date is in the
+  // bucket header and refs ride inline on the commit row.
+  return options.bucketed ? 1 : 2
 }
+
+/** Fewest cells worth spending on inline refs in a bucketed rail row (#1819). */
+const RAIL_INLINE_REFS_MIN = 6
+/** Most a long subject gives up for inline refs on a roomy rail row. */
+const RAIL_INLINE_REFS_RESERVE = 18
 
 /**
  * Grows the stacked-mode history window item-by-item, measuring each
@@ -551,7 +572,7 @@ function stackedItemLineCost(
  * A floor of 2 items always renders (matching the old `Math.max(2, …)`
  * floor) even if that overflows a pathologically small budget.
  */
-function fillStackedWindow(
+export function fillStackedWindow(
   state: LogInkState,
   lineBudget: number,
   options: GetVisibleLogInkHistoryOptions,
@@ -669,7 +690,27 @@ function renderRemoteOpLoader(
     h(Text, undefined, ''),
     h(Text, { color: accent }, track),
     h(Text, undefined, ''),
-    h(Text, { dimColor: true }, `Talking to the remote ${pickWorkstationGlyph('dash', theme.ascii)} history refreshes automatically.`)))
+    h(Text, { dimColor: true }, `Talking to the remote ${pickWorkstationGlyph('dash', theme.ascii)} history refreshes automatically.`),
+    h(Text, { dimColor: true }, 'Esc to cancel')))
+}
+
+/** Distinct remote names per remote-branch list, derived once per load rather than per frame (#2209). */
+const remoteNamesCache = new WeakMap<readonly { remote?: string }[], string[]>()
+
+function getRemoteNames(remoteBranches: readonly { remote?: string }[] | undefined): string[] | undefined {
+  if (!remoteBranches) return undefined
+  let names = remoteNamesCache.get(remoteBranches)
+  if (!names) {
+    names = Array.from(
+      new Set(
+        remoteBranches
+          .map((branch) => branch.remote)
+          .filter((remote): remote is string => Boolean(remote))
+      )
+    )
+    remoteNamesCache.set(remoteBranches, names)
+  }
+  return names
 }
 
 export function renderHistoryPanel(
@@ -701,15 +742,7 @@ export function renderHistoryPanel(
   // slashed local branch like `feat/x` doesn't get mis-coloured as
   // remote. When branch data hasn't loaded yet, `undefined` makes the
   // chip helper fall back to the legacy slash-based heuristic.
-  const remoteNames = context.branches?.remoteBranches
-    ? Array.from(
-        new Set(
-          context.branches.remoteBranches
-            .map((branch) => branch.remote)
-            .filter((remote): remote is string => Boolean(remote))
-        )
-      )
-    : undefined
+  const remoteNames = getRemoteNames(context.branches?.remoteBranches)
   // Set of just-landed commit hashes for the "new commit" marker.
   // Populated for ~5s after a split-apply or other commit-creating
   // operation; auto-cleared by the runtime so it doesn't linger.

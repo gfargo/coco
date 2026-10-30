@@ -9,10 +9,11 @@ import { loadConfig } from '../../lib/config/utils/loadConfig'
 import type { Config } from '../../lib/config/types'
 import type { LlmUsageSurface } from '../../lib/langchain/utils/observability'
 import { getRepo } from '../../lib/simple-git/getRepo'
+import type { FileChange } from '../../lib/types'
 import { Logger } from '../../lib/utils/logger'
 import { isPathWithinRoot } from '../../lib/utils/pathWithinRoot'
 import { AgentOperationError } from './errors'
-import { AgentOperation, ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
+import { AgentOperation, ChangeSource, ChangeSourceShorthand, CHANGE_SOURCE_SHORTHANDS, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES, SourceMetadata } from './schemas'
 
 // Re-export so existing importers (mcp/server.ts, context.test.ts) continue to
 // resolve from this module without changes.
@@ -306,8 +307,61 @@ export async function resolveAgentRepoRoot(
  * All other supplied-source operations (review, changelog, recap with
  * patch/summary/files) do not.
  */
-export function requiresRepository(operation: AgentOperation, source: ChangeSource): boolean {
-  return operation === 'commit-draft' || source.kind === 'repository'
+export function requiresRepository(operation: AgentOperation, source: ChangeSource | ChangeSourceShorthand): boolean {
+  // Every shorthand names a repository source; pr-draft reads the current
+  // branch and its base even for a supplied source.
+  return operation === 'commit-draft' || operation === 'pr-draft' || typeof source === 'string' || source.kind === 'repository'
+}
+
+/**
+ * Expand a source shorthand (#2041) into the object form, reading the
+ * repository where the shorthand needs it (the last tag, the default
+ * branch). Objects pass through unchanged.
+ */
+export async function expandChangeSource(
+  source: ChangeSource | ChangeSourceShorthand,
+  context: AgentOperationContext,
+): Promise<ChangeSource> {
+  if (typeof source !== 'string') return source
+  if (source === 'staged' || source === 'worktree') {
+    return { kind: 'repository', scope: { type: source } }
+  }
+  if (source === 'since-last-tag') {
+    let tag = ''
+    try {
+      tag = (await runAgentGit(context, ['describe', '--tags', '--abbrev=0', 'HEAD'])).trim()
+    } catch {
+      // No tag reachable from HEAD: reported below.
+    }
+    if (!tag) {
+      throw new AgentOperationError('INVALID_REVISION', '`since-last-tag` needs a tag reachable from HEAD, and none was found.')
+    }
+    return { kind: 'repository', scope: { type: 'range', from: tag, to: 'HEAD' } }
+  }
+  if (source === 'branch') {
+    return { kind: 'repository', scope: { type: 'branch', base: await defaultBranchRef(context) } }
+  }
+  if (source.startsWith('branch:')) {
+    return { kind: 'repository', scope: { type: 'branch', base: source.slice('branch:'.length) } }
+  }
+  if (/^HEAD~\d+$/.test(source)) {
+    return { kind: 'repository', scope: { type: 'branch', base: source } }
+  }
+  throw new AgentOperationError(
+    'INVALID_INPUT',
+    `Unknown source shorthand '${source}'. Use one of: ${CHANGE_SOURCE_SHORTHANDS.join(', ')}, or a source object.`,
+  )
+}
+
+/** `origin/HEAD`'s target (e.g. `origin/main`), else `main`. */
+async function defaultBranchRef(context: AgentOperationContext): Promise<string> {
+  try {
+    const ref = (await runAgentGit(context, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])).trim()
+    if (ref) return ref
+  } catch {
+    // No origin/HEAD (no remote, or never set): fall through.
+  }
+  return 'main'
 }
 
 export async function createAgentOperationContext(input: {
@@ -449,7 +503,11 @@ async function repositoryText(
     case 'branch': {
       const base = await resolveCommitRevision(context, source.scope.base)
       const head = await resolveCommitRevision(context, source.scope.head || 'HEAD')
-      return runAgentGit(context, ['diff', ...safeDiffOptions, `${base}..${head}`, '--'])
+      // Three dots: what the branch changed since it left `base` (the
+      // merge-base), as a pull request shows it. Two dots compared the two
+      // tips, so once `base` moved ahead its new commits showed up reversed
+      // in a branch review or PR draft (#1823 review). `range` keeps two.
+      return runAgentGit(context, ['diff', ...safeDiffOptions, `${base}...${head}`, '--'])
     }
     case 'range': {
       const from = await resolveCommitRevision(context, source.scope.from)
@@ -1216,3 +1274,77 @@ export async function readRepoCapabilitiesContext(context: AgentOperationContext
     isShallow,
   }
 }
+
+/**
+ * The branch a PR draft is made from and the base it targets (#1823), read
+ * through the hardened agent git runner. `head` is undefined on a detached
+ * HEAD. `defaultBase` is `origin/HEAD`'s branch (without the remote), else
+ * the configured `defaultBranch`, else `main`.
+ */
+export async function readPullRequestBranches(
+  context: AgentOperationContext,
+): Promise<{ head?: string; defaultBase: string; defaultBaseRef: string }> {
+  let head: string | undefined
+  try {
+    head = (await runAgentGit(context, ['symbolic-ref', '--quiet', '--short', 'HEAD'])).trim() || undefined
+  } catch {
+    head = undefined
+  }
+  let defaultBase: string | undefined
+  // The ref to diff against: the remote-tracking branch when that is where
+  // the default came from, since the local one can be stale or missing (a
+  // CI clone, a fresh worktree). `defaultBase` is the name a PR targets.
+  let defaultBaseRef: string | undefined
+  try {
+    const remoteHead = (await runAgentGit(context, ['symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD'])).trim()
+    defaultBase = remoteHead.replace(/^origin\//, '') || undefined
+    defaultBaseRef = remoteHead || undefined
+  } catch {
+    defaultBase = undefined
+  }
+  if (!defaultBase) {
+    const config = loadConfig<Record<string, unknown>, Record<string, unknown>>({}, { cwd: context.repoRoot })
+    defaultBase = typeof config.defaultBranch === 'string' && config.defaultBranch ? config.defaultBranch : 'main'
+  }
+  return { head, defaultBase, defaultBaseRef: defaultBaseRef ?? defaultBase }
+}
+
+const NAME_STATUS: Record<string, FileChange['status']> = {
+  A: 'added',
+  M: 'modified',
+  D: 'deleted',
+  R: 'renamed',
+  C: 'added',
+  T: 'modified',
+}
+
+/**
+ * The staged files and their status, through the hardened agent git runner
+ * (#1824). Rename and copy entries carry the old path.
+ */
+export async function readStagedFileChanges(context: AgentOperationContext): Promise<FileChange[]> {
+  const output = await runAgentGit(context, ['diff', '--cached', '--name-status', '-z', '--find-renames'])
+  const fields = output.split('\0')
+  if (fields[fields.length - 1] === '') fields.pop()
+  const changes: FileChange[] = []
+  for (let i = 0; i < fields.length; ) {
+    const code = fields[i++] ?? ''
+    if (!code) continue
+    const letter = code[0]
+    if (letter === 'R' || letter === 'C') {
+      const oldFilePath = fields[i++]
+      const filePath = fields[i++]
+      if (filePath) changes.push({ filePath, oldFilePath, status: NAME_STATUS[letter], summary: '' })
+    } else {
+      const filePath = fields[i++]
+      if (filePath) changes.push({ filePath, status: NAME_STATUS[letter] ?? 'unknown', summary: '' })
+    }
+  }
+  return changes
+}
+
+/** One staged file's patch, through the hardened agent git runner (#1824). */
+export function readStagedFileDiff(context: AgentOperationContext, filePath: string): Promise<string> {
+  return runAgentGit(context, ['diff', '--cached', '--no-ext-diff', '--no-textconv', '--end-of-options', '--', filePath])
+}
+

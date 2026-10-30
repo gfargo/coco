@@ -118,7 +118,7 @@ export type UseWorktreeStageActionsDeps = {
 export type UseWorktreeStageActionsResult = {
   toggleSelectedFileStage: () => Promise<void>
   toggleSelectedHunkStage: () => Promise<void>
-  revertSelectedFile: () => Promise<void>
+  revertSelectedFile: (path?: string) => Promise<void>
   revertSelectedHunk: () => Promise<void>
   stageSelectedLines: () => Promise<void>
   revertSelectedLines: () => Promise<void>
@@ -246,20 +246,29 @@ export function useWorktreeStageActions(
     }
   }, [dispatch, git, refreshWorktreeContext, worktreeDiffOffset, worktreeDiff, worktreeHunks])
 
-  const revertSelectedFile = React.useCallback(async () => {
-    if (!selectedWorktreeFile) {
-      dispatch({ type: 'setStatus', value: 'no worktree file selected', kind: 'warning' })
+  const revertSelectedFile = React.useCallback(async (pinnedPath?: string) => {
+    // #2202 — the confirmation pinned a path; act on that file, not
+    // whatever the cursor index points at after a background refresh.
+    const target = pinnedPath
+      ? visibleWorktreeFilesGrouped.find((file) => file.path === pinnedPath)
+      : selectedWorktreeFile
+    if (!target) {
+      dispatch({
+        type: 'setStatus',
+        value: pinnedPath ? `${pinnedPath} is no longer changed; revert cancelled` : 'no worktree file selected',
+        kind: 'warning',
+      })
       return
     }
 
     dispatch({ type: 'setStatus', value: 'reverting selected file' })
-    const result = await revertFile(git, selectedWorktreeFile)
+    const result = await revertFile(git, target)
 
     dispatch({ type: 'setStatus', value: result.message, kind: result.ok ? undefined : 'error' })
     await refreshWorktreeContext()
     setWorktreeDiff(undefined)
     setWorktreeHunks(undefined)
-  }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile])
+  }, [dispatch, git, refreshWorktreeContext, selectedWorktreeFile, visibleWorktreeFilesGrouped])
 
   const revertSelectedHunk = React.useCallback(async () => {
     const selectedHunk = worktreeHunks?.hunks[

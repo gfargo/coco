@@ -6,6 +6,7 @@
  * remove / set-url / prune) live in the input + workflow layers.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -14,7 +15,7 @@ import {
   formatLogInkRemotesEmpty,
 } from '../../chrome/surfaceStates'
 import { cellWidth, padCells, truncateCells } from '../../chrome/text'
-import type { RemoteEntry } from '../../../git/remoteData'
+import { maskUrlCredentials, type RemoteEntry } from '../../../git/remoteData'
 import {
   matchesPromotedFilter,
   renderPromotedFilterAffordance,
@@ -71,16 +72,16 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
         // shared URL, where a second column would just be noise).
         const pushDiffers = entry.pushUrl && entry.pushUrl !== entry.fetchUrl
         const urlText = pushDiffers
-          ? `${entry.fetchUrl} ↑ ${entry.pushUrl}`
-          : entry.fetchUrl || '(no url)'
+          ? `${maskUrlCredentials(entry.fetchUrl)} ↑ ${maskUrlCredentials(entry.pushUrl)}`
+          : entry.fetchUrl ? maskUrlCredentials(entry.fetchUrl) : '(no url)'
         const lineText = truncateCells(
           `${cursor} ${namePadded} ${urlText}`,
           Math.max(20, width - 4),
         )
         return h(Text, {
           key: `remote-${index}`,
-          bold: isSelected,
           dimColor: !isSelected,
+          ...selectionRowProps(theme, isSelected, focused),
         }, lineText)
       })
 

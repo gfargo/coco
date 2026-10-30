@@ -26,7 +26,15 @@ import {
     parseLineRange,
 } from '../../commands/blame/render'
 import { BLAME_EXPLAIN_PROMPT } from '../../commands/blame/prompt'
-import { validateConventionalCommitMessage } from '../../lib/utils/commitlintValidator'
+import { getBuiltInConventionalRulesContext, validateConventionalCommitMessage } from '../../lib/utils/commitlintValidator'
+import {
+    collectHunkInventory,
+    COMMIT_SPLIT_PROMPT,
+    CONVENTIONAL_COMMITS_RULES,
+    formatDedupeWarnings,
+    formatHunkInventory,
+} from '../../commands/commit/split'
+import { generateValidatedCommitSplitPlan, NO_PREVIOUS_FEEDBACK_PLACEHOLDER } from '../../commands/commit/splitPlanGenerator'
 import {
     LINT_LOG_FORMAT,
     LintLogCommit,
@@ -64,6 +72,9 @@ import {
     hasCommitlintConfigAtRoot,
     ResolvedChangeContext,
     resolveChangeSource,
+    readPullRequestBranches,
+    readStagedFileChanges,
+    readStagedFileDiff,
     readRepoBranchContext,
     readRepoStatusContext,
     readRepoHistoryContext,
@@ -71,13 +82,18 @@ import {
     readRepoCapabilitiesContext,
     digestOf,
 } from './context'
-import { AgentOperationError } from './errors'
+import { AgentOperationError, createAgentFailureEnvelope, toAgentOperationError } from './errors'
 import { splitUnifiedDiff } from './splitUnifiedDiff'
 import {
     AgentOperation,
     AgentOptions,
     AgentPlan,
+    AgentBatchInput,
     AgentPlannedEnvelope,
+    SplitPlanData,
+    BatchData,
+    ChangeSource,
+    PrDraftData,
     AgentSuccessEnvelope,
     AgentTaskInput,
     AGENT_PROTOCOL_VERSION,
@@ -105,7 +121,7 @@ import {
     RepoContextSection,
 } from './schemas'
 
-type SupportedTask = 'review' | 'changelog' | 'recap'
+type SupportedTask = 'review' | 'changelog' | 'recap' | 'commitSplit'
 
 type RuntimeBasics = {
   config: ReturnType<typeof loadConfig<Record<string, unknown>, Record<string, unknown>>>
@@ -272,7 +288,7 @@ async function prepareStructuredCall(input: {
  * real call budgets against -- never a second, potentially-drifting estimate.
  */
 async function buildAgentPlan(input: {
-  task: SupportedTask
+  task: Exclude<SupportedTask, 'commitSplit'>
   context: AgentOperationContext
   options: AgentOptions
   promptTemplate: typeof REVIEW_PROMPT
@@ -575,8 +591,217 @@ export async function generateAgentReview(
   })
   findings.sort((a, b) => b.severity - a.severity)
   report(context, 'Completed', 1)
-  const warnings = truncated ? [...resolved.warnings, truncationWarning()] : resolved.warnings
-  return envelope('review', { findings }, warnings, resolved.meta, conventions.provenance)
+  const { kept, omittedWarning } = applySeverityThreshold(findings, input.options.severity)
+  const warnings = [
+    ...resolved.warnings,
+    ...(truncated ? [truncationWarning()] : []),
+    ...(omittedWarning ? [omittedWarning] : []),
+  ]
+  return envelope('review', { findings: kept }, warnings, resolved.meta, conventions.provenance)
+}
+
+/**
+ * The agent `severity` option (#1828): keep findings at or above the
+ * threshold, and say how many were left out so the result is not silently
+ * smaller. No threshold keeps everything.
+ */
+export function applySeverityThreshold(
+  findings: ReviewFeedbackItem[],
+  threshold: number | undefined,
+): { kept: ReviewFeedbackItem[]; omittedWarning?: string } {
+  if (threshold === undefined) return { kept: findings }
+  const kept = findings.filter((finding) => finding.severity >= threshold)
+  const omitted = findings.length - kept.length
+  if (omitted === 0) return { kept }
+  return {
+    kept,
+    omittedWarning: `${omitted} finding${omitted === 1 ? '' : 's'} below severity ${threshold} ${omitted === 1 ? 'was' : 'were'} omitted.`,
+  }
+}
+
+/**
+ * Draft a pull/merge request title and body for the current branch (#1823):
+ * the agent counterpart of `coco pr create --json`, through the same
+ * changelog generation over `base..HEAD`, without any forge call. Nothing is
+ * opened; `draft` is echoed for the caller.
+ *
+ * A repository source defaults to the branch against its base. A supplied
+ * source (patch, files, summary) is generated from as given, with base and
+ * head still read from the repository.
+ */
+/** `origin/main` → `main`: the branch a PR targets, from a ref naming it. */
+function toBranchName(ref: string): string {
+  return ref.replace(/^origin\//, '')
+}
+
+export async function generateAgentPrDraft(
+  input: AgentTaskInput,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<PrDraftData> | AgentPlannedEnvelope> {
+  const { head: checkedOut, defaultBase, defaultBaseRef } = await readPullRequestBranches(context)
+  const branchScope = input.source.kind === 'repository' && input.source.scope.type === 'branch'
+    ? input.source.scope
+    : undefined
+  // A branch source may name its head; the draft describes that branch,
+  // not whatever happens to be checked out (final review).
+  const requestedHead = branchScope?.head && branchScope.head !== 'HEAD' ? branchScope.head : undefined
+  const head = requestedHead ? toBranchName(requestedHead) : checkedOut
+  if (!head) {
+    throw new AgentOperationError('INVALID_REVISION', 'pr-draft needs a checked-out branch; HEAD is detached.')
+  }
+  // The ref the diff runs against, and the branch name the request targets
+  // (a remote-tracking ref like `origin/main` targets `main`). options.base
+  // is normalised the same way as the source's base.
+  const requestedBase = input.options.base ?? branchScope?.base
+  const baseRef = requestedBase ?? defaultBaseRef
+  const base = requestedBase ? toBranchName(requestedBase) : defaultBase
+  if (base === head) {
+    throw new AgentOperationError(
+      'INVALID_INPUT',
+      `The head branch is the base branch ('${base}'). Check out a feature branch, or pass options.base.`,
+    )
+  }
+  const source: ChangeSource = input.source.kind === 'repository' && input.source.scope.type !== 'range'
+    ? { kind: 'repository', scope: { type: 'branch', base: baseRef, ...(requestedHead ? { head: requestedHead } : {}) } }
+    : input.source
+  const result = await generateAgentChangelog({ ...input, source }, context)
+  if (result.status === 'planned') {
+    return { ...result, operation: 'pr-draft' }
+  }
+  return {
+    ...result,
+    operation: 'pr-draft',
+    data: {
+      base,
+      head,
+      title: result.data.title.trim(),
+      body: result.data.content.trim(),
+      draft: Boolean(input.options.draft),
+    },
+  }
+}
+
+/**
+ * Plan a multi-commit split of the staged changes for an agent (#1824): the
+ * planner behind `coco commit --split`, minus everything that is unsafe for
+ * an agent tool. Repository prompts and commitlint config are never loaded
+ * (built-in Conventional Commits rules when `conventional` is set), every git
+ * read goes through the hardened agent runner, and the diff is framed as
+ * untrusted. Returns the plan; nothing is staged or committed.
+ */
+export async function generateAgentSplitPlan(
+  input: AgentTaskInput,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<SplitPlanData>> {
+  if (input.source.kind !== 'repository' || input.source.scope.type !== 'staged') {
+    throw new AgentOperationError(
+      'UNSUPPORTED_SOURCE',
+      'split-plan plans the staged changes: use the `staged` repository source (the default).',
+    )
+  }
+  if (input.options.dryRun) {
+    throw new AgentOperationError('UNSUPPORTED_OPERATION', 'split-plan does not support dryRun.')
+  }
+  const staged = await readStagedFileChanges(context)
+  if (staged.length === 0) {
+    throw new AgentOperationError('NO_CHANGES', 'Nothing is staged to split.')
+  }
+  const resolved = await resolveChangeSource(input.source, context, { trustRepositoryConfig: false })
+  report(context, 'Resolved changes', 0.2)
+  const hunkInventory = await collectHunkInventory(staged, (filePath) => readStagedFileDiff(context, filePath))
+
+  const conventional = Boolean(input.options.conventional)
+  const branchName = input.options.includeBranchName
+    ? (await readPullRequestBranches(context)).head
+    : undefined
+  const runtime = await createRuntime('commitSplit', input.options, context)
+  const prompt = getPrompt({
+    template: COMMIT_SPLIT_PROMPT.template as string,
+    variables: COMMIT_SPLIT_PROMPT.inputVariables,
+    fallback: COMMIT_SPLIT_PROMPT,
+  })
+  // The inventories are not trimmable: when they alone exceed the budget,
+  // report CONTEXT_TOO_LARGE rather than an unclassified failure (#1824 review).
+  const budgeted = await enforcePromptBudget({
+    prompt,
+    variables: {
+      file_inventory: staged.map((change) => `- ${change.filePath}: ${change.status}`).join('\n'),
+      hunk_inventory: formatHunkInventory(hunkInventory),
+      summary: asUntrustedChangeContext(resolved.text),
+      additional_context: input.options.additionalContext ?? '',
+      commit_message_rules: conventional ? `\n${CONVENTIONAL_COMMITS_RULES}` : '',
+      branch_name_context: branchName ? `Current git branch name: ${branchName}` : '',
+      commitlint_rules_context: conventional ? getBuiltInConventionalRulesContext() : '',
+      previous_attempt_feedback: NO_PREVIOUS_FEEDBACK_PLACEHOLDER,
+    },
+    tokenizer: runtime.tokenizer,
+    maxTokens: runtime.config.service.tokenLimit || 4096,
+    summaryKey: 'summary',
+  }).catch((error: unknown) => {
+    throw new AgentOperationError(
+      'CONTEXT_TOO_LARGE',
+      `The staged changes are too large to plan within the token budget: ${error instanceof Error ? error.message : String(error)}`,
+    )
+  })
+
+  report(context, 'Generating split plan…', 0.4)
+  const { plan, fallback, dedupeWarnings } = await generateValidatedCommitSplitPlan({
+    llm: runtime.llm,
+    prompt,
+    variables: budgeted.variables,
+    staged,
+    hunkInventory,
+    logger: context.logger,
+    tokenizer: runtime.tokenizer,
+    metadata: { command: 'agent', surface: context.surface, provider: runtime.provider, model: runtime.model, conventional },
+    signal: context.signal,
+    validateGroupMessage: conventional ? (message) => validateConventionalCommitMessage(message) : undefined,
+  })
+  report(context, 'Completed', 1)
+
+  const warnings = [
+    ...resolved.warnings,
+    ...(budgeted.truncated ? [truncationWarning()] : []),
+    ...(dedupeWarnings?.length ? [formatDedupeWarnings(dedupeWarnings)] : []),
+    ...(fallback ? [`The planner returned a single combined group: ${fallback.reason}`] : []),
+  ]
+  return envelope('split-plan', {
+    groups: plan.groups.map((group) => ({
+      title: group.title,
+      body: group.body ?? '',
+      files: group.files ?? [],
+      hunks: group.hunks ?? [],
+      ...(group.rationale ? { rationale: group.rationale } : {}),
+      unclaimed: Boolean(group.unclaimed),
+    })),
+    ...(fallback ? { fallback: fallback.reason } : {}),
+  }, warnings, resolved.meta)
+}
+
+/**
+ * Run several operations over one resolution of the source (#2045). Each
+ * operation's own failure is returned as its failure envelope so the others
+ * still run; cancellation stops the whole batch.
+ */
+export async function runAgentBatch(
+  input: AgentBatchInput,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<BatchData>> {
+  const resolved = await resolveChangeSource(input.source, context, {
+    trustRepositoryConfig: input.options.trustRepositoryConfig,
+  })
+  const { operations, ...shared } = input
+  const results: BatchData['results'] = []
+  for (const operation of operations) {
+    try {
+      results.push(await runAgentOperation(operation, shared, context, resolved) as BatchData['results'][number])
+    } catch (error) {
+      const normalized = toAgentOperationError(error)
+      if (normalized.code === 'CANCELLED') throw normalized
+      results.push(createAgentFailureEnvelope(operation, normalized))
+    }
+  }
+  return envelope('batch', { results }, resolved.warnings, resolved.meta)
 }
 
 export async function generateAgentChangelog(
@@ -688,6 +913,8 @@ export async function runAgentOperation(
       return generateAgentChangelog(input, context, preResolved)
     case 'recap':
       return generateAgentRecap(input, context, preResolved)
+    case 'pr-draft':
+      return generateAgentPrDraft(input, context)
     case 'condense-diff':
       // condense-diff uses its own request schema (CondenseDiffRequest) and is
       // dispatched via runCondenseDiff, not through this shared entry point.
@@ -718,6 +945,22 @@ export async function runAgentOperation(
       throw new AgentOperationError(
         'INVALID_OPERATION',
         'lint must be dispatched via runLint, not runAgentOperation.',
+        false,
+      )
+    case 'split-plan':
+      return generateAgentSplitPlan(input, context)
+    case 'batch':
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'batch must be dispatched via runAgentBatch, not runAgentOperation.',
+        false,
+      )
+    case 'commit-validate':
+    case 'commitlint-rules':
+      // Zero-token tools with their own request schemas (validate.ts).
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        `${operation} must be dispatched via runCommitValidate / runCommitlintRules, not runAgentOperation.`,
         false,
       )
   }

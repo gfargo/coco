@@ -90,7 +90,11 @@ const performReflogUndoMock = performReflogUndo as jest.MockedFunction<typeof pe
 function createHookHarness() {
   const refSlots: Array<{ current: unknown }> = []
   let refCursor = 0
-  let memoized: ((...args: unknown[]) => unknown) | undefined
+  // One slot per `useCallback` call site, in call order, like React: a
+  // hook that creates several callbacks must not get the first one back
+  // for all of them.
+  const callbackSlots: Array<(...args: unknown[]) => unknown> = []
+  let callbackCursor = 0
   const React = {
     useRef: <T,>(initial: T) => {
       if (refCursor >= refSlots.length) {
@@ -99,13 +103,13 @@ function createHookHarness() {
       return refSlots[refCursor++] as { current: T }
     },
     useCallback: <T,>(fn: T): T => {
-      if (!memoized) {
-        memoized = fn as (...args: unknown[]) => unknown
+      if (callbackCursor >= callbackSlots.length) {
+        callbackSlots.push(fn as (...args: unknown[]) => unknown)
       }
-      return memoized as T
+      return callbackSlots[callbackCursor++] as T
     },
   } as unknown as typeof ReactTypes
-  return { React, beginRender: () => { refCursor = 0 } }
+  return { React, beginRender: () => { refCursor = 0; callbackCursor = 0 } }
 }
 
 function createDeps(over: Partial<UseWorkflowActionDeps>): UseWorkflowActionDeps {
@@ -1592,7 +1596,7 @@ describe('undo stack (OSS-1606)', () => {
     await runWorkflowAction('reset-to-commit', 'hard')
     expect(dispatch).toHaveBeenCalledWith({
       type: 'pushUndoEntry',
-      value: { kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234', mode: 'hard' },
+      value: { kind: 'reset-to-commit', label: 'reset --hard to c0', depth: 0, previousSha: 'deadbeef1234', headAfter: 'deadbeef1234', mode: 'hard' },
     })
 
     dispatch.mockClear()
@@ -1752,6 +1756,7 @@ describe('merge-into-current workflow handler', () => {
         label: 'merge feature/merge-target into main',
         depth: 0,
         previousSha: 'deadbeef9876',
+        headAfter: 'deadbeef9876',
       },
     })
   })
@@ -1962,6 +1967,7 @@ describe('reset-to-branch workflow handler', () => {
         label: 'reset --hard to feature/target',
         depth: 0,
         previousSha: 'abc123previous',
+        headAfter: 'abc123previous',
         mode: 'hard',
       },
     })
@@ -2221,5 +2227,170 @@ describe('sync-branch workflow handler (Requirement 6)', () => {
     }))
     // No choice prompts should have been raised
     expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'setPendingChoice' }))
+  })
+})
+
+describe('Esc cancels an in-flight network op (#2199)', () => {
+  const localBranchForCancel = { shortName: 'main', current: true } as never
+
+  function cancellableFake(root = '/repo') {
+    let cancelled = false
+    const git = { tag: 'cancellable-git' } as never
+    const op = {
+      git,
+      cancel: jest.fn(() => { cancelled = true }),
+      wasCancelled: () => cancelled,
+    }
+    const factory = jest.fn(() => op)
+    return { op, git, factory, root }
+  }
+
+  const frameGit = (root = '/repo') =>
+    ({ revparse: jest.fn().mockResolvedValue(`${root}\n`) }) as unknown as UseWorkflowActionDeps['git']
+
+  const pending = <T,>() => {
+    let resolve: (value: T) => void = () => undefined
+    const promise = new Promise<T>((r) => { resolve = r })
+    return { promise, resolve }
+  }
+
+  const flush = () => new Promise((resolve) => setImmediate(resolve))
+
+  it('runs the network workflow on the injected cancellable git, rooted at the repo toplevel', async () => {
+    const { git, factory } = cancellableFake()
+    pullCurrentBranchMock.mockReset()
+    pullCurrentBranchMock.mockResolvedValue({ ok: true, message: 'Pulled main from origin' })
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      git: frameGit('/repo'),
+      createCancellableGit: factory,
+      context: { branches: { localBranches: [localBranchForCancel], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('pull-current-branch')
+
+    expect(factory).toHaveBeenCalledWith('/repo')
+    expect(pullCurrentBranchMock).toHaveBeenCalledWith(git)
+  })
+
+  it('Esc aborts the op and reports a cancellation instead of the raw abort error', async () => {
+    const { op, factory } = cancellableFake()
+    const hold = pending<{ ok: boolean; message: string }>()
+    pullCurrentBranchMock.mockReset()
+    pullCurrentBranchMock.mockImplementation(() => hold.promise)
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction, cancelRemoteOp } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: frameGit(),
+      createCancellableGit: factory,
+      context: { branches: { localBranches: [localBranchForCancel], currentBranch: 'main' } } as never,
+    }))
+
+    const run = runWorkflowAction('pull-current-branch')
+    await flush() // let the toplevel lookup resolve and the op register
+    cancelRemoteOp()
+    expect(op.cancel).toHaveBeenCalledTimes(1)
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'setStatus', value: 'Cancelling…' }))
+
+    // simple-git rejects the killed command; the runner turns it into a clear message.
+    hold.resolve({ ok: false, message: 'Abort signal received' })
+    await run
+
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'setStatus',
+      value: 'Cancelled — the remote operation was stopped.',
+      kind: 'error',
+    }))
+    expect(dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ value: 'Abort signal received' }))
+    // The loader is still cleared.
+    expect(dispatch).toHaveBeenCalledWith({ type: 'setRemoteOp', value: undefined })
+  })
+
+  it('cancelRemoteOp is a no-op when nothing is in flight, and after the op finished', async () => {
+    const { op, factory } = cancellableFake()
+    pullCurrentBranchMock.mockReset()
+    pullCurrentBranchMock.mockResolvedValue({ ok: true, message: 'Pulled main from origin' })
+    const dispatch = jest.fn()
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction, cancelRemoteOp } = useWorkflowAction(harness.React, createDeps({
+      dispatch,
+      git: frameGit(),
+      createCancellableGit: factory,
+      context: { branches: { localBranches: [localBranchForCancel], currentBranch: 'main' } } as never,
+    }))
+
+    cancelRemoteOp()
+    expect(dispatch).not.toHaveBeenCalled()
+
+    await runWorkflowAction('pull-current-branch')
+    dispatch.mockClear()
+    cancelRemoteOp()
+    expect(op.cancel).not.toHaveBeenCalled()
+    expect(dispatch).not.toHaveBeenCalled()
+  })
+
+  it('Esc stops every overlapping network op, not just the latest', async () => {
+    const first = cancellableFake()
+    const second = cancellableFake()
+    const factory = jest.fn().mockReturnValueOnce(first.op).mockReturnValueOnce(second.op)
+    const holdPull = pending<{ ok: boolean; message: string }>()
+    const holdPush = pending<{ ok: boolean; message: string }>()
+    pullCurrentBranchMock.mockReset()
+    pullCurrentBranchMock.mockImplementation(() => holdPull.promise)
+    pushBranchMock.mockReset()
+    pushBranchMock.mockImplementation(() => holdPush.promise)
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction, cancelRemoteOp } = useWorkflowAction(harness.React, createDeps({
+      git: frameGit(),
+      createCancellableGit: factory,
+      context: { branches: { localBranches: [localBranchForCancel], currentBranch: 'main' } } as never,
+    }))
+
+    const pullRun = runWorkflowAction('pull-current-branch')
+    const pushRun = runWorkflowAction('push-selected-branch')
+    await flush()
+    cancelRemoteOp()
+
+    expect(first.op.cancel).toHaveBeenCalledTimes(1)
+    expect(second.op.cancel).toHaveBeenCalledTimes(1)
+    holdPull.resolve({ ok: false, message: 'Abort signal received' })
+    holdPush.resolve({ ok: false, message: 'Abort signal received' })
+    await Promise.all([pullRun, pushRun])
+  })
+
+  it('does not build a cancellable git for a workflow that is not a network op', async () => {
+    const { factory } = cancellableFake()
+    ;(createStash as jest.Mock).mockResolvedValue({ ok: true, message: 'Stashed' })
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      git: frameGit(),
+      createCancellableGit: factory,
+    }))
+
+    await runWorkflowAction('create-stash', 'wip')
+
+    expect(factory).not.toHaveBeenCalled()
+  })
+
+  it('without a factory the frame git is used unchanged (not cancellable)', async () => {
+    const git = frameGit()
+    pullCurrentBranchMock.mockReset()
+    pullCurrentBranchMock.mockResolvedValue({ ok: true, message: 'Pulled main from origin' })
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      git,
+      context: { branches: { localBranches: [localBranchForCancel], currentBranch: 'main' } } as never,
+    }))
+
+    await runWorkflowAction('pull-current-branch')
+
+    expect(pullCurrentBranchMock).toHaveBeenCalledWith(git)
   })
 })

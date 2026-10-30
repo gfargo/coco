@@ -14,6 +14,9 @@ import {
   totalUsageCost,
 } from '../../lib/langchain/utils/usageLedger'
 import { LLM_PROVIDER_IDS, providerRequiresAuth } from '../../lib/langchain/providers/registry'
+import { createSimpleGit } from '../../lib/simple-git/createSimpleGit'
+import { resolveGitPath } from '../../git/gitPath'
+import { probeGitBinary } from '../../lib/simple-git/gitPreflight'
 
 export type DiagnosticSeverity = 'error' | 'warn' | 'info'
 
@@ -565,4 +568,67 @@ export async function checkOllamaLiveness(config: Config): Promise<Diagnostic[]>
   }
 
   return diagnostics
+}
+
+/**
+ * Live git probe (#2205): the git binary must exist and meet the minimum
+ * version, since staging and checkout use `git restore` / `git switch`.
+ * Async because it spawns `git --version`, so it sits beside the other
+ * live checks rather than in the sync `runDiagnostics`.
+ */
+export async function checkGitInstallation(
+  probe: typeof probeGitBinary = probeGitBinary
+): Promise<Diagnostic[]> {
+  const result = await probe()
+  if (result.ok) return []
+  return [{
+    severity: 'error',
+    message: result.message,
+    fix: result.reason === 'too-old'
+      ? 'Upgrade git (for example from your distro\'s backports or https://git-scm.com/downloads).'
+      : 'Install git and make sure it is on PATH.',
+  }]
+}
+
+/** Repos at least this large get the commit-graph suggestion (#2209). */
+export const COMMIT_GRAPH_SUGGEST_THRESHOLD = 10_000
+
+export type CommitGraphProbeResult =
+  | { inRepo: false }
+  | { inRepo: true; hasCommitGraph: true }
+  // Counted only without a commit-graph: the count is the slow part.
+  | { inRepo: true; hasCommitGraph: false; commitCount: number }
+
+export async function probeCommitGraph(cwd: string = process.cwd()): Promise<CommitGraphProbeResult> {
+  const git = createSimpleGit(cwd)
+  if (!(await git.checkIsRepo())) return { inRepo: false }
+  const [single, chain] = await Promise.all([
+    resolveGitPath(git, 'objects/info/commit-graph'),
+    resolveGitPath(git, 'objects/info/commit-graphs/commit-graph-chain'),
+  ])
+  // Stat first: the commit count walks all history, slowest on exactly the
+  // repos without a commit-graph, and is only needed when there is none.
+  if (fs.existsSync(single) || fs.existsSync(chain)) return { inRepo: true, hasCommitGraph: true }
+  const commitCount = Number.parseInt((await git.raw(['rev-list', '--count', '--all'])).trim(), 10) || 0
+  return { inRepo: true, commitCount, hasCommitGraph: false }
+}
+
+/**
+ * `coco ui` loads history with `git log --graph`, which has to order every
+ * commit topologically before it can print the first page. Without a
+ * commit-graph file git walks the whole history to do that; with one it
+ * uses stored generation numbers. On a 50k-commit repo that is about 0.30 s
+ * vs 0.06 s per page (#2209). Informational, and only for repos big enough
+ * to notice.
+ */
+export async function checkCommitGraph(
+  probe: () => Promise<CommitGraphProbeResult> = () => probeCommitGraph()
+): Promise<Diagnostic[]> {
+  const result = await probe().catch(() => undefined)
+  if (!result?.inRepo || result.hasCommitGraph || result.commitCount < COMMIT_GRAPH_SUGGEST_THRESHOLD) return []
+  return [{
+    severity: 'info',
+    message: `This repository has ${result.commitCount.toLocaleString('en-US')} commits and no commit-graph file, so history in coco ui loads several times slower than it needs to.`,
+    fix: 'Run `git commit-graph write --reachable`, or `git maintenance start` to keep one up to date.',
+  }]
 }

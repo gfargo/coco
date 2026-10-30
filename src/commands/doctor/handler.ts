@@ -24,7 +24,7 @@ import {
 } from '../../lib/langchain/utils/usageLedger'
 import { PRICES_AS_OF } from '../../lib/langchain/utils/pricing'
 import { DoctorArgv, DoctorOptions } from './config'
-import { checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
+import { checkCommitGraph, checkGitInstallation, checkOllamaLiveness, DiagnosticSeverity, runDiagnostics } from './checks'
 import { Config } from '../../lib/config/types'
 
 export function formatRowCost(row: UsageAggregate): string {
@@ -246,6 +246,8 @@ export const handler: CommandHandler<DoctorArgv> = async (argv, logger) => {
   // reachability + configured-model-pulled), which need a network round-trip.
   const diagnostics = runDiagnostics(config)
   diagnostics.push(...(await checkOllamaLiveness(config)))
+  diagnostics.push(...(await checkGitInstallation()))
+  diagnostics.push(...(await checkCommitGraph()))
 
   if (diagnostics.length === 0) {
     logger.log(chalk.green(`${PASS()} No issues found. Your configuration looks good!`))

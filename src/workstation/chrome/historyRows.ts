@@ -6,7 +6,7 @@ import {
   MERGE_COMMIT_GLYPH,
 } from './graphChars'
 import { LaneSegment } from './graphLanes'
-import { computeGraphLayout, GraphLayout } from './graphLayout'
+import { computeGraphLayout, extendGraphLayout, GraphLayout } from './graphLayout'
 import {
   renderCommitRowSegments,
   renderRowGraphAscii,
@@ -198,14 +198,21 @@ function isSelectedCommit(row: GitLogRow, selected: GitLogCommitRow | undefined)
  * Lane layout is a pure function of the ordered commit list, so cache it
  * by the array's identity — recomputed only when the commit list itself
  * changes (a data load), never on a scroll or selection move.
+ *
+ * `appendRows` always builds a new array, so a load-more page is a cache
+ * miss. The most recent layout is kept so that case extends it instead of
+ * laying out every loaded commit again (#2208); `extendGraphLayout` falls
+ * back to a full layout when the new list is not an extension.
  */
 const layoutCache = new WeakMap<readonly GitLogCommitRow[], GraphLayout>()
+let lastLayout: GraphLayout | undefined
 
 function getGraphLayout(commits: GitLogCommitRow[]): GraphLayout {
   const cached = layoutCache.get(commits)
   if (cached) return cached
-  const layout = computeGraphLayout(commits)
+  const layout = lastLayout ? extendGraphLayout(lastLayout, commits) : computeGraphLayout(commits)
   layoutCache.set(commits, layout)
+  lastLayout = layout
   return layout
 }
 
@@ -220,18 +227,87 @@ type ExpandedRow =
   | { kind: 'bucket-header'; label: string }
 
 /**
- * Find the most recent bucket header at or above `start` so a slice
- * that begins mid-bucket can still surface its section label (the
- * "sticky header" behavior). Returns the label to prepend, or
- * `undefined` when none is needed.
+ * The full-graph list expanded to rows, plus what windowing needs to read
+ * from it without scanning: each commit's row index, and the label of the
+ * last bucket header before each row.
  */
-function findStickyBucketLabel(expanded: ExpandedRow[], start: number): string | undefined {
-  if (start < expanded.length && expanded[start].kind === 'bucket-header') return undefined
-  for (let i = start - 1; i >= 0; i -= 1) {
-    const entry = expanded[i]
-    if (entry.kind === 'bucket-header') return entry.label
+type ExpandedHistory = {
+  rows: ExpandedRow[]
+  indexByCommitKey: Map<string, number>
+  /** `headerBefore[i]` = label of the last bucket header at an index < i (length rows + 1). */
+  headerBefore: (string | undefined)[]
+}
+
+/**
+ * Expanding walks every loaded commit and buckets each date, and it used to
+ * run on every render (each keystroke, each 80 ms spinner tick). It only
+ * depends on the commit list, spacing, and the calendar day bucketing is
+ * relative to, so it is cached on those (#2208).
+ */
+const expandedCache = new WeakMap<readonly GitLogCommitRow[], Map<string, ExpandedHistory>>()
+
+/** Buckets are relative to the viewer's local calendar day (see `getDateBucket`). */
+function bucketDayKey(now: Date | undefined): string {
+  return now ? `${now.getFullYear()}-${now.getMonth()}-${now.getDate()}` : 'none'
+}
+
+function expandHistory(
+  commits: GitLogCommitRow[],
+  withSpacers: boolean,
+  bucketingNow: Date | undefined
+): ExpandedHistory {
+  const key = `${withSpacers ? 1 : 0}|${bucketDayKey(bucketingNow)}`
+  let byOptions = expandedCache.get(commits)
+  const cached = byOptions?.get(key)
+  if (cached) return cached
+
+  // Expand to (optional bucket header) + commit + (optional transition)
+  // per commit across the full list, so windowing is a simple slice.
+  const rows: ExpandedRow[] = []
+  const indexByCommitKey = new Map<string, number>()
+  let prevBucket: string | undefined
+  for (let i = 0; i < commits.length; i += 1) {
+    if (bucketingNow) {
+      const bucket = getDateBucket(commits[i].date, bucketingNow)
+      if (bucket.key !== prevBucket) {
+        rows.push({ kind: 'bucket-header', label: bucket.label })
+        prevBucket = bucket.key
+      }
+    }
+    const commitKeyValue = commitKey(commits[i])
+    if (!indexByCommitKey.has(commitKeyValue)) indexByCommitKey.set(commitKeyValue, rows.length)
+    rows.push({ kind: 'commit', index: i })
+    // The transition row carries this commit's topology (fork / merge /
+    // continuation) down to the next commit and doubles as the linear
+    // spacer. Off only for non-rendering callers (filters, tests) that
+    // want commit rows alone.
+    if (withSpacers) rows.push({ kind: 'transition', index: i })
   }
-  return undefined
+
+  const headerBefore: (string | undefined)[] = [undefined]
+  let lastHeader: string | undefined
+  for (const row of rows) {
+    if (row.kind === 'bucket-header') lastHeader = row.label
+    headerBefore.push(lastHeader)
+  }
+
+  const expanded = { rows, indexByCommitKey, headerBefore }
+  if (!byOptions) {
+    byOptions = new Map()
+    expandedCache.set(commits, byOptions)
+  }
+  byOptions.set(key, expanded)
+  return expanded
+}
+
+/**
+ * The bucket label to prepend when a slice starting at `start` begins
+ * partway into a bucket (the "sticky header" behavior), or `undefined`
+ * when the slice opens on a header itself or no header precedes it.
+ */
+function findStickyBucketLabel(expanded: ExpandedHistory, start: number): string | undefined {
+  if (start < expanded.rows.length && expanded.rows[start].kind === 'bucket-header') return undefined
+  return expanded.headerBefore[Math.min(start, expanded.rows.length)]
 }
 
 function toFullGraphItems(
@@ -254,29 +330,11 @@ function toFullGraphItems(
   const selected = state.filteredCommits[state.selectedIndex]
   const { withSpacers, bucketingNow } = options
 
-  // Expand to (optional bucket header) + commit + (optional transition)
-  // per commit across the full list, so windowing is a simple slice.
-  const expanded: ExpandedRow[] = []
-  let prevBucket: string | undefined
-  for (let i = 0; i < commits.length; i += 1) {
-    if (bucketingNow) {
-      const bucket = getDateBucket(commits[i].date, bucketingNow)
-      if (bucket.key !== prevBucket) {
-        expanded.push({ kind: 'bucket-header', label: bucket.label })
-        prevBucket = bucket.key
-      }
-    }
-    expanded.push({ kind: 'commit', index: i })
-    // The transition row carries this commit's topology (fork / merge /
-    // continuation) down to the next commit and doubles as the linear
-    // spacer. Off only for non-rendering callers (filters, tests) that
-    // want commit rows alone.
-    if (withSpacers) expanded.push({ kind: 'transition', index: i })
-  }
-
-  const selectedExpandedIndex = expanded.findIndex(
-    (entry) => entry.kind === 'commit' && isSelectedCommit(commits[entry.index], selected)
-  )
+  const history = expandHistory(commits, withSpacers, bucketingNow)
+  const expanded = history.rows
+  const selectedExpandedIndex = selected
+    ? history.indexByCommitKey.get(commitKey(selected)) ?? -1
+    : -1
 
   const toItems = (entries: ExpandedRow[]): LogInkHistoryItem[] =>
     entries.map((entry) => {
@@ -305,7 +363,7 @@ function toFullGraphItems(
   // Sticky header — prepend the active bucket label when the slice
   // starts partway into a bucket; costs one row from the budget.
   const build = (windowStart: number): LogInkHistoryItem[] => {
-    const stickyLabel = bucketingNow ? findStickyBucketLabel(expanded, windowStart) : undefined
+    const stickyLabel = bucketingNow ? findStickyBucketLabel(history, windowStart) : undefined
     const sliceCount = stickyLabel ? visibleCount - 1 : visibleCount
     const sliced = expanded.slice(windowStart, windowStart + sliceCount)
     const finalEntries: ExpandedRow[] = stickyLabel

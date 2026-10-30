@@ -919,8 +919,8 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     {
       id: 'interactive-rebase',
       key: '',
-      label: 'Interactive rebase (in $EDITOR)',
-      description: 'Start an interactive rebase from the cursored commit (opens $GIT_EDITOR for the todo list).',
+      label: 'Interactive rebase (plan view)',
+      description: 'Open the rebase plan view from the cursored commit to reorder, squash, fixup, drop, or reword (same as `i` on History).',
       kind: 'destructive',
       requiresConfirmation: true,
       targets: 'single',

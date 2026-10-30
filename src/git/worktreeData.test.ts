@@ -82,4 +82,35 @@ describe('log worktree data', () => {
       ],
     })
   })
+
+  // #2209 — the context loader already has the current worktree's status;
+  // only the other worktrees should spawn their own `git status`.
+  it('answers the current worktree from a supplied status instead of spawning', async () => {
+    const git = {
+      revparse: jest.fn().mockResolvedValue('/repo\n'),
+      raw: jest.fn(async (args: string[]) => {
+        if (args[0] === 'worktree') return porcelain
+        return args[1] === '/repo-feature' ? ' M src/file.ts\n' : ''
+      }),
+    }
+
+    const overview = await getWorktreeListOverview(git as never, { statusOutput: '?? new.txt\0' })
+
+    const statusCalls = git.raw.mock.calls.filter(([args]) => args.includes('status')).map(([args]) => args[1])
+    expect(statusCalls).toEqual(['/repo-feature', '/repo-detached'])
+    expect(overview.worktrees.map((w) => [w.path, w.dirty])).toEqual([
+      ['/repo', true],
+      ['/repo-feature', true],
+      ['/repo-detached', false],
+    ])
+  })
+
+  it('treats an empty supplied status as clean', async () => {
+    const git = {
+      revparse: jest.fn().mockResolvedValue('/repo\n'),
+      raw: jest.fn(async (args: string[]) => (args[0] === 'worktree' ? porcelain : '')),
+    }
+    const overview = await getWorktreeListOverview(git as never, { statusOutput: '' })
+    expect(overview.worktrees[0]).toMatchObject({ path: '/repo', current: true, dirty: false })
+  })
 })

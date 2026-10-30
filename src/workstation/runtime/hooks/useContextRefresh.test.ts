@@ -304,3 +304,67 @@ describe('useContextRefresh — refreshContext threads silent into loadLogInkCon
     expect(getProviderOverviewMock).toHaveBeenCalledTimes(1)
   })
 })
+
+// #2209 — refresh storms. The watcher needs to tell coco's own refreshes from
+// its own, and the context loader should not re-run `git status` for the
+// current worktree inside the worktree list.
+describe('useContextRefresh / loadLogInkContext — refresh-storm trimming (#2209)', () => {
+  function makeGit(calls: string[][] = []) {
+    return {
+      raw: jest.fn().mockImplementation(async (args: string[]) => {
+        calls.push([...args])
+        if (args[0] === 'worktree') return 'worktree /tmp/fake-repo\nHEAD abc123\nbranch refs/heads/main\n'
+        if (args[0] === 'branch') return 'main\n'
+        if (args[0] === 'config') throw new Error('no config')
+        return ''
+      }),
+      revparse: jest.fn().mockResolvedValue('/tmp/fake-repo\n'),
+    } as never
+  }
+
+  it('records when a refresh not issued by the watcher starts', async () => {
+    const { refreshContext, lastSelfRefreshAtRef } = useContextRefresh(fakeReact(), baseDeps({ git: makeGit() }))
+    expect(lastSelfRefreshAtRef.current).toBe(0)
+
+    const before = Date.now()
+    await refreshContext({ silent: true })
+    expect(lastSelfRefreshAtRef.current).toBeGreaterThanOrEqual(before)
+  })
+
+  it('does not record the watcher\'s own refreshes', async () => {
+    const { refreshContext, lastSelfRefreshAtRef } = useContextRefresh(fakeReact(), baseDeps({ git: makeGit() }))
+    await refreshContext({ silent: true, fromWatcher: true })
+    expect(lastSelfRefreshAtRef.current).toBe(0)
+  })
+
+  it('reuses the snapshot status for the current worktree in the worktree list', async () => {
+    const calls: string[][] = []
+    const context = await loadLogInkContext(makeGit(calls), { silent: true })
+
+    const perWorktreeStatus = calls.filter((args) => args[0] === '-C' && args.includes('status'))
+    expect(perWorktreeStatus).toEqual([])
+    expect(context.worktreeList?.worktrees).toEqual([
+      expect.objectContaining({ path: '/tmp/fake-repo', current: true, dirty: false }),
+    ])
+  })
+
+  // #2166 review: the triage empty states say "press r", but a refresh kept
+  // the loaded issue / PR lists, so r never refetched them.
+  it('drops the triage lists so they refetch when asked to', async () => {
+    const setContext = jest.fn()
+    const { refreshContext } = useContextRefresh(fakeReact(), baseDeps({ git: makeGit(), setContext }))
+    await refreshContext({ silent: true, refetchForgeLists: true })
+    const update = setContext.mock.calls.map(([arg]) => arg).find((arg) => typeof arg === 'function')
+    const loaded = { issueList: { issues: [] }, pullRequestList: { pullRequests: [] } } as never
+    expect(update(loaded)).toMatchObject({ issueList: undefined, pullRequestList: undefined })
+  })
+
+  it('keeps the triage lists on an ordinary refresh', async () => {
+    const setContext = jest.fn()
+    const { refreshContext } = useContextRefresh(fakeReact(), baseDeps({ git: makeGit(), setContext }))
+    await refreshContext({ silent: true })
+    const update = setContext.mock.calls.map(([arg]) => arg).find((arg) => typeof arg === 'function')
+    const loaded = { issueList: { issues: [] }, pullRequestList: { pullRequests: [] } } as never
+    expect(update(loaded)).toMatchObject({ issueList: { issues: [] }, pullRequestList: { pullRequests: [] } })
+  })
+})

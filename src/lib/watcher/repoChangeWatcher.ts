@@ -94,6 +94,15 @@ export type RepoChangeWatcherOptions = {
   repoRoot: string
   /** Resolved git directory (output of `git rev-parse --absolute-git-dir`). */
   gitDir: string
+  /**
+   * The repository's COMMON git directory (`git rev-parse --git-common-dir`,
+   * absolute). In a linked worktree `gitDir` is `<main>/.git/worktrees/<n>`,
+   * which holds HEAD, index and logs for that worktree but no `refs/`: the
+   * branch refs live in the common dir. Watching `<gitDir>/refs/heads`
+   * there meant commits made in any other worktree never refreshed this
+   * one (#2205). Defaults to `gitDir`, which is correct for a plain repo.
+   */
+  commonGitDir?: string
   /** Called once per debounce window. */
   onChange: (kind: RepoChangeKind) => void
   debounceMs?: number
@@ -182,7 +191,7 @@ export function createRepoChangeWatcher(
 
   safeWatchFileViaParent(path.join(options.gitDir, 'index'), 'worktree')
   safeWatchFileViaParent(path.join(options.gitDir, 'HEAD'), 'full')
-  safeWatch(path.join(options.gitDir, 'refs', 'heads'), 'full', { recursive: true })
+  safeWatch(path.join(options.commonGitDir ?? options.gitDir, 'refs', 'heads'), 'full', { recursive: true })
   safeWatchFileViaParent(path.join(options.gitDir, 'logs', 'HEAD'), 'full')
   safeWatch(options.repoRoot, 'worktree')
 

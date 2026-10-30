@@ -52,6 +52,8 @@ import type * as ReactTypes from 'react'
 import { pickThemedSpinnerFrame } from '../chrome/spinner'
 import { cellWidth, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
+import { en } from '../../lib/i18n/en'
+import { t } from '../../lib/i18n/t'
 import { getLogInkFooterHints } from '../../workstation/runtime/inkKeymap'
 import type { LogInkState } from '../../workstation/runtime/inkViewModel'
 import type { LogInkComponents, LogInkContext } from './types'
@@ -192,7 +194,13 @@ export function renderFooter(
   const statusBold = isError || isWarning || isSuccess || isLoading || isInfo
   const statusDim = !statusBold
 
-  let hintsText = hints.contextual.join('   ')
+  // `g? more` (#2160) closes the contextual cluster whenever hints were left
+  // out, by the per-view cap or by the width fit below, so the truncation
+  // is discoverable instead of silent.
+  const moreHint = t(en, 'keymap.footer.gMore')
+  const withMore = (contextual: string[], more: boolean) =>
+    (more ? [...contextual, moreHint] : contextual).join('   ')
+  let hintsText = withMore(hints.contextual, Boolean(hints.more))
   let globalText = hints.global.join(' · ')
   if (width !== undefined) {
     // paddingX eats 2 cells; keep a minimum 2-cell space-between gap.
@@ -201,15 +209,18 @@ export function renderFooter(
     // Globals are the recovery cluster (? / : / q) — they keep their
     // cells, clamped to the row as a last resort.
     globalText = truncateCells(globalText, budget)
+    const fits = (text: string) => cellWidth(text) + gap + cellWidth(globalText) <= budget
     const contextual = [...hints.contextual]
-    while (
-      contextual.length > 0 &&
-      cellWidth(contextual.join('   ')) + gap + cellWidth(globalText) > budget
-    ) {
+    let dropped = Boolean(hints.more)
+    while (contextual.length > 0 && !fits(contextual.join('   '))) {
       contextual.pop()
+      dropped = true
     }
+    // `g? more` only goes in when it fits beside the hints that survived:
+    // it must never be the reason a real hint is dropped.
+    const more = dropped && fits(withMore(contextual, true))
     hintsText = truncateCells(
-      contextual.join('   '),
+      withMore(contextual, more),
       Math.max(0, budget - gap - cellWidth(globalText))
     )
   }

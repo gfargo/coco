@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { getCompareDiff } from './compareData'
+import { MACHINE_DIFF_ARGS } from './machineDiff'
 
 describe('getCompareDiff', () => {
   it('invokes `git diff base..head` and splits the result on newlines', async () => {
@@ -18,7 +19,7 @@ describe('getCompareDiff', () => {
 
     const lines = await getCompareDiff(git, 'main', 'feature')
 
-    expect(raw).toHaveBeenCalledWith(['diff', 'main..feature'])
+    expect(raw).toHaveBeenCalledWith(['diff', ...MACHINE_DIFF_ARGS, 'main..feature'])
     expect(lines).toEqual([
       'diff --git a/foo.ts b/foo.ts',
       'index aaa..bbb 100644',
@@ -36,7 +37,7 @@ describe('getCompareDiff', () => {
 
     await getCompareDiff(git, 'v1.0.0', 'abc1234')
 
-    expect(raw).toHaveBeenCalledWith(['diff', 'v1.0.0..abc1234'])
+    expect(raw).toHaveBeenCalledWith(['diff', ...MACHINE_DIFF_ARGS, 'v1.0.0..abc1234'])
   })
 
   it('strips trailing CR characters from each line (CRLF tolerance)', async () => {

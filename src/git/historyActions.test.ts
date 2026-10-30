@@ -18,7 +18,6 @@ import {
   revertCommit,
   autosquashRebase,
   createFixupCommit,
-  startInteractiveRebase,
 } from './historyActions'
 
 jest.mock('child_process', () => ({
@@ -309,7 +308,7 @@ describe('log history actions', () => {
     })
   })
 
-  it('constructs reset and rebase commands with recovery guidance', async () => {
+  it('constructs reset commands with recovery guidance', async () => {
     const git = {
       revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
       raw: jest.fn().mockResolvedValue(''),
@@ -323,17 +322,8 @@ describe('log history actions', () => {
         'Then run `git reset --hard HEAD@{n}` if you need to undo this reset.',
       ],
     })
-    await expect(startInteractiveRebase(git as never, commit)).resolves.toEqual({
-      ok: true,
-      message: 'Started interactive rebase from abcdef1',
-      details: [
-        'Recovery: use `git rebase --abort` while the rebase is in progress.',
-        'After completion, use `git reflog` to recover the previous HEAD if needed.',
-      ],
-    })
 
-    expect(git.raw).toHaveBeenNthCalledWith(1, ['reset', '--mixed', commit.hash])
-    expect(git.raw).toHaveBeenNthCalledWith(2, ['rebase', '-i', `${commit.hash}^`])
+    expect(git.raw).toHaveBeenCalledWith(['reset', '--mixed', commit.hash])
   })
 
   describe('restorePreviousHead (OSS-1606 undo-stack inverse for resetToCommit)', () => {
@@ -399,22 +389,46 @@ describe('log history actions', () => {
     expect(git.raw).toHaveBeenCalledWith(['commit', '--fixup', commit.hash])
   })
 
-  it('autosquashes with the sequence editor disabled and recovery guidance', async () => {
+  it('autosquashes with both editors disabled via the child environment, and gives recovery guidance', async () => {
     const git = {
       revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'),
       raw: jest.fn().mockResolvedValue(''),
     }
+    const runner = jest.fn().mockResolvedValue('')
 
-    await expect(autosquashRebase(git as never, commit)).resolves.toEqual({
+    await expect(autosquashRebase(git as never, commit, runner)).resolves.toEqual({
       ok: true,
       message: 'Autosquashed fixups into abcdef1',
       details: ['Recovery: `git reflog` holds the pre-rebase HEAD if you need it back.'],
     })
-    // -c keeps the editor override scoped to this invocation — mutating
-    // the shared instance env would break the user-facing `i` rebase.
-    expect(git.raw).toHaveBeenCalledWith(
-      ['-c', 'sequence.editor=true', 'rebase', '-i', '--autosquash', `${commit.hash}^`]
+    // The editors are overridden on the child process only (#2198): never
+    // via `git -c sequence.editor=...`, which simple-git refuses, and never
+    // by mutating the shared SimpleGit environment.
+    expect(runner).toHaveBeenCalledWith(
+      ['rebase', '-i', '--autosquash', `${commit.hash}^`],
+      expect.objectContaining({
+        cwd: '/tmp/coco-missing-git-state',
+        env: expect.objectContaining({ GIT_SEQUENCE_EDITOR: 'true', GIT_EDITOR: 'true' }),
+      })
     )
+    expect(git.raw).not.toHaveBeenCalled()
+  })
+
+  it('overrides editors the user has exported, so the rebase can never wait on one', async () => {
+    const git = { revparse: jest.fn().mockResolvedValue('/tmp/coco-missing-git-state'), raw: jest.fn() }
+    const runner = jest.fn().mockResolvedValue('')
+    const saved = { GIT_EDITOR: process.env.GIT_EDITOR, GIT_SEQUENCE_EDITOR: process.env.GIT_SEQUENCE_EDITOR }
+    process.env.GIT_EDITOR = 'vim'
+    process.env.GIT_SEQUENCE_EDITOR = 'vim'
+    try {
+      await autosquashRebase(git as never, commit, runner)
+    } finally {
+      for (const [key, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      }
+    }
+    expect(runner.mock.calls[0][1].env).toMatchObject({ GIT_SEQUENCE_EDITOR: 'true', GIT_EDITOR: 'true' })
   })
 
   it('fixup and autosquash refuse a missing target', async () => {

@@ -26,7 +26,7 @@ exports[`renderIssuesTriageSurface structural snapshot — empty list 1`] = `
   <Text
     dimColor={true}
   >
-    No issues match the current filter (default: open issues).
+    No issues match the current filter (default: open issues). Press f to change it.
   </Text>
 </Box>
 `;
@@ -55,34 +55,24 @@ exports[`renderIssuesTriageSurface structural snapshot — populated 1`] = `
     </Text>
   </Box>
   <Text
+    backgroundColor="#1a3a4a"
     bold={true}
+    color="#ffffff"
     dimColor={false}
   >
     &gt; 
-    <Text
-      dimColor={true}
-    >
+    <Text>
       #1   
     </Text>
-    <Text
-      color="green"
-      dimColor={false}
-    >
+    <Text>
       open    
     </Text>
-    <Text
-      color="cyan"
-      dimColor={false}
-    >
+    <Text>
             
     </Text>
     Something is broken
-    <Text
-      dimColor={true}
-    />
-    <Text
-      dimColor={true}
-    />
+    <Text />
+    <Text />
   </Text>
 </Box>
 `;

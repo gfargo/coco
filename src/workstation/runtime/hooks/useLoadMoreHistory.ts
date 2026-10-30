@@ -408,11 +408,19 @@ export function useLoadMoreHistory(
     repoFrameDepth: state.repoStack.length - 1,
   }
 
+  // Latest-wins id for anchored fetches (#2209). Cursoring through
+  // several far-away refs used to let every fetch land and append, so the
+  // loaded history grew by a window per ref passed. Only the newest
+  // request's rows are merged now.
+  const loadCommitContextRequestRef = React.useRef(0)
+
   const loadCommitContext = React.useCallback(async (
     target: { hash: string; label: string }
-  ): Promise<void> => {
+  ): Promise<{ superseded?: boolean } | void> => {
     const snap = loadCommitContextStateRef.current
-    if (!snap.logArgv) return
+    if (!snap.logArgv) return {}
+    const requestId = ++loadCommitContextRequestRef.current
+    const superseded = () => loadCommitContextRequestRef.current !== requestId
     // #1384 — frame-tag the anchored fetch; see `loadMoreCommits`.
     const issuedAtDepth = snap.repoFrameDepth
     dispatch({
@@ -426,7 +434,13 @@ export function useLoadMoreHistory(
       // Stashes are already in the loaded graph from boot's
       // `loadRowsWithStashes`; `appendRows` deduplicates by hash so
       // the merged result keeps both views without double-counting.
-      const rows = await getLogRowsAnchoredOn(git, snap.logArgv, target.hash, {})
+      // One page of context, not COMMIT_CONTEXT_DEFAULT_LIMIT (5000): enough
+      // to land on the target and scroll around it, at a fifth of the cost.
+      const rows = await getLogRowsAnchoredOn(git, snap.logArgv, target.hash, {
+        limit: LOG_INTERACTIVE_DEFAULT_LIMIT,
+      })
+      // A newer request owns the status line and the merge now.
+      if (superseded()) return { superseded: true }
       // #1384 — drop the resolve when the repo-frame stack changed
       // mid-flight: the anchored rows belong to the frame that issued
       // the fetch, and `appendRows` would splice them into whichever
@@ -435,7 +449,7 @@ export function useLoadMoreHistory(
         mounted: mountedRef.current,
         issuedAtDepth,
         currentDepth: loadCommitContextStateRef.current.repoFrameDepth,
-      })) return
+      })) return {}
       if (rows.length > 0) {
         dispatch({ type: 'appendRows', rows })
         // Explicitly clear the loading status here rather than relying
@@ -458,6 +472,7 @@ export function useLoadMoreHistory(
         })
       }
     } catch (error) {
+      if (superseded()) return { superseded: true }
       // Same frame-scoped drop for the failure path (#1384): a stale
       // frame's error message would mislabel the ACTIVE frame's state.
       if (!isStaleFrameResolve({

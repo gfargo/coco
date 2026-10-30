@@ -42,6 +42,32 @@ export function stripControl(value: string): string {
   return strip(value, false)
 }
 
+/**
+ * Display variants for text read from the LOCAL repo (commit subjects,
+ * blame lines, diff lines). Same C0/DEL/C1 strip as above, but tabs
+ * survive — code indentation — and CR is dropped so CRLF files don't
+ * garble rows. Ink's sanitizer keeps SGR and OSC sequences, so a crafted
+ * commit message could otherwise retitle the terminal or write the
+ * clipboard through OSC 52 (#2204).
+ */
+export function stripDisplayControl(value: string): string {
+  let out = ''
+  for (const ch of value) {
+    const code = ch.codePointAt(0)
+    if (code === undefined || code === 0x09 || !isControl(code, false)) out += ch
+  }
+  return out
+}
+
+/** Multi-line display variant: also keeps newlines (commit bodies). */
+export function stripDisplayControlMultiline(value: string): string {
+  return value
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map(stripDisplayControl)
+    .join('\n')
+}
+
 /** Strip control bytes but keep newlines — multi-line fields (body, comment). */
 export function stripControlMultiline(value: string): string {
   return strip(value.replace(/\r\n?/g, '\n'), true)

@@ -226,6 +226,24 @@ const SIDEBAR_AT_REST_BY_TIER: Record<LogInkLayoutDensity, SidebarAtRestConfig> 
   wide: { min: 28, max: 32, fraction: 0.20 },
 }
 
+/**
+ * The inspector's at-rest width (#2158). Normal and tight tiers keep the
+ * 20-32 band. On a wide terminal the inspector used to stay at 32 while
+ * the main panel took 130+ cells it could not fill, so the inspector
+ * truncated subjects and file paths beside empty space. In the wide tier it
+ * grows toward 30% of the width (up to 60), but only out of what the main
+ * panel has beyond WIDE_MAIN_PANEL_FLOOR, so history rows never lose room.
+ */
+const WIDE_MAIN_PANEL_FLOOR = 100
+
+function calcDetailAtRestWidth(columns: number, density: LogInkLayoutDensity): number {
+  const base = Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
+  if (density !== 'wide') return base
+  const grown = Math.min(60, Math.floor(columns * 0.30))
+  const spare = columns - calcSidebarAtRestWidth(columns, density) - WIDE_MAIN_PANEL_FLOOR
+  return Math.max(base, Math.min(grown, spare))
+}
+
 function calcSidebarAtRestWidth(columns: number, density: LogInkLayoutDensity): number {
   const config = SIDEBAR_AT_REST_BY_TIER[density]
   return Math.max(config.min, Math.min(config.max, Math.floor(columns * config.fraction)))
@@ -301,10 +319,12 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const detailWidth = input.helpOverlayActive
     ? Math.max(60, Math.min(100, Math.floor(columns * 0.50)))
     : input.zoomedPane === 'inspector'
-      ? Math.max(36, Math.min(60, Math.floor(columns * 0.40)))
+      // Zoom must be wider than at rest, which reaches 60 on wide
+      // terminals (#2158 review): 40% of the width, capped at 90 cells.
+      ? Math.max(36, calcDetailAtRestWidth(columns, density) + 12, Math.min(90, Math.floor(columns * 0.40)))
       : input.zoomedPane === 'main'
         ? LAYOUT_DETAIL_MIN_WIDTH
-        : Math.max(20, Math.min(32, Math.floor(columns * 0.22)))
+        : calcDetailAtRestWidth(columns, density)
   // Sidebar at rest is tier-aware (see `SIDEBAR_AT_REST_BY_TIER`):
   // tight stays compact (22-28), normal shrinks slightly (22-30),
   // wide grows naturally (28-48) so the side panel doesn't get pinned

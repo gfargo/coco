@@ -40,12 +40,14 @@
  * convention) because the workstation never statically imports React.
  */
 
+import { interactiveGitEnv } from '../../../lib/simple-git/headlessGit'
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import * as nodePath from 'node:path'
+import { runWithTerminalHandedOff } from '../editorHandoff'
 import type { LogInkAction } from '../inkViewModel'
 import type { LogInkContext } from '../types'
 import { COMMIT_MOMENTUM_HINT } from '../../chrome/postApplyHints'
@@ -209,16 +211,12 @@ export function useCommitComposeActions(
     const editorPrefixArgs = editorArgs.slice(1)
     const out = process.stdout
     const stdin = process.stdin
-    const ENTER_ALT = '\x1b[?1049h'
-    const EXIT_ALT = '\x1b[?1049l'
-    const SHOW_CURSOR = '\x1b[?25h'
-    const HIDE_CURSOR = '\x1b[?25l'
 
     let editorOk = false
     try {
-      stdin.setRawMode?.(false)
-      out.write(`${SHOW_CURSOR}${EXIT_ALT}`)
-      const result = spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
+      const result = runWithTerminalHandedOff({ stdin, out }, () =>
+        spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit', env: interactiveGitEnv() })
+      )
       if (result.error) {
         dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })
       } else if (result.signal) {
@@ -229,8 +227,6 @@ export function useCommitComposeActions(
         editorOk = true
       }
     } finally {
-      out.write(`${ENTER_ALT}${HIDE_CURSOR}`)
-      stdin.setRawMode?.(true)
       resumeRef?.current?.()
     }
 

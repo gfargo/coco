@@ -14,6 +14,7 @@
  * of #890. No behavior change.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -203,8 +204,8 @@ export function renderConflictsSurface(ctx: SurfaceRenderContext): ReactTypes.Re
       const label = statusLabel(file)
       return h(Text, {
         key: `conflict-${index}`,
-        bold: isSelected,
         dimColor: !isSelected,
+        ...selectionRowProps(theme, isSelected, focused),
       }, truncateCells(
         `${cursor} ${code} ${file.path}  (${label})`,
         width - 4

@@ -1,9 +1,10 @@
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult } from './branchActions'
+import { retryOnIndexLock } from './actionErrors'
 
 async function runAction(action: () => Promise<unknown>, successMessage: string): Promise<BranchActionResult> {
   try {
-    await action()
+    await retryOnIndexLock(action)
 
     return {
       ok: true,

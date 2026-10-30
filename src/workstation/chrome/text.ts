@@ -14,6 +14,31 @@ export { cellWidth }
 let asciiDialect = false
 
 /** Set the process-wide ASCII-dialect default. Call once per theme resolution. */
+// Everything in C0 (bar tab 0x09 and newline 0x0a), DEL and C1. Ink's own
+// sanitizer keeps SGR and OSC sequences and lets `\r` through.
+// eslint-disable-next-line no-control-regex
+const TERMINAL_CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/
+// eslint-disable-next-line no-control-regex
+const TERMINAL_CONTROL_ALL = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]/g
+
+/**
+ * Render-time neutraliser for text that came from a repository (commit
+ * subjects, diff and blame lines, file names) (#2204). A hostile value can
+ * carry an OSC sequence that retitles the terminal or writes the clipboard
+ * (OSC 52), a clear-screen, or a bare `\r` that garbles the row. It runs
+ * inside the cell-layout helpers, i.e. at display time, so the underlying
+ * data stays byte-exact: diff lines are also fed to `git apply`, where
+ * stripping a CRLF file's `\r` would corrupt the patch. Tabs and newlines
+ * survive (callers expand tabs and split lines themselves).
+ *
+ * Deliberately NOT applied to `Text` globally: OSC 8 hyperlinks are emitted
+ * on purpose (see `hyperlinks.ts`) and are applied after truncation.
+ * Common case is a clean string, so the test is a single regex scan.
+ */
+export function stripTerminalControl(value: string): string {
+  return TERMINAL_CONTROL.test(value) ? value.replace(TERMINAL_CONTROL_ALL, '') : value
+}
+
 export function setAsciiDialect(value: boolean): void {
   asciiDialect = value
 }
@@ -28,10 +53,14 @@ export function getAsciiDialect(): boolean {
  * on whitespace where possible; falls back to mid-word splits when a single
  * word is wider than the budget. Preserves blank input as a single empty
  * line so `value.split('\n').flatMap(wrapCells)` round-trips cleanly.
+ * A non-positive budget (a hidden pane is laid out at width 0) fits
+ * nothing, so it yields one empty line rather than the unwrapped text,
+ * which Ink would render as a row overflowing the frame (#1869).
  */
-export function wrapCells(value: string, width: number): string[] {
+export function wrapCells(rawValue: string, width: number): string[] {
+  const value = stripTerminalControl(rawValue)
   if (width < 1) {
-    return [value]
+    return ['']
   }
   if (cellWidth(value) <= width) {
     return [value]
@@ -121,10 +150,11 @@ export function padCells(value: string, width: number, fillChar = ' '): string {
 }
 
 export function truncateCells(
-  value: string,
+  rawValue: string,
   width: number,
   options: { ascii?: boolean } = {}
 ): string {
+  const value = stripTerminalControl(rawValue)
   if (width < 1) {
     return ''
   }
@@ -196,7 +226,8 @@ export function truncateCells(
  *   truncatePathCells('a/b/c.ts', 100)                // 'a/b/c.ts'  (fits)
  *   truncatePathCells('plainname.ts', 8)              // 'plain...'
  */
-export function truncatePathCells(value: string, width: number): string {
+export function truncatePathCells(rawValue: string, width: number): string {
+  const value = stripTerminalControl(rawValue)
   if (width < 1) return ''
   if (cellWidth(value) <= width) return value
 

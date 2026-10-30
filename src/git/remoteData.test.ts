@@ -1,4 +1,4 @@
-import { getRemoteOverview, parseRemoteVerboseOutput } from './remoteData'
+import { getRemoteOverview, maskUrlCredentials, parseRemoteVerboseOutput } from './remoteData'
 
 describe('parseRemoteVerboseOutput', () => {
   it('groups fetch + push lines into one entry per remote', () => {
@@ -102,5 +102,29 @@ describe('getRemoteOverview', () => {
       hasRemotes: false,
       entries: [],
     })
+  })
+})
+
+describe('maskUrlCredentials (#2204)', () => {
+  it.each([
+    ['https://user:ghp_secret@github.com/o/r.git', 'https://***@github.com/o/r.git'],
+    ['https://ghp_tokenasuser@github.com/o/r.git', 'https://***@github.com/o/r.git'],
+    ['ssh://git:hunter2@host/o/r.git', 'ssh://git:***@host/o/r.git'],
+    // A raw `@` in the password must not leave its tail visible.
+    ['https://user:p@ss@host/o/r.git', 'https://***@host/o/r.git'],
+    ['ssh://git:p@ss@host/o/r.git', 'ssh://git:***@host/o/r.git'],
+  ])('masks %s', (input, expected) => {
+    expect(maskUrlCredentials(input)).toBe(expected)
+  })
+
+  it.each([
+    'https://github.com/o/r.git',
+    'ssh://git@github.com/o/r.git',
+    'git@github.com:o/r.git',
+    'https://github.com/o/r@v1.git',
+    '/local/path/repo',
+    '',
+  ])('leaves %s untouched', (input) => {
+    expect(maskUrlCredentials(input)).toBe(input)
   })
 })

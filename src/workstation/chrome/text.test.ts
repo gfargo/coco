@@ -1,4 +1,4 @@
-import { cellWidth, expandTabs, padCells, truncateCells, truncatePathCells, wrapCells } from './text'
+import { cellWidth, expandTabs, padCells, stripTerminalControl, truncateCells, truncatePathCells, wrapCells } from './text'
 
 describe('log Ink text helpers', () => {
   describe('expandTabs (#1393)', () => {
@@ -160,6 +160,13 @@ describe('log Ink text helpers', () => {
   })
 
   describe('wrapCells', () => {
+    // #1869 — a hidden pane is laid out at width 0 and the detail surface
+    // derives `width - 4` from it; the text must not come back unwrapped.
+    it('returns a single empty line for a non-positive budget', () => {
+      expect(wrapCells('a long subject line that would overflow', 0)).toEqual([''])
+      expect(wrapCells('a long subject line that would overflow', -4)).toEqual([''])
+    })
+
     it('never hangs when the budget is narrower than one wide character', () => {
       // Regression: an empty chunk never shrank `remaining`, spinning
       // the hard-split loop forever. Width 1 vs width-2 CJK chars must
@@ -267,5 +274,42 @@ describe('log Ink text helpers', () => {
       const result = truncatePathCells('src/very/deep/path/data.test.ts', 16)
       expect(result.endsWith('data.test.ts')).toBe(true)
     })
+  })
+})
+
+describe('stripTerminalControl and the cell helpers (#2204)', () => {
+  const ESC = '\u001b'
+  const OSC52 = `${ESC}]52;c;ZXZpbA==\u0007`
+  const OSC_TITLE = `${ESC}]0;pwned\u0007`
+
+  it('removes escapes, BEL, bare CR, DEL and C1 bytes', () => {
+    expect(stripTerminalControl(`a${OSC52}b`)).not.toMatch(/[\u001b\u0007]/)
+    expect(stripTerminalControl(`a${OSC_TITLE}b`)).not.toMatch(/[\u001b\u0007]/)
+    expect(stripTerminalControl('row\r')).toBe('row')
+    expect(stripTerminalControl('x\u007fy\u009bz')).toBe('xyz')
+  })
+
+  it('keeps tabs and newlines for the callers that handle them', () => {
+    expect(stripTerminalControl('a\tb\nc')).toBe('a\tb\nc')
+  })
+
+  it('returns a clean string unchanged', () => {
+    const clean = 'plain text with unicode caf\u00e9 and emoji \u{1F600}'
+    expect(stripTerminalControl(clean)).toBe(clean)
+  })
+
+  it.each([
+    ['truncateCells', (s: string) => truncateCells(s, 40)],
+    ['truncateCells (forced truncation)', (s: string) => truncateCells(s, 6)],
+    ['truncatePathCells', (s: string) => truncatePathCells(`dir/${s}`, 60)],
+    ['wrapCells', (s: string) => wrapCells(s, 30).join('\n')],
+  ])('%s never emits an escape or CR', (_name, fn) => {
+    const out = fn(`start${OSC52}${OSC_TITLE}middle\rend`)
+    expect(out).not.toMatch(/[\u001b\u0007\r]/)
+  })
+
+  it('does not change the measured width of clean text', () => {
+    expect(truncateCells('abcdef', 10)).toBe('abcdef')
+    expect(wrapCells('one two three', 80)).toEqual(['one two three'])
   })
 })

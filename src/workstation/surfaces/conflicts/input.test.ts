@@ -145,7 +145,7 @@ describe('handleConflictsInput', () => {
     it('jumps to the first file and sets an echo status when files exist', () => {
       const events = handleConflictsInput(conflictsState(), '', { home: true }, { conflictFileCount: 4 }, 'jump-top')
       expect(events).toEqual([
-        { type: 'action', action: { type: 'moveConflictFile', delta: -4, count: 4 } },
+        { type: 'action', action: { type: 'moveList', list: 'conflictFile', delta: -4, count: 4 } },
         { type: 'action', action: { type: 'setStatus', value: 'jumped to first conflict', ttl: 'echo' } },
       ])
     })
@@ -153,7 +153,7 @@ describe('handleConflictsInput', () => {
     it('jumps to the last file and sets an echo status when files exist', () => {
       const events = handleConflictsInput(conflictsState(), '', { end: true }, { conflictFileCount: 4 }, 'jump-bottom')
       expect(events).toEqual([
-        { type: 'action', action: { type: 'moveConflictFile', delta: 4, count: 4 } },
+        { type: 'action', action: { type: 'moveList', list: 'conflictFile', delta: 4, count: 4 } },
         { type: 'action', action: { type: 'setStatus', value: 'jumped to last conflict', ttl: 'echo' } },
       ])
     })
@@ -168,10 +168,10 @@ describe('handleConflictsInput', () => {
     it('moves the conflict file cursor with up/k and down/j, no-ops without a file count', () => {
       const state = conflictsState()
       expect(handleConflictsInput(state, 'k', { upArrow: true }, { conflictFileCount: 3 }, 'move')).toEqual([
-        { type: 'action', action: { type: 'moveConflictFile', delta: -1, count: 3 } },
+        { type: 'action', action: { type: 'moveList', list: 'conflictFile', delta: -1, count: 3 } },
       ])
       expect(handleConflictsInput(state, 'j', { downArrow: true }, { conflictFileCount: 3 }, 'move')).toEqual([
-        { type: 'action', action: { type: 'moveConflictFile', delta: 1, count: 3 } },
+        { type: 'action', action: { type: 'moveList', list: 'conflictFile', delta: 1, count: 3 } },
       ])
       expect(handleConflictsInput(state, 'k', { upArrow: true }, {}, 'move')).toBeNull()
     })

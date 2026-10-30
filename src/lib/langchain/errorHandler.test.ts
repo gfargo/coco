@@ -329,3 +329,24 @@ describe('LangChainNetworkError', () => {
     expect(error.context?.originalError).toBe('TypeError')
   })
 })
+
+// #1844 — the wait a provider asks for, so an agent retries no sooner.
+describe('extractRetryAfterMs', () => {
+  const { extractRetryAfterMs } = jest.requireActual('./errorHandler') as typeof import('./errorHandler')
+  const now = Date.parse('2026-10-30T12:00:00Z')
+
+  it('reads retry-after-ms first, then Retry-After seconds', () => {
+    expect(extractRetryAfterMs({ headers: { 'retry-after-ms': '750', 'retry-after': '9' } }, now)).toBe(750)
+    expect(extractRetryAfterMs({ headers: { 'Retry-After': '2' } }, now)).toBe(2000)
+  })
+
+  it('reads an HTTP-date Retry-After and a Headers object on response', () => {
+    const headers = new Headers({ 'retry-after': 'Thu, 30 Oct 2026 12:00:05 GMT' })
+    expect(extractRetryAfterMs({ response: { headers } }, now)).toBe(5000)
+  })
+
+  it('returns undefined without a usable hint', () => {
+    expect(extractRetryAfterMs(new Error('x'), now)).toBeUndefined()
+    expect(extractRetryAfterMs({ headers: { 'retry-after': 'soon' } }, now)).toBeUndefined()
+  })
+})

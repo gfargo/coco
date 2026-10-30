@@ -1,6 +1,6 @@
 import chalk from 'chalk'
 
-import { createJsonStore } from '../../workstation/chrome/jsonStore'
+import { createJsonStore } from './jsonStore'
 import { BUILD_PACKAGE_NAME, BUILD_VERSION } from '../buildInfo'
 import { Config } from '../config/types'
 import { decideUpdateNotice } from './updateNotice'

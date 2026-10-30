@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'pr-draft', 'commit-validate', 'commitlint-rules', 'split-plan', 'batch'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -113,6 +113,20 @@ export const AgentOptionsSchema = z.object({
   timeframe: z.string().min(1).max(100).optional().describe(
     'Human-readable window for the summary, e.g. "last week" or "yesterday". Honored by: recap. Ignored by other operations.',
   ),
+  base: gitRevisionSchema.optional().describe(
+    'Base branch the pull/merge request would target. Defaults to the repository\'s default branch (origin/HEAD, ' +
+    'else the configured defaultBranch, else main). Honored by: pr-draft. Ignored by other operations.',
+  ),
+  draft: z.boolean().optional().describe(
+    'Echoed back as `draft` so a caller can open the request as a draft later. coco never opens it. ' +
+    'Honored by: pr-draft. Ignored by other operations.',
+  ),
+  severity: z.number().int().min(1).max(10).optional().describe(
+    'Return only findings with severity >= this threshold (1-10), the same scale as `coco review --severity`. ' +
+    'A filter, not a gate: the call still succeeds, and a warning says how many findings were left out. ' +
+    'Filtering happens after generation, so it does not reduce token cost. Omit to return every finding. ' +
+    'Honored by: review. Ignored by other operations.',
+  ),
   trustRepositoryConfig: z.boolean().default(false).describe(
     'Allow repository-defined prompts and executable commitlint configuration. Disabled by default for agent safety. Honored by: all operations, agent CLI only -- not present in the MCP input schema.',
   ),
@@ -126,10 +140,33 @@ export const AgentOptionsSchema = z.object({
   ),
 }).strict()
 
+/**
+ * Shorthand strings for the common repository sources (#2041), accepted in
+ * place of a `source` object by the generation operations and expanded once
+ * the repository is known (`expandChangeSource`):
+ *
+ * - `staged`, `worktree`: those scopes.
+ * - `since-last-tag`: `range` from the most recent tag (`git describe --tags --abbrev=0`) to HEAD.
+ * - `branch`: `branch` against the default branch (`origin/HEAD`, else `main`).
+ * - `branch:<ref>`: `branch` against `<ref>`.
+ * - `HEAD~N`: `branch` against `HEAD~N`.
+ */
+export const CHANGE_SOURCE_SHORTHANDS = ['staged', 'worktree', 'since-last-tag', 'branch', 'branch:<ref>', 'HEAD~N'] as const
+
+const SHORTHAND_PATTERN = /^(staged|worktree|since-last-tag|branch|branch:(?!-)[^\s\u0000]+|HEAD~\d{1,6})$/
+
+export const ChangeSourceShorthandSchema = z.string().regex(SHORTHAND_PATTERN, {
+  message: `Unknown source shorthand. Use one of: ${CHANGE_SOURCE_SHORTHANDS.join(', ')}, or a source object.`,
+}).describe(`Shorthand for a repository source: ${CHANGE_SOURCE_SHORTHANDS.join(', ')}.`)
+
+export type ChangeSourceShorthand = z.infer<typeof ChangeSourceShorthandSchema>
+
+const ChangeSourceInputSchema = z.union([ChangeSourceShorthandSchema, ChangeSourceSchema])
+
 export const AgentTaskInputSchema = z.object({
   version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
   repo: z.string().min(1).optional(),
-  source: ChangeSourceSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
+  source: ChangeSourceInputSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
   options: AgentOptionsSchema.default({
     conventional: false,
     includeBranchName: false,
@@ -155,7 +192,7 @@ export const McpAgentOptionsSchema = AgentOptionsSchema.omit({ trustRepositoryCo
 export const McpTaskInputSchema = z.object({
   version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
   repo: z.string().min(1).optional(),
-  source: ChangeSourceSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
+  source: ChangeSourceInputSchema.default({ kind: 'repository', scope: { type: 'staged' } }),
   options: McpAgentOptionsSchema.default({
     conventional: false,
     includeBranchName: false,
@@ -183,6 +220,35 @@ export const SourceMetadataSchema = z.object({
   conventions: ConventionsMetadataSchema.optional(),
 }).strict()
 
+/** `pr-draft` (#1823): what `coco pr create --json` would submit. Never opened. */
+export const PrDraftDataSchema = z.object({
+  base: z.string(),
+  head: z.string(),
+  title: z.string(),
+  body: z.string(),
+  draft: z.boolean(),
+}).strict()
+
+export type PrDraftData = z.infer<typeof PrDraftDataSchema>
+
+/**
+ * `split-plan` (#1824): a validated multi-commit decomposition of the staged
+ * changes. Planning only; nothing is staged or committed.
+ */
+export const SplitPlanDataSchema = z.object({
+  groups: z.array(z.object({
+    title: z.string(),
+    body: z.string(),
+    files: z.array(z.string()).describe('Repository-relative paths committed whole in this group.'),
+    hunks: z.array(z.string()).describe('Hunk ids (`<path>::hunk-<n>`) for files split across groups.'),
+    rationale: z.string().optional(),
+    unclaimed: z.boolean().describe('True for the catch-all group of changes the planner could not place; `coco commit --split` leaves these uncommitted.'),
+  }).strict()),
+  fallback: z.string().optional().describe('Set when the planner gave up and returned a single combined group; says why.'),
+}).strict()
+
+export type SplitPlanData = z.infer<typeof SplitPlanDataSchema>
+
 export const CommitDraftDataSchema = z.object({
   title: z.string(),
   body: z.string(),
@@ -204,10 +270,83 @@ export const RecapDataSchema = z.object({
   summary: z.string(),
 }).strict()
 
+/**
+ * Error categories (#1844): a client that does not recognize a specific code
+ * can still handle its class.
+ *
+ * - `input`: the request itself is wrong; fix it before retrying.
+ * - `repository`: the repository state does not allow the operation (nothing
+ *   staged, unknown repo, a hook rejected the commit).
+ * - `safety`: refused by a safety or confinement rule.
+ * - `authentication`: no usable provider credentials.
+ * - `generation`: the model ran but its output was unusable.
+ * - `provider`: the LLM provider or the network to it failed.
+ * - `cancelled`: the caller cancelled.
+ * - `internal`: anything not classified more precisely.
+ */
+export const AGENT_ERROR_CATEGORIES = [
+  'input',
+  'repository',
+  'safety',
+  'authentication',
+  'generation',
+  'provider',
+  'cancelled',
+  'internal',
+] as const
+
+export type AgentErrorCategory = typeof AGENT_ERROR_CATEGORIES[number]
+
+/**
+ * Every error code an agent operation can return, with its category. This is
+ * the one list: `AgentOperationError` only accepts these codes, so emitting
+ * a new one without publishing it does not compile (#1844).
+ *
+ * Forward compatibility: coco may add codes within protocol version 1. A
+ * client should treat a code it does not know as `OPERATION_FAILED` and use
+ * `category` and `retryable` to decide what to do.
+ */
+export const AGENT_ERROR_CODE_CATEGORIES = {
+  INVALID_INPUT: 'input',
+  INVALID_JSON: 'input',
+  INVALID_OPERATION: 'input',
+  INVALID_REVISION: 'input',
+  UNSUPPORTED_OPERATION: 'input',
+  UNSUPPORTED_SOURCE: 'input',
+  UNSUPPORTED_MODE: 'input',
+  CONTEXT_TOO_LARGE: 'input',
+  EXPLAIN_RANGE_TOO_LARGE: 'input',
+  INVALID_REPOSITORY: 'repository',
+  REPOSITORY_MISMATCH: 'repository',
+  NO_CHANGES: 'repository',
+  EMPTY_INDEX: 'repository',
+  BLAME_FAILED: 'repository',
+  HOOK_FAILED: 'repository',
+  REPOSITORY_OUTSIDE_ROOT: 'safety',
+  UNSAFE_SOURCE: 'safety',
+  AUTHENTICATION_REQUIRED: 'authentication',
+  GENERATION_FAILED: 'generation',
+  RATE_LIMITED: 'provider',
+  PROVIDER_UNAVAILABLE: 'provider',
+  QUOTA_EXCEEDED: 'provider',
+  CANCELLED: 'cancelled',
+  OPERATION_FAILED: 'internal',
+} as const satisfies Record<string, AgentErrorCategory>
+
+export type AgentErrorCode = keyof typeof AGENT_ERROR_CODE_CATEGORIES
+
+export const AGENT_ERROR_CODES = Object.keys(AGENT_ERROR_CODE_CATEGORIES) as [AgentErrorCode, ...AgentErrorCode[]]
+
+export const AgentErrorCodeSchema = z.enum(AGENT_ERROR_CODES).describe(
+  'Machine-readable failure code. New codes may be added within protocol version 1; treat an unknown code as OPERATION_FAILED.',
+)
+
 export const AgentErrorSchema = z.object({
-  code: z.string(),
+  code: AgentErrorCodeSchema,
+  category: z.enum(AGENT_ERROR_CATEGORIES).describe('Class of the failure, for clients that do not recognize the code.'),
   message: z.string(),
-  retryable: z.boolean(),
+  retryable: z.boolean().describe('True when the same request may succeed if sent again later (a rate limit or a transient provider or network failure).'),
+  retryAfterMs: z.number().int().nonnegative().optional().describe('How long the provider asked to wait before retrying, when it said.'),
   details: z.unknown().optional(),
 }).strict()
 
@@ -462,9 +601,13 @@ export type CondenseDiffData = z.infer<typeof CondenseDiffDataSchema>
 export type CondenseDiffFileResult = z.infer<typeof CondenseDiffFileResultSchema>
 
 export type AgentOperation = z.infer<typeof AgentOperationSchema>
-export type AgentTaskInput = z.infer<typeof AgentTaskInputSchema>
+/** A parsed request: `source` may still be a shorthand string. */
+export type AgentTaskRequest = z.infer<typeof AgentTaskInputSchema>
+/** What operations receive: `source` expanded to an object (see `expandChangeSource`). */
+export type AgentTaskInput = Omit<AgentTaskRequest, 'source'> & { source: z.infer<typeof ChangeSourceSchema> }
 export type AgentOptions = z.infer<typeof AgentOptionsSchema>
-export type McpTaskInput = z.infer<typeof McpTaskInputSchema>
+export type McpTaskRequest = z.infer<typeof McpTaskInputSchema>
+export type McpTaskInput = Omit<McpTaskRequest, 'source'> & { source: z.infer<typeof ChangeSourceSchema> }
 export type McpAgentOptions = z.infer<typeof McpAgentOptionsSchema>
 export type ChangeSource = z.infer<typeof ChangeSourceSchema>
 export type SourceMetadata = z.infer<typeof SourceMetadataSchema>
@@ -741,6 +884,64 @@ export type LintRequest = z.infer<typeof LintRequestSchema>
 export type LintData = z.infer<typeof LintDataSchema>
 export type LintCommitResult = z.infer<typeof LintCommitResultSchema>
 
+// ─── commit-validate / commitlint-rules operations (#1845) ────────────────────
+
+/**
+ * Which rules a validation used. Always the built-in Conventional Commits
+ * rules for now: repository commitlint config is executable and is not loaded
+ * by agent tools. Reported so a caller knows a pass is advisory when the
+ * repository defines stricter rules (see `repositoryConfig`).
+ */
+const RulesSourceSchema = z.literal('built-in-conventional')
+
+const RepositoryConfigSchema = z.enum(['detected', 'absent', 'unknown']).describe(
+  'Whether the repository defines its own commitlint config (checked by file presence only, never executed). ' +
+  '"detected" means a pass against the built-in rules may not satisfy the repository. "unknown" when no repository was resolved.',
+)
+
+export const CommitValidateRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  message: z.string().min(1).max(32 * 1024).describe('The full candidate commit message (subject, blank line, body).'),
+}).strict()
+
+export function createCommitValidateInputJsonSchema() {
+  return z.toJSONSchema(CommitValidateRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+const CommitlintFindingSchema = z.object({
+  rule: z.string().describe('The commitlint rule, e.g. "header-max-length".'),
+  message: z.string(),
+}).strict()
+
+export const CommitValidateDataSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(CommitlintFindingSchema),
+  warnings: z.array(CommitlintFindingSchema),
+  rulesSource: RulesSourceSchema,
+  repositoryConfig: RepositoryConfigSchema,
+}).strict()
+
+export const CommitlintRulesRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+}).strict()
+
+export function createCommitlintRulesInputJsonSchema() {
+  return z.toJSONSchema(CommitlintRulesRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const CommitlintRulesDataSchema = z.object({
+  rules: z.array(z.string()).describe('The rules a message is validated against, one readable line each.'),
+  rulesSource: RulesSourceSchema,
+  repositoryConfig: RepositoryConfigSchema,
+}).strict()
+
+export type CommitValidateRequest = z.infer<typeof CommitValidateRequestSchema>
+export type CommitValidateData = z.infer<typeof CommitValidateDataSchema>
+export type CommitlintRulesRequest = z.infer<typeof CommitlintRulesRequestSchema>
+export type CommitlintRulesData = z.infer<typeof CommitlintRulesDataSchema>
+
 // ─── commit-apply operation ───────────────────────────────────────────────────
 
 /**
@@ -833,3 +1034,39 @@ export const CapabilitiesResultSchema = z.object({
 
 export type CapabilitiesRequest = z.infer<typeof CapabilitiesRequestSchema>
 export type CapabilitiesResult = z.infer<typeof CapabilitiesResultSchema>
+
+// ─── batch operation (#2045) ─────────────────────────────────────────────────
+
+/** Operations a batch can run: the generation operations that share a source. */
+export const BATCHABLE_OPERATIONS = ['commit-draft', 'review', 'changelog', 'recap'] as const
+
+const batchOperationsSchema = z.array(z.enum(BATCHABLE_OPERATIONS)).min(1).max(BATCHABLE_OPERATIONS.length)
+  .refine((operations) => new Set(operations).size === operations.length, 'Each operation may appear at most once.')
+  .describe('Operations to run, in order, over one resolution of `source`. Each at most once.')
+
+/**
+ * Run several generation operations over one resolved source (#2045). An
+ * agent that recaps, reviews and drafts a commit for the same diff used to
+ * pay for resolving it three times.
+ */
+export const AgentBatchRequestSchema = AgentTaskInputSchema.extend({ operations: batchOperationsSchema }).strict()
+export const McpBatchRequestSchema = McpTaskInputSchema.extend({ operations: batchOperationsSchema }).strict()
+
+export function createAgentBatchInputJsonSchema() {
+  return z.toJSONSchema(AgentBatchRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const BatchDataSchema = z.object({
+  results: z.array(z.union([
+    createAgentOutputSchema('commit-draft', CommitDraftDataSchema),
+    createAgentOutputSchema('review', ReviewDataSchema),
+    createAgentOutputSchema('changelog', ChangelogDataSchema),
+    createAgentOutputSchema('recap', RecapDataSchema),
+  ])).describe('One envelope per requested operation, in request order, each with the same meta.digest.'),
+}).strict()
+
+export type BatchableOperation = typeof BATCHABLE_OPERATIONS[number]
+export type AgentBatchRequest = z.infer<typeof AgentBatchRequestSchema>
+export type AgentBatchInput = Omit<AgentBatchRequest, 'source'> & { source: z.infer<typeof ChangeSourceSchema> }
+export type BatchData = z.infer<typeof BatchDataSchema>
+

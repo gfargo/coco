@@ -9,6 +9,7 @@ import {
 import { createCocoMcpServer, resetDeferredUsageTelemetryArmedForTests } from './server'
 
 const mockResolveAgentRepoRoot = jest.fn()
+const mockRunAgentBatch = jest.fn()
 const mockArmNonInteractiveUsageTelemetry = jest.fn()
 const mockCreateAgentOperationContext = jest.fn()
 const mockRunAgentOperation = jest.fn()
@@ -110,6 +111,17 @@ jest.mock('@modelcontextprotocol/sdk/server/mcp.js', () => ({
     connect = jest.fn()
   },
 }))
+// @commitlint/core is ESM-only and cannot load under jest on Node 22. The
+// commitlint tools' lint call is stubbed here; real rule output is covered
+// in commitlintValidator.test.ts (subprocess).
+jest.mock('../lib/utils/commitlintValidator', () => ({
+  ...jest.requireActual('../lib/utils/commitlintValidator'),
+  lintWithBuiltInConventionalRules: jest.fn(async (message: string) => {
+    const header = message.split('\n')[0]
+    const errors = header.length > 72 ? [{ rule: 'header-max-length', message: 'header must not be longer than 72 characters' }] : []
+    return { valid: errors.length === 0, errors, warnings: [] }
+  }),
+}))
 jest.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: class MockStdioServerTransport {},
 }))
@@ -128,6 +140,7 @@ jest.mock('../operations/agent', () => {
     asUntrustedChangeContext: generate.asUntrustedChangeContext,
     digestOf: context.digestOf,
     requiresRepository: context.requiresRepository,
+    expandChangeSource: context.expandChangeSource,
     describeRepoResolutionFailure: context.describeRepoResolutionFailure,
     createAgentOperationContext: (...args: unknown[]) => mockCreateAgentOperationContext(...args),
     resolveAgentDirectoryRoot: jest.fn((value: string) => value),
@@ -144,6 +157,10 @@ jest.mock('../operations/agent', () => {
     runRepoContext: (...args: unknown[]) => mockRunRepoContext(...args),
     runBlame: (...args: unknown[]) => mockRunBlame(...args),
     runLint: (...args: unknown[]) => mockRunLint(...args),
+    runAgentBatch: (...args: unknown[]) => mockRunAgentBatch(...args),
+    // Real implementations: zero-token, no model call (#1845).
+    runCommitValidate: (jest.requireActual('../operations/agent/validate') as typeof import('../operations/agent/validate')).runCommitValidate,
+    runCommitlintRules: (jest.requireActual('../operations/agent/validate') as typeof import('../operations/agent/validate')).runCommitlintRules,
     runCommitApply: (...args: unknown[]) => mockRunCommitApply(...args),
     runCapabilities: (...args: unknown[]) => mockRunCapabilities(...args),
   }
@@ -274,7 +291,7 @@ describe('createCocoMcpServer', () => {
     }
   }
 
-  it('registers nine read-only tools including coco_condense_diff, coco_repo_context, coco_blame, coco_lint, and coco_capabilities', () => {
+  it('registers fourteen read-only tools including coco_split_plan, coco_batch, coco_pr_draft, coco_condense_diff, coco_repo_context, coco_blame, coco_lint, the commitlint tools, and coco_capabilities', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -282,10 +299,15 @@ describe('createCocoMcpServer', () => {
       'coco_review',
       'coco_changelog',
       'coco_recap',
+      'coco_split_plan',
+      'coco_batch',
+      'coco_pr_draft',
       'coco_condense_diff',
       'coco_repo_context',
       'coco_blame',
       'coco_lint',
+      'coco_commit_validate',
+      'coco_commitlint_rules',
       'coco_capabilities',
     ])
     // The four LLM-generation tools share the AgentTaskInputSchema and have
@@ -1270,4 +1292,170 @@ describe('createCocoMcpServer', () => {
       expect(result).not.toHaveProperty('isError', true)
     })
   })
+
+  describe('client roots are fetched once per tool call (#1826)', () => {
+    type RootsMock = {
+      server: {
+        getClientCapabilities: jest.Mock
+        listRoots: jest.Mock
+      }
+    }
+
+    function deferredServerWithRoots(roots: string[]): RootsMock {
+      const server = createCocoMcpServer() as unknown as RootsMock
+      server.server.getClientCapabilities.mockReturnValue({ roots: {} })
+      server.server.listRoots.mockResolvedValue({ roots: roots.map((root) => ({ uri: `file://${root}` })) })
+      return server
+    }
+
+    const isPathWithinRootMock = jest.requireMock('../operations/agent').isPathWithinRoot as jest.Mock
+
+    afterEach(() => {
+      isPathWithinRootMock.mockImplementation(() => true)
+    })
+
+    it('resolves the repo from the roots and confines it with a single roots/list', async () => {
+      const server = deferredServerWithRoots(['/workspace'])
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/workspace')
+
+      await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+      }, makeExtra())
+
+      expect(server.server.listRoots).toHaveBeenCalledTimes(1)
+    })
+
+    it('fetches again on the next call rather than reusing a stale list', async () => {
+      const server = deferredServerWithRoots(['/workspace'])
+      mockResolveAgentRepoRoot.mockResolvedValue('/workspace')
+
+      for (let i = 0; i < 2; i++) {
+        await registrations.get('coco_review')!.handler({
+          source: { kind: 'summary', summary: 'changed' },
+        }, makeExtra())
+      }
+
+      expect(server.server.listRoots).toHaveBeenCalledTimes(2)
+    })
+
+    it('still rejects an explicit repo outside the declared roots', async () => {
+      const server = deferredServerWithRoots(['/workspace'])
+      isPathWithinRootMock.mockImplementation((child: string, root: string) => child.startsWith(root))
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/elsewhere/repo')
+
+      const result = await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+        repo: '/elsewhere/repo',
+      }, makeExtra())
+
+      expect(result).toMatchObject({
+        isError: true,
+        structuredContent: { ok: false, error: { code: 'REPOSITORY_OUTSIDE_ROOT' } },
+      })
+      expect(server.server.listRoots).toHaveBeenCalledTimes(1)
+    })
+
+    it('skips roots entirely for a client without the roots capability', async () => {
+      const server = createCocoMcpServer() as unknown as RootsMock
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/deferred/repo')
+
+      await registrations.get('coco_review')!.handler({
+        source: { kind: 'summary', summary: 'changed' },
+        repo: '/deferred/repo',
+      }, makeExtra())
+
+      expect(server.server.listRoots).not.toHaveBeenCalled()
+    })
+  })
+
+  // #1845 — zero-token commit message tools.
+  describe('coco_commit_validate / coco_commitlint_rules', () => {
+    it('validates a message with no repository and reports the rule that failed', async () => {
+      // Deferred mode, no `repo`, no client roots: no repository resolves.
+      createCocoMcpServer()
+
+      const result = await registrations.get('coco_commit_validate')!.handler({
+        message: `feat: ${'x'.repeat(120)}`,
+      }, makeExtra())
+
+      expect(result).toMatchObject({
+        structuredContent: {
+          ok: true,
+          operation: 'commit-validate',
+          data: { valid: false, rulesSource: 'built-in-conventional', repositoryConfig: 'unknown' },
+        },
+      })
+      const data = (result.structuredContent as { data: { errors: { rule: string }[] } }).data
+      expect(data.errors.map((e) => e.rule)).toContain('header-max-length')
+    })
+
+    it('passes a conforming message', async () => {
+      // Deferred mode, no `repo`, no client roots: no repository resolves.
+      createCocoMcpServer()
+      const result = await registrations.get('coco_commit_validate')!.handler({ message: 'fix(mcp): fetch roots once' }, makeExtra())
+      expect(result).toMatchObject({ structuredContent: { ok: true, data: { valid: true, errors: [] } } })
+    })
+
+    it('still refuses a repository outside the client roots', async () => {
+      const server = createCocoMcpServer() as unknown as { server: { getClientCapabilities: jest.Mock; listRoots: jest.Mock } }
+      server.server.getClientCapabilities.mockReturnValue({ roots: {} })
+      server.server.listRoots.mockResolvedValue({ roots: [{ uri: 'file:///workspace' }] })
+      const isPathWithinRootMock = jest.requireMock('../operations/agent').isPathWithinRoot as jest.Mock
+      isPathWithinRootMock.mockImplementation((child: string, root: string) => child.startsWith(root))
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/elsewhere/repo')
+      try {
+        const result = await registrations.get('coco_commitlint_rules')!.handler({ repo: '/elsewhere/repo' }, makeExtra())
+        expect(result).toMatchObject({ isError: true, structuredContent: { error: { code: 'REPOSITORY_OUTSIDE_ROOT' } } })
+      } finally {
+        isPathWithinRootMock.mockImplementation(() => true)
+      }
+    })
+  })
+
+  // #2041 — source shorthand strings.
+  describe('source shorthands', () => {
+    it('expands "staged" before running the operation', async () => {
+      createServer()
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/repo')
+      mockRunAgentOperation.mockResolvedValueOnce(reviewSuccess)
+
+      await registrations.get('coco_review')!.handler({ source: 'staged' }, makeExtra())
+
+      expect(mockRunAgentOperation.mock.calls.at(-1)?.[1]).toMatchObject({
+        source: { kind: 'repository', scope: { type: 'staged' } },
+      })
+    })
+
+    it('rejects an unknown shorthand with INVALID_INPUT naming the options', async () => {
+      createServer()
+      const result = await registrations.get('coco_review')!.handler({ source: 'yesterday' }, makeExtra())
+
+      expect(result).toMatchObject({ isError: true, structuredContent: { error: { code: 'INVALID_INPUT' } } })
+      expect(JSON.stringify(result.structuredContent)).toContain('since-last-tag')
+    })
+  })
+
+  // #2045 — batch tool.
+  describe('coco_batch', () => {
+    it('expands the source once and passes the operations to runAgentBatch', async () => {
+      createServer()
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/repo')
+      mockRunAgentBatch.mockResolvedValueOnce({ ok: true })
+
+      await registrations.get('coco_batch')!.handler({ source: 'staged', operations: ['review', 'commit-draft'] }, makeExtra())
+
+      expect(mockRunAgentBatch.mock.calls.at(-1)?.[0]).toMatchObject({
+        operations: ['review', 'commit-draft'],
+        source: { kind: 'repository', scope: { type: 'staged' } },
+        options: { trustRepositoryConfig: false },
+      })
+    })
+
+    it('rejects a duplicate operation with INVALID_INPUT', async () => {
+      createServer()
+      const result = await registrations.get('coco_batch')!.handler({ operations: ['review', 'review'] }, makeExtra())
+      expect(result).toMatchObject({ isError: true, structuredContent: { error: { code: 'INVALID_INPUT' } } })
+    })
+  })
 })
+

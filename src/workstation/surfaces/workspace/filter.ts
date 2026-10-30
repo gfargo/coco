@@ -7,7 +7,7 @@ import { pickWorkstationGlyph, type WorkstationGlyphKey } from '../../chrome/gly
  * predicate would yield zero rows in absence of PR data are gated so
  * the surface can dim them rather than show empty lists.
  */
-export const WORKSPACE_TABS = ['all', 'dirty', 'behind', 'pull-requests'] as const
+export const WORKSPACE_TABS = ['all', 'dirty', 'behind', 'pull-requests', 'errors'] as const
 
 export type WorkspaceTab = (typeof WORKSPACE_TABS)[number]
 
@@ -16,6 +16,7 @@ const TAB_LABELS: Record<WorkspaceTab, string> = {
   dirty: 'Dirty',
   behind: 'Behind',
   'pull-requests': 'PRs',
+  errors: 'Errors',
 }
 
 /**
@@ -24,6 +25,7 @@ const TAB_LABELS: Record<WorkspaceTab, string> = {
  *   ● Dirty   (warn / filled)
  *   ↓ Behind  (warn / down)
  *   ⊙ PRs     (accent / target)
+ *   ✗ Errors  (repos whose summary failed: broken, unreadable, corrupt)
  *
  * Used in two places: as a label prefix in the expanded sidebar,
  * and as the standalone icon when the sidebar is rail-collapsed at
@@ -36,6 +38,7 @@ const TAB_GLYPHS: Record<WorkspaceTab, WorkstationGlyphKey> = {
   dirty: 'filled',
   behind: 'down',
   'pull-requests': 'target',
+  errors: 'cross',
 }
 
 export function workspaceTabLabel(tab: WorkspaceTab): string {
@@ -76,6 +79,8 @@ export function matchesWorkspaceTab(
       const count = context.pullRequestCounts?.[repo.path] ?? 0
       return count > 0
     }
+    case 'errors':
+      return Boolean(repo.error)
     default:
       return true
   }

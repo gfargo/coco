@@ -1,4 +1,4 @@
-import { BaseCommandOptions } from '../../commands/types'
+import { BaseCommandOptions } from './commandOptions'
 import { LogInkThemeConfig } from '../../workstation/chrome/theme'
 import { LLMService } from '../langchain/types'
 
@@ -217,6 +217,18 @@ type BaseConfig = {
      * @default 3
      */
     maxDepth?: number
+
+    /**
+     * Follow symlinked directories while scanning the configured roots.
+     * Off by default so a symlink cycle or a link out to a huge tree
+     * can't blow up discovery; turn it on when your repos are reachable
+     * only through links (e.g. `~/code/work` -> `/Volumes/work`).
+     * Directories already visited via their real path are never walked
+     * twice.
+     *
+     * @default false
+     */
+    followSymlinks?: boolean
   }
 
   /**

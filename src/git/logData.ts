@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { stripDisplayControl, stripDisplayControlMultiline } from './forgeText'
 import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
 import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from './submoduleDiff'
 import { LogArgv, LogView } from '../commands/log/config'
@@ -185,9 +186,9 @@ export function parseLogOutput(output: string): GitLogRow[] {
         hash,
         parents: parentsStr ? parentsStr.trim().split(' ').filter(Boolean) : [],
         date,
-        author,
-        refs: cleanRefs(refs),
-        message,
+        author: stripDisplayControl(author),
+        refs: cleanRefs(refs).map(stripDisplayControl),
+        message: stripDisplayControl(message),
       }
     })
 }
@@ -334,10 +335,10 @@ export function parseCommitDetail(metadata: string, files: string, numstatOutput
     hash,
     parents: parentsStr ? parentsStr.trim().split(' ').filter(Boolean) : [],
     date,
-    author,
-    refs: cleanRefs(refs),
-    message,
-    body: body.trim(),
+    author: stripDisplayControl(author),
+    refs: cleanRefs(refs).map(stripDisplayControl),
+    message: stripDisplayControl(message),
+    body: stripDisplayControlMultiline(body.trim()),
     files: parseNameStatus(files, numstat),
     stats: summarizeNumstat(numstat),
   }
@@ -524,6 +525,57 @@ export function buildToggleGraphArgs(argv: LogArgv, fullGraph: boolean): LogArgv
   return { ...argv, view: argv.view ?? 'compact' }
 }
 
+const STASH_TIP_SUBJECT = /^(WIP on|On) [^:]+: /
+const STASH_HELPER_SUBJECT = /^(index on|untracked files on) [^:]+: /
+
+/**
+ * Hide stash plumbing from the history graph (#2159). A stash commit has the
+ * stashed base as its first parent, plus an `index on <branch>:` commit and,
+ * with -u, an `untracked files on <branch>:` commit. Those helpers render as
+ * ordinary rows and lanes and dominated the top of history; nobody acts on
+ * them. The stash tip stays (so the stash sidebar can still cursor-sync to
+ * it), shown as a one-parent commit on its base.
+ *
+ * A commit counts as a stash tip when its hash is in `knownStashes`, or when
+ * its subject has the stash form and a non-first parent loaded here has the
+ * helper form. The workstation reducer applies it as rows enter state
+ * (`createLogInkState`, `replaceRows`, `appendRows`), after the paging
+ * counts are taken from the rows git returned: hiding inside `getLogRows`
+ * made a 1000-row page come back short, which read as "no more history"
+ * and stopped paging. `coco log` never calls it, so its ASCII graph is
+ * untouched.
+ */
+export function hideStashHelperCommits(rows: GitLogRow[], knownStashes: readonly string[] = []): GitLogRow[] {
+  const known = new Set(knownStashes)
+  const byHash = new Map<string, GitLogCommitRow>()
+  for (const row of rows) if (row.type === 'commit') byHash.set(row.hash, row)
+
+  const helperHashes = new Set<string>()
+  const tips = new Set<string>()
+  for (const row of byHash.values()) {
+    if (row.parents.length < 2) continue
+    const extras = row.parents.slice(1)
+    const loadedHelper = extras.some((hash) => STASH_HELPER_SUBJECT.test(byHash.get(hash)?.message ?? ''))
+    const isTip = known.has(row.hash) || (STASH_TIP_SUBJECT.test(row.message) && loadedHelper)
+    if (!isTip) continue
+    tips.add(row.hash)
+    for (const hash of extras) {
+      const helper = byHash.get(hash)
+      if (!helper || STASH_HELPER_SUBJECT.test(helper.message)) helperHashes.add(hash)
+    }
+  }
+  if (tips.size === 0) return rows
+
+  return rows.flatMap((row): GitLogRow[] => {
+    if (row.type !== 'commit') return [row]
+    if (helperHashes.has(row.hash)) return []
+    if (tips.has(row.hash)) {
+      return [{ ...row, parents: row.parents.filter((hash, index) => index === 0 || !helperHashes.has(hash)) }]
+    }
+    return [row]
+  })
+}
+
 export async function getLogRows(
   git: SimpleGit,
   argv: LogArgv,
@@ -610,6 +662,10 @@ export async function getCommitFilePreview(
       line.startsWith(' ')
     ))
     .slice(0, limit)
+  // NOT sanitised here (#2204): these lines are also the source of
+  // `extractDiffHunk` -> `git apply`, so a CRLF file's `\r` must survive.
+  // Control bytes are neutralised when the lines are rendered
+  // (`stripTerminalControl` in the cell-layout helpers).
 
   // #884 — replace LFS pointer hunks and submodule "Subproject
   // commit" hunks with one-line summaries. Both detections are

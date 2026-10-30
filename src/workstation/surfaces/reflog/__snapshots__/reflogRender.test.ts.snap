@@ -26,7 +26,7 @@ exports[`renderReflogSurface structural snapshot — empty 1`] = `
   <Text
     dimColor={true}
   >
-    No reflog entries. Activity in this repo will appear here over time.
+    No reflog entries yet. Press gh to return to history.
   </Text>
 </Box>
 `;
@@ -55,7 +55,9 @@ exports[`renderReflogSurface structural snapshot — populated 1`] = `
     </Text>
   </Box>
   <Text
+    backgroundColor="#1a3a4a"
     bold={true}
+    color="#ffffff"
     dimColor={false}
   >
     &gt; 2 hours ago commit abc1234  latest work

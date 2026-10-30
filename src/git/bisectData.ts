@@ -1,5 +1,6 @@
 import { existsSync } from 'fs'
 import { SimpleGit } from 'simple-git'
+import { resolveGitPath } from './gitPath'
 
 /**
  * Bisect state surfacing for the TUI (#784).
@@ -79,7 +80,7 @@ const EMPTY_STATUS: BisectStatus = {
 
 async function bisectIsActive(git: SimpleGit): Promise<boolean> {
   try {
-    const path = (await git.revparse(['--git-path', 'BISECT_LOG'])).trim()
+    const path = await resolveGitPath(git, 'BISECT_LOG')
     return path.length > 0 && existsSync(path)
   } catch {
     return false

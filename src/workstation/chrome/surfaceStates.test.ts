@@ -44,8 +44,8 @@ describe('log Ink surface states', () => {
   describe('formatLogInkTagsEmpty', () => {
     it('returns a tailored hint when no filter is active', () => {
       const message = formatLogInkTagsEmpty({ filter: '' })
-      expect(message).toContain('No tags found')
-      expect(message).toContain('git tag')
+      expect(message).toContain('No tags yet')
+      expect(message).toContain('Press +')
     })
 
     it('flags the active filter and tells users how to clear it', () => {
@@ -59,7 +59,8 @@ describe('log Ink surface states', () => {
     it('returns a tailored hint when no filter is active', () => {
       const message = formatLogInkStashEmpty({ filter: '' })
       expect(message).toContain('No stashes')
-      expect(message).toContain('gs') // hints at status view
+      // The real create-stash binding (createStash, normal context).
+      expect(message).toBe('No stashes. Press gZ to stash your changes.')
     })
 
     it('flags the active filter and tells users how to clear it', () => {
@@ -75,7 +76,7 @@ describe('log Ink surface states', () => {
   describe('formatLogInkWorktreesEmpty', () => {
     it('returns a tailored hint when no filter is active', () => {
       const message = formatLogInkWorktreesEmpty({ filter: '' })
-      expect(message).toBe('No linked worktrees.')
+      expect(message).toBe('No linked worktrees. Add one with `git worktree add <path>`, then press r to refresh.')
     })
 
     it('flags the active filter and tells users how to clear it', () => {
@@ -85,7 +86,7 @@ describe('log Ink surface states', () => {
     })
 
     it('treats whitespace-only filter as no filter', () => {
-      expect(formatLogInkWorktreesEmpty({ filter: '   ' })).toBe('No linked worktrees.')
+      expect(formatLogInkWorktreesEmpty({ filter: '   ' })).toBe('No linked worktrees. Add one with `git worktree add <path>`, then press r to refresh.')
     })
   })
 
@@ -126,7 +127,7 @@ describe('log Ink surface states', () => {
 
     it('reports a generic empty viewport when commits exist but none are visible', () => {
       const message = formatLogInkHistoryEmpty({ filter: '', totalCommits: 5 })
-      expect(message).toBe('No commits in view.')
+      expect(message).toBe('No commits in view. Press r to reload history.')
     })
   })
 
@@ -179,6 +180,38 @@ describe('PR diff loading / error states (#1363)', () => {
   })
 
   it('distinguishes an empty patch from a failed fetch', () => {
-    expect(formatLogInkPullRequestDiffEmpty()).toBe('No diff to display for this pull request.')
+    expect(formatLogInkPullRequestDiffEmpty()).toBe('No diff to display for this pull request. Press esc to go back.')
+  })
+})
+
+// #2166 — every empty and error state names the next key to press.
+describe('empty and error states name the next key (#2166)', () => {
+  const states = jest.requireActual('./surfaceStates') as Record<string, unknown>
+  const variants: Record<string, unknown>[] = [
+    { filter: '' },
+    { filter: 'abc' },
+    { filter: '', totalCommits: 0 },
+    { filter: '', totalCommits: 5 },
+    { hasChanges: false, hasStaged: false },
+    { path: 'a.ts', failureMessage: 'boom' },
+    { path: 'a.ts' },
+    { resource: 'Pull requests' },
+    { resource: 'Issues', authHint: 'Set GITEA_TOKEN.' },
+    { message: 'auth expired.' },
+  ]
+
+  it.each(Object.keys(states).filter((name) => name.startsWith('format') && name !== 'formatLogInkLoading'))('%s', (name) => {
+    const format = states[name] as (args?: Record<string, unknown>) => string | undefined
+    const outputs = new Set<string>()
+    for (const args of variants) {
+      try {
+        const text = format(args)
+        if (typeof text === 'string' && text) outputs.add(text)
+      } catch {
+        // Not every formatter accepts every argument shape.
+      }
+    }
+    expect(outputs.size).toBeGreaterThan(0)
+    for (const text of outputs) expect(text).toMatch(/\bpress\b/i)
   })
 })

@@ -11,6 +11,7 @@
  * clears the plan).
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import type { RebaseTodoAction } from '../../../git/rebasePlanActions'
 import { truncateCells } from '../../chrome/text'
@@ -85,8 +86,8 @@ export function renderRebaseSurface(ctx: SurfaceRenderContext): ReactTypes.React
         h(Text, {
           key: `rebase-row-${row.sha}`,
           color: isSelected ? (theme.noColor ? undefined : theme.colors.accent) : actionColor(row.action, theme),
-          bold: isSelected,
           dimColor: !isSelected && row.action === 'drop',
+          ...selectionRowProps(theme, isSelected, focused),
         }, truncateCells(line, Math.max(10, width - 4)))
       )
     }

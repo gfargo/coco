@@ -81,7 +81,7 @@ export async function loadLogInkContext(
       safe(getTagOverview(git)),
       safe(getWorktreeOverview(git, snapshot)),
       safe(getStashOverview(git)),
-      safe(getWorktreeListOverview(git)),
+      safe(getWorktreeListOverview(git, snapshot)),
       safe(getGitOperationOverview(git, snapshot)),
       skipForge ? Promise.resolve(undefined) : safe(getProviderOverview(git)),
       safe(getReflogOverview(git)),
@@ -187,9 +187,28 @@ export type UseContextRefreshDeps = {
   setWorktreeDiffRefreshToken: ReactTypes.Dispatch<ReactTypes.SetStateAction<number>>
 }
 
+export type RefreshContextOptions = {
+  silent?: boolean
+  /**
+   * Set by the fs watcher for its own refreshes. Every other caller is coco
+   * reacting to a change it made (or a manual `r`), which the watcher uses
+   * to tell its echo of that change from an outside one (#2209).
+   */
+  fromWatcher?: boolean
+  /**
+   * Also drop the cached issue and PR triage lists so an open triage view
+   * fetches them again. The lists are loaded lazily and kept across
+   * refreshes, so without this a manual `r` after `gh auth login` changed
+   * nothing, though the empty states say to press it (#2166 review).
+   */
+  refetchForgeLists?: boolean
+}
+
 export type UseContextRefreshResult = {
-  refreshContext: (options?: { silent?: boolean }) => Promise<void>
+  refreshContext: (options?: RefreshContextOptions) => Promise<void>
   refreshWorktreeContext: (options?: { silent?: boolean }) => Promise<LogInkContext['worktree']>
+  /** `Date.now()` when a refresh not issued by the watcher last started; 0 before any. */
+  lastSelfRefreshAtRef: ReactTypes.MutableRefObject<number>
 }
 
 export function useContextRefresh(
@@ -222,7 +241,10 @@ export function useContextRefresh(
   const currentWorktreeRef = React.useRef(currentWorktree)
   currentWorktreeRef.current = currentWorktree
 
-  const refreshContext = React.useCallback(async (options: { silent?: boolean } = {}) => {
+  const lastSelfRefreshAtRef = React.useRef(0)
+
+  const refreshContext = React.useCallback(async (options: RefreshContextOptions = {}) => {
+    if (!options.fromWatcher) lastSelfRefreshAtRef.current = Date.now()
     const issuedAtDepth = runtimesLength - 1
     const requestId = (refreshContextRequestRef.current[issuedAtDepth] ?? 0) + 1
     refreshContextRequestRef.current[issuedAtDepth] = requestId
@@ -244,7 +266,10 @@ export function useContextRefresh(
     // waiting on the (batched, async) `setContext` write to land.
     const rectification = computeRefreshRectificationSnapshot(stateRef.current, next)
     // OSS-452 — merge, don't replace: preserves lazily-loaded slices.
-    setContext((current) => mergeRefreshedContext(current, next), issuedAtDepth)
+    setContext((current) => {
+      const merged = mergeRefreshedContext(current, next)
+      return options.refetchForgeLists ? { ...merged, issueList: undefined, pullRequestList: undefined } : merged
+    }, issuedAtDepth)
     if (hasRefreshRectification(rectification)) {
       dispatch({ type: 'rectifyPromotedSelections', snapshot: rectification })
     }
@@ -313,5 +338,5 @@ export function useContextRefresh(
     return worktree
   }, [git, runtimesLength, setContext, setContextStatus, setWorktreeDiffRefreshToken])
 
-  return { refreshContext, refreshWorktreeContext }
+  return { refreshContext, refreshWorktreeContext, lastSelfRefreshAtRef }
 }

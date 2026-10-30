@@ -22,7 +22,7 @@ import { createLogInkContextStatus } from '../../chrome/context'
 import { createLogInkTheme } from '../../chrome/theme'
 import type { GitLogRow } from '../../../git/logData'
 import type { LogInkContext, LogInkComponents } from '../../runtime/types'
-import { formatHistoryFetchArgs, renderHistoryPanel } from './index'
+import { formatHistoryFetchArgs, renderHistoryPanel, stackedItemLineCost } from './index'
 
 // Synthetic stubs for Ink's <Text> / <Box> — collect every prop the
 // renderer passes (color, dimColor, bold, children, …) and render
@@ -263,6 +263,52 @@ describe('renderHistoryPanel', () => {
       expect(strings).not.toContain('·')
     })
 
+    // #1819 — refs that are not the branch chip (tags, origin/HEAD) ride on
+    // the commit row instead of a detached second line.
+    const taggedState = () => createLogInkState([
+      makeCommit({ shortHash: 'aaa1111', hash: 'aaa1111', parents: ['bbb2222'], message: 'feat: x', refs: ['HEAD -> main'] }),
+      makeCommit({ shortHash: 'bbb2222', hash: 'bbb2222', parents: [], message: 'fix: y', refs: ['tag: v1.2.0', 'origin/HEAD'] }),
+    ], { fullGraph: true })
+    const stackRows = (node: unknown, out: Array<{ key: string; children: unknown }> = []) => {
+      if (Array.isArray(node)) { node.forEach((child) => stackRows(child, out)); return out }
+      if (!node || typeof node !== 'object' || !('props' in node)) return out
+      const key = (node as { key?: unknown }).key
+      const children = (node as { props: { children?: unknown } }).props.children
+      if (typeof key === 'string' && key.endsWith('-stack')) out.push({ key, children })
+      else stackRows(children, out)
+      return out
+    }
+
+    it('keeps tag refs on the commit row under bucketing, one line per commit', () => {
+      const tree = render(taggedState(), { rowMode: 'stacked', width: 60, dateBucketingEnabled: true })
+      const tagged = stackRows(tree).find((row) => row.key.startsWith('bbb2222'))!
+      expect(Array.isArray(tagged.children) ? tagged.children.length : 1).toBe(1)
+      expect(collectStrings(tagged.children, []).join('')).toContain('tag: v1.2.0')
+    })
+
+    it('leaves the refs to the inspector when the row has no room for them', () => {
+      const tree = render(taggedState(), { rowMode: 'stacked', width: 22, dateBucketingEnabled: true })
+      const tagged = stackRows(tree).find((row) => row.key.startsWith('bbb2222'))!
+      expect(Array.isArray(tagged.children) ? tagged.children.length : 1).toBe(1)
+      expect(collectStrings(tagged.children, []).join('')).not.toContain('tag:')
+    })
+
+    it('keeps a slice of a roomy rail row for refs when the subject is long', () => {
+      const state = createLogInkState([
+        makeCommit({ shortHash: 'aaa1111', hash: 'aaa1111', parents: ['bbb2222'], message: 'feat: x', refs: ['HEAD -> main'] }),
+        makeCommit({ shortHash: 'bbb2222', hash: 'bbb2222', parents: [], message: `fix: ${'long subject words '.repeat(8)}`, refs: ['tag: v1.2.0'] }),
+      ], { fullGraph: true })
+      const tree = render(state, { rowMode: 'stacked', width: 70, dateBucketingEnabled: true })
+      const tagged = stackRows(tree).find((row) => row.key.startsWith('bbb2222'))!
+      expect(collectStrings(tagged.children, []).join('')).toContain('tag: v1.2.0')
+    })
+
+    it('counts every bucketed rail commit as one line', () => {
+      const item = { type: 'commit', commit: { refs: ['tag: v1'] }, graph: '', selected: false } as never
+      expect(stackedItemLineCost(item, { fullGraph: true, bucketed: true })).toBe(1)
+      expect(stackedItemLineCost(item, { fullGraph: true, bucketed: false })).toBe(2)
+    })
+
     it('skips per-commit graph transition rows in stacked mode', () => {
       const single = render(makeState(), { rowMode: 'single', width: 120 })
       const stacked = render(makeState(), { rowMode: 'stacked', width: 40 })
@@ -456,5 +502,51 @@ describe('formatHistoryFetchArgs', () => {
 
   it('falls back to "none" when no filter is active', () => {
     expect(formatHistoryFetchArgs({})).toBe('none')
+  })
+})
+
+// #2204 — end-to-end: a hostile commit subject, author and ref must not put
+// a terminal control sequence into anything the history panel renders.
+describe('renderHistoryPanel with hostile commit content (#2204)', () => {
+  const ESC = '\u001b'
+  const OSC52 = `${ESC}]52;c;ZXZpbA==\u0007`
+
+  // Flatten every string child in the rendered tree.
+  function allText(node: unknown, out: string[] = []): string[] {
+    if (typeof node === 'string') { out.push(node); return out }
+    if (Array.isArray(node)) { node.forEach((child) => allText(child, out)); return out }
+    if (node && typeof node === 'object' && 'props' in node) {
+      allText((node as { props: StubProps }).props.children, out)
+    }
+    return out
+  }
+
+  it('emits no escape, BEL or carriage return for a crafted subject, author or ref', () => {
+    const rows = [
+      makeCommit({
+        shortHash: 'ddd4444',
+        hash: 'ddd4444',
+        message: `feat: ${OSC52}pwned\rsubject`,
+        author: `Eve${OSC52}`,
+        refs: [`HEAD -> main${OSC52}`],
+      }),
+    ]
+    const state = { ...createLogInkState(rows), rows, commits: rows, filteredCommits: rows } as LogInkState
+    // The history panel renders through stub components, so descend by
+    // rendering each function component to its element tree.
+    const expand = (node: unknown): unknown => {
+      if (node && typeof node === 'object' && 'type' in node) {
+        const element = node as ReactElement
+        if (typeof element.type === 'function') {
+          return expand((element.type as (props: unknown) => unknown)(element.props))
+        }
+        const props = element.props as StubProps
+        return { props: { children: Array.isArray(props.children) ? props.children.map(expand) : expand(props.children) } }
+      }
+      return node
+    }
+    const text = allText(expand(render(state))).join('')
+    expect(text).toContain('feat:')
+    expect(text).not.toMatch(/[\u001b\u0007\r]/)
   })
 })

@@ -1,11 +1,177 @@
 {
   "root": true,
   "parser": "@typescript-eslint/parser",
-  "extends": ["plugin:@typescript-eslint/recommended"],
-  "plugins": ["react-hooks"],
-  "parserOptions": { "ecmaVersion": 2018, "sourceType": "module" },
+  "extends": [
+    "plugin:@typescript-eslint/recommended"
+  ],
+  "plugins": [
+    "react-hooks"
+  ],
+  "parserOptions": {
+    "ecmaVersion": 2018,
+    "sourceType": "module"
+  },
   "rules": {
     "react-hooks/rules-of-hooks": "error",
     "react-hooks/exhaustive-deps": "warn"
-  }
+  },
+  // Layering (#2218): lib <- git <- workstation <- commands. A lower layer
+  // must not import a higher one; workstation may import commands/log.
+  "overrides": [
+    {
+      "files": [
+        "src/lib/**/*.ts",
+        "src/lib/**/*.tsx"
+      ],
+      "excludedFiles": [
+        "**/*.test.ts",
+        "**/*.test.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../git/*",
+                  "../../git/*",
+                  "../../../git/*",
+                  "../../../../git/*",
+                  "../../../../../git/*",
+                  "../git",
+                  "../../git",
+                  "../../../git",
+                  "../../../../git",
+                  "../../../../../git",
+                  "../workstation/*",
+                  "../../workstation/*",
+                  "../../../workstation/*",
+                  "../../../../workstation/*",
+                  "../../../../../workstation/*",
+                  "../workstation",
+                  "../../workstation",
+                  "../../../workstation",
+                  "../../../../workstation",
+                  "../../../../../workstation",
+                  "../commands/*",
+                  "../../commands/*",
+                  "../../../commands/*",
+                  "../../../../commands/*",
+                  "../../../../../commands/*",
+                  "../commands",
+                  "../../commands",
+                  "../../../commands",
+                  "../../../../commands",
+                  "../../../../../commands"
+                ],
+                "message": "Layering is lib <- git <- workstation <- commands: a lower layer must not import from a higher one. Move the shared type or helper down instead (#2218)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/git/**/*.ts"
+      ],
+      "excludedFiles": [
+        "**/*.test.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../workstation/*",
+                  "../../workstation/*",
+                  "../../../workstation/*",
+                  "../../../../workstation/*",
+                  "../../../../../workstation/*",
+                  "../workstation",
+                  "../../workstation",
+                  "../../../workstation",
+                  "../../../../workstation",
+                  "../../../../../workstation",
+                  "../commands/*",
+                  "../../commands/*",
+                  "../../../commands/*",
+                  "../../../../commands/*",
+                  "../../../../../commands/*",
+                  "../commands",
+                  "../../commands",
+                  "../../../commands",
+                  "../../../../commands",
+                  "../../../../../commands"
+                ],
+                "message": "Layering is lib <- git <- workstation <- commands: a lower layer must not import from a higher one. Move the shared type or helper down instead (#2218)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/workstation/**/*.ts",
+        "src/workstation/**/*.tsx"
+      ],
+      "excludedFiles": [
+        "**/*.test.ts",
+        "**/*.test.tsx"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "../commands/*",
+                  "../../commands/*",
+                  "../../../commands/*",
+                  "../../../../commands/*",
+                  "../../../../../commands/*",
+                  "!../commands/log",
+                  "!../../commands/log",
+                  "!../../../commands/log",
+                  "!../../../../commands/log",
+                  "!../../../../../commands/log",
+                  "!../commands/log/*",
+                  "!../../commands/log/*",
+                  "!../../../commands/log/*",
+                  "!../../../../commands/log/*",
+                  "!../../../../../commands/log/*"
+                ],
+                "message": "Layering is lib <- git <- workstation <- commands: a lower layer must not import from a higher one. Move the shared type or helper down instead (#2218)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    // Frozen allowlist: files that predated the layering rule (#2218).
+    // Remove an entry once its file is fixed; never add one.
+    {
+      "files": [
+        "src/git/aiActions.ts",
+        "src/git/commitWorkflowActions.ts",
+        "src/git/conflictAiActions.ts",
+        "src/git/logData.ts",
+        "src/lib/autofix/buildPrompt.ts",
+        "src/lib/autofix/index.ts",
+        "src/lib/config/types.ts",
+        "src/lib/ui/TaskList.ts",
+        "src/lib/ui/editPrompt.ts",
+        "src/lib/utils/commandExecutor.ts",
+        "src/workstation/runtime/splitPlanState.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
 }

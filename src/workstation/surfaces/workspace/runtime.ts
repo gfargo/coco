@@ -97,6 +97,8 @@ import {
   writeWorkspacePreferences,
 } from '../../chrome/workspacePreferences'
 import { isGitWorkingTree } from '../../../git/workspaceData'
+import { createLatestGate } from './latestGate'
+import { createSummaryBatcher } from './summaryBatcher'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
 /**
@@ -160,6 +162,8 @@ export type WorkspaceStartOptions = {
   roots: ReadonlyArray<string>
   knownRepos?: ReadonlyArray<string>
   maxDepth?: number
+  /** Follow symlinked directories during discovery (`workspace.followSymlinks`). */
+  followSymlinks?: boolean
   appLabel?: string
   theme?: LogInkThemeConfig
   /**
@@ -176,7 +180,8 @@ export type WorkspaceStartOptions = {
   /** Override discovery (used by tests). */
   loadOverview?: (
     roots: ReadonlyArray<string>,
-    knownRepos: ReadonlyArray<string>
+    knownRepos: ReadonlyArray<string>,
+    onRepoSummary?: (summary: WorkspaceRepoSummary) => void
   ) => Promise<WorkspaceOverview>
   /**
    * Override gh PR-count fetch (used by tests + when caller already
@@ -221,8 +226,16 @@ export async function startWorkspace(
 
   const loadOverview =
     options.loadOverview ??
-    ((roots: ReadonlyArray<string>, repos: ReadonlyArray<string>) =>
-      getWorkspaceOverview(roots, { knownRepos: repos, maxDepth: options.maxDepth }))
+    ((
+      roots: ReadonlyArray<string>,
+      repos: ReadonlyArray<string>,
+      onRepoSummary?: (summary: WorkspaceRepoSummary) => void
+    ) => getWorkspaceOverview(roots, {
+        knownRepos: repos,
+        maxDepth: options.maxDepth,
+        followSymlinks: options.followSymlinks,
+        onRepoSummary,
+      }))
 
   const loadPullRequestCounts: (
     repos: ReadonlyArray<WorkspaceRepoSummary>,
@@ -364,7 +377,27 @@ export function flushWorkspaceTrace(): void {
   }
 }
 
-function installWorkspaceDebugHandlers(): void {
+/**
+ * Registering a listener for a signal replaces Node's default action for it
+ * (terminate), so a handler that only logged and flushed made `Ctrl-C` stop
+ * working wherever the TTY is in cooked mode, such as while `$EDITOR` runs
+ * (#1873). Log and flush, then take the listener off and, if nothing else is
+ * handling the signal (`terminalLifecycle` exits on SIGTERM itself), send it
+ * again so the process dies exactly as it would without the debug flag.
+ */
+function traceSignalWithoutSwallowingIt(signal: 'SIGINT' | 'SIGTERM'): void {
+  const handler = (): void => {
+    workspaceDebug(signal)
+    flushWorkspaceTrace()
+    process.removeListener(signal, handler)
+    if (process.listenerCount(signal) === 0) {
+      process.kill(process.pid, signal)
+    }
+  }
+  process.on(signal, handler)
+}
+
+export function installWorkspaceDebugHandlers(): void {
   if (workspaceDebugInstalled || !workspaceDebugEnabled()) return
   workspaceDebugInstalled = true
   process.on('uncaughtException', (err) => {
@@ -379,8 +412,8 @@ function installWorkspaceDebugHandlers(): void {
     workspaceDebug(`process.exit code=${code}`)
     flushWorkspaceTrace()
   })
-  process.on('SIGINT', () => { workspaceDebug('SIGINT'); flushWorkspaceTrace() })
-  process.on('SIGTERM', () => { workspaceDebug('SIGTERM'); flushWorkspaceTrace() })
+  traceSignalWithoutSwallowingIt('SIGINT')
+  traceSignalWithoutSwallowingIt('SIGTERM')
   workspaceDebug(`debug buffer opened pid=${process.pid} cwd=${process.cwd()}`)
 }
 
@@ -429,7 +462,8 @@ type WorkspaceInkAppProps = {
   knownRepos: ReadonlyArray<string>
   loadOverview: (
     roots: ReadonlyArray<string>,
-    knownRepos: ReadonlyArray<string>
+    knownRepos: ReadonlyArray<string>,
+    onRepoSummary?: (summary: WorkspaceRepoSummary) => void
   ) => Promise<WorkspaceOverview>
   loadPullRequestCounts: (
     repos: ReadonlyArray<WorkspaceRepoSummary>,
@@ -572,15 +606,31 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   // refresh (and, once resurrected, `d` refused to remove it again
   // because the store no longer listed it).
   const knownReposRef = React.useRef<ReadonlyArray<string>>(props.knownRepos)
+  // Latest overview load wins (#2210): older results are dropped.
+  const loadGateRef = React.useRef(createLatestGate())
+  // PR counts get their own gate: delete / add / clone reload discovery
+  // only, so gating counts on the overview gate dropped them whenever one
+  // of those ran mid-fetch (final review). Counts are keyed by path, so a
+  // newer discovery does not make them stale; only a newer count fetch does.
+  const prGateRef = React.useRef(createLatestGate())
 
   // Background discovery + PR-count refresh on mount.
   React.useEffect(() => {
     let cancelled = false
     dispatch({ type: 'set-loading', loading: true })
     void (async () => {
+      const isCurrent = loadGateRef.current.begin()
+      let isCurrentPr: (() => boolean) | undefined
+      // Rows stream in as each repo finishes instead of waiting for the
+      // slowest one (#2210); the final overview below supersedes them.
+      const batcher = createSummaryBatcher((batch) => {
+        if (cancelled || unmountedRef.current || !isCurrent()) return
+        dispatch({ type: 'merge-repo-summaries', repos: batch })
+      })
       try {
-        const overview = await props.loadOverview(props.roots, knownReposRef.current)
-        if (cancelled || unmountedRef.current) return
+        const overview = await props.loadOverview(props.roots, knownReposRef.current, batcher.push)
+        batcher.cancel()
+        if (cancelled || unmountedRef.current || !isCurrent()) return
         writeCachedWorkspace(props.roots, overview)
         dispatch({ type: 'replace-overview', overview })
         if (props.resume?.selectedRepoPath) {
@@ -593,11 +643,12 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           type: 'set-pull-request-fetching',
           paths: overview.repos.map((entry) => entry.path),
         })
+        isCurrentPr = prGateRef.current.begin()
         const pr = await props.loadPullRequestCounts(overview.repos, (path) => {
           if (cancelled || unmountedRef.current) return
           dispatch({ type: 'mark-pull-request-fetched', path })
         })
-        if (cancelled || unmountedRef.current) return
+        if (cancelled || unmountedRef.current || !isCurrentPr()) return
         dispatch({
           type: 'replace-pull-request-counts',
           counts: pr.counts,
@@ -614,7 +665,8 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           })
         }
       } catch (err) {
-        if (cancelled || unmountedRef.current) return
+        batcher.cancel()
+        if (cancelled || unmountedRef.current || !(isCurrentPr ?? isCurrent)()) return
         dispatch({ type: 'set-pull-request-fetching', paths: [] })
         dispatch({ type: 'set-loading', loading: false })
         dispatch({
@@ -637,11 +689,20 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     // stayed on the same ROW NUMBER but a different repo, and Enter
     // drilled into the wrong one. Every other list-mutating flow
     // (add / clone / resume) already anchors by path.
+    // `r` while a load is already running is a no-op (#2210).
+    if (stateRef.current.loading) return
     const focusedPath = selectFocusedRepo(stateRef.current)?.path
+    const isCurrent = loadGateRef.current.begin()
+    let isCurrentPr: (() => boolean) | undefined
+    const batcher = createSummaryBatcher((batch) => {
+      if (unmountedRef.current || !isCurrent()) return
+      dispatch({ type: 'merge-repo-summaries', repos: batch })
+    })
     dispatch({ type: 'set-loading', loading: true })
     try {
-      const overview = await props.loadOverview(props.roots, knownReposRef.current)
-      if (unmountedRef.current) return
+      const overview = await props.loadOverview(props.roots, knownReposRef.current, batcher.push)
+      batcher.cancel()
+      if (unmountedRef.current || !isCurrent()) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       if (focusedPath) {
@@ -652,11 +713,12 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         type: 'set-pull-request-fetching',
         paths: overview.repos.map((entry) => entry.path),
       })
+      isCurrentPr = prGateRef.current.begin()
       const pr = await props.loadPullRequestCounts(overview.repos, (path) => {
         if (unmountedRef.current) return
         dispatch({ type: 'mark-pull-request-fetched', path })
       })
-      if (unmountedRef.current) return
+      if (unmountedRef.current || !isCurrentPr()) return
       dispatch({
         type: 'replace-pull-request-counts',
         counts: pr.counts,
@@ -664,7 +726,9 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       })
       dispatch({ type: 'set-pull-request-fetching', paths: [] })
     } catch (err) {
-      if (unmountedRef.current) return
+      batcher.cancel()
+      if (unmountedRef.current || !(isCurrentPr ?? isCurrent)()) return
+      if (isCurrentPr) dispatch({ type: 'set-pull-request-fetching', paths: [] })
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
@@ -756,12 +820,15 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'cancel-delete' })
     dispatch({ type: 'set-status', status: `Removed ${target}.` })
     // Refresh discovery so the deleted entry drops out of the list.
+    const isCurrent = loadGateRef.current.begin()
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, knownReposRef.current)
+      if (!isCurrent() || unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
     } catch (err) {
+      if (!isCurrent() || unmountedRef.current) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
@@ -799,13 +866,16 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'set-status', status: `Added ${candidate}.` })
     // Refresh discovery so the new repo lands in the list and the
     // cursor anchors onto it.
+    const isCurrent = loadGateRef.current.begin()
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, knownReposRef.current)
+      if (!isCurrent() || unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       dispatch({ type: 'anchor-cursor-by-path', path: candidate })
     } catch (err) {
+      if (!isCurrent() || unmountedRef.current) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
@@ -857,13 +927,16 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'replace-known-repos', paths: updated })
     dispatch({ type: 'set-focus', focus: 'list' })
     dispatch({ type: 'set-status', status: result.message })
+    const isCurrent = loadGateRef.current.begin()
     dispatch({ type: 'set-loading', loading: true })
     try {
       const overview = await props.loadOverview(props.roots, knownReposRef.current)
+      if (!isCurrent() || unmountedRef.current) return
       writeCachedWorkspace(props.roots, overview)
       dispatch({ type: 'replace-overview', overview })
       dispatch({ type: 'anchor-cursor-by-path', path: repoPath })
     } catch (err) {
+      if (!isCurrent() || unmountedRef.current) return
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',

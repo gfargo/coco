@@ -69,6 +69,7 @@ import type { FilteredLists } from './buildFilteredLists'
 import type { StatusSurfaceData } from './buildStatusSurfaceData'
 import type { LogInkContext } from '../types'
 import { getLogInkWorkflowActionById } from '../inkWorkflows'
+import { needsConfirmation } from '../confirmationGate'
 
 export type UseInputHandlerDeps = {
   /** The reducer state — active view, selection indices, filter, diff source. */
@@ -154,14 +155,14 @@ export type UseInputHandlerDeps = {
   exit: () => void
 
   /** Loud / silent repository-context refresh. */
-  refreshContext: (options?: { silent?: boolean }) => Promise<void>
+  refreshContext: (options?: { silent?: boolean; refetchForgeLists?: boolean }) => Promise<void>
   /** Re-fetch the history rows. */
   refreshHistoryRows: () => Promise<void>
 
   /** Worktree staging / revert callbacks (`useWorktreeStageActions`). */
   toggleSelectedFileStage: () => Promise<void>
   toggleSelectedHunkStage: () => Promise<void>
-  revertSelectedFile: () => Promise<void>
+  revertSelectedFile: (path?: string) => Promise<void>
   revertSelectedHunk: () => Promise<void>
   stageSelectedLines: () => Promise<void>
   revertSelectedLines: () => Promise<void>
@@ -185,6 +186,8 @@ export type UseInputHandlerDeps = {
   /** AI conflict-resolution callbacks (`useConflictResolutionActions`). */
   startConflictResolution: () => Promise<void>
   cancelConflictResolution: () => void
+  /** Esc during a fetch / pull / push (`useWorkflowAction`). */
+  cancelRemoteOp: () => void
   acceptConflictProposal: () => Promise<void>
   acceptAllConflictProposals: () => Promise<void>
   editConflictProposal: () => Promise<void>
@@ -287,6 +290,7 @@ export function useInputHandler(
     cancelChangelog,
     startConflictResolution,
     cancelConflictResolution,
+    cancelRemoteOp,
     acceptConflictProposal,
     acceptAllConflictProposals,
     editConflictProposal,
@@ -325,6 +329,11 @@ export function useInputHandler(
       })
       return
     }
+
+    // The "Terminal too small" screen hides every prompt, so a key that
+    // reached the handlers could answer a y-confirm the user can't see
+    // (#2204). Ctrl+C above is the only key that works until they resize.
+    if (layout.tooSmall) return
 
     // First-launch onboarding (P1.3): any keystroke dismisses the overlay
     // and writes the seen-marker. Swallow the keystroke so the same key
@@ -643,14 +652,14 @@ export function useInputHandler(
         // commits existed at boot — new commits (made in another
         // terminal, or remote commits brought in by a fetch) never
         // appear until relaunch, which reads as "the history is stuck."
-        void refreshContext()
+        void refreshContext({ refetchForgeLists: true })
         void refreshHistoryRows()
       } else if (event.type === 'toggleSelectedFileStage') {
         void toggleSelectedFileStage()
       } else if (event.type === 'toggleSelectedHunkStage') {
         void toggleSelectedHunkStage()
       } else if (event.type === 'revertSelectedFile') {
-        void revertSelectedFile()
+        void revertSelectedFile(event.path)
       } else if (event.type === 'revertSelectedHunk') {
         void revertSelectedHunk()
       } else if (event.type === 'stageSelectedLines') {
@@ -675,6 +684,8 @@ export function useInputHandler(
         void startConflictResolution()
       } else if (event.type === 'cancelConflictResolution') {
         cancelConflictResolution()
+      } else if (event.type === 'cancelRemoteOp') {
+        cancelRemoteOp()
       } else if (event.type === 'acceptConflictProposal') {
         void acceptConflictProposal()
       } else if (event.type === 'acceptAllConflictProposals') {
@@ -703,17 +714,10 @@ export function useInputHandler(
         // Centralized confirmation gate (#1445): if the registry declares
         // requiresConfirmation and the user hasn't already consented
         // (via y-confirm overlay, choice selection, or input-prompt
-        // submission), redirect to the confirmation overlay. Consent is
-        // detected by: (a) the event carries `confirmed: true`, OR
-        // (b) there's an active pendingConfirmationId matching this id
-        // (meaning the y-press handler emitted us), OR (c) a choice
-        // prompt was just active (meaning an option was picked).
+        // submission), redirect to the confirmation overlay. What counts as
+        // consent is defined in `needsConfirmation` (confirmationGate.ts).
         const workflow = getLogInkWorkflowActionById(event.id)
-        const alreadyConfirmed =
-          event.confirmed ||
-          state.pendingConfirmationId === event.id ||
-          Boolean(state.pendingChoice)
-        if (workflow?.requiresConfirmation && !alreadyConfirmed) {
+        if (needsConfirmation(workflow, event, state)) {
           dispatch({ type: 'setPendingConfirmation', value: event.id, payload: event.payload })
         } else {
           void runWorkflowAction(event.id, event.payload)

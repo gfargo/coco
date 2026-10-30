@@ -1081,6 +1081,42 @@ export function getLogInkChordContinuations(prefix: string): LogInkChordContinua
 export type LogInkFooterHints = {
   contextual: string[]
   global: string[]
+  /** True when contextual hints were left out; the footer then shows `g? more` (#2160). */
+  more?: boolean
+}
+
+/**
+ * Most contextual hints a view's footer shows (#2160). Several views had
+ * 10-18, more than fit on a row, and the footer trimmed from the end, which
+ * is where `esc back` sat. Each view lists its hints most-useful first; the
+ * rest stay reachable through `g?` (the view's keys) and `?` (all keys).
+ */
+export const FOOTER_CONTEXTUAL_HINT_CAP = 6
+
+/**
+ * Apply the cap, and pin `esc back` into the global cluster, which is never
+ * trimmed: it is the key a lost user needs, so it must not be what falls
+ * off a long hint list.
+ */
+function capFooterHints(hints: LogInkFooterHints, options: GetLogInkFooterHintsOptions): LogInkFooterHints {
+  // Chord continuations, help, the palette and the filter prompt own the
+  // footer with their own instructions; those are not a view's hint list.
+  if (options.pendingKey || options.showHelp || options.showCommandPalette || options.filterMode) return hints
+  const escBack = t(en, 'keymap.footer.escBack')
+  const hasEscBack = hints.contextual.includes(escBack)
+  const contextual = hasEscBack ? hints.contextual.filter((hint) => hint !== escBack) : hints.contextual
+  // `<` and esc are the same binding (navigateBack), so the pinned
+  // `esc back` replaces `< back` rather than showing back twice (#2160 review).
+  const lessBack = t(en, 'keymap.footer.back')
+  const global = hasEscBack && !hints.global.includes(escBack)
+    ? [escBack, ...hints.global.filter((hint) => hint !== lessBack)]
+    : hints.global
+  const more = Boolean(hints.more) || contextual.length > FOOTER_CONTEXTUAL_HINT_CAP
+  return {
+    contextual: contextual.slice(0, FOOTER_CONTEXTUAL_HINT_CAP),
+    global,
+    ...(more ? { more } : {}),
+  }
 }
 
 /**
@@ -1462,9 +1498,9 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
   // be a footer lie. Hidden entirely at depth 0 rather than always
   // shown-but-inert — an undo hint that does nothing is noise.
   if (options.undoStackSize && options.undoStackSize > 0 && hints.global === NORMAL_GLOBAL_HINTS) {
-    return { ...hints, global: [...NORMAL_GLOBAL_HINTS, t(en, 'keymap.footer.undo', { count: options.undoStackSize })] }
+    return capFooterHints({ ...hints, global: [...NORMAL_GLOBAL_HINTS, t(en, 'keymap.footer.undo', { count: options.undoStackSize })] }, options)
   }
-  return hints
+  return capFooterHints(hints, options)
 }
 
 function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
@@ -1506,9 +1542,11 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
   }
 
   if (options.showCommandPalette) {
+    // Only keys the palette actually handles: every other printable key
+    // (including `:`, `?` and `q`) types into its filter (#2161 review).
     return {
-      contextual: [t(en, 'keymap.footer.close2'), t(en, 'keymap.footer.dTXConfirm'), t(en, 'keymap.footer.iMAi')],
-      global: [t(en, 'keymap.footer.help'), t(en, 'keymap.footer.qQuit')],
+      contextual: [t(en, 'keymap.footer.upDownSelect'), t(en, 'keymap.footer.enterRun'), t(en, 'keymap.footer.ctrlUClear')],
+      global: [t(en, 'keymap.footer.escClose')],
     }
   }
 
@@ -1751,7 +1789,9 @@ function rebaseHints(): LogInkFooterHints {
 
 function conflictsHints(): LogInkFooterHints {
   return {
-    contextual: [t(en, 'keymap.footer.files'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.sStage'), t(en, 'keymap.footer.uIncoming'), t(en, 'keymap.footer.uYours'), t(en, 'keymap.footer.oEdit'), t(en, 'keymap.footer.cContinue'), t(en, 'keymap.footer.escBack')],
+    // `C continue` ahead of `o edit`: finishing the operation is the step the
+    // capped footer (#2160) must keep.
+    contextual: [t(en, 'keymap.footer.files'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.sStage'), t(en, 'keymap.footer.uIncoming'), t(en, 'keymap.footer.uYours'), t(en, 'keymap.footer.cContinue'), t(en, 'keymap.footer.oEdit'), t(en, 'keymap.footer.escBack')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -1850,7 +1890,9 @@ function historyHints(options: GetLogInkFooterHintsOptions): LogInkFooterHints {
   // and the palette. `v range` (#1361) anchors a span for `c` to
   // cherry-pick as one command instead of the single cursored commit.
   return {
-    contextual: [t(en, 'keymap.footer.move'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.cRZIMutate'), t(en, 'keymap.footer.fFixup'), t(en, 'keymap.footer.bGtNew'), t(en, 'keymap.footer.mCompare'), t(en, 'keymap.footer.vRange'), t(en, 'keymap.footer.yYYank'), t(en, 'keymap.footer.search')],
+    // `/ search` third: it is one of the most used keys and sat last, so the
+    // capped footer (#2160) would have dropped it.
+    contextual: [t(en, 'keymap.footer.move'), t(en, 'keymap.footer.enterDiff'), t(en, 'keymap.footer.search'), t(en, 'keymap.footer.cRZIMutate'), t(en, 'keymap.footer.fFixup'), t(en, 'keymap.footer.bGtNew'), t(en, 'keymap.footer.mCompare'), t(en, 'keymap.footer.vRange'), t(en, 'keymap.footer.yYYank')],
     global: NORMAL_GLOBAL_HINTS,
   }
 }
@@ -2014,12 +2056,26 @@ export type LogInkPaletteCommand = {
   description: string
   workflowKind?: LogInkWorkflowActionKind
   requiresConfirmation?: boolean
+  /**
+   * Where a binding applies, shown next to entries that share a key so `[`
+   * reads as "previous tab (sidebar)" vs "previous hunk (diff)" (#2161).
+   */
+  context?: string
+  /** The individual keys (a binding's `keys`), for spotting shared keys. */
+  keyTokens?: string[]
 }
 
 function bindingToPaletteCommand(binding: LogInkKeyBinding): LogInkPaletteCommand {
+  // Only a binding that applies in exactly one place gets a context label:
+  // a global one (`normal` among its contexts) applies everywhere, and one
+  // listing several views would be mislabelled by its first (#2161 review).
+  const scoped = binding.contexts.filter((entry) => entry !== 'search')
+  const context = scoped.length === 1 && scoped[0] !== 'normal' ? scoped[0] : undefined
   return {
     id: binding.id,
     kind: 'binding',
+    ...(context ? { context } : {}),
+    keyTokens: binding.keys,
     keys: formatBindingKeys(binding),
     label: binding.label,
     description: binding.description,
@@ -2043,10 +2099,29 @@ function workflowToPaletteCommand(action: LogInkWorkflowAction): LogInkPaletteCo
  * action. Phase 6 onwards, both surfaces are filterable and executable
  * from `:`.
  */
-export function getLogInkPaletteCommands(): LogInkPaletteCommand[] {
+export function getLogInkPaletteCommands(activeView?: LogInkView): LogInkPaletteCommand[] {
+  const bindings = LOG_INK_KEY_BINDINGS.map((binding) => ({ binding, command: bindingToPaletteCommand(binding) }))
+  const workflows = getLogInkWorkflowActions().map(workflowToPaletteCommand)
+  if (!activeView) {
+    return [...bindings.map((entry) => entry.command), ...workflows]
+  }
+  // Actions first (#2161). Nobody opens a palette to press down: movement
+  // used to fill the whole first screen, pushing the actions people search
+  // for off it. Order: this view's actions, then workflow actions, then the
+  // remaining keys, then movement. A filter still finds everything, and
+  // recent commands still lead (`filterLogInkPaletteCommands`).
+  const rank = (binding: LogInkKeyBinding): number => {
+    const category = categorizeBinding(binding, GLOBAL_BINDING_IDS.includes(binding.id))
+    if (category === 'movement') return 3
+    return (binding.contexts as string[]).includes(activeView) ? 0 : 2
+  }
+  const ranked = bindings
+    .map((entry, index) => ({ ...entry, index, rank: rank(entry.binding) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
   return [
-    ...LOG_INK_KEY_BINDINGS.map(bindingToPaletteCommand),
-    ...getLogInkWorkflowActions().map(workflowToPaletteCommand),
+    ...ranked.filter((entry) => entry.rank === 0).map((entry) => entry.command),
+    ...workflows,
+    ...ranked.filter((entry) => entry.rank > 0).map((entry) => entry.command),
   ]
 }
 

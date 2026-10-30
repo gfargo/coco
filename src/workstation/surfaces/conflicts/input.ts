@@ -22,6 +22,8 @@ export type LogInkConflictsInputSlot =
   | 'move'
   | 'jump-top'
   | 'jump-bottom'
+  | 'page-up'
+  | 'page-down'
   | 'enter'
   | 'row-action'
 
@@ -95,10 +97,10 @@ export function handleConflictsInput(
         return null
       }
       if (key.upArrow || inputValue === 'k') {
-        return [action({ type: 'moveConflictFile', delta: -1, count: context.conflictFileCount })]
+        return [action({ type: 'moveList', list: 'conflictFile', delta: -1, count: context.conflictFileCount })]
       }
       if (key.downArrow || inputValue === 'j') {
-        return [action({ type: 'moveConflictFile', delta: 1, count: context.conflictFileCount })]
+        return [action({ type: 'moveList', list: 'conflictFile', delta: 1, count: context.conflictFileCount })]
       }
       return null
     }
@@ -109,7 +111,7 @@ export function handleConflictsInput(
     case 'jump-top':
       return context.conflictFileCount
         ? [
-          action({ type: 'moveConflictFile', delta: -context.conflictFileCount, count: context.conflictFileCount }),
+          action({ type: 'moveList', list: 'conflictFile', delta: -context.conflictFileCount, count: context.conflictFileCount }),
           action({ type: 'setStatus', value: 'jumped to first conflict', ttl: 'echo' }),
         ]
         : []
@@ -117,9 +119,22 @@ export function handleConflictsInput(
     case 'jump-bottom':
       return context.conflictFileCount
         ? [
-          action({ type: 'moveConflictFile', delta: context.conflictFileCount, count: context.conflictFileCount }),
+          action({ type: 'moveList', list: 'conflictFile', delta: context.conflictFileCount, count: context.conflictFileCount }),
           action({ type: 'setStatus', value: 'jumped to last conflict', ttl: 'echo' }),
         ]
+        : []
+
+    // View-local paging (#2203): without this the generic `page` fallback
+    // moves the hidden history cursor beneath the conflicts view. Always
+    // handled once the view matches, like jump-top / jump-bottom.
+    case 'page-up':
+      return context.conflictFileCount
+        ? [action({ type: 'moveList', list: 'conflictFile', delta: -10, count: context.conflictFileCount })]
+        : []
+
+    case 'page-down':
+      return context.conflictFileCount
+        ? [action({ type: 'moveList', list: 'conflictFile', delta: 10, count: context.conflictFileCount })]
         : []
 
     case 'enter': {

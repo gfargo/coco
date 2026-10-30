@@ -107,14 +107,18 @@ describe('AgentTaskInputSchema', () => {
       required?: string[]
       properties: {
         options: { required?: string[] }
-        source: { oneOf: Array<Record<string, unknown>> }
+        // A shorthand string (#2041) or the source object.
+        source: { anyOf: [{ type: string; pattern: string }, { oneOf: Array<Record<string, unknown>> }] }
       }
     }
 
     expect(jsonSchema.required).toBeUndefined()
     expect(jsonSchema.properties.options.required).toBeUndefined()
 
-    const repository = jsonSchema.properties.source.oneOf[0] as {
+    const [shorthand, objectForm] = jsonSchema.properties.source.anyOf
+    expect(shorthand).toMatchObject({ type: 'string', pattern: expect.stringContaining('since-last-tag') })
+
+    const repository = objectForm.oneOf[0] as {
       required: string[]
       properties: {
         scope: {
@@ -129,7 +133,7 @@ describe('AgentTaskInputSchema', () => {
       '^(?!-)[^\\u0000]+$',
     )
 
-    const files = jsonSchema.properties.source.oneOf[2] as {
+    const files = objectForm.oneOf[2] as {
       properties: {
         files: {
           items: { anyOf: Array<{ required: string[] }> }
@@ -259,7 +263,7 @@ describe('agent output schemas', () => {
     version: AGENT_PROTOCOL_VERSION,
     ok: false as const,
     operation: 'changelog' as const,
-    error: { code: 'GENERATION_FAILED', message: 'no result', retryable: false },
+    error: { code: 'GENERATION_FAILED', category: 'generation', message: 'no result', retryable: false },
   }
 
   it('accepts only the matching success, planned, and failure envelopes', () => {
