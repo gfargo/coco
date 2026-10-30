@@ -8,6 +8,7 @@
  * of #890. No behavior change.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -89,8 +90,8 @@ export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: numbe
         if (!url || lineText.indexOf(namePadded) < 0) {
           return h(Text, {
             key: `tag-${index}`,
-            bold: isSelected,
-            dimColor: !isSelected,
+              dimColor: !isSelected,
+            ...selectionRowProps(theme, isSelected, focused),
           }, lineText, spinnerSpan)
         }
         const linkStart = lineText.indexOf(namePadded)
@@ -98,8 +99,8 @@ export function renderTagsSurface(ctx: SurfaceRenderContext, spinnerFrame: numbe
         const after = lineText.slice(linkStart + namePadded.length)
         return h(Text, {
           key: `tag-${index}`,
-          bold: isSelected,
           dimColor: !isSelected,
+          ...selectionRowProps(theme, isSelected, focused),
         }, before, formatHyperlink(namePadded, url), after, spinnerSpan)
       })
 

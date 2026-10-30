@@ -9,6 +9,7 @@
  * land in phase 4-6. This phase ships navigation only.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import type { IssueListItem } from '../../../git/issuesListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
@@ -163,8 +164,8 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
 
         return h(Text, {
           key: `issue-${index}`,
-          bold: isSelected,
           dimColor: !isSelected,
+          ...selectionRowProps(theme, isSelected, focused),
         },
         head,
         h(Text, { dimColor: true }, numStr + '  '),

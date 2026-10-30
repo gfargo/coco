@@ -55,7 +55,9 @@ exports[`renderReflogSurface structural snapshot — populated 1`] = `
     </Text>
   </Box>
   <Text
+    backgroundColor="#1a3a4a"
     bold={true}
+    color="#ffffff"
     dimColor={false}
   >
     &gt; 2 hours ago commit abc1234  latest work

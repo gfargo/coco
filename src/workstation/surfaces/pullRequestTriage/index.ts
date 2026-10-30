@@ -10,6 +10,7 @@
  * summarize land in phase 4-6.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import type { PullRequestListItem } from '../../../git/pullRequestListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
@@ -246,8 +247,8 @@ export function renderPullRequestTriageSurface(
 
         return h(Text, {
           key: `pr-triage-${index}`,
-          bold: isSelected,
           dimColor: !isSelected,
+          ...selectionRowProps(theme, isSelected, focused),
         },
         head,
         h(Text, { dimColor: true }, numStr + '  '),

@@ -10,6 +10,7 @@
  * cursor + filter only.
  */
 
+import { selectionRowProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { clampListWindowStart } from '../../chrome/layout'
@@ -100,9 +101,9 @@ export function renderSubmodulesSurface(ctx: SurfaceRenderContext): ReactTypes.R
         const color = flagColor(entry.flag, theme)
         return h(Text, {
           key: `submodule-${index}`,
-          bold: isSelected,
           dimColor: !isSelected && entry.flag === 'clean',
           color,
+          ...selectionRowProps(theme, isSelected, focused),
         }, lineText)
       })
 
