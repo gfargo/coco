@@ -11,7 +11,8 @@ the rules that are easy to get wrong.
 workstation. It generates commit messages, changelogs, code reviews, and PRs; exposes
 those generation tasks to coding agents through a versioned JSON CLI and local stdio
 MCP server; and ships `coco ui` — an Ink/React TUI with 16 views, chord navigation,
-128 themes, and multi-forge support (GitHub, GitHub Enterprise, GitLab, Bitbucket).
+128 themes, and multi-forge support (GitHub, GitHub Enterprise, GitLab, Bitbucket Cloud and
+Server, Gitea/Forgejo/Codeberg).
 The canonical machine-integration guide is the wiki page
 [Agent CLI and MCP](https://github.com/gfargo/coco/wiki/Agent-CLI-and-MCP).
 

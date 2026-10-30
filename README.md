@@ -7,7 +7,7 @@
 [![Last Commit](https://img.shields.io/github/last-commit/gfargo/coco)](https://github.com/gfargo/coco/tree/main)
 [![Discord](https://img.shields.io/discord/1176716060825767948)](https://discord.gg/KGu9nE9Ejx)
 
-**AI commits, changelogs, code review, PR creation, a structured agent/MCP API, and a full keyboard-driven git workstation — all from one CLI.** `coco commit` turns your staged diff into a Conventional-Commits-ready message. `coco commit --split` breaks a large staging area into logical multi-commit groups. `coco changelog` writes your release notes. `coco review` catches issues before they ship. `coco pr create` generates a title and body and opens it on your forge. `coco agent` and `coco mcp` expose the same generation engine to coding agents through versioned JSON and four local read-only MCP tools. And `coco ui` ties it all together in a terminal workstation with 16 views, chord navigation, and one-keystroke workflows. Seven AI providers — including fully local Ollama — on GitHub, GitHub Enterprise, GitLab, and Bitbucket.
+**AI commits, changelogs, code review, PR creation, a structured agent/MCP API, and a full keyboard-driven git workstation — all from one CLI.** `coco commit` turns your staged diff into a Conventional-Commits-ready message. `coco commit --split` breaks a large staging area into logical multi-commit groups. `coco changelog` writes your release notes. `coco review` catches issues before they ship. `coco pr create` generates a title and body and opens it on your forge. `coco agent` and `coco mcp` expose the same generation engine to coding agents through versioned JSON and four local read-only MCP tools. And `coco ui` ties it all together in a terminal workstation with 16 views, chord navigation, and one-keystroke workflows. Seven AI providers — including fully local Ollama — on GitHub, GitHub Enterprise, GitLab, Bitbucket, and Gitea/Forgejo/Codeberg.
 
 > The package is **git-coco**; the command is `coco`.
 
@@ -28,7 +28,7 @@ That's the core. Everything else — changelogs, code review, PRs, and the works
 - 🔌 **Agent-native** — versioned JSON/stdin operations plus four discoverable local MCP tools for commit drafts, reviews, changelogs, and recaps
 - 🏠 **Local-first** — run fully offline with Ollama (no API costs, nothing leaves your machine)
 - 🖥️ **Terminal workstation** — 16 views (history, status, diff, branches, PRs, issues, and more) via `g`-chord navigation + command palette
-- 🌐 **Multi-forge** — GitHub, GitHub Enterprise, GitLab, and Bitbucket from the same tool
+- 🌐 **Multi-forge** — GitHub, GitHub Enterprise, GitLab, Bitbucket (Cloud and Server), and Gitea/Forgejo/Codeberg from the same tool
 - 🎨 **120+ themes** — Catppuccin, Gruvbox, Dracula, Tokyo Night, and many more, with a live picker (`gC`)
 - 🩺 **Self-diagnosing** — `coco doctor` audits your config, providers, and model routing in one command
 
@@ -67,7 +67,7 @@ coco commit -i       # generate your first commit (interactive)
 | [`coco commit --split`](https://github.com/gfargo/coco/wiki/Command-Reference#commit---split) | Break a large diff into logical multi-commit groups |
 | [`coco amend`](https://github.com/gfargo/coco/wiki/Command-Reference#amend) | Regenerate and rewrite the last commit message |
 | [`coco changelog`](https://github.com/gfargo/coco/wiki/Command-Reference#changelog) | Create changelogs from commit history (by branch, tag, or range) |
-| [`coco pr create`](https://github.com/gfargo/coco/wiki/Command-Reference#pr-create) | Generate PR title + body and open via `gh` / `glab` / Bitbucket API |
+| [`coco pr create`](https://github.com/gfargo/coco/wiki/Command-Reference#pr-create) | Generate PR title + body and open via `gh` / `glab` / the Bitbucket or Gitea API |
 | [`coco recap`](https://github.com/gfargo/coco/wiki/Command-Reference#recap) | Summarize recent changes for standups or handoffs |
 | [`coco review`](https://github.com/gfargo/coco/wiki/Command-Reference#review) | AI code review with severity gating for CI (`--severity`) |
 | [`coco watch`](https://github.com/gfargo/coco/wiki/Command-Reference#watch) | Continuously re-run review / commit-draft as changes settle, `--json` for editors |
@@ -76,7 +76,7 @@ coco commit -i       # generate your first commit (interactive)
 | [`coco ui`](https://github.com/gfargo/coco/wiki/Coco-UI) | Full-screen git workstation — 16 views, keyboard-driven |
 | [`coco workspace`](https://github.com/gfargo/coco/wiki/Command-Reference#workspace) | Multi-repo overview; drill into any repo as a `coco ui` session |
 | [`coco log`](https://github.com/gfargo/coco/wiki/Command-Reference#log) | Commit history with graph, filters, and JSON output |
-| [`coco prs` / `coco issues`](https://github.com/gfargo/coco/wiki/Command-Reference#prs--issues) | List PRs or issues across GitHub, GitLab, or Bitbucket |
+| [`coco prs` / `coco issues`](https://github.com/gfargo/coco/wiki/Command-Reference#prs--issues) | List PRs or issues across GitHub, GitLab, Bitbucket, or Gitea/Forgejo |
 | [`coco doctor`](https://github.com/gfargo/coco/wiki/Command-Reference#doctor) | Diagnose config, providers, model routing, and usage stats |
 | [`coco init`](https://github.com/gfargo/coco/wiki/Getting-Started) | Interactive setup wizard |
 
