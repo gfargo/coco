@@ -87,6 +87,24 @@ export function getLanePalette(theme: LogInkTheme): readonly string[] {
   return deriveLanePalette(theme.colors) ?? DEFAULT_LANE_PALETTE
 }
 
+/**
+ * `getLaneColor` runs for every graph segment of every visible row on each
+ * render, and building the palette can derive lightness variants, so it is
+ * memoized per theme (#2208). Keyed on the `colors` object: a theme change
+ * swaps it; `noColor` is folded into the key.
+ */
+const lanePaletteCache = new WeakMap<object, { colored?: readonly string[]; noColor?: readonly string[] }>()
+
+function cachedLanePalette(theme: LogInkTheme): readonly string[] {
+  let entry = lanePaletteCache.get(theme.colors)
+  if (!entry) {
+    entry = {}
+    lanePaletteCache.set(theme.colors, entry)
+  }
+  const slot = theme.noColor ? 'noColor' : 'colored'
+  return (entry[slot] ??= getLanePalette(theme))
+}
+
 export function getLaneColor(
   laneId: number | undefined,
   theme: LogInkTheme
@@ -94,7 +112,7 @@ export function getLaneColor(
   if (laneId === undefined) {
     return undefined
   }
-  const palette = getLanePalette(theme)
+  const palette = cachedLanePalette(theme)
   if (palette.length === 0) {
     return undefined
   }

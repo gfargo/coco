@@ -4,6 +4,8 @@ import {
     formatInkHistoryGraphRow,
     formatInkRefLabels,
     getVisibleLogInkHistory,
+    type LogInkHistoryBucketHeaderItem,
+    type LogInkHistoryItem,
 } from './historyRows'
 import { applyLogInkAction, createLogInkState } from '../../workstation/runtime/inkViewModel'
 
@@ -546,6 +548,56 @@ describe('Ink history rows', () => {
       expect(visible.items[0].type).toBe('bucket-header')
       const firstHeader = visible.items[0] as { label: string }
       expect(firstHeader.label).toBe('Yesterday')
+    })
+  })
+
+  // #2208 — the full-graph expansion is cached per commit list. The cache
+  // must not serve stale rows when the inputs it depends on change.
+  describe('expanded-row cache', () => {
+    const cacheRows: GitLogRow[] = [
+      {
+        type: 'commit', graph: '* ', shortHash: 'a1', hash: 'a1'.padEnd(40, '0'),
+        parents: ['b2'.padEnd(40, '0')], date: '2026-05-14', author: 'Coco', refs: [], message: 'newer',
+      },
+      {
+        type: 'commit', graph: '* ', shortHash: 'b2', hash: 'b2'.padEnd(40, '0'),
+        parents: [], date: '2026-05-13', author: 'Coco', refs: [], message: 'older',
+      },
+    ]
+    const labels = (items: LogInkHistoryItem[]) =>
+      items.filter((i) => i.type === 'bucket-header').map((h) => (h as LogInkHistoryBucketHeaderItem).label)
+
+    it('re-buckets when the calendar day changes for the same commit list', () => {
+      const state = createLogInkState(cacheRows, { fullGraph: true })
+      const onTheDay = getVisibleLogInkHistory(state, 10, { dateBucketingNow: new Date(2026, 4, 14) })
+      const nextDay = getVisibleLogInkHistory(state, 10, { dateBucketingNow: new Date(2026, 4, 15) })
+
+      expect(labels(onTheDay.items)).toEqual(['Today', 'Yesterday'])
+      expect(labels(nextDay.items)).toEqual(['Yesterday', 'This week'])
+    })
+
+    it('keeps spacing and bucketing variants of the same list apart', () => {
+      const state = createLogInkState(cacheRows, { fullGraph: true })
+      const NOW = new Date(2026, 4, 14)
+      const plain = getVisibleLogInkHistory(state, 10, {})
+      const spaced = getVisibleLogInkHistory(state, 10, { fullGraphSpacing: true })
+      const bucketed = getVisibleLogInkHistory(state, 10, { dateBucketingNow: NOW })
+
+      expect(plain.items.map((i) => i.type)).toEqual(['commit', 'commit'])
+      expect(spaced.items.map((i) => i.type)).toEqual(['commit', 'graph', 'commit', 'graph'])
+      expect(labels(bucketed.items)).toEqual(['Today', 'Yesterday'])
+      // And asking again for the first variant still gets it.
+      expect(getVisibleLogInkHistory(state, 10, {}).items.map((i) => i.type)).toEqual(['commit', 'commit'])
+    })
+
+    it('marks the selected commit after moving the cursor over a cached list', () => {
+      let state = createLogInkState(cacheRows, { fullGraph: true })
+      getVisibleLogInkHistory(state, 10, {})
+      state = applyLogInkAction(state, { type: 'move', delta: 1 })
+      const selected = getVisibleLogInkHistory(state, 10, {}).items
+        .filter((i) => i.type === 'commit' && i.selected)
+        .map((i) => (i as { commit: { shortHash: string } }).commit.shortHash)
+      expect(selected).toEqual(['b2'])
     })
   })
 })
