@@ -139,6 +139,7 @@ jest.mock('../operations/agent', () => {
     asUntrustedChangeContext: generate.asUntrustedChangeContext,
     digestOf: context.digestOf,
     requiresRepository: context.requiresRepository,
+    expandChangeSource: context.expandChangeSource,
     describeRepoResolutionFailure: context.describeRepoResolutionFailure,
     createAgentOperationContext: (...args: unknown[]) => mockCreateAgentOperationContext(...args),
     resolveAgentDirectoryRoot: jest.fn((value: string) => value),
@@ -1405,4 +1406,28 @@ describe('createCocoMcpServer', () => {
       }
     })
   })
+
+  // #2041 — source shorthand strings.
+  describe('source shorthands', () => {
+    it('expands "staged" before running the operation', async () => {
+      createServer()
+      mockResolveAgentRepoRoot.mockResolvedValueOnce('/repo')
+      mockRunAgentOperation.mockResolvedValueOnce(reviewSuccess)
+
+      await registrations.get('coco_review')!.handler({ source: 'staged' }, makeExtra())
+
+      expect(mockRunAgentOperation.mock.calls.at(-1)?.[1]).toMatchObject({
+        source: { kind: 'repository', scope: { type: 'staged' } },
+      })
+    })
+
+    it('rejects an unknown shorthand with INVALID_INPUT naming the options', async () => {
+      createServer()
+      const result = await registrations.get('coco_review')!.handler({ source: 'yesterday' }, makeExtra())
+
+      expect(result).toMatchObject({ isError: true, structuredContent: { error: { code: 'INVALID_INPUT' } } })
+      expect(JSON.stringify(result.structuredContent)).toContain('since-last-tag')
+    })
+  })
 })
+
