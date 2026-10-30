@@ -34,6 +34,7 @@
  * convention) because the workstation never statically imports React.
  */
 
+import { interactiveGitEnv } from '../../../lib/simple-git/headlessGit'
 import type * as ReactTypes from 'react'
 import { spawnSync } from 'node:child_process'
 import { runWithTerminalHandedOff } from '../editorHandoff'
@@ -79,7 +80,7 @@ export function useEditorActions(
       // Cooked mode + primary buffer for the editor, and any keystrokes it
       // leaves unread are discarded on the way back (#1871).
       const result = runWithTerminalHandedOff({ stdin, out }, () =>
-        spawnSync(editor, [...editorPrefixArgs, path], { stdio: 'inherit' })
+        spawnSync(editor, [...editorPrefixArgs, path], { stdio: 'inherit', env: interactiveGitEnv() })
       )
       if (result.error) {
         dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })

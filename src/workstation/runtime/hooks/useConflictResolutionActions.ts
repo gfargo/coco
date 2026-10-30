@@ -16,6 +16,7 @@
  * stale state.
  */
 
+import { interactiveGitEnv } from '../../../lib/simple-git/headlessGit'
 import type * as ReactTypes from 'react'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -273,7 +274,7 @@ export function useConflictResolutionActions(
       let editorOk = false
       try {
         const result = runWithTerminalHandedOff({ stdin, out }, () =>
-          spawnSync(editor, [...editorArgs.slice(1), file], { stdio: 'inherit' })
+          spawnSync(editor, [...editorArgs.slice(1), file], { stdio: 'inherit', env: interactiveGitEnv() })
         )
         if (result.error) {
           dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })

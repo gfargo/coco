@@ -608,6 +608,11 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   const knownReposRef = React.useRef<ReadonlyArray<string>>(props.knownRepos)
   // Latest overview load wins (#2210): older results are dropped.
   const loadGateRef = React.useRef(createLatestGate())
+  // PR counts get their own gate: delete / add / clone reload discovery
+  // only, so gating counts on the overview gate dropped them whenever one
+  // of those ran mid-fetch (final review). Counts are keyed by path, so a
+  // newer discovery does not make them stale; only a newer count fetch does.
+  const prGateRef = React.useRef(createLatestGate())
 
   // Background discovery + PR-count refresh on mount.
   React.useEffect(() => {
@@ -615,6 +620,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     dispatch({ type: 'set-loading', loading: true })
     void (async () => {
       const isCurrent = loadGateRef.current.begin()
+      let isCurrentPr: (() => boolean) | undefined
       // Rows stream in as each repo finishes instead of waiting for the
       // slowest one (#2210); the final overview below supersedes them.
       const batcher = createSummaryBatcher((batch) => {
@@ -637,11 +643,12 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           type: 'set-pull-request-fetching',
           paths: overview.repos.map((entry) => entry.path),
         })
+        isCurrentPr = prGateRef.current.begin()
         const pr = await props.loadPullRequestCounts(overview.repos, (path) => {
           if (cancelled || unmountedRef.current) return
           dispatch({ type: 'mark-pull-request-fetched', path })
         })
-        if (cancelled || unmountedRef.current || !isCurrent()) return
+        if (cancelled || unmountedRef.current || !isCurrentPr()) return
         dispatch({
           type: 'replace-pull-request-counts',
           counts: pr.counts,
@@ -659,7 +666,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         }
       } catch (err) {
         batcher.cancel()
-        if (cancelled || unmountedRef.current || !isCurrent()) return
+        if (cancelled || unmountedRef.current || !(isCurrentPr ?? isCurrent)()) return
         dispatch({ type: 'set-pull-request-fetching', paths: [] })
         dispatch({ type: 'set-loading', loading: false })
         dispatch({
@@ -686,6 +693,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     if (stateRef.current.loading) return
     const focusedPath = selectFocusedRepo(stateRef.current)?.path
     const isCurrent = loadGateRef.current.begin()
+    let isCurrentPr: (() => boolean) | undefined
     const batcher = createSummaryBatcher((batch) => {
       if (unmountedRef.current || !isCurrent()) return
       dispatch({ type: 'merge-repo-summaries', repos: batch })
@@ -705,11 +713,12 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         type: 'set-pull-request-fetching',
         paths: overview.repos.map((entry) => entry.path),
       })
+      isCurrentPr = prGateRef.current.begin()
       const pr = await props.loadPullRequestCounts(overview.repos, (path) => {
         if (unmountedRef.current) return
         dispatch({ type: 'mark-pull-request-fetched', path })
       })
-      if (unmountedRef.current || !isCurrent()) return
+      if (unmountedRef.current || !isCurrentPr()) return
       dispatch({
         type: 'replace-pull-request-counts',
         counts: pr.counts,
@@ -718,7 +727,8 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-pull-request-fetching', paths: [] })
     } catch (err) {
       batcher.cancel()
-      if (unmountedRef.current || !isCurrent()) return
+      if (unmountedRef.current || !(isCurrentPr ?? isCurrent)()) return
+      if (isCurrentPr) dispatch({ type: 'set-pull-request-fetching', paths: [] })
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',

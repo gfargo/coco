@@ -40,6 +40,7 @@
  * convention) because the workstation never statically imports React.
  */
 
+import { interactiveGitEnv } from '../../../lib/simple-git/headlessGit'
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
 import { spawnSync } from 'node:child_process'
@@ -214,7 +215,7 @@ export function useCommitComposeActions(
     let editorOk = false
     try {
       const result = runWithTerminalHandedOff({ stdin, out }, () =>
-        spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
+        spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit', env: interactiveGitEnv() })
       )
       if (result.error) {
         dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })

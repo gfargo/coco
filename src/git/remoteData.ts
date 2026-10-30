@@ -102,7 +102,9 @@ export async function getRemoteOverview(git: SimpleGit): Promise<RemoteOverview>
  * not a secret. scp-style `git@host:path` has no scheme and is untouched.
  */
 export function maskUrlCredentials(url: string): string {
-  const match = /^([a-z][a-z0-9+.-]*:\/\/)([^/@\s]+)@(.*)$/i.exec(url)
+  // Userinfo runs to the LAST `@` in the authority: a hand-typed password
+  // can hold a raw `@`, and splitting at the first one showed its tail.
+  const match = /^([a-z][a-z0-9+.-]*:\/\/)([^/\s]+)@([^/@\s]*(?:\/.*)?)$/i.exec(url)
   if (!match) return url
   const [, scheme, userinfo, rest] = match
   if (/^https?:|^ftps?:/i.test(scheme)) return `${scheme}***@${rest}`

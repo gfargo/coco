@@ -110,6 +110,9 @@ describe('maskUrlCredentials (#2204)', () => {
     ['https://user:ghp_secret@github.com/o/r.git', 'https://***@github.com/o/r.git'],
     ['https://ghp_tokenasuser@github.com/o/r.git', 'https://***@github.com/o/r.git'],
     ['ssh://git:hunter2@host/o/r.git', 'ssh://git:***@host/o/r.git'],
+    // A raw `@` in the password must not leave its tail visible.
+    ['https://user:p@ss@host/o/r.git', 'https://***@host/o/r.git'],
+    ['ssh://git:p@ss@host/o/r.git', 'ssh://git:***@host/o/r.git'],
   ])('masks %s', (input, expected) => {
     expect(maskUrlCredentials(input)).toBe(expected)
   })
@@ -118,6 +121,7 @@ describe('maskUrlCredentials (#2204)', () => {
     'https://github.com/o/r.git',
     'ssh://git@github.com/o/r.git',
     'git@github.com:o/r.git',
+    'https://github.com/o/r@v1.git',
     '/local/path/repo',
     '',
   ])('leaves %s untouched', (input) => {

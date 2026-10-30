@@ -48,6 +48,7 @@
  * convention) because the workstation never statically imports React.
  */
 
+import { interactiveGitEnv } from '../../../lib/simple-git/headlessGit'
 import type * as ReactTypes from 'react'
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -342,7 +343,7 @@ export function useChangelogActions(
     let editorOk = false
     try {
       const result = runWithTerminalHandedOff({ stdin, out }, () =>
-        spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit' })
+        spawnSync(editor, [...editorPrefixArgs, file], { stdio: 'inherit', env: interactiveGitEnv() })
       )
       if (result.error) {
         dispatch({ type: 'setStatus', value: `Failed to launch ${editor}: ${result.error.message}`, kind: 'error' })

@@ -741,6 +741,39 @@ describe('generateAgentPrDraft (#1823)', () => {
     expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual(summary)
     expect(result.data).toMatchObject({ base: 'main', head: 'feat/x' })
   })
+
+  // Final review: options.base kept its `origin/` prefix, so the base===head
+  // guard missed and data.base was not a branch a forge PR can target.
+  it('normalises a remote-tracking options.base like the source base', async () => {
+    contextModule.readPullRequestBranches.mockResolvedValueOnce({ head: 'main', defaultBase: 'main', defaultBaseRef: 'origin/main' })
+    await expect(generateAgentPrDraft(repoInput({ base: 'origin/main' }), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+
+    mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+    const result = await generateAgentPrDraft(repoInput({ base: 'origin/release' }), makeContext(undefined))
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.data).toMatchObject({ base: 'release' })
+    expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'repository', scope: { type: 'branch', base: 'origin/release' },
+    })
+  })
+
+  // Final review: a branch source's head was dropped, so the draft
+  // described the checked-out branch instead of the requested one.
+  it('drafts the branch a source names as head, not the checked-out one', async () => {
+    mockExecuteChain.mockResolvedValueOnce({ title: 't', content: 'c' } as never)
+    const source = { kind: 'repository', scope: { type: 'branch', base: 'main', head: 'feature-y' } }
+    const result = await generateAgentPrDraft(repoInput({}, source), makeContext(undefined))
+    if (result.status !== 'completed') throw new Error('expected a completed envelope')
+    expect(result.data).toMatchObject({ base: 'main', head: 'feature-y' })
+    expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual({
+      kind: 'repository', scope: { type: 'branch', base: 'main', head: 'feature-y' },
+    })
+  })
+
+  it('compares a named head against the base, not the checked-out branch', async () => {
+    const source = { kind: 'repository', scope: { type: 'branch', base: 'main', head: 'main' } }
+    await expect(generateAgentPrDraft(repoInput({}, source), makeContext(undefined))).rejects.toMatchObject({ code: 'INVALID_INPUT' })
+  })
 })
 
 // #1828 — the agent counterpart of `coco review --severity`, as a filter.
