@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'pr-draft'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'pr-draft', 'commit-validate', 'commitlint-rules'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -865,6 +865,64 @@ export const LintDataSchema = z.object({
 export type LintRequest = z.infer<typeof LintRequestSchema>
 export type LintData = z.infer<typeof LintDataSchema>
 export type LintCommitResult = z.infer<typeof LintCommitResultSchema>
+
+// ─── commit-validate / commitlint-rules operations (#1845) ────────────────────
+
+/**
+ * Which rules a validation used. Always the built-in Conventional Commits
+ * rules for now: repository commitlint config is executable and is not loaded
+ * by agent tools. Reported so a caller knows a pass is advisory when the
+ * repository defines stricter rules (see `repositoryConfig`).
+ */
+const RulesSourceSchema = z.literal('built-in-conventional')
+
+const RepositoryConfigSchema = z.enum(['detected', 'absent', 'unknown']).describe(
+  'Whether the repository defines its own commitlint config (checked by file presence only, never executed). ' +
+  '"detected" means a pass against the built-in rules may not satisfy the repository. "unknown" when no repository was resolved.',
+)
+
+export const CommitValidateRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+  message: z.string().min(1).max(32 * 1024).describe('The full candidate commit message (subject, blank line, body).'),
+}).strict()
+
+export function createCommitValidateInputJsonSchema() {
+  return z.toJSONSchema(CommitValidateRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+const CommitlintFindingSchema = z.object({
+  rule: z.string().describe('The commitlint rule, e.g. "header-max-length".'),
+  message: z.string(),
+}).strict()
+
+export const CommitValidateDataSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(CommitlintFindingSchema),
+  warnings: z.array(CommitlintFindingSchema),
+  rulesSource: RulesSourceSchema,
+  repositoryConfig: RepositoryConfigSchema,
+}).strict()
+
+export const CommitlintRulesRequestSchema = z.object({
+  version: z.literal(AGENT_PROTOCOL_VERSION).default(AGENT_PROTOCOL_VERSION),
+  repo: z.string().min(1).optional(),
+}).strict()
+
+export function createCommitlintRulesInputJsonSchema() {
+  return z.toJSONSchema(CommitlintRulesRequestSchema, { io: 'input', target: 'draft-07' })
+}
+
+export const CommitlintRulesDataSchema = z.object({
+  rules: z.array(z.string()).describe('The rules a message is validated against, one readable line each.'),
+  rulesSource: RulesSourceSchema,
+  repositoryConfig: RepositoryConfigSchema,
+}).strict()
+
+export type CommitValidateRequest = z.infer<typeof CommitValidateRequestSchema>
+export type CommitValidateData = z.infer<typeof CommitValidateDataSchema>
+export type CommitlintRulesRequest = z.infer<typeof CommitlintRulesRequestSchema>
+export type CommitlintRulesData = z.infer<typeof CommitlintRulesDataSchema>
 
 // ─── commit-apply operation ───────────────────────────────────────────────────
 

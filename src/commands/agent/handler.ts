@@ -22,6 +22,12 @@ import {
     createLintInputJsonSchema,
     createRepoContextInputJsonSchema,
     describeRepoResolutionFailure,
+    CommitlintRulesDataSchema,
+    CommitlintRulesRequestSchema,
+    CommitValidateDataSchema,
+    CommitValidateRequestSchema,
+    createCommitlintRulesInputJsonSchema,
+    createCommitValidateInputJsonSchema,
     LintDataSchema,
     PrDraftDataSchema,
     LintRequestSchema,
@@ -36,6 +42,8 @@ import {
     runBlame,
     runCapabilities,
     runCondenseDiff,
+    runCommitlintRules,
+    runCommitValidate,
     runLint,
     runRepoContext,
     toAgentOperationError
@@ -82,6 +90,10 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentOutputSchema(operation, LintDataSchema)
     case 'pr-draft':
       return createAgentOutputSchema(operation, PrDraftDataSchema)
+    case 'commit-validate':
+      return createAgentOutputSchema(operation, CommitValidateDataSchema)
+    case 'commitlint-rules':
+      return createAgentOutputSchema(operation, CommitlintRulesDataSchema)
   }
 }
 
@@ -101,6 +113,10 @@ function emitSchema(operation: AgentOperation): void {
       ? createBlameInputJsonSchema()
       : isLint
       ? createLintInputJsonSchema()
+      : operation === 'commit-validate'
+      ? createCommitValidateInputJsonSchema()
+      : operation === 'commitlint-rules'
+      ? createCommitlintRulesInputJsonSchema()
       : createAgentInputJsonSchema(),
     output: z.toJSONSchema(outputSchemaFor(operation)),
   })
@@ -202,6 +218,18 @@ export async function handler(argv: AgentCommandArgv): Promise<void> {
         surface: 'agent-cli',
       })
       emit(await runLint(input, context))
+    } else if (operation === 'commit-validate' || operation === 'commitlint-rules') {
+      // Zero-token, no API key, no config load (#1845). A repository is
+      // optional: it is only used to report whether one defines its own
+      // commitlint config, so a failure to resolve one is not an error.
+      const input = operation === 'commit-validate'
+        ? CommitValidateRequestSchema.parse(raw)
+        : CommitlintRulesRequestSchema.parse(raw)
+      const repoRoot = await resolveAgentRepoRoot(argv.repo || input.repo, undefined, controller.signal)
+        .catch(() => undefined)
+      emit(operation === 'commit-validate'
+        ? await runCommitValidate(input as z.infer<typeof CommitValidateRequestSchema>, repoRoot)
+        : await runCommitlintRules(input, repoRoot))
     } else {
       const input = AgentTaskInputSchema.parse(raw)
       const needsRepo = requiresRepository(operation, input.source)

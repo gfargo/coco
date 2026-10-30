@@ -731,6 +731,9 @@ describe('generateAgentPrDraft (#1823)', () => {
     if (result.status !== 'completed') throw new Error('expected a completed envelope')
     expect(contextModule.resolveChangeSource.mock.calls.at(-1)?.[0]).toEqual(summary)
     expect(result.data).toMatchObject({ base: 'main', head: 'feat/x' })
+  })
+})
+
 // #1828 — the agent counterpart of `coco review --severity`, as a filter.
 describe('review severity threshold (#1828)', () => {
   const finding = (severity: number) => ({
