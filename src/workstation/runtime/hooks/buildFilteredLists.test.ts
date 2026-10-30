@@ -197,3 +197,21 @@ describe('buildFilteredLists', () => {
     })
   })
 })
+
+// #2209 — the sidebar renders through buildFilteredLists directly, so it is
+// memoized per context object, filter and sort modes.
+describe('buildFilteredLists memoization', () => {
+  it('returns the same result for the same context, filter and sorts', () => {
+    const sorts = { branchSort: DEFAULT_BRANCH_SORT_MODE, tagSort: DEFAULT_TAG_SORT_MODE }
+    expect(buildFilteredLists(context, 'login', sorts)).toBe(buildFilteredLists(context, 'login', { ...sorts }))
+  })
+
+  it('recomputes when the filter, a sort mode, or the context changes', () => {
+    const first = buildFilteredLists(context, 'login')
+    expect(buildFilteredLists(context, 'main')).not.toBe(first)
+    expect(buildFilteredLists(context, 'login', { tagSort: 'name' })).not.toBe(first)
+
+    const reloaded = { ...context, tags: { tags: [{ name: 'v3.0.0 login', subject: '' }] } } as unknown as LogInkContext
+    expect(buildFilteredLists(reloaded, 'login').filteredTagList.map((t) => t.name)).toEqual(['v3.0.0 login'])
+  })
+})

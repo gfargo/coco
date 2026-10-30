@@ -26,7 +26,40 @@ export function cycleBranchSort(mode: BranchSortMode): BranchSortMode {
   return BRANCH_SORT_MODES[(index + 1) % BRANCH_SORT_MODES.length]
 }
 
+/**
+ * Sorted results per input list and mode (#2209). The sorts run from about
+ * ten render and input paths (surfaces, selection, the inspector, filter and
+ * refresh rectification), on every keystroke, against a list that only
+ * changes when the branches or tags reload. Callers treat the result as
+ * read-only; nothing sorts or splices it in place.
+ */
+const sortedBranchesCache = new WeakMap<readonly BranchRef[], Map<BranchSortMode, BranchRef[]>>()
+const sortedTagsCache = new WeakMap<readonly GitTagRef[], Map<TagSortMode, GitTagRef[]>>()
+
+function memoSort<T, M>(
+  cache: WeakMap<readonly T[], Map<M, T[]>>,
+  list: T[],
+  mode: M,
+  sort: (list: T[], mode: M) => T[]
+): T[] {
+  let byMode = cache.get(list)
+  if (!byMode) {
+    byMode = new Map()
+    cache.set(list, byMode)
+  }
+  let sorted = byMode.get(mode)
+  if (!sorted) {
+    sorted = sort(list, mode)
+    byMode.set(mode, sorted)
+  }
+  return sorted
+}
+
 export function sortBranches<T extends BranchRef>(branches: T[], mode: BranchSortMode): T[] {
+  return memoSort(sortedBranchesCache, branches, mode, computeSortedBranches) as T[]
+}
+
+function computeSortedBranches<T extends BranchRef>(branches: T[], mode: BranchSortMode): T[] {
   // Pin the current branch at index 0 regardless of sort mode (#806
   // follow-up). Lands the user's cursor on the active branch by
   // default and keeps the most-relevant row glued to the top of the
@@ -69,6 +102,10 @@ export function cycleTagSort(mode: TagSortMode): TagSortMode {
 }
 
 export function sortTags<T extends GitTagRef>(tags: T[], mode: TagSortMode): T[] {
+  return memoSort(sortedTagsCache, tags, mode, computeSortedTags) as T[]
+}
+
+function computeSortedTags<T extends GitTagRef>(tags: T[], mode: TagSortMode): T[] {
   const copy = tags.slice()
   switch (mode) {
     case 'name':

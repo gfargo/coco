@@ -673,6 +673,25 @@ function renderRemoteOpLoader(
     h(Text, { dimColor: true }, 'Esc to cancel')))
 }
 
+/** Distinct remote names per remote-branch list, derived once per load rather than per frame (#2209). */
+const remoteNamesCache = new WeakMap<readonly { remote?: string }[], string[]>()
+
+function getRemoteNames(remoteBranches: readonly { remote?: string }[] | undefined): string[] | undefined {
+  if (!remoteBranches) return undefined
+  let names = remoteNamesCache.get(remoteBranches)
+  if (!names) {
+    names = Array.from(
+      new Set(
+        remoteBranches
+          .map((branch) => branch.remote)
+          .filter((remote): remote is string => Boolean(remote))
+      )
+    )
+    remoteNamesCache.set(remoteBranches, names)
+  }
+  return names
+}
+
 export function renderHistoryPanel(
   ctx: SurfaceRenderContext,
   hasMoreCommits: boolean,
@@ -702,15 +721,7 @@ export function renderHistoryPanel(
   // slashed local branch like `feat/x` doesn't get mis-coloured as
   // remote. When branch data hasn't loaded yet, `undefined` makes the
   // chip helper fall back to the legacy slash-based heuristic.
-  const remoteNames = context.branches?.remoteBranches
-    ? Array.from(
-        new Set(
-          context.branches.remoteBranches
-            .map((branch) => branch.remote)
-            .filter((remote): remote is string => Boolean(remote))
-        )
-      )
-    : undefined
+  const remoteNames = getRemoteNames(context.branches?.remoteBranches)
   // Set of just-landed commit hashes for the "new commit" marker.
   // Populated for ~5s after a split-apply or other commit-creating
   // operation; auto-cleared by the runtime so it doesn't linger.

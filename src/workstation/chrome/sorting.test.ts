@@ -168,3 +168,28 @@ describe('log Ink sorting (P4.2)', () => {
     })
   })
 })
+
+// #2209 — the sorts run on every keystroke from many paths; results are
+// kept per input list and mode.
+describe('sort memoization', () => {
+  it('returns the same array for the same list and mode', () => {
+    const list = [branch({ shortName: 'b' }), branch({ shortName: 'a' })]
+    expect(sortBranches(list, 'name')).toBe(sortBranches(list, 'name'))
+    const tags = [tag({ name: 'v2' }), tag({ name: 'v1' })]
+    expect(sortTags(tags, 'name')).toBe(sortTags(tags, 'name'))
+  })
+
+  it('recomputes for a different mode or a reloaded list', () => {
+    const list = [branch({ shortName: 'b', date: '2026-01-01' }), branch({ shortName: 'a', date: '2025-01-01' })]
+    expect(sortBranches(list, 'name').map((b) => b.shortName)).toEqual(['a', 'b'])
+    expect(sortBranches(list, 'recent').map((b) => b.shortName)).toEqual(['b', 'a'])
+
+    const reloaded = [...list, branch({ shortName: 'c' })]
+    expect(sortBranches(reloaded, 'name').map((b) => b.shortName)).toEqual(['a', 'b', 'c'])
+  })
+
+  it('never hands back the input array itself', () => {
+    const tags = [tag({ name: 'v1' })]
+    expect(sortTags(tags, 'name')).not.toBe(tags)
+  })
+})
