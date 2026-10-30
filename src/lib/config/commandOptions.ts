@@ -1,0 +1,40 @@
+/**
+ * Argv shared by every coco subcommand. Lives in `lib/` because the config
+ * loader and the LLM layer read it, and `lib/` must not import from
+ * `commands/` (#2218). `commands/types` re-exports it for command code.
+ */
+export interface BaseArgvOptions {
+  interactive: boolean
+  verbose: boolean
+  version: boolean
+  help: boolean
+  /**
+   * Repository directory to operate against. When set, the command
+   * chdir's to this path before loading config / opening a git
+   * instance, so every downstream read (config lookup, simple-git
+   * baseDir, commitlint discovery, etc.) sees the same root.
+   *
+   * `--cwd` is an alias.
+   *
+   * Inherited by every coco subcommand so scripts / editor wrappers
+   * / scenario tests can target arbitrary repos without `cd`-ing
+   * first. Defaults to `process.cwd()` when omitted (unchanged
+   * behavior for users who launch via the regular `cd && coco ...`
+   * path).
+   */
+  repo?: string
+  /** Global `--quiet` (`-q`): silence coco's status chrome. Results still print. */
+  quiet?: boolean
+  /** Global `--json`: emit machine-readable JSON on supported commands. */
+  json?: boolean
+  /**
+   * Global `--ascii`: force the workstation TUI to render ASCII-only
+   * glyphs, for non-UTF-8 terminals / locales where box-drawing, braille
+   * spinners, and arrow glyphs render as mojibake. Detected automatically
+   * from the locale / `TERM` / `COCO_ASCII` when unset — see
+   * `workstation/chrome/asciiMode.ts`.
+   */
+  ascii?: boolean
+}
+
+export interface BaseCommandOptions extends BaseArgvOptions {}

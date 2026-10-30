@@ -1,4 +1,4 @@
-import { Config } from '../../../commands/types'
+import { Config } from '../../config/types'
 import {
   DynamicModelPreference,
   DynamicModelTask,

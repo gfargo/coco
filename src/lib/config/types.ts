@@ -1,4 +1,4 @@
-import { BaseCommandOptions } from '../../commands/types'
+import { BaseCommandOptions } from './commandOptions'
 import { LogInkThemeConfig } from '../../workstation/chrome/theme'
 import { LLMService } from '../langchain/types'
 

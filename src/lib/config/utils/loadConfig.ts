@@ -6,7 +6,7 @@ import { loadXDGConfig } from '../services/xdg'
 import { Config } from '../types'
 
 import { DEFAULT_CONFIG, DEFAULT_IGNORED_FILES, DEFAULT_IGNORED_EXTENSIONS } from '../constants'
-import { BaseCommandOptions } from '../../../commands/types'
+import { BaseCommandOptions } from '../commandOptions'
 import { mergeIgnoreLists, unionPreservingOrder } from './mergeIgnoreLists'
 import { removeUndefined } from '../../utils/removeUndefined'
 
