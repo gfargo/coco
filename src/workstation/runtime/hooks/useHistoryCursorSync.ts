@@ -74,7 +74,8 @@ import type { LogInkContext } from '../types'
 /** How long the cursor has to rest on a ref before its commits are fetched (#2209). */
 export const CURSOR_SYNC_LOAD_DEBOUNCE_MS = 150
 
-export type LoadCommitContextFn = (target: { hash: string; label: string }) => Promise<void>
+/** `superseded` when a newer anchored fetch replaced this one and its rows were dropped (#2209). */
+export type LoadCommitContextFn = (target: { hash: string; label: string }) => Promise<{ superseded?: boolean } | void>
 
 export type UseHistoryCursorSyncDeps = {
   /** Reducer dispatch — drives the cursor jump + status updates. */
@@ -234,7 +235,12 @@ export function useHistoryCursorSync(
         pendingLoad = setTimeout(() => {
           pendingLoad = undefined
           attemptedContextHashesRef.current.add(target.hash)
-          void loadCommitContextRef.current?.(target)
+          void loadCommitContextRef.current?.(target)?.then((outcome) => {
+            // A superseded fetch's rows were dropped, so the hash was never
+            // loaded: un-mark it, or returning to this ref would resolve to
+            // "unreachable" instead of fetching it again.
+            if (outcome && outcome.superseded) attemptedContextHashesRef.current.delete(target.hash)
+          })
         }, CURSOR_SYNC_LOAD_DEBOUNCE_MS)
         return cancelPendingLoad
       }

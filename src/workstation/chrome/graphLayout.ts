@@ -146,7 +146,9 @@ type LayoutNode = {
 type LayoutState = {
   lanes: (Lane | null)[]
   nextLaneId: number
+  /** Pass-1 nodes from commit index `nodesStart` onward. */
   nodes: LayoutNode[]
+  nodesStart: number
 }
 
 /**
@@ -281,19 +283,29 @@ function layoutFrom(
 
   const keep = Math.max(0, from - 1)
   const rows = prevRows.slice(0, keep)
-  for (let i = keep; i < state.nodes.length; i += 1) {
-    rows.push(routeRow(state.nodes[i], state.nodes[i + 1]))
+  const node = (index: number) => state.nodes[index - state.nodesStart]
+  const total = state.nodesStart + state.nodes.length
+  for (let i = keep; i < total; i += 1) {
+    rows.push(routeRow(node(i), i + 1 < total ? node(i + 1) : undefined))
   }
   let maxWidth = 1
   for (const row of rows) if (row.width > maxWidth) maxWidth = row.width
 
   const layout: GraphLayout = { rows, maxWidth }
-  resumeState.set(layout, state)
+  // Resuming re-routes only the last row, so keep only its node and the
+  // lane state. Keeping every node (each with lane snapshots on both
+  // sides) made a 20k-commit layout hold millions of objects (#2208).
+  resumeState.set(layout, {
+    lanes: state.lanes,
+    nextLaneId: state.nextLaneId,
+    nodes: total > 0 ? [node(total - 1)] : [],
+    nodesStart: Math.max(0, total - 1),
+  })
   return layout
 }
 
 export function computeGraphLayout(commits: LayoutCommit[]): GraphLayout {
-  return layoutFrom(commits, 0, { lanes: [], nextLaneId: 0, nodes: [] }, [])
+  return layoutFrom(commits, 0, { lanes: [], nextLaneId: 0, nodes: [], nodesStart: 0 }, [])
 }
 
 /**
@@ -322,6 +334,7 @@ export function extendGraphLayout(previous: GraphLayout, commits: LayoutCommit[]
     lanes: saved.lanes.map((lane) => (lane ? { ...lane } : null)),
     nextLaneId: saved.nextLaneId,
     nodes: saved.nodes.slice(),
+    nodesStart: saved.nodesStart,
   }
   return layoutFrom(commits, prevCount, state, previous.rows)
 }
