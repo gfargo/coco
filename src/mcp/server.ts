@@ -82,20 +82,55 @@ function outputSchemaFor(operation: AgentOperation) {
   }
 }
 
+/** The client's declared filesystem roots for one tool call, or `undefined` without the capability. */
+type ClientRoots = () => Promise<string[] | undefined>
+
+/**
+ * Fetch the client's `file://` roots and normalize them. The one place the
+ * URI parsing and path normalization live, so the repo-from-roots lookup and
+ * the confinement check cannot drift apart.
+ */
+async function fetchClientRoots(server: McpServer): Promise<string[] | undefined> {
+  if (!server.server.getClientCapabilities()?.roots) return undefined
+  const { roots } = await server.server.listRoots()
+  return roots.flatMap((root) => {
+    if (!root.uri.startsWith('file://')) return []
+    try {
+      return [resolveAgentDirectoryRoot(fileURLToPath(root.uri))]
+    } catch {
+      return []
+    }
+  })
+}
+
+/**
+ * Per-call memo of the client roots (#1826). Resolving a repo from the roots
+ * and then confining it to them used to send `roots/list` twice per tool
+ * call. Keyed on the request's `extra`, which the SDK creates per call, so
+ * the list is never reused across calls: clients may change their roots
+ * mid-session (`listChanged`).
+ */
+const clientRootsByCall = new WeakMap<object, ClientRoots>()
+
+function clientRootsFor(server: McpServer, call: object): ClientRoots {
+  let roots = clientRootsByCall.get(call)
+  if (!roots) {
+    let pending: Promise<string[] | undefined> | undefined
+    roots = () => (pending ??= fetchClientRoots(server))
+    clientRootsByCall.set(call, roots)
+  }
+  return roots
+}
+
 /**
  * Resolve the first git repository root found among the MCP client's
  * declared roots. Returns `undefined` if the client does not declare
  * roots or none of them contain a git repository.
  */
-async function resolveRepoFromClientRoots(server: McpServer): Promise<string | undefined> {
-  if (!server.server.getClientCapabilities()?.roots) return undefined
-  const { roots } = await server.server.listRoots()
-  for (const root of roots) {
-    if (!root.uri.startsWith('file://')) continue
+async function resolveRepoFromClientRoots(clientRoots: ClientRoots): Promise<string | undefined> {
+  for (const dir of (await clientRoots()) ?? []) {
     try {
-      const dir = resolveAgentDirectoryRoot(fileURLToPath(root.uri))
-      const resolved = await resolveAgentRepoRoot(dir)
-      return resolved
+      return await resolveAgentRepoRoot(dir)
     } catch {
       // Not a git repo or not a valid directory — skip.
     }
@@ -103,19 +138,10 @@ async function resolveRepoFromClientRoots(server: McpServer): Promise<string | u
   return undefined
 }
 
-async function assertClientAllowsRoot(server: McpServer, repoRoot: string): Promise<void> {
-  if (!server.server.getClientCapabilities()?.roots) return
-  const { roots } = await server.server.listRoots()
-  const allowed = roots.some((root) => {
-    if (!root.uri.startsWith('file://')) return false
-    try {
-      const clientRoot = resolveAgentDirectoryRoot(fileURLToPath(root.uri))
-      return isPathWithinRoot(repoRoot, clientRoot)
-    } catch {
-      return false
-    }
-  })
-  if (!allowed) {
+async function assertClientAllowsRoot(clientRoots: ClientRoots, repoRoot: string): Promise<void> {
+  const roots = await clientRoots()
+  if (!roots) return
+  if (!roots.some((clientRoot) => isPathWithinRoot(repoRoot, clientRoot))) {
     throw new AgentOperationError(
       'REPOSITORY_OUTSIDE_ROOT',
       `The MCP client did not expose '${repoRoot}' as an allowed filesystem root.`,
@@ -158,7 +184,7 @@ export function resetDeferredUsageTelemetryArmedForTests(): void {
  *   2. The first git root found in the client's declared roots.
  */
 async function resolveEffectiveRepoRoot(
-  server: McpServer,
+  clientRoots: ClientRoots,
   inputRepo: string | undefined,
   boundRoot: string | undefined,
   signal?: AbortSignal,
@@ -182,7 +208,7 @@ async function resolveEffectiveRepoRoot(
     return repoRoot
   }
 
-  const fromRoots = await resolveRepoFromClientRoots(server)
+  const fromRoots = await resolveRepoFromClientRoots(clientRoots)
   if (fromRoots) {
     await armDeferredUsageTelemetryOnce(fromRoots)
     return fromRoots
@@ -256,7 +282,7 @@ function registerGenerationTool(
       if (needsRepo) {
         // Repository-derived sources and commit-draft require a real repository.
         try {
-          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
+          repoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, boundRoot, extra.signal)
         } catch (error) {
           if (error instanceof AgentOperationError && error.code === 'INVALID_REPOSITORY' && operation === 'commit-draft') {
             throw new AgentOperationError(
@@ -267,14 +293,14 @@ function registerGenerationTool(
           }
           throw error
         }
-        await assertClientAllowsRoot(server, repoRoot)
+        await assertClientAllowsRoot(clientRootsFor(server, extra), repoRoot)
         requireRepository = true
       } else {
         // Supplied-source operations: try repo resolution for head verification,
         // but skip it gracefully when no repository is available or declared.
         try {
-          repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
-          await assertClientAllowsRoot(server, repoRoot)
+          repoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, boundRoot, extra.signal)
+          await assertClientAllowsRoot(clientRootsFor(server, extra), repoRoot)
           requireRepository = true
         } catch (error) {
           if (error instanceof AgentOperationError) {
@@ -347,8 +373,8 @@ function registerCommitApplyTool(server: McpServer, boundRoot: string | undefine
   }, async (rawInput, extra) => {
     try {
       const input = CommitApplyRequestSchema.parse(rawInput)
-      const repoRoot = await resolveEffectiveRepoRoot(server, input.repo, boundRoot, extra.signal)
-      await assertClientAllowsRoot(server, repoRoot)
+      const repoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, boundRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), repoRoot)
       const context = await createAgentOperationContext({
         repoRoot,
         requireRepository: true,
@@ -390,8 +416,8 @@ function registerRepoResource(
     mimeType,
   }, async (resourceUri, extra) => {
     try {
-      const repoRoot = await resolveEffectiveRepoRoot(server, undefined, boundRoot, extra.signal)
-      await assertClientAllowsRoot(server, repoRoot)
+      const repoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), undefined, boundRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), repoRoot)
       const context = await createAgentOperationContext({
         repoRoot,
         signal: extra.signal,
@@ -687,8 +713,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
       const input = McpCondenseDiffRequestSchema.parse(rawInput)
       // repoRoot here shadows the outer parameter, using it as the "boundRoot"
       // to match the single-repo confinement pattern of the other tools.
-      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       const onProgress = makeMcpProgressReporter(extra)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
@@ -738,8 +764,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     const repoContextOperation = 'repo-context' as const
     try {
       const input = RepoContextRequestSchema.parse(rawInput)
-      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
@@ -787,8 +813,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     const operation = 'blame' as const
     try {
       const input = BlameRequestSchema.parse(rawInput)
-      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
@@ -837,8 +863,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     const operation = 'lint' as const
     try {
       const input = LintRequestSchema.parse(rawInput)
-      const resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-      await assertClientAllowsRoot(server, resolvedRepoRoot)
+      const resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+      await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       const context = await createAgentOperationContext({
         repoRoot: resolvedRepoRoot,
         signal: extra.signal,
@@ -889,8 +915,8 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
       const input = CapabilitiesRequestSchema.parse(rawInput)
       let resolvedRepoRoot: string | undefined
       try {
-        resolvedRepoRoot = await resolveEffectiveRepoRoot(server, input.repo, repoRoot, extra.signal)
-        await assertClientAllowsRoot(server, resolvedRepoRoot)
+        resolvedRepoRoot = await resolveEffectiveRepoRoot(clientRootsFor(server, extra), input.repo, repoRoot, extra.signal)
+        await assertClientAllowsRoot(clientRootsFor(server, extra), resolvedRepoRoot)
       } catch {
         // No repository available (or not declared as an allowed client
         // root) -- capabilities degrades to the repo-optional report rather
