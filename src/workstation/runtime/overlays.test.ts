@@ -616,3 +616,49 @@ describe('command palette / theme picker row budget (#1861)', () => {
     expect(countRows(element) + 2).toBeLessThanOrEqual(bodyRows)
   })
 })
+
+// #2161 — the palette leads with actions, not movement.
+describe('command palette ordering and layout (#2161)', () => {
+  const paletteComponents = { Box, Text } as unknown as LogInkComponents
+  const paletteLines = (activeView: string, filter = '') => {
+    const state = {
+      ...createLogInkState([]),
+      activeView: activeView as never,
+      paletteFilter: filter,
+      paletteRecent: [],
+      paletteSelectedIndex: 0,
+    }
+    const element = renderCommandPalette(createElement, paletteComponents, state, 120, theme, true, 30)
+    const children = (element.props as { children: unknown[] }).children.flat() as Array<{ key?: string; props: { children: unknown } }>
+    return children.filter((child) => typeof child?.key === 'string' && child.key.startsWith('palette-') && !child.key.includes('more') && !child.key.includes('recent') && !child.key.includes('empty'))
+      .map((child) => String(child.props.children))
+  }
+
+  it('shows history actions on the first screen, with no movement keys', () => {
+    const first = paletteLines('history').slice(0, 10).join('\n')
+    expect(first).toMatch(/cherry-pick/i)
+    expect(first).not.toMatch(/move down|page down|move up/)
+  })
+
+  it('still finds movement keys by search', () => {
+    expect(paletteLines('history', 'page down').join('\n')).toMatch(/page down/)
+  })
+
+  it('aligns the label column even when a key is long', () => {
+    const lines = paletteLines('history', 'page')
+    const labelStarts = lines.map((line) => line.indexOf('page', 4))
+    expect(new Set(labelStarts.filter((index) => index > 0)).size).toBeLessThanOrEqual(2)
+  })
+
+  it('says where each entry applies when entries share a key', () => {
+    const text = paletteLines('history', 'previous').join('\n')
+    expect(text).toMatch(/previous tab \(sidebar\)/)
+  })
+
+  it('renders and selects from the same order', () => {
+    const fromRender = paletteLines('history')[0]
+    const [first] = getLogInkPaletteCommands('history')
+    expect(fromRender).toContain(first.label)
+  })
+})
+

@@ -2014,12 +2014,22 @@ export type LogInkPaletteCommand = {
   description: string
   workflowKind?: LogInkWorkflowActionKind
   requiresConfirmation?: boolean
+  /**
+   * Where a binding applies, shown next to entries that share a key so `[`
+   * reads as "previous tab (sidebar)" vs "previous hunk (diff)" (#2161).
+   */
+  context?: string
+  /** The individual keys (a binding's `keys`), for spotting shared keys. */
+  keyTokens?: string[]
 }
 
 function bindingToPaletteCommand(binding: LogInkKeyBinding): LogInkPaletteCommand {
+  const context = binding.contexts.find((entry) => entry !== 'normal' && entry !== 'search')
   return {
     id: binding.id,
     kind: 'binding',
+    ...(context ? { context } : {}),
+    keyTokens: binding.keys,
     keys: formatBindingKeys(binding),
     label: binding.label,
     description: binding.description,
@@ -2043,10 +2053,29 @@ function workflowToPaletteCommand(action: LogInkWorkflowAction): LogInkPaletteCo
  * action. Phase 6 onwards, both surfaces are filterable and executable
  * from `:`.
  */
-export function getLogInkPaletteCommands(): LogInkPaletteCommand[] {
+export function getLogInkPaletteCommands(activeView?: LogInkView): LogInkPaletteCommand[] {
+  const bindings = LOG_INK_KEY_BINDINGS.map((binding) => ({ binding, command: bindingToPaletteCommand(binding) }))
+  const workflows = getLogInkWorkflowActions().map(workflowToPaletteCommand)
+  if (!activeView) {
+    return [...bindings.map((entry) => entry.command), ...workflows]
+  }
+  // Actions first (#2161). Nobody opens a palette to press down: movement
+  // used to fill the whole first screen, pushing the actions people search
+  // for off it. Order: this view's actions, then workflow actions, then the
+  // remaining keys, then movement. A filter still finds everything, and
+  // recent commands still lead (`filterLogInkPaletteCommands`).
+  const rank = (binding: LogInkKeyBinding): number => {
+    const category = categorizeBinding(binding, GLOBAL_BINDING_IDS.includes(binding.id))
+    if (category === 'movement') return 3
+    return (binding.contexts as string[]).includes(activeView) ? 0 : 2
+  }
+  const ranked = bindings
+    .map((entry, index) => ({ ...entry, index, rank: rank(entry.binding) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
   return [
-    ...LOG_INK_KEY_BINDINGS.map(bindingToPaletteCommand),
-    ...getLogInkWorkflowActions().map(workflowToPaletteCommand),
+    ...ranked.filter((entry) => entry.rank === 0).map((entry) => entry.command),
+    ...workflows,
+    ...ranked.filter((entry) => entry.rank > 0).map((entry) => entry.command),
   ]
 }
 

@@ -124,7 +124,7 @@ export function handleOverlayInput(
 
   if (state.showCommandPalette) {
     const filtered = filterLogInkPaletteCommands(
-      getLogInkPaletteCommands(),
+      getLogInkPaletteCommands(state.activeView),
       state.paletteFilter,
       state.paletteRecent
     )
