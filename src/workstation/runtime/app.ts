@@ -461,6 +461,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     fullGraph: state.fullGraph,
     historyFetchArgs: state.historyFetchArgs,
     historyRefetchGenerationRef,
+    loadedCommitCount: state.mainHistoryCommitCount,
   })
 
   // Render-fresh snapshot of `state` for `refreshContext`'s rectification
