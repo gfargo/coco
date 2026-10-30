@@ -347,4 +347,24 @@ describe('useContextRefresh / loadLogInkContext — refresh-storm trimming (#220
       expect.objectContaining({ path: '/tmp/fake-repo', current: true, dirty: false }),
     ])
   })
+
+  // #2166 review: the triage empty states say "press r", but a refresh kept
+  // the loaded issue / PR lists, so r never refetched them.
+  it('drops the triage lists so they refetch when asked to', async () => {
+    const setContext = jest.fn()
+    const { refreshContext } = useContextRefresh(fakeReact(), baseDeps({ git: makeGit(), setContext }))
+    await refreshContext({ silent: true, refetchForgeLists: true })
+    const update = setContext.mock.calls.map(([arg]) => arg).find((arg) => typeof arg === 'function')
+    const loaded = { issueList: { issues: [] }, pullRequestList: { pullRequests: [] } } as never
+    expect(update(loaded)).toMatchObject({ issueList: undefined, pullRequestList: undefined })
+  })
+
+  it('keeps the triage lists on an ordinary refresh', async () => {
+    const setContext = jest.fn()
+    const { refreshContext } = useContextRefresh(fakeReact(), baseDeps({ git: makeGit(), setContext }))
+    await refreshContext({ silent: true })
+    const update = setContext.mock.calls.map(([arg]) => arg).find((arg) => typeof arg === 'function')
+    const loaded = { issueList: { issues: [] }, pullRequestList: { pullRequests: [] } } as never
+    expect(update(loaded)).toMatchObject({ issueList: { issues: [] }, pullRequestList: { pullRequests: [] } })
+  })
 })

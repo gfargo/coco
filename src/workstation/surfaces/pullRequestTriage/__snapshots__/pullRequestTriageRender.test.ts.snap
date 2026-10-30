@@ -61,44 +61,26 @@ exports[`renderPullRequestTriageSurface structural snapshot — populated 1`] = 
     dimColor={false}
   >
     &gt; 
-    <Text
-      dimColor={true}
-    >
+    <Text>
       #42  
     </Text>
-    <Text
-      color="green"
-      dimColor={false}
-    >
+    <Text>
       open    
     </Text>
-    <Text
-      color="gray"
-      dimColor={false}
-    >
+    <Text>
       ·  
     </Text>
-    <Text
-      color="gray"
-      dimColor={false}
-    >
+    <Text>
          
     </Text>
-    <Text
-      color="cyan"
-      dimColor={false}
-    >
+    <Text>
             
     </Text>
-    <Text
-      dimColor={true}
-    >
+    <Text>
       feature/x  
     </Text>
     Add a thing
-    <Text
-      dimColor={true}
-    />
+    <Text />
   </Text>
 </Box>
 `;

@@ -319,7 +319,9 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const detailWidth = input.helpOverlayActive
     ? Math.max(60, Math.min(100, Math.floor(columns * 0.50)))
     : input.zoomedPane === 'inspector'
-      ? Math.max(36, Math.min(60, Math.floor(columns * 0.40)))
+      // Zoom must be wider than at rest, which reaches 60 on wide
+      // terminals (#2158 review): 40% of the width, capped at 90 cells.
+      ? Math.max(36, calcDetailAtRestWidth(columns, density) + 12, Math.min(90, Math.floor(columns * 0.40)))
       : input.zoomedPane === 'main'
         ? LAYOUT_DETAIL_MIN_WIDTH
         : calcDetailAtRestWidth(columns, density)

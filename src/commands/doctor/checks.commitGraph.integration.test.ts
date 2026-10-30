@@ -30,7 +30,7 @@ describe('probeCommitGraph (real git)', () => {
   it('counts commits and sees whether a commit-graph exists', async () => {
     await expect(probeCommitGraph(dir)).resolves.toEqual({ inRepo: true, commitCount: 3, hasCommitGraph: false })
     git(dir, 'commit-graph', 'write', '--reachable')
-    await expect(probeCommitGraph(dir)).resolves.toEqual({ inRepo: true, commitCount: 3, hasCommitGraph: true })
+    await expect(probeCommitGraph(dir)).resolves.toEqual({ inRepo: true, hasCommitGraph: true })
   })
 
   it('finds the main checkout\'s commit-graph from a linked worktree', async () => {

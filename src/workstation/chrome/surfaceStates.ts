@@ -57,7 +57,7 @@ export function formatLogInkStashEmpty({ filter }: LogInkStashEmptyArgs): string
   if (filter.trim()) {
     return `No stashes match filter '${filter}'. Press ctrl+u to clear.`
   }
-  return 'No stashes. Press gs to save WIP from the status view, or run git stash from the shell.'
+  return 'No stashes. Press gZ to stash your changes.'
 }
 
 export type LogInkHistoryEmptyArgs = {

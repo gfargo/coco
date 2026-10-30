@@ -10,7 +10,7 @@
  * summarize land in phase 4-6.
  */
 
-import { selectionRowProps } from '../../chrome/selection'
+import { selectionRowProps, selectionSegmentProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import type { PullRequestListItem } from '../../../git/pullRequestListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
@@ -211,6 +211,8 @@ export function renderPullRequestTriageSurface(
       bodyLines = windowed.map((pr, offset) => {
         const index = startIndex + offset
         const isSelected = index === selected
+        const segment = (color?: string, options?: { alwaysDim?: boolean }) =>
+          selectionSegmentProps(theme, isSelected, focused, color, options)
         // #1363 — while `gh pr checkout <n>` runs against this row, the
         // cursor glyph swaps for the shared inline spinner (same idiom
         // as the branches surface's delete/checkout rows).
@@ -251,26 +253,14 @@ export function renderPullRequestTriageSurface(
           ...selectionRowProps(theme, isSelected, focused),
         },
         head,
-        h(Text, { dimColor: true }, numStr + '  '),
-        h(Text, {
-          color: stateColor(theme, pr.state, pr.isDraft),
-          dimColor: !isSelected,
-        }, stateStr + '  '),
-        h(Text, {
-          color: mergeableColor(theme, pr.mergeStateStatus, pr.mergeable),
-          dimColor: !isSelected,
-        }, mergeStr + '  '),
-        h(Text, {
-          color: reviewColor(theme, pr.reviewDecision),
-          dimColor: !isSelected,
-        }, reviewStr + '  '),
-        h(Text, {
-          color: theme.noColor ? undefined : theme.colors.accent,
-          dimColor: !isSelected,
-        }, authorStr + '  '),
-        h(Text, { dimColor: true }, branchStr + '  '),
+        h(Text, segment(undefined, { alwaysDim: true }), numStr + '  '),
+        h(Text, segment(stateColor(theme, pr.state, pr.isDraft)), stateStr + '  '),
+        h(Text, segment(mergeableColor(theme, pr.mergeStateStatus, pr.mergeable)), mergeStr + '  '),
+        h(Text, segment(reviewColor(theme, pr.reviewDecision)), reviewStr + '  '),
+        h(Text, segment(theme.colors.accent), authorStr + '  '),
+        h(Text, segment(undefined, { alwaysDim: true }), branchStr + '  '),
         titleStr,
-        h(Text, { dimColor: true }, labelStr),
+        h(Text, segment(undefined, { alwaysDim: true }), labelStr),
         )
       })
     }

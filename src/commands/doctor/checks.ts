@@ -595,17 +595,22 @@ export const COMMIT_GRAPH_SUGGEST_THRESHOLD = 10_000
 
 export type CommitGraphProbeResult =
   | { inRepo: false }
-  | { inRepo: true; commitCount: number; hasCommitGraph: boolean }
+  | { inRepo: true; hasCommitGraph: true }
+  // Counted only without a commit-graph: the count is the slow part.
+  | { inRepo: true; hasCommitGraph: false; commitCount: number }
 
 export async function probeCommitGraph(cwd: string = process.cwd()): Promise<CommitGraphProbeResult> {
   const git = simpleGit(cwd)
   if (!(await git.checkIsRepo())) return { inRepo: false }
-  const commitCount = Number.parseInt((await git.raw(['rev-list', '--count', '--all'])).trim(), 10) || 0
   const [single, chain] = await Promise.all([
     resolveGitPath(git, 'objects/info/commit-graph'),
     resolveGitPath(git, 'objects/info/commit-graphs/commit-graph-chain'),
   ])
-  return { inRepo: true, commitCount, hasCommitGraph: fs.existsSync(single) || fs.existsSync(chain) }
+  // Stat first: the commit count walks all history, slowest on exactly the
+  // repos without a commit-graph, and is only needed when there is none.
+  if (fs.existsSync(single) || fs.existsSync(chain)) return { inRepo: true, hasCommitGraph: true }
+  const commitCount = Number.parseInt((await git.raw(['rev-list', '--count', '--all'])).trim(), 10) || 0
+  return { inRepo: true, commitCount, hasCommitGraph: false }
 }
 
 /**

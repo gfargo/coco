@@ -245,6 +245,8 @@ export const en: Catalog = {
   'keymap.footer.enterApply': 'enter apply',
   'keymap.footer.escCancel': 'esc cancel',
   'keymap.footer.ctrlUClear': 'ctrl+u clear',
+  'keymap.footer.upDownSelect': '↑/↓ select',
+  'keymap.footer.escClose': 'esc close',
   'keymap.footer.enterKeep': 'enter keep',
   'keymap.footer.escClear': 'esc clear',
   'keymap.footer.typeToFilter': 'type to filter',

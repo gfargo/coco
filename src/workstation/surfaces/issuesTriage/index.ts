@@ -9,7 +9,7 @@
  * land in phase 4-6. This phase ships navigation only.
  */
 
-import { selectionRowProps } from '../../chrome/selection'
+import { selectionRowProps, selectionSegmentProps } from '../../chrome/selection'
 import type * as ReactTypes from 'react'
 import type { IssueListItem } from '../../../git/issuesListData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
@@ -131,6 +131,8 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
         const index = startIndex + offset
         const isSelected = index === selected
         const cursor = isSelected ? '>' : ' '
+        const segment = (color?: string, options?: { alwaysDim?: boolean }) =>
+          selectionSegmentProps(theme, isSelected, focused, color, options)
         const numStr = `#${issue.number}`.padEnd(numberColWidth)
         const stateStr = issue.state.toLowerCase().padEnd(6)
         // Truncate before padding: padEnd never shortens, so an author
@@ -168,12 +170,12 @@ export function renderIssuesTriageSurface(ctx: SurfaceRenderContext): ReactTypes
           ...selectionRowProps(theme, isSelected, focused),
         },
         head,
-        h(Text, { dimColor: true }, numStr + '  '),
-        h(Text, { color: stateColor(theme, issue.state), dimColor: !isSelected }, stateStr + '  '),
-        h(Text, { color: theme.noColor ? undefined : theme.colors.accent, dimColor: !isSelected }, authorStr + '  '),
+        h(Text, segment(undefined, { alwaysDim: true }), numStr + '  '),
+        h(Text, segment(stateColor(theme, issue.state)), stateStr + '  '),
+        h(Text, segment(theme.colors.accent), authorStr + '  '),
         titleStr,
-        h(Text, { dimColor: true }, labelStr),
-        h(Text, { dimColor: true }, commentsStr),
+        h(Text, segment(undefined, { alwaysDim: true }), labelStr),
+        h(Text, segment(undefined, { alwaysDim: true }), commentsStr),
         )
       })
     }
