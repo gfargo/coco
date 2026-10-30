@@ -548,11 +548,11 @@ export function renderCommandPalette(
 
   // Slide a window of rows around the selection so the cursor stays visible
   // even with hundreds of bindings. Row budget: title + border (3) + input
-  // + blank (2), plus the recent-hint line when shown. When no
+  // + hint + blank (3), plus the recent-hint line when shown. When no
   // bodyRows is given (legacy/test callers), fall back to the old fixed
   // window. `clampListWindowStart` (#1340) also keeps the window full when
   // the cursor is near the end instead of running off the list.
-  const chromeRows = 5 + (showingRecent ? 1 : 0)
+  const chromeRows = 6 + (showingRecent ? 1 : 0)
   const baseListRows = bodyRows > 0 ? Math.max(4, bodyRows - chromeRows) : 14
   // A mid-list cursor can show both the "more above" and "more below" hints
   // at once, so reserve 2 rows (not 1) whenever the list overflows.
@@ -561,6 +561,7 @@ export function renderCommandPalette(
   const visible = filtered.slice(startIndex, startIndex + listRows)
 
   const inputLine = `> ${state.paletteFilter}_`
+  const hint = '↑/↓ select · enter run · esc close'
   const matchSummary = filtered.length === 0
     ? 'no matches'
     : `${filtered.length} ${filtered.length === 1 ? 'match' : 'matches'}`
@@ -621,8 +622,7 @@ export function renderCommandPalette(
     h(Text, { dimColor: true }, matchSummary)
   ),
   h(Text, { color: theme.colors.accent }, truncateCells(inputLine, width - 4)),
-  // No "↑/↓ select · enter run · esc close" line here: the footer already
-  // shows the palette's keys (#2161).
+  h(Text, { dimColor: true }, truncateCells(hint, width - 4)),
   h(Text, undefined, ''),
   ...(showingRecent
     ? [h(Text, { key: 'palette-recent-hint', dimColor: true }, '· marks recently-used')]

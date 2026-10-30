@@ -155,7 +155,7 @@ export type UseInputHandlerDeps = {
   exit: () => void
 
   /** Loud / silent repository-context refresh. */
-  refreshContext: (options?: { silent?: boolean }) => Promise<void>
+  refreshContext: (options?: { silent?: boolean; refetchForgeLists?: boolean }) => Promise<void>
   /** Re-fetch the history rows. */
   refreshHistoryRows: () => Promise<void>
 
@@ -652,7 +652,7 @@ export function useInputHandler(
         // commits existed at boot — new commits (made in another
         // terminal, or remote commits brought in by a fetch) never
         // appear until relaunch, which reads as "the history is stuck."
-        void refreshContext()
+        void refreshContext({ refetchForgeLists: true })
         void refreshHistoryRows()
       } else if (event.type === 'toggleSelectedFileStage') {
         void toggleSelectedFileStage()

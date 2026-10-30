@@ -293,6 +293,16 @@ describe('renderHistoryPanel', () => {
       expect(collectStrings(tagged.children, []).join('')).not.toContain('tag:')
     })
 
+    it('keeps a slice of a roomy rail row for refs when the subject is long', () => {
+      const state = createLogInkState([
+        makeCommit({ shortHash: 'aaa1111', hash: 'aaa1111', parents: ['bbb2222'], message: 'feat: x', refs: ['HEAD -> main'] }),
+        makeCommit({ shortHash: 'bbb2222', hash: 'bbb2222', parents: [], message: `fix: ${'long subject words '.repeat(8)}`, refs: ['tag: v1.2.0'] }),
+      ], { fullGraph: true })
+      const tree = render(state, { rowMode: 'stacked', width: 70, dateBucketingEnabled: true })
+      const tagged = stackRows(tree).find((row) => row.key.startsWith('bbb2222'))!
+      expect(collectStrings(tagged.children, []).join('')).toContain('tag: v1.2.0')
+    })
+
     it('counts every bucketed rail commit as one line', () => {
       const item = { type: 'commit', commit: { refs: ['tag: v1'] }, graph: '', selected: false } as never
       expect(stackedItemLineCost(item, { fullGraph: true, bucketed: true })).toBe(1)

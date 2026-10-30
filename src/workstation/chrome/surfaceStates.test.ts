@@ -59,7 +59,8 @@ describe('log Ink surface states', () => {
     it('returns a tailored hint when no filter is active', () => {
       const message = formatLogInkStashEmpty({ filter: '' })
       expect(message).toContain('No stashes')
-      expect(message).toContain('gs') // hints at status view
+      // The real create-stash binding (createStash, normal context).
+      expect(message).toBe('No stashes. Press gZ to stash your changes.')
     })
 
     it('flags the active filter and tells users how to clear it', () => {

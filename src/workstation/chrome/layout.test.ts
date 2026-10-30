@@ -127,14 +127,14 @@ describe('log Ink layout', () => {
     const expanded = getLogInkLayout({ columns: 120, rows: 40, zoomedPane: 'inspector' })
 
     expect(expanded.detailWidth).toBeGreaterThan(collapsed.detailWidth)
-    // 120 * 0.40 = 48 → clamped down to the 60-cell maximum (no clamp needed at 120)
+    // 120 * 0.40 = 48, under the 90-cell cap
     expect(expanded.detailWidth).toBe(48)
     expect(expanded.sidebarWidth).toBe(collapsed.sidebarWidth)
     // Main panel shrinks to absorb the inspector growth.
     expect(expanded.mainPanelWidth).toBe(120 - expanded.sidebarWidth - expanded.detailWidth)
   })
 
-  it('clamps the zoomed inspector to its 36-60 cell range in three-pane tiers', () => {
+  it('clamps the zoomed inspector to its 36-90 cell range in three-pane tiers', () => {
     // The 36-cell floor is only reachable below the single-pane
     // breakpoint, where the inspector instead takes the full width, so
     // the lowest three-pane zoomed width is floor(100 × 0.40) = 40.
@@ -142,7 +142,16 @@ describe('log Ink layout', () => {
     const wide = getLogInkLayout({ columns: 200, rows: 60, zoomedPane: 'inspector' })
 
     expect(narrow.detailWidth).toBe(40)
-    expect(wide.detailWidth).toBe(60)
+    expect(wide.detailWidth).toBe(80)
+    expect(getLogInkLayout({ columns: 300, rows: 60, zoomedPane: 'inspector' }).detailWidth).toBe(90)
+  })
+
+  // #2158 review: at-rest grew to 60 on wide terminals, which made the
+  // old 60-cell zoom cap a no-op there.
+  it.each([100, 120, 160, 200, 260])('zooming the inspector widens it at %i columns', (columns) => {
+    const rest = getLogInkLayout({ columns, rows: 40 })
+    const zoomed = getLogInkLayout({ columns, rows: 40, zoomedPane: 'inspector' })
+    expect(zoomed.detailWidth).toBeGreaterThan(rest.detailWidth)
   })
 
   it('zooming a pane is unaffected by which pane has focus (Tab-invariance)', () => {

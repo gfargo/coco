@@ -61,30 +61,18 @@ exports[`renderIssuesTriageSurface structural snapshot — populated 1`] = `
     dimColor={false}
   >
     &gt; 
-    <Text
-      dimColor={true}
-    >
+    <Text>
       #1   
     </Text>
-    <Text
-      color="green"
-      dimColor={false}
-    >
+    <Text>
       open    
     </Text>
-    <Text
-      color="cyan"
-      dimColor={false}
-    >
+    <Text>
             
     </Text>
     Something is broken
-    <Text
-      dimColor={true}
-    />
-    <Text
-      dimColor={true}
-    />
+    <Text />
+    <Text />
   </Text>
 </Box>
 `;

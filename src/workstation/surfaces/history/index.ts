@@ -450,10 +450,17 @@ function renderStackedCommitHistoryRow(
     : { node: null, width: 0, chip: undefined }
   const lineOneFixed =
     graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth + chip.width
-  const subject = truncateCells(commit.message, Math.max(8, totalWidth - lineOneFixed))
   // Trailing refs are filtered against the chip so the branch tip is not
   // repeated as both a leading chip and a trailing label.
   const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
+  // With refs to show, a long subject leaves them a small slice instead of
+  // filling the row: otherwise tags vanished from nearly every rail row
+  // (#1819 review). The subject still keeps most of the row.
+  const subjectRoom = Math.max(8, totalWidth - lineOneFixed)
+  const refsReserve = bucketed && refs && subjectRoom >= 40
+    ? Math.min(cellWidth(refs.trimStart()) + 1, RAIL_INLINE_REFS_RESERVE)
+    : 0
+  const subject = truncateCells(commit.message, subjectRoom - refsReserve)
   // Bucketed rail rows (#1819): those refs (tags, origin/HEAD) ride on the
   // commit row after the subject instead of a detached second line.
   // Priority is chip, then subject, then these refs: they get only the room
@@ -503,7 +510,7 @@ function renderStackedCommitHistoryRow(
     }, lineOne)
   }
 
-  const dateText = bucketed && refs ? '' : formatCompactRelativeDate(commit.date, now)
+  const dateText = formatCompactRelativeDate(commit.date, now)
   const metaRoom = Math.max(8, totalWidth - indent.length - (dateText ? dateText.length + 1 : 0))
   const refsTrunc = refs ? truncateCells(refs, metaRoom) : ''
   // If both pieces are empty (date unparseable + no refs), show a
@@ -547,6 +554,8 @@ export function stackedItemLineCost(
 
 /** Fewest cells worth spending on inline refs in a bucketed rail row (#1819). */
 const RAIL_INLINE_REFS_MIN = 6
+/** Most a long subject gives up for inline refs on a roomy rail row. */
+const RAIL_INLINE_REFS_RESERVE = 18
 
 /**
  * Grows the stacked-mode history window item-by-item, measuring each

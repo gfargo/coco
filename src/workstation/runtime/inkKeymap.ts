@@ -1105,7 +1105,12 @@ function capFooterHints(hints: LogInkFooterHints, options: GetLogInkFooterHintsO
   const escBack = t(en, 'keymap.footer.escBack')
   const hasEscBack = hints.contextual.includes(escBack)
   const contextual = hasEscBack ? hints.contextual.filter((hint) => hint !== escBack) : hints.contextual
-  const global = hasEscBack && !hints.global.includes(escBack) ? [escBack, ...hints.global] : hints.global
+  // `<` and esc are the same binding (navigateBack), so the pinned
+  // `esc back` replaces `< back` rather than showing back twice (#2160 review).
+  const lessBack = t(en, 'keymap.footer.back')
+  const global = hasEscBack && !hints.global.includes(escBack)
+    ? [escBack, ...hints.global.filter((hint) => hint !== lessBack)]
+    : hints.global
   const more = Boolean(hints.more) || contextual.length > FOOTER_CONTEXTUAL_HINT_CAP
   return {
     contextual: contextual.slice(0, FOOTER_CONTEXTUAL_HINT_CAP),
@@ -1537,9 +1542,11 @@ function computeLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogInkF
   }
 
   if (options.showCommandPalette) {
+    // Only keys the palette actually handles: every other printable key
+    // (including `:`, `?` and `q`) types into its filter (#2161 review).
     return {
-      contextual: [t(en, 'keymap.footer.close2'), t(en, 'keymap.footer.dTXConfirm'), t(en, 'keymap.footer.iMAi')],
-      global: [t(en, 'keymap.footer.help'), t(en, 'keymap.footer.qQuit')],
+      contextual: [t(en, 'keymap.footer.upDownSelect'), t(en, 'keymap.footer.enterRun'), t(en, 'keymap.footer.ctrlUClear')],
+      global: [t(en, 'keymap.footer.escClose')],
     }
   }
 
@@ -2059,7 +2066,11 @@ export type LogInkPaletteCommand = {
 }
 
 function bindingToPaletteCommand(binding: LogInkKeyBinding): LogInkPaletteCommand {
-  const context = binding.contexts.find((entry) => entry !== 'normal' && entry !== 'search')
+  // Only a binding that applies in exactly one place gets a context label:
+  // a global one (`normal` among its contexts) applies everywhere, and one
+  // listing several views would be mislabelled by its first (#2161 review).
+  const scoped = binding.contexts.filter((entry) => entry !== 'search')
+  const context = scoped.length === 1 && scoped[0] !== 'normal' ? scoped[0] : undefined
   return {
     id: binding.id,
     kind: 'binding',

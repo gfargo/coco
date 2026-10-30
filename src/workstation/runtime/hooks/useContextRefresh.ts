@@ -195,6 +195,13 @@ export type RefreshContextOptions = {
    * to tell its echo of that change from an outside one (#2209).
    */
   fromWatcher?: boolean
+  /**
+   * Also drop the cached issue and PR triage lists so an open triage view
+   * fetches them again. The lists are loaded lazily and kept across
+   * refreshes, so without this a manual `r` after `gh auth login` changed
+   * nothing, though the empty states say to press it (#2166 review).
+   */
+  refetchForgeLists?: boolean
 }
 
 export type UseContextRefreshResult = {
@@ -259,7 +266,10 @@ export function useContextRefresh(
     // waiting on the (batched, async) `setContext` write to land.
     const rectification = computeRefreshRectificationSnapshot(stateRef.current, next)
     // OSS-452 — merge, don't replace: preserves lazily-loaded slices.
-    setContext((current) => mergeRefreshedContext(current, next), issuedAtDepth)
+    setContext((current) => {
+      const merged = mergeRefreshedContext(current, next)
+      return options.refetchForgeLists ? { ...merged, issueList: undefined, pullRequestList: undefined } : merged
+    }, issuedAtDepth)
     if (hasRefreshRectification(rectification)) {
       dispatch({ type: 'rectifyPromotedSelections', snapshot: rectification })
     }

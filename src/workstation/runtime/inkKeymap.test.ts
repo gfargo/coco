@@ -25,7 +25,10 @@ import { t } from '../../lib/i18n/t'
 function footer(contextual: string[], global: string[]) {
   const escBack = 'esc back'
   const rest = contextual.filter((hint) => hint !== escBack)
-  const pinned = contextual.includes(escBack) && !global.includes(escBack) ? [escBack, ...global] : global
+  // `<` and esc are one binding, so the pinned `esc back` replaces `< back`.
+  const pinned = contextual.includes(escBack) && !global.includes(escBack)
+    ? [escBack, ...global.filter((hint) => hint !== '< back')]
+    : global
   return {
     contextual: rest.slice(0, FOOTER_CONTEXTUAL_HINT_CAP),
     global: pinned,
@@ -330,7 +333,9 @@ describe('log Ink keymap', () => {
       showCommandPalette: true,
       showHelp: false,
     })).toEqual(
-      footer([': close', 'D/T/X confirm', 'I/M AI'], ['? help', 'q quit']),
+      // The palette's input swallows printable keys, so the footer names
+      // only what works there (#2160 review): no `q quit`, no mutations.
+      footer(['↑/↓ select', 'enter run', 'ctrl+u clear'], ['esc close']),
     )
   })
 
@@ -507,6 +512,18 @@ describe('log Ink keymap', () => {
       expect(kinds).toEqual(new Set(['binding', 'workflow']))
     })
 
+    // #2161 review: a binding shared by several views was labelled with
+    // the first, and a global one with a view it is not limited to.
+    it('labels a binding with a view only when it applies to that view alone', () => {
+      const commands = new Map(getLogInkPaletteCommands().map((command) => [command.id, command]))
+      for (const binding of LOG_INK_KEY_BINDINGS) {
+        const scoped = binding.contexts.filter((entry) => entry !== 'search')
+        const expected = scoped.length === 1 && scoped[0] !== 'normal' ? scoped[0] : undefined
+        expect({ id: binding.id, context: commands.get(binding.id)?.context }).toEqual({ id: binding.id, context: expected })
+      }
+      expect(LOG_INK_KEY_BINDINGS.some((binding) => binding.contexts.filter((entry) => entry !== 'normal' && entry !== 'search').length > 1)).toBe(true)
+    })
+
     it('passes through every command when filter is empty and no recent', () => {
       const commands = getLogInkPaletteCommands()
       const result = filterLogInkPaletteCommands(commands, '', [])
@@ -649,7 +666,8 @@ describe('log Ink keymap', () => {
       expect(hints.contextual).toContain('C continue*')
       expect(hints.contextual).toContain('enter diff')
       expect(hints.more).toBe(true)
-      expect(hints.global).toEqual(['esc back', 'g jump', '< back', '? help', ': cmds', 'q quit'])
+      expect(hints.global).toEqual(['esc back', 'g jump', '? help', ': cmds', 'q quit'])
+      expect(hints.global.filter((hint) => hint.endsWith(' back'))).toHaveLength(1)
     })
 
     it('includes gx in chord continuations for the g prefix', () => {
