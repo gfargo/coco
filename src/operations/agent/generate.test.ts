@@ -14,6 +14,7 @@ import {
   generateAgentCommitDraft,
   generateAgentRecap,
   generateAgentPrDraft,
+  runAgentBatch,
   applySeverityThreshold,
   generateAgentReview,
 } from './generate'
@@ -765,6 +766,72 @@ describe('review severity threshold (#1828)', () => {
 
   it.each([0, 11, 2.5, Number.NaN])('rejects severity %p', (severity) => {
     expect(AgentOptionsSchema.safeParse({ severity }).success).toBe(false)
+  })
+})
+
+// #2045 — several operations over one resolution of the source.
+describe('runAgentBatch (#2045)', () => {
+  const contextModule = jest.requireMock('./context') as { resolveChangeSource: jest.Mock }
+  const resolved = {
+    text: 'diff --git a/x b/x',
+    warnings: [],
+    meta: { kind: 'repository', digest: 'sha256:shared', verification: 'repository-derived' },
+  }
+  const batchInput = (operations: string[]) => ({
+    ...baseInput,
+    source: { kind: 'repository', scope: { type: 'staged' } },
+    operations,
+  }) as never
+
+  beforeEach(() => {
+    contextModule.resolveChangeSource.mockReset()
+    contextModule.resolveChangeSource.mockResolvedValue(resolved)
+  })
+
+  it('resolves the source once and returns an envelope per operation with the shared digest', async () => {
+    mockExecuteChain
+      .mockResolvedValueOnce({ title: 'Recap', summary: 's' } as never)
+      .mockResolvedValueOnce({ title: 'Changes', content: 'c' } as never)
+    const result = await runAgentBatch(batchInput(['recap', 'changelog']), makeContext(undefined))
+
+    expect(contextModule.resolveChangeSource).toHaveBeenCalledTimes(1)
+    expect(result.operation).toBe('batch')
+    expect(result.data.results.map((r) => [r.operation, r.ok])).toEqual([['recap', true], ['changelog', true]])
+    expect(result.data.results.map((r) => (r as { meta?: { digest: string } }).meta?.digest)).toEqual(['sha256:shared', 'sha256:shared'])
+    expect(result.meta.digest).toBe('sha256:shared')
+  })
+
+  it('keeps going when one operation fails, returning its failure envelope', async () => {
+    mockExecuteChain
+      .mockRejectedValueOnce(new Error('model broke'))
+      .mockResolvedValueOnce({ title: 'Changes', content: 'c' } as never)
+    const result = await runAgentBatch(batchInput(['recap', 'changelog']), makeContext(undefined))
+
+    expect(result.data.results[0]).toMatchObject({ ok: false, operation: 'recap', error: { code: 'OPERATION_FAILED' } })
+    expect(result.data.results[1]).toMatchObject({ ok: true, operation: 'changelog' })
+  })
+
+  it('stops the whole batch on cancellation', async () => {
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    mockExecuteChain.mockRejectedValueOnce(abort)
+    await expect(runAgentBatch(batchInput(['recap', 'changelog']), makeContext(undefined))).rejects.toMatchObject({ code: 'CANCELLED' })
+  })
+})
+
+describe('batch request schema (#2045)', () => {
+  const { AgentBatchRequestSchema } = jest.requireActual('./schemas') as typeof import('./schemas')
+
+  it('accepts a set of generation operations', () => {
+    expect(AgentBatchRequestSchema.safeParse({ source: 'staged', operations: ['review', 'commit-draft'] }).success).toBe(true)
+  })
+
+  it.each([
+    [[]],
+    [['review', 'review']],
+    [['review', 'lint']],
+    [['pr-draft']],
+  ])('rejects operations %j', (operations) => {
+    expect(AgentBatchRequestSchema.safeParse({ operations }).success).toBe(false)
   })
 })
 

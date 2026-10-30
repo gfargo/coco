@@ -72,13 +72,15 @@ import {
     readRepoCapabilitiesContext,
     digestOf,
 } from './context'
-import { AgentOperationError } from './errors'
+import { AgentOperationError, createAgentFailureEnvelope, toAgentOperationError } from './errors'
 import { splitUnifiedDiff } from './splitUnifiedDiff'
 import {
     AgentOperation,
     AgentOptions,
     AgentPlan,
+    AgentBatchInput,
     AgentPlannedEnvelope,
+    BatchData,
     ChangeSource,
     PrDraftData,
     AgentSuccessEnvelope,
@@ -654,6 +656,32 @@ export async function generateAgentPrDraft(
   }
 }
 
+/**
+ * Run several operations over one resolution of the source (#2045). Each
+ * operation's own failure is returned as its failure envelope so the others
+ * still run; cancellation stops the whole batch.
+ */
+export async function runAgentBatch(
+  input: AgentBatchInput,
+  context: AgentOperationContext,
+): Promise<AgentSuccessEnvelope<BatchData>> {
+  const resolved = await resolveChangeSource(input.source, context, {
+    trustRepositoryConfig: input.options.trustRepositoryConfig,
+  })
+  const { operations, ...shared } = input
+  const results: BatchData['results'] = []
+  for (const operation of operations) {
+    try {
+      results.push(await runAgentOperation(operation, shared, context, resolved) as BatchData['results'][number])
+    } catch (error) {
+      const normalized = toAgentOperationError(error)
+      if (normalized.code === 'CANCELLED') throw normalized
+      results.push(createAgentFailureEnvelope(operation, normalized))
+    }
+  }
+  return envelope('batch', { results }, resolved.warnings, resolved.meta)
+}
+
 export async function generateAgentChangelog(
   input: AgentTaskInput,
   context: AgentOperationContext,
@@ -795,6 +823,12 @@ export async function runAgentOperation(
       throw new AgentOperationError(
         'INVALID_OPERATION',
         'lint must be dispatched via runLint, not runAgentOperation.',
+        false,
+      )
+    case 'batch':
+      throw new AgentOperationError(
+        'INVALID_OPERATION',
+        'batch must be dispatched via runAgentBatch, not runAgentOperation.',
         false,
       )
     case 'commit-validate':
