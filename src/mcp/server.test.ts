@@ -291,7 +291,7 @@ describe('createCocoMcpServer', () => {
     }
   }
 
-  it('registers thirteen read-only tools including coco_batch, coco_pr_draft, coco_condense_diff, coco_repo_context, coco_blame, coco_lint, the commitlint tools, and coco_capabilities', () => {
+  it('registers fourteen read-only tools including coco_split_plan, coco_batch, coco_pr_draft, coco_condense_diff, coco_repo_context, coco_blame, coco_lint, the commitlint tools, and coco_capabilities', () => {
     createServer()
 
     expect([...registrations.keys()]).toEqual([
@@ -299,6 +299,7 @@ describe('createCocoMcpServer', () => {
       'coco_review',
       'coco_changelog',
       'coco_recap',
+      'coco_split_plan',
       'coco_batch',
       'coco_pr_draft',
       'coco_condense_diff',

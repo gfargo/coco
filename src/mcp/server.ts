@@ -57,6 +57,7 @@ import {
     CommitValidateRequestSchema,
     LintDataSchema,
     PrDraftDataSchema,
+    SplitPlanDataSchema,
     LintRequestSchema,
     MAX_BLAME_EXPLAIN_COMMITS,
     MAX_BLAME_EXPLAIN_LINES,
@@ -93,6 +94,8 @@ function outputSchemaFor(operation: AgentOperation) {
       return createAgentMcpOutputSchema(operation, RecapDataSchema)
     case 'pr-draft':
       return createAgentMcpOutputSchema(operation, PrDraftDataSchema)
+    case 'split-plan':
+      return createAgentMcpOutputSchema(operation, SplitPlanDataSchema)
     case 'condense-diff':
       return createAgentMcpOutputSchema(operation, CondenseDiffDataSchema)
     case 'repo-context':
@@ -724,6 +727,13 @@ export function createCocoMcpServer(repoRoot?: string, allowWrite = false): McpS
     'recap',
     'Recap changes',
     'Generate a structured recap from repository changes or supplied context.',
+    repoRoot,
+  )
+  registerGenerationTool(
+    server,
+    'split-plan',
+    'Plan a commit split',
+    'Plan how to split the staged changes into a sequence of focused commits, as `coco commit --split` would: groups with a title, body, files and hunk ids, validated against the staged state (and built-in Conventional Commits rules with `conventional: true`). Only the staged source is accepted. Repository commitlint config and prompts are never loaded. Planning only: never stages or commits.',
     repoRoot,
   )
   registerGenerationTool(

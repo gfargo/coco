@@ -14,6 +14,7 @@ import {
   generateAgentCommitDraft,
   generateAgentRecap,
   generateAgentPrDraft,
+  generateAgentSplitPlan,
   runAgentBatch,
   applySeverityThreshold,
   generateAgentReview,
@@ -22,6 +23,8 @@ import { AGENT_PROTOCOL_VERSION, AgentOptionsSchema, AgentTaskInput } from './sc
 
 jest.mock('./context', () => ({
   resolveChangeSource: jest.fn(),
+  readStagedFileChanges: jest.fn(),
+  readStagedFileDiff: jest.fn(),
   readPullRequestBranches: jest.fn(),
   getConventionsContext: jest.fn().mockReturnValue({ text: '', provenance: null }),
 }))
@@ -36,6 +39,10 @@ jest.mock('../../lib/langchain/utils/createSchemaParser', () => ({
   createSchemaParser: jest.fn().mockReturnValue({}),
 }))
 jest.mock('../../commands/commit/generateCommitDraft')
+jest.mock('../../commands/commit/splitPlanGenerator', () => ({
+  ...jest.requireActual('../../commands/commit/splitPlanGenerator'),
+  generateValidatedCommitSplitPlan: jest.fn(),
+}))
 
 const mockResolveChangeSource = resolveChangeSource as jest.MockedFunction<typeof resolveChangeSource>
 const mockLoadConfig = loadConfig as jest.MockedFunction<typeof loadConfig>
@@ -766,6 +773,88 @@ describe('review severity threshold (#1828)', () => {
 
   it.each([0, 11, 2.5, Number.NaN])('rejects severity %p', (severity) => {
     expect(AgentOptionsSchema.safeParse({ severity }).success).toBe(false)
+  })
+})
+
+// #1824 — agent-safe split planning.
+describe('generateAgentSplitPlan (#1824)', () => {
+  const contextModule = jest.requireMock('./context') as {
+    resolveChangeSource: jest.Mock
+    readStagedFileChanges: jest.Mock
+    readStagedFileDiff: jest.Mock
+    readPullRequestBranches: jest.Mock
+  }
+  const planner = jest.requireMock('../../commands/commit/splitPlanGenerator').generateValidatedCommitSplitPlan as jest.Mock
+  const stagedInput = (options: Record<string, unknown> = {}, source: unknown = { kind: 'repository', scope: { type: 'staged' } }) => ({
+    ...baseInput, source, options: AgentOptionsSchema.parse(options),
+  }) as AgentTaskInput
+
+  beforeEach(() => {
+    planner.mockReset()
+    contextModule.resolveChangeSource.mockResolvedValue({
+      text: 'diff --git a/a.ts b/a.ts', warnings: [],
+      meta: { kind: 'repository', digest: 'sha256:d', verification: 'repository-derived' },
+    })
+    contextModule.readStagedFileChanges.mockResolvedValue([
+      { filePath: 'a.ts', status: 'added', summary: '' },
+      { filePath: 'b.ts', status: 'added', summary: '' },
+    ])
+    contextModule.readStagedFileDiff.mockResolvedValue('')
+    planner.mockResolvedValue({
+      plan: { groups: [
+        { title: 'feat: add a', files: ['a.ts'] },
+        { title: 'chore: misc', body: 'left over', files: ['b.ts'], unclaimed: true },
+      ] },
+      attempts: 1,
+    })
+  })
+
+  it('returns the plan groups', async () => {
+    const result = await generateAgentSplitPlan(stagedInput(), makeContext(undefined))
+    expect(result.operation).toBe('split-plan')
+    expect(result.data.groups).toEqual([
+      { title: 'feat: add a', body: '', files: ['a.ts'], hunks: [], unclaimed: false },
+      { title: 'chore: misc', body: 'left over', files: ['b.ts'], hunks: [], unclaimed: true },
+    ])
+    expect(result.meta.digest).toBe('sha256:d')
+  })
+
+  it('validates group titles against the built-in rules only when conventional is set', async () => {
+    await generateAgentSplitPlan(stagedInput(), makeContext(undefined))
+    expect(planner.mock.calls[0][0].validateGroupMessage).toBeUndefined()
+
+    await generateAgentSplitPlan(stagedInput({ conventional: true }), makeContext(undefined))
+    expect(typeof planner.mock.calls[1][0].validateGroupMessage).toBe('function')
+    expect(planner.mock.calls[1][0].variables.commitlint_rules_context).toContain('Header')
+  })
+
+  it('uses the built-in split prompt and frames the diff as untrusted', async () => {
+    await generateAgentSplitPlan(stagedInput(), makeContext(undefined))
+    const { variables } = planner.mock.calls[0][0]
+    expect(variables.summary).not.toBe('diff --git a/a.ts b/a.ts')
+    expect(variables.summary).toContain('diff --git a/a.ts b/a.ts')
+    expect(variables.file_inventory).toBe('- a.ts: added\n- b.ts: added')
+  })
+
+  it('reports a fallback plan as a warning and in data', async () => {
+    planner.mockResolvedValueOnce({
+      plan: { groups: [{ title: 'chore: changes', files: ['a.ts', 'b.ts'] }] },
+      attempts: 3,
+      fallback: { reason: 'validation kept failing', lastIssues: {} },
+    })
+    const result = await generateAgentSplitPlan(stagedInput(), makeContext(undefined))
+    expect(result.data.fallback).toBe('validation kept failing')
+    expect(result.warnings.some((w) => w.includes('validation kept failing'))).toBe(true)
+  })
+
+  it('refuses non-staged sources, dryRun, and an empty index', async () => {
+    await expect(generateAgentSplitPlan(stagedInput({}, { kind: 'summary', summary: 'x' }), makeContext(undefined)))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_SOURCE' })
+    await expect(generateAgentSplitPlan(stagedInput({ dryRun: true }), makeContext(undefined)))
+      .rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' })
+    contextModule.readStagedFileChanges.mockResolvedValueOnce([])
+    await expect(generateAgentSplitPlan(stagedInput(), makeContext(undefined)))
+      .rejects.toMatchObject({ code: 'NO_CHANGES' })
   })
 })
 

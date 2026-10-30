@@ -14,7 +14,7 @@ export const MAX_AGENT_CONTEXT_BYTES = 2 * 1024 * 1024
 export const MAX_CONDENSE_BUDGET_TOKENS = 2_000_000
 export const MAX_CONVENTIONS_BYTES = 24 * 1024
 
-export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'pr-draft', 'commit-validate', 'commitlint-rules', 'batch'])
+export const AgentOperationSchema = z.enum(['commit-draft', 'review', 'changelog', 'recap', 'condense-diff', 'repo-context', 'blame', 'lint', 'pr-draft', 'commit-validate', 'commitlint-rules', 'split-plan', 'batch'])
 
 const gitRevisionSchema = z.string().min(1).refine(
   (revision) => !revision.startsWith('-') && !revision.includes('\0'),
@@ -230,6 +230,24 @@ export const PrDraftDataSchema = z.object({
 }).strict()
 
 export type PrDraftData = z.infer<typeof PrDraftDataSchema>
+
+/**
+ * `split-plan` (#1824): a validated multi-commit decomposition of the staged
+ * changes. Planning only; nothing is staged or committed.
+ */
+export const SplitPlanDataSchema = z.object({
+  groups: z.array(z.object({
+    title: z.string(),
+    body: z.string(),
+    files: z.array(z.string()).describe('Repository-relative paths committed whole in this group.'),
+    hunks: z.array(z.string()).describe('Hunk ids (`<path>::hunk-<n>`) for files split across groups.'),
+    rationale: z.string().optional(),
+    unclaimed: z.boolean().describe('True for the catch-all group of changes the planner could not place; `coco commit --split` leaves these uncommitted.'),
+  }).strict()),
+  fallback: z.string().optional().describe('Set when the planner gave up and returned a single combined group; says why.'),
+}).strict()
+
+export type SplitPlanData = z.infer<typeof SplitPlanDataSchema>
 
 export const CommitDraftDataSchema = z.object({
   title: z.string(),

@@ -54,7 +54,7 @@ export type { CommitSplitPlan, CommitSplitGroup }
  * `title` field in the plan must follow the spec, not just the
  * overall commit message.
  */
-const CONVENTIONAL_COMMITS_RULES = `Each group's "title" MUST follow the Conventional Commits 1.0.0 spec:
+export const CONVENTIONAL_COMMITS_RULES = `Each group's "title" MUST follow the Conventional Commits 1.0.0 spec:
 - Format: <type>(<scope>)<!>: <subject>
 - type is one of: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
 - scope is optional but encouraged when it adds clarity (file/module name)
@@ -209,9 +209,14 @@ function hunkPreview(hunk: StructuredPatchHunk): string {
     .join('\n')
 }
 
-async function collectHunkInventory(
+/**
+ * Hunk inventory for the staged modified files. `readStagedDiff` returns one
+ * file's `git diff --staged` patch; the CLI passes simple-git, the agent
+ * split-plan passes its hardened runner (#1824).
+ */
+export async function collectHunkInventory(
   staged: FileChange[],
-  git: ReturnType<typeof import('../../lib/simple-git/getRepo').getRepo>
+  readStagedDiff: (filePath: string) => Promise<string>
 ): Promise<HunkInventory> {
   const hunks: StagedHunk[] = []
   const byId = new Map<string, StagedHunk>()
@@ -222,7 +227,7 @@ async function collectHunkInventory(
       continue
     }
 
-    const diff = await git.diff(['--staged', '--', change.filePath])
+    const diff = await readStagedDiff(change.filePath)
     const [patch] = parsePatch(diff)
 
     if (!patch || patch.hunks.length === 0) {
@@ -248,7 +253,7 @@ async function collectHunkInventory(
   return { hunks, byId, byFile }
 }
 
-function formatHunkInventory(inventory: HunkInventory): string {
+export function formatHunkInventory(inventory: HunkInventory): string {
   if (inventory.hunks.length === 0) {
     return 'No hunk-level inventory available. Use file-level groups.'
   }
@@ -941,7 +946,7 @@ export async function prepareCommitSplitPlan({
     return { empty: true }
   }
 
-  const hunkInventory = await collectHunkInventory(changes.staged, git)
+  const hunkInventory = await collectHunkInventory(changes.staged, (filePath) => git.diff(['--staged', '--', filePath]))
   const summary = await fileChangeParser({
     changes: changes.staged,
     commit: '--staged',
