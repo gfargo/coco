@@ -451,6 +451,18 @@ function renderStackedCommitHistoryRow(
   const lineOneFixed =
     graphWidth + 1 + commit.shortHash.length + 1 + recentMarkerWidth + chip.width
   const subject = truncateCells(commit.message, Math.max(8, totalWidth - lineOneFixed))
+  // Trailing refs are filtered against the chip so the branch tip is not
+  // repeated as both a leading chip and a trailing label.
+  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
+  // Bucketed rail rows (#1819): those refs (tags, origin/HEAD) ride on the
+  // commit row after the subject instead of a detached second line.
+  // Priority is chip, then subject, then these refs: they get only the room
+  // the subject leaves, and are left to the inspector when that is under
+  // RAIL_INLINE_REFS_MIN cells.
+  const inlineRefsRoom = totalWidth - lineOneFixed - cellWidth(subject) - 1
+  const inlineRefs = bucketed && refs && inlineRefsRoom >= RAIL_INLINE_REFS_MIN
+    ? truncateCells(refs.trimStart(), inlineRefsRoom)
+    : ''
 
   const graphChildren = laneSegments && !theme.ascii
     ? renderLaneSegmentSpans(h, Text, laneSegments, theme, graphWidth, `cs${index}`, { suppressColor: selected })
@@ -470,23 +482,21 @@ function renderStackedCommitHistoryRow(
   h(Text, { color: accent, bold: selected || isRecent }, commit.shortHash),
   ' ',
   chip.node,
-  ...renderTypedSubject(h, Text, subject, theme, `${commit.hash}-${index}-stk-subj`, selected))
+  ...renderTypedSubject(h, Text, subject, theme, `${commit.hash}-${index}-stk-subj`, selected),
+  inlineRefs
+    ? h(Text, { key: `${commit.hash}-${index}-stk-refs`, color: muted, dimColor: !selected }, ` ${inlineRefs}`)
+    : null)
 
   // Line 2 — metadata row, padded to align with the start of the
   // shortHash on line 1 so the eye still groups them as one commit.
   // Selection background does not extend here so we don't get a thick
-  // double-row highlight on a tight terminal. Trailing refs are
-  // filtered against the chip so we don't repeat the branch tip both
-  // as a leading chip and a trailing label.
+  // double-row highlight on a tight terminal.
   const indent = ' '.repeat(graphWidth + 1)
-  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip.chip, remoteNames))
   // When bucketing is active, the bucket header already conveys the
-  // timeframe — a per-row date is redundant. If the commit also has
-  // no refs, line 2 would only show "1d" / "3d" (or a bare `·`),
-  // which at rail widths makes the whole list read as double-spaced
-  // noise. Collapse to a single-line row in that case so the graph
-  // is dense and readable on tiny terminals (#1421).
-  if (bucketed && !refs) {
+  // timeframe, and refs ride inline on line 1 (#1819), so line 2 would
+  // only show a redundant date: a bucketed rail commit is one line, which
+  // keeps the graph dense and readable on tiny terminals (#1421).
+  if (bucketed) {
     return h(Box, {
       key: `${commit.hash}-${index}-stack`,
       flexDirection: 'column',
@@ -530,11 +540,13 @@ export function stackedItemLineCost(
   options: { fullGraph: boolean; bucketed: boolean; remoteNames?: string[] }
 ): number {
   if (item.type !== 'commit') return 1
-  const commit = item.commit
-  const chip = options.fullGraph ? getBranchTipChip(commit.refs, options.remoteNames) : undefined
-  const refs = formatInkRefLabels(filterChippedRefs(commit.refs, chip, options.remoteNames))
-  return options.bucketed && !refs ? 1 : 2
+  // Bucketed rail commits are always one line (#1819): the date is in the
+  // bucket header and refs ride inline on the commit row.
+  return options.bucketed ? 1 : 2
 }
+
+/** Fewest cells worth spending on inline refs in a bucketed rail row (#1819). */
+const RAIL_INLINE_REFS_MIN = 6
 
 /**
  * Grows the stacked-mode history window item-by-item, measuring each
