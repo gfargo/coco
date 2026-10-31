@@ -118,7 +118,11 @@ export function formatStashPreview(
   ]
 
   const files = stash.files || []
-  if (files.length > 0) {
+  if (!stash.files) {
+    // Still loading (#2209): not "no files".
+    out.push(blank())
+    out.push(dim('Loading files…'))
+  } else if (files.length > 0) {
     out.push(blank())
     out.push(line(`Files (${files.length}):`))
     files.slice(0, cap).forEach((path) => out.push(line(`  ${path}`)))

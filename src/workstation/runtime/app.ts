@@ -77,6 +77,7 @@ import { useBisectCandidateHydration, useBisectCandidateState } from './hooks/us
 import { useCommitDetailHydration, useCommitDetailState } from './hooks/useCommitDetailHydration'
 import { useContextHydration } from './hooks/useContextHydration'
 import { useBlameLoadingState, useDetailHydration, useFileHistoryLoadingState } from './hooks/useDetailHydration'
+import { useStashFilesHydration } from './hooks/useStashFilesHydration'
 import { useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState } from './hooks/useDiffHydration'
 import { usePullRequestDiffHydration, usePullRequestDiffState } from './hooks/usePullRequestDiffHydration'
 import { usePullRequestChecksHydration } from './hooks/usePullRequestChecksHydration'
@@ -762,6 +763,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setFileHistoryLoading,
     setBlameFailure,
     setFileHistoryFailure,
+  })
+
+  // Stash files load only while a stash surface is showing (#2209): listing
+  // them eagerly cost a `git stash show` per stash on every refresh.
+  useStashFilesHydration(React, {
+    git,
+    stashes: context.stashes?.stashes,
+    active: state.activeView === 'stash' || state.sidebarTab === 'stashes',
+    runtimes,
+    setContext,
   })
 
   // Commit-detail loader, lifted verbatim into `useCommitDetailHydration`

@@ -1,5 +1,6 @@
 import {
   findStashFileForOffset,
+  getStashFiles,
   getStashOverview,
   parseStashDiffFiles,
   parseStashFiles,
@@ -63,6 +64,26 @@ describe('log stash data', () => {
     })
   })
 
+  // #2209: listing stashes is one git call. The files cost a `git stash show`
+  // each, which every refresh paid for every stash.
+  it('lists stashes without spawning a process per stash', async () => {
+    const git = {
+      raw: jest.fn().mockResolvedValue(
+        'stash@{0}\x1fabc123\x1fbase111 idx111\x1f2026-04-28 09:00:00 -0400\x1fOn main: save docs\n' +
+        'stash@{1}\x1fdef456\x1fbase222 idx222\x1f2026-04-27 09:00:00 -0400\x1fWIP on main: wip'
+      ),
+    }
+    const overview = await getStashOverview(git as never)
+    expect(git.raw).toHaveBeenCalledTimes(1)
+    expect(overview.stashes.map((stash) => stash.files)).toEqual([undefined, undefined])
+  })
+
+  it('loads a stash\'s files by hash, not by an index that can shift', async () => {
+    const git = { raw: jest.fn().mockResolvedValue('src/a.ts\0src/b.ts\0') }
+    await expect(getStashFiles(git as never, 'abc123')).resolves.toEqual(['src/a.ts', 'src/b.ts'])
+    expect(git.raw).toHaveBeenCalledWith(['stash', 'show', '--name-only', '-z', 'abc123'])
+  })
+
   it('parses stash files and loads overview details', async () => {
     const git = {
       raw: jest.fn()
@@ -70,7 +91,7 @@ describe('log stash data', () => {
         .mockResolvedValueOnce('src/a.ts\0src/b.ts\0'),
     }
 
-    await expect(getStashOverview(git as never)).resolves.toEqual({
+    await expect(getStashOverview(git as never, { withFiles: true })).resolves.toEqual({
       stashes: [
         {
           ref: 'stash@{0}',
@@ -84,7 +105,7 @@ describe('log stash data', () => {
       ],
     })
     // The per-stash call asks git for NUL-separated names (#2205).
-    expect(git.raw).toHaveBeenLastCalledWith(['stash', 'show', '--name-only', '-z', 'stash@{0}'])
+    expect(git.raw).toHaveBeenLastCalledWith(['stash', 'show', '--name-only', '-z', 'abc123'])
     expect(parseStashFiles('src/a.ts\0src/b.ts\0')).toEqual(['src/a.ts', 'src/b.ts'])
     // Names are exact: spaces that belong to the name are kept (#2205).
     expect(parseStashFiles(' lead and trail \0dir/with space.ts\0')).toEqual([' lead and trail ', 'dir/with space.ts'])

@@ -26,6 +26,11 @@ import { isMarkedItem, isPendingItemAction } from '../../../workstation/runtime/
 
 const GAP = 2 // cells between columns
 
+/** The files column: the count once the stash's files are loaded, `…` until then (#2209). */
+function fileCountLabel(stash: { files?: string[] }): string {
+  return stash.files ? String(stash.files.length) : '…'
+}
+
 /** Truncate to `w` cells, then pad to `w` (left = padEnd, right = padStart). */
 function cell(value: string, w: number, align: 'left' | 'right' = 'left'): string {
   const t = truncateCells(value, w)
@@ -93,7 +98,7 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
     ? Math.max(0, ...visible.map((s) => cellWidth(s.branch || '')))
     : 0
   const filesCol = visible.length
-    ? Math.max(5, ...visible.map((s) => String(s.files.length).length))
+    ? Math.max(5, ...visible.map((s) => fileCountLabel(s).length))
     : 5
 
   // Responsive degradation. Keep ref + message always; when the message
@@ -160,7 +165,7 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
         cell(stash.ref, refCol),
         showAge ? h(Text, { dimColor: true }, `${' '.repeat(GAP)}${cell(ageOf(stash), ageCol, 'right')}`) : null,
         branchCol > 0 ? h(Text, { dimColor: true }, `${' '.repeat(GAP)}${cell(stash.branch || '', branchCol)}`) : null,
-        showFiles ? h(Text, { dimColor: true }, `${' '.repeat(GAP)}${cell(String(stash.files.length), filesCol, 'right')}`) : null,
+        showFiles ? h(Text, { dimColor: true }, `${' '.repeat(GAP)}${cell(fileCountLabel(stash), filesCol, 'right')}`) : null,
         `${' '.repeat(GAP)}${message}`,
         spinnerSpan,
         )

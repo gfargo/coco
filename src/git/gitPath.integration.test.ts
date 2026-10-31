@@ -88,7 +88,7 @@ describe('getStashOverview file names (#2205)', () => {
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
   it('returns exact names for non-ASCII, quoted and space-padded files', async () => {
-    const { getStashOverview } = await import('./stashData')
+    const { getStashFiles, getStashOverview } = await import('./stashData')
     const names = ['café.txt', ' leading space.txt', 'trailing space .txt', 'tab\there.txt']
     for (const name of names) writeFileSync(join(dir, name), 'v1\n')
     run('add', '.')
@@ -96,9 +96,11 @@ describe('getStashOverview file names (#2205)', () => {
     for (const name of names) writeFileSync(join(dir, name), 'v2\n')
     run('stash', 'push', '-q', '-m', 'wip')
 
-    const overview = await getStashOverview(simpleGit(dir))
+    const overview = await getStashOverview(simpleGit(dir), { withFiles: true })
 
     expect(overview.stashes).toHaveLength(1)
-    expect([...overview.stashes[0].files].sort()).toEqual([...names].sort())
+    expect([...(overview.stashes[0].files ?? [])].sort()).toEqual([...names].sort())
+    // The lazy loader the TUI uses reads the same exact names, by hash.
+    expect([...(await getStashFiles(simpleGit(dir), overview.stashes[0].hash))].sort()).toEqual([...names].sort())
   })
 })

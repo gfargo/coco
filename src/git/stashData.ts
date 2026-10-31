@@ -24,7 +24,14 @@ export type StashEntry = {
   date: string
   branch: string
   message: string
-  files: string[]
+  /**
+   * Changed file names. Undefined until loaded: listing a stash is one
+   * `git stash list`, but the files cost one `git stash show` each, which
+   * made every refresh spawn a process per stash (about 14 ms each, 560 ms
+   * for 40 stashes) whether or not the stash view was open (#2209). The TUI
+   * loads them while a stash surface is showing (`getStashFiles`).
+   */
+  files?: string[]
 }
 
 export type StashOverview = {
@@ -106,7 +113,19 @@ export async function getStashCommitHashes(git: SimpleGit): Promise<string[]> {
     .filter(Boolean)
 }
 
-export async function getStashOverview(git: SimpleGit): Promise<StashOverview> {
+/**
+ * The files a stash changes, by its commit hash. By hash, not `stash@{N}`: the
+ * index shifts when a stash is pushed or dropped between listing and loading,
+ * and the files would land on the wrong entry.
+ */
+export async function getStashFiles(git: SimpleGit, stashHash: string): Promise<string[]> {
+  return parseStashFiles(await git.raw(['stash', 'show', '--name-only', '-z', stashHash]))
+}
+
+export async function getStashOverview(
+  git: SimpleGit,
+  options: { withFiles?: boolean } = {}
+): Promise<StashOverview> {
   // Format fields (separated by 0x1f / unit separator):
   //   %gd  — stash reflog selector (stash@{N})
   //   %H   — stash commit hash
@@ -125,10 +144,12 @@ export async function getStashOverview(git: SimpleGit): Promise<StashOverview> {
     await git.raw(['stash', 'list', '--format=%gd%x1f%H%x1f%P%x1f%cI%x1f%gs'])
   )
 
+  if (!options.withFiles) return { stashes }
+
   return {
     stashes: await Promise.all(stashes.map(async (stash) => ({
       ...stash,
-      files: parseStashFiles(await git.raw(['stash', 'show', '--name-only', '-z', stash.ref])),
+      files: await getStashFiles(git, stash.hash),
     }))),
   }
 }
