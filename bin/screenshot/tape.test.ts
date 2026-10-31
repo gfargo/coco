@@ -7,7 +7,8 @@
  * masks those forwarded values before the driver surfaces VHS output so
  * live keys/tokens never reach the logs.
  */
-import { createSecretRedactor, hasForwardedSecrets } from './tape'
+import { findRecipe } from './recipes'
+import { buildTape, createSecretRedactor, hasForwardedSecrets } from './tape'
 
 const SECRET_KEYS = [
   'OPENAI_API_KEY',
@@ -98,5 +99,29 @@ describe('hasForwardedSecrets', () => {
   it('is false when only short values are set', () => {
     process.env.OPENAI_API_KEY = 'tiny'
     expect(hasForwardedSecrets()).toBe(false)
+  })
+})
+
+// The 80x24 recipes sit on coco's 24-row floor. With JetBrains Mono installed
+// VHS rows are ~18.4px, not the calibrated 16.55px, so an exact-height window
+// held only 21 rows and every capture said "Terminal too small".
+describe('buildTape window height', () => {
+  const options = { cwd: '/tmp/repo', outputPng: '/tmp/out.png', cocoCommand: 'coco', repoRoot: '/repo', nodeBinDir: '/node' }
+  const heightOf = (name: string) => {
+    const recipe = findRecipe(name)
+    if (!recipe) throw new Error(`no recipe ${name}`)
+    return Number(/^Set Height (\d+)$/m.exec(buildTape(recipe, options))?.[1])
+  }
+
+  it.each(['ui-single-pane-narrow', 'ui-single-pane-peek', 'demo-single-pane'])('%s keeps room for 24 rows on a taller font', (name) => {
+    // 24 rows at the tallest measured row height (18.5px) plus the 60px padding.
+    expect(heightOf(name)).toBeGreaterThanOrEqual(24 * 18.5 + 60)
+  })
+
+  it('leaves recipes without slack at their exact calibrated height', () => {
+    const recipe = findRecipe('ui-history-rich-graph')
+    const rows = recipe?.dimensions?.rows ?? 40
+    expect(recipe?.dimensions?.rowSlack).toBeUndefined()
+    expect(heightOf('ui-history-rich-graph')).toBe(Math.round(rows * 16.55 + 60))
   })
 })

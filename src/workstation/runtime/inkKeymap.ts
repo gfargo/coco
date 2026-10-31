@@ -1481,8 +1481,13 @@ export function getLogInkFooterHints(options: GetLogInkFooterHintsOptions): LogI
     // peek over select was how line-staging silently vanished on
     // narrow terminals.
     const onWorktreeDiff = options.activeView === 'diff' && options.diffSource === 'worktree'
+    // Same for the history, branches and stash main panes (#1361): `v` is the
+    // range / mark anchor there, and the input layer skips the peek, so the
+    // hint promised a peek that never came. The inspector pane still peeks.
+    const vIsSelect = options.focus === 'commits' &&
+      (options.activeView === 'history' || options.activeView === 'branches' || options.activeView === 'stash')
     const lead =
-      options.focus === 'sidebar' || onWorktreeDiff
+      options.focus === 'sidebar' || onWorktreeDiff || vIsSelect
         ? [singlePaneSwitcherHint(options.focus)]
         : [singlePaneSwitcherHint(options.focus), t(en, 'keymap.footer.peek')]
     return {

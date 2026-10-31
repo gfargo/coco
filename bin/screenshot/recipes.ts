@@ -49,8 +49,15 @@ export type ScreenshotRecipe = {
    * Terminal dimensions for the capture. Defaults to 140x40 — wide
    * enough for the workstation's standard 3-pane layout without
    * triggering tight-density fallbacks.
+   *
+   * `rowSlack` adds spare rows to the pixel height only. The tape sizes the
+   * window from a measured per-row height, which depends on the font VHS
+   * resolves (16.55px with the CI fallback, ~18.4px with JetBrains Mono), so
+   * a recipe sitting exactly on coco's 24-row floor can land on 21 rows and
+   * capture "Terminal too small". Give floor recipes a few rows of slack;
+   * coco simply fills the taller window.
    */
-  dimensions?: { cols: number; rows: number }
+  dimensions?: { cols: number; rows: number; rowSlack?: number }
   /**
    * Theme preset to lock the capture to. Defaults to `default`.
    */
@@ -219,12 +226,13 @@ export const RECIPES: ScreenshotRecipe[] = [
     description: 'Single-pane fallback at the 80×24 floor — sidebar pane full-width, Tab-cycled',
     scenario: 'feature-pr-ready',
     command: 'ui --view history --no-all',
-    // 80×24 is the supported floor and a common tmux-split / SSH size.
+    // 80×24 is the supported floor and a common tmux-split / SSH size. The
+    // slack keeps the window at or above 24 rows whichever font VHS picks.
     // Below 100 cols the three-panel layout drops to a single full-width
     // pane (no 8-cell rails). Tab twice (commits → inspector → sidebar)
     // to land on the sidebar so the shot shows the full-width accordion
     // that replaced the rail, plus the footer's `tab: [sidebar] …` switcher.
-    dimensions: { cols: 80, rows: 24 },
+    dimensions: { cols: 80, rows: 24, rowSlack: 3 },
     actions: [
       // Wait out the cold-cache "loading context" beat before Tab-cycling,
       // else the capture lands on an empty/loading pane.
@@ -238,16 +246,19 @@ export const RECIPES: ScreenshotRecipe[] = [
     description: 'Single-pane sidebar "peek" (v) at the 80×24 floor — momentary glance with v/esc → main',
     scenario: 'feature-pr-ready',
     command: 'ui --view history --no-all',
-    // `v` momentarily peeks the sidebar from the main pane without
-    // losing your place — one key out, one key (v/esc) back. The shot
-    // captures the full-width sidebar mid-glance plus the footer's
-    // `v/esc → main` snap-back affordance that distinguishes a peek from
-    // a Tab-cycle focus move.
-    dimensions: { cols: 80, rows: 24 },
+    // `v` momentarily peeks the sidebar without losing your place — one
+    // key out, one key (v/esc) back. The shot captures the full-width
+    // sidebar mid-glance plus the footer's `v/esc → main` snap-back
+    // affordance that distinguishes a peek from a Tab-cycle focus move.
+    // Pressed from the inspector pane: on the history main pane `v` is the
+    // range anchor (#1361), not the peek.
+    dimensions: { cols: 80, rows: 24, rowSlack: 3 },
     actions: [
       // Wait out the cold-cache "loading context" beat before peeking,
       // else the capture lands on an empty/loading pane.
       { kind: 'sleep', ms: 3500 },
+      { kind: 'key', key: 'Tab' },     // main → inspector
+      { kind: 'sleep', ms: 600 },
       { kind: 'type', text: 'v' },
       { kind: 'sleep', ms: 800 },
     ],
@@ -1739,18 +1750,20 @@ export const RECIPES: ScreenshotRecipe[] = [
     scenario: 'feature-pr-ready',
     command: 'ui --view history --no-all',
     emitGif: true,
-    dimensions: { cols: 80, rows: 24 },
+    dimensions: { cols: 80, rows: 24, rowSlack: 3 },
     actions: [
       { kind: 'sleep', ms: 2000 },
       { kind: 'key', key: 'Tab' },     // main → inspector
       { kind: 'sleep', ms: 1500 },
+      // `v` peeks from the inspector; on the history main pane it is the
+      // range anchor (#1361), so the peek happens before Tab returns there.
+      { kind: 'type', text: 'v' },     // peek the sidebar
+      { kind: 'sleep', ms: 1700 },
+      { kind: 'type', text: 'v' },     // snap back to the inspector
+      { kind: 'sleep', ms: 1200 },
       { kind: 'key', key: 'Tab' },     // inspector → sidebar
       { kind: 'sleep', ms: 1500 },
       { kind: 'key', key: 'Tab' },     // sidebar → main
-      { kind: 'sleep', ms: 1500 },
-      { kind: 'type', text: 'v' },     // peek the sidebar
-      { kind: 'sleep', ms: 1700 },
-      { kind: 'type', text: 'v' },     // snap back to main
       { kind: 'sleep', ms: 1200 },
     ],
   },
