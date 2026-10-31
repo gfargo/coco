@@ -1,4 +1,5 @@
 import { CommitResult, GitError, SimpleGit } from 'simple-git'
+import { commitWithSigningHandover } from './signingHandover'
 
 /**
  * Error thrown when a pre-commit hook blocks a commit (e.g. a linter exits non-zero).
@@ -98,7 +99,7 @@ export async function createCommit(
   ]
 
   try {
-    return await git.commit(message, flags)
+    return await commitWithSigningHandover(git, message, flags)
   } catch (error) {
     if (isPreCommitHookModifiedFilesError(error)) {
       // Notify caller (e.g. to show a spinner message or log)
@@ -119,7 +120,7 @@ export async function createCommit(
       if (staged.length > 0) {
         await git.raw(['add', '--', ...staged])
       }
-      return await git.commit(message, flags)
+      return await commitWithSigningHandover(git, message, flags)
     }
 
     if (error instanceof GitError) {

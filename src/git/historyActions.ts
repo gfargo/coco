@@ -5,6 +5,7 @@ import { rejectFlagLike } from './forgeArgGuards'
 import { getInProgressOperationType } from './operationData'
 import { retryOnIndexLock } from './actionErrors'
 import { runGitProcess, type GitProcessRunner } from './gitProcess'
+import { runCommitCommand } from '../lib/simple-git/signingHandover'
 
 function compactOutputLines(output: string): string[] {
   return output
@@ -176,7 +177,7 @@ export async function amendHeadCommit(
   }
 
   return runAction(
-    () => git.raw(['commit', '--amend', '--no-edit']),
+    () => runCommitCommand(git, ['commit', '--amend', '--no-edit']),
     'Amended HEAD with staged changes'
   )
 }
@@ -203,7 +204,7 @@ export async function rewordHeadCommit(
   }
 
   return runAction(
-    () => git.raw(['commit', '--amend', '-m', trimmedMessage]),
+    () => runCommitCommand(git, ['commit', '--amend', '-m', trimmedMessage]),
     'Reworded HEAD commit'
   )
 }
@@ -536,7 +537,7 @@ export function createFixupCommit(
 
   return guardNoInProgressOperation(git).then((blocked) => (
     blocked || runAction(
-      () => git.raw(['commit', '--fixup', commit.hash]),
+      () => runCommitCommand(git, ['commit', '--fixup', commit.hash]),
       `Created fixup for ${commit.shortHash} — will squash on the next autosquash rebase`
     )
   ))

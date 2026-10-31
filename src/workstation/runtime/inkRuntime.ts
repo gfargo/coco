@@ -21,6 +21,8 @@ import { LogInkApp } from '../runtime/app'
 import { createLogInkTheme, LogInkThemeConfig } from '../chrome/theme'
 import { setAsciiDialect } from '../chrome/text'
 import { installTerminalLifecycle } from '../chrome/terminalLifecycle'
+import { registerTerminalHandoff } from '../../lib/simple-git/signingHandover'
+import { runWithTerminalHandedOff } from './editorHandoff'
 import { canStartLogInkTui, getLogInkRenderOptions } from '../chrome/terminal'
 import type { LogInkRuntime } from '../runtime/types'
 import { LogArgv } from '../../commands/log/config'
@@ -178,9 +180,20 @@ export async function startInkInteractiveLog(
     mouse: options.mouse === true,
   })
 
+  // A signed commit may need a pinentry on the terminal (#2199): git work
+  // that does gets the screen the way an editor does, then a repaint.
+  registerTerminalHandoff((run) => {
+    try {
+      return runWithTerminalHandedOff({ stdin: input, out: output }, run)
+    } finally {
+      resumeRef.current?.()
+    }
+  })
+
   try {
     await instance.waitUntilExit()
   } finally {
+    registerTerminalHandoff(undefined)
     lifecycle.dispose()
   }
 }
