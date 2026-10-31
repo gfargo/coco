@@ -25,7 +25,7 @@ import {
 import { AgentOperationError } from './errors'
 import { ChangeSource, MAX_AGENT_CONTEXT_BYTES, MAX_CONVENTIONS_BYTES } from './schemas'
 
-jest.setTimeout(20000)
+jest.setTimeout(60000)
 
 describe('agent repository context', () => {
   let tempRoot: string

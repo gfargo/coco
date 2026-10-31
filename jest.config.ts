@@ -39,6 +39,13 @@ export default {
   // independently scans its own `src/` + `bin/` and the main checkout
   // does the same. No cross-contamination.
   roots: ['<rootDir>/src', '<rootDir>/bin'],
+  // Jest's 5s default is too tight for the suites that run real git (rebase,
+  // worktree, upstream and signing integration tests) once the machine is busy:
+  // `npm test` is also the release-it `before:init` hook, which runs the whole
+  // suite on a developer's laptop; a busy one timed out at 5s and 20s in eight
+  // of those tests while CI stayed green. A passing test costs nothing extra;
+  // only a genuine hang waits longer.
+  testTimeout: 30000,
   // Coverage configuration — opt-in via `--coverage` so the default
   // `npm run test:jest` stays fast. CI runs `--coverage` to upload
   // lcov output to Codecov.
