@@ -25,6 +25,7 @@ import {
   renderCommitDiffDetail,
   renderCommitPanel,
   renderComposeContextPanel,
+  AT_REST_RICH_MIN_WIDTH,
   renderHistoryInspector,
   renderIssueTriagePreviewPanel,
   renderPullRequestTriagePreviewPanel,
@@ -208,6 +209,65 @@ describe('renderHistoryInspector', () => {
       expect(text).toContain('Changed files:')
       expect(text).toContain('index.ts')
       expect(text).toContain('Actions:')
+    })
+  })
+
+  // #2158: at 48+ cells the at-rest inspector shows the start of the body and
+  // the changed files, so "what did this commit touch?" needs no Tab.
+  describe('wide at rest (#2158)', () => {
+    function renderRest(width: number, tabbed = false, detail: GitCommitDetail = HISTORY_DETAIL): string {
+      return renderToLines(renderHistoryInspector(
+        createElement,
+        components,
+        makeState(),
+        {},
+        createLogInkContextStatus('ready'),
+        detail,
+        false,
+        undefined,
+        false,
+        width,
+        tabbed,
+        theme,
+        false
+      ), Text, Box).join('\n')
+    }
+
+    it('shows the body start and the changed files once the column has room', () => {
+      const text = renderRest(AT_REST_RICH_MIN_WIDTH)
+      expect(text).toContain('Longer body text')
+      expect(text).toContain('Changed files:')
+      expect(text).toContain('index.ts')
+      expect(text).toContain('text.ts')
+      expect(text).toContain('tab → inspect')
+      // Still the condensed view: refs and the actions list wait for focus.
+      expect(text).not.toContain('Refs:')
+      expect(text).not.toContain('Actions:')
+    })
+
+    it('stays the four-line summary just below the threshold', () => {
+      const text = renderRest(AT_REST_RICH_MIN_WIDTH - 1)
+      expect(text).not.toContain('Changed files:')
+      expect(text).not.toContain('Longer body text')
+    })
+
+    it('stays condensed on a short terminal, where there are no spare rows', () => {
+      expect(renderRest(AT_REST_RICH_MIN_WIDTH + 12, true)).not.toContain('Changed files:')
+    })
+
+    it('caps a long file list and says how many are left', () => {
+      const files = Array.from({ length: 12 }, (_, index) => ({ status: 'M', path: `src/file${index}.ts`, additions: 1, deletions: 0 }))
+      const text = renderRest(60, false, { ...HISTORY_DETAIL, files, stats: { filesChanged: 12, insertions: 12, deletions: 0 } })
+      expect(text).toContain('file0.ts')
+      expect(text).toContain('file5.ts')
+      expect(text).not.toContain('file6.ts')
+      expect(text).toContain('… +6 more')
+    })
+
+    it('omits the body block for a commit without one', () => {
+      const text = renderRest(60, false, { ...HISTORY_DETAIL, body: '' })
+      expect(text).toContain('Changed files:')
+      expect(text).not.toContain('Longer body text')
     })
   })
 
