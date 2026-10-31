@@ -2104,9 +2104,88 @@ function workflowToPaletteCommand(action: LogInkWorkflowAction): LogInkPaletteCo
  * action. Phase 6 onwards, both surfaces are filterable and executable
  * from `:`.
  */
+/** A label reduced to its letters, so `Cherry-pick commit` matches `cherry-pick commit`. */
+function paletteLabelKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z]/g, '')
+}
+
+/**
+ * Workflows whose name differs from their binding's too much to match by
+ * label. Workflow id → binding id. A guard test checks every id still exists.
+ */
+export const WORKFLOW_BINDING_ALIASES: Readonly<Record<string, string>> = {
+  'cherry-pick-commit': 'viewCherryPick',
+  'create-branch-here': 'viewCreateBranchHere',
+  'create-tag-here': 'viewCreateTagHere',
+  'interactive-rebase': 'viewInteractiveRebase',
+  'stage-pathspec': 'stagePathspec',
+  'add-to-gitignore': 'gitignoreFile',
+  'continue-operation': 'workflowContinueOperation',
+  'push-tag': 'workflowPushTag',
+  'bisect-run': 'workflowBisectRun',
+}
+
+/**
+ * Many workflows are the same action as a key binding: `R` reverts a commit,
+ * and so does the "Revert commit" workflow. Listed apart they were twins, the
+ * binding showing its key and the workflow a blank one, which hid that a key
+ * exists (#2161). The workflow takes the binding's place and key, so the entry
+ * keeps its position and shows `R` while still running from anywhere.
+ *
+ * A twin is found through the alias table, or by name: the workflow's label,
+ * minus a `Bisect: ` style prefix, equals the binding's. Only an unambiguous
+ * match folds: a label shared by several bindings or several workflows stays
+ * as it is.
+ */
+function foldWorkflowTwins<T extends { binding: LogInkKeyBinding; command: LogInkPaletteCommand }>(
+  bindings: T[],
+  workflows: Array<LogInkPaletteCommand>
+): { bindings: T[]; workflows: LogInkPaletteCommand[] } {
+  const indexesByLabel = new Map<string, number[]>()
+  bindings.forEach((entry, index) => {
+    const key = paletteLabelKey(entry.command.label)
+    indexesByLabel.set(key, [...(indexesByLabel.get(key) ?? []), index])
+  })
+  const workflowsByLabel = new Map<string, number>()
+  for (const workflow of workflows) {
+    const key = paletteLabelKey(workflow.label)
+    workflowsByLabel.set(key, (workflowsByLabel.get(key) ?? 0) + 1)
+  }
+
+  const replacement = new Map<number, LogInkPaletteCommand>()
+  const folded = new Set<LogInkPaletteCommand>()
+  for (const workflow of workflows) {
+    let target: number | undefined
+    const aliased = WORKFLOW_BINDING_ALIASES[workflow.id]
+    if (aliased) {
+      const index = bindings.findIndex((entry) => entry.binding.id === aliased)
+      target = index >= 0 ? index : undefined
+    } else {
+      const key = paletteLabelKey(workflow.label.replace(/^[A-Za-z]+:\s*/, ''))
+      const indexes = indexesByLabel.get(key)
+      if (indexes?.length === 1 && workflowsByLabel.get(paletteLabelKey(workflow.label)) === 1) target = indexes[0]
+    }
+    if (target === undefined || replacement.has(target)) continue
+    const binding = bindings[target].command
+    replacement.set(target, {
+      ...workflow,
+      keys: workflow.keys || binding.keys,
+      ...(binding.keyTokens ? { keyTokens: binding.keyTokens } : {}),
+      ...(binding.context ? { context: binding.context } : {}),
+    })
+    folded.add(workflow)
+  }
+  return {
+    bindings: bindings.map((entry, index) => (replacement.has(index) ? { ...entry, command: replacement.get(index) as LogInkPaletteCommand } : entry)),
+    workflows: workflows.filter((workflow) => !folded.has(workflow)),
+  }
+}
+
 export function getLogInkPaletteCommands(activeView?: LogInkView): LogInkPaletteCommand[] {
-  const bindings = LOG_INK_KEY_BINDINGS.map((binding) => ({ binding, command: bindingToPaletteCommand(binding) }))
-  const workflows = getLogInkWorkflowActions().map(workflowToPaletteCommand)
+  const { bindings, workflows } = foldWorkflowTwins(
+    LOG_INK_KEY_BINDINGS.map((binding) => ({ binding, command: bindingToPaletteCommand(binding) })),
+    getLogInkWorkflowActions().map(workflowToPaletteCommand)
+  )
   if (!activeView) {
     return [...bindings.map((entry) => entry.command), ...workflows]
   }

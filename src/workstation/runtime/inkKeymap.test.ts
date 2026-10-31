@@ -1,6 +1,7 @@
 import {
     FOOTER_CONTEXTUAL_HINT_CAP,
     LOG_INK_KEY_BINDINGS,
+    WORKFLOW_BINDING_ALIASES,
     combineLogInkBreadcrumbSegments,
     filterLogInkPaletteCommands,
     formatBindingBareKeys,
@@ -14,6 +15,7 @@ import {
     getLogInkViewKeyBindings,
 } from './inkKeymap'
 import type { LogInkView } from './inkViewModel'
+import { getLogInkWorkflowActions } from './inkWorkflows'
 import { en } from '../../lib/i18n/en'
 import { t } from '../../lib/i18n/t'
 
@@ -517,11 +519,88 @@ describe('log Ink keymap', () => {
     it('labels a binding with a view only when it applies to that view alone', () => {
       const commands = new Map(getLogInkPaletteCommands().map((command) => [command.id, command]))
       for (const binding of LOG_INK_KEY_BINDINGS) {
+        const command = commands.get(binding.id)
+        // A binding folded into its workflow twin keeps its key and label on
+        // the workflow entry; the label rule is checked on the rest.
+        if (!command) continue
         const scoped = binding.contexts.filter((entry) => entry !== 'search')
         const expected = scoped.length === 1 && scoped[0] !== 'normal' ? scoped[0] : undefined
-        expect({ id: binding.id, context: commands.get(binding.id)?.context }).toEqual({ id: binding.id, context: expected })
+        expect({ id: binding.id, context: command.context }).toEqual({ id: binding.id, context: expected })
       }
       expect(LOG_INK_KEY_BINDINGS.some((binding) => binding.contexts.filter((entry) => entry !== 'normal' && entry !== 'search').length > 1)).toBe(true)
+    })
+
+    // #2161: a workflow that is the same action as a binding showed up twice,
+    // the binding with its key and the workflow with a blank one.
+    describe('workflow twins', () => {
+      const labelKey = (label: string) => label.toLowerCase().replace(/[^a-z]/g, '')
+
+      it('lists an action once, with its key, when a binding and a workflow share a name', () => {
+        for (const view of [undefined, 'history', 'stash'] as const) {
+          const seen = new Map<string, string[]>()
+          for (const command of getLogInkPaletteCommands(view)) {
+            const key = labelKey(command.label)
+            seen.set(key, [...(seen.get(key) ?? []), `${command.kind}:${command.keys || '-'}`])
+          }
+          // Only the "open in browser" pair (two bindings in different views)
+          // and the PR workflows that name different scopes may repeat a label.
+          const repeated = [...seen.entries()].filter(([, entries]) =>
+            entries.length > 1 && entries.some((entry) => entry.startsWith('binding:')) && entries.some((entry) => entry.startsWith('workflow:')))
+          expect(repeated).toEqual([])
+        }
+      })
+
+      it('gives a folded workflow its binding\'s key, so a keyless twin no longer hides the key', () => {
+        const byId = new Map(getLogInkPaletteCommands().map((command) => [command.id, command]))
+        const deleteBranch = [...byId.values()].find((command) => labelKey(command.label) === 'deletebranch')
+        expect(deleteBranch).toMatchObject({ kind: 'workflow', keys: 'D' })
+        const revert = [...byId.values()].find((command) => labelKey(command.label) === 'revertcommit')
+        expect(revert?.kind).toBe('workflow')
+        expect(revert?.keys).toBeTruthy()
+        expect(revert?.context).toBe('history')
+      })
+
+      it('keeps the folded entry where the binding was, ahead of movement', () => {
+        const commands = getLogInkPaletteCommands('history')
+        const revertIndex = commands.findIndex((command) => labelKey(command.label) === 'revertcommit')
+        const moveIndex = commands.findIndex((command) => command.id === 'moveUp' || command.label === 'move up')
+        expect(revertIndex).toBeGreaterThanOrEqual(0)
+        expect(revertIndex).toBeLessThan(moveIndex)
+      })
+
+      it('folds the aliased twins, so cherry-pick and friends show their key once', () => {
+        const commands = getLogInkPaletteCommands()
+        const ids = new Set(commands.map((command) => command.id))
+        for (const [workflowId, bindingId] of Object.entries(WORKFLOW_BINDING_ALIASES)) {
+          expect(ids.has(workflowId)).toBe(true)
+          expect(ids.has(bindingId)).toBe(false)
+        }
+        const cherryPick = commands.find((command) => command.id === 'cherry-pick-commit')
+        expect(cherryPick).toMatchObject({ kind: 'workflow', keys: 'c', context: 'history' })
+      })
+
+      it('folds a "Bisect: " style workflow into the binding named after its action', () => {
+        const commands = getLogInkPaletteCommands()
+        expect(commands.find((command) => command.id === 'bisect-good')).toMatchObject({ kind: 'workflow', keys: 'y', context: 'bisect' })
+        expect(commands.find((command) => command.id === 'submodule-update')?.keys).toBe('u')
+      })
+
+      // Guards the table against a renamed or removed id: an alias that no
+      // longer points at a real workflow and binding silently folds nothing.
+      it('keeps every alias pointing at a real workflow and binding', () => {
+        const bindingIds = new Set<string>(LOG_INK_KEY_BINDINGS.map((binding) => binding.id))
+        const workflowIds = new Set(getLogInkWorkflowActions().map((action) => action.id))
+        for (const [workflowId, bindingId] of Object.entries(WORKFLOW_BINDING_ALIASES)) {
+          expect({ workflowId, exists: workflowIds.has(workflowId) }).toEqual({ workflowId, exists: true })
+          expect({ bindingId, exists: bindingIds.has(bindingId) }).toEqual({ bindingId, exists: true })
+        }
+      })
+
+      it('leaves a label shared by several bindings alone', () => {
+        const openInBrowser = getLogInkPaletteCommands().filter((command) => labelKey(command.label) === 'openinbrowser')
+        expect(openInBrowser.length).toBeGreaterThan(1)
+        expect(openInBrowser.every((command) => command.kind === 'binding')).toBe(true)
+      })
     })
 
     it('passes through every command when filter is empty and no recent', () => {
