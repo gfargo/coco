@@ -1,6 +1,7 @@
 import {
   LOG_INK_CONTEXT_KEYS,
   createLogInkContextStatus,
+  deriveDisplayContextStatus,
   isLogInkContextKeyLoading,
   isLogInkContextLoading,
   mergeRefreshedContext,
@@ -23,6 +24,49 @@ describe('log Ink context loading state', () => {
     expect(next.branches).toBe('ready')
     expect(next.provider).toBe('loading')
     expect(loading.branches).toBe('loading')
+  })
+})
+
+// #2166: an explicit refresh marks every key loading while the previous data is
+// still on screen; the surfaces then swapped their rows for "Loading …".
+describe('deriveDisplayContextStatus', () => {
+  it('reads a loading key that already has data as ready, so a refresh keeps its rows', () => {
+    const status = createLogInkContextStatus('loading')
+    const display = deriveDisplayContextStatus(status, { branches: { localBranches: [] }, tags: { tags: [] } })
+    expect(display.branches).toBe('ready')
+    expect(display.tags).toBe('ready')
+  })
+
+  it('keeps a loading key with no data loading, since there is nothing to show instead', () => {
+    const display = deriveDisplayContextStatus(createLogInkContextStatus('loading'), { branches: { localBranches: [] } })
+    expect(display.stashes).toBe('loading')
+    expect(display.worktree).toBe('loading')
+  })
+
+  it('leaves idle and ready keys alone', () => {
+    const status = updateLogInkContextStatus(createLogInkContextStatus('ready'), 'tags', 'idle')
+    const display = deriveDisplayContextStatus(status, { branches: {}, tags: {} })
+    expect(display.branches).toBe('ready')
+    expect(display.tags).toBe('idle')
+  })
+
+  it('returns the same object when nothing changes, so a useMemo over it keeps its identity', () => {
+    const ready = createLogInkContextStatus('ready')
+    expect(deriveDisplayContextStatus(ready, { branches: {} })).toBe(ready)
+    const noData = createLogInkContextStatus('loading')
+    expect(deriveDisplayContextStatus(noData, {})).toBe(noData)
+  })
+
+  it('does not touch the status it was given', () => {
+    const status = createLogInkContextStatus('loading')
+    deriveDisplayContextStatus(status, { branches: {} })
+    expect(status.branches).toBe('loading')
+  })
+
+  it('covers every context key', () => {
+    const data = Object.fromEntries(LOG_INK_CONTEXT_KEYS.map((key) => [key, {}]))
+    const display = deriveDisplayContextStatus(createLogInkContextStatus('loading'), data)
+    expect(LOG_INK_CONTEXT_KEYS.every((key) => display[key] === 'ready')).toBe(true)
   })
 })
 

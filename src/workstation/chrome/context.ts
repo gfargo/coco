@@ -81,6 +81,33 @@ function carryStashFiles<T extends object>(previous: T, merged: T): T {
   }
 }
 
+/**
+ * The status the surfaces and the sidebar render from (#2166). An explicit
+ * refresh marks every key `loading` while the previous data is still on
+ * screen, and each surface swaps its list for "Loading …" the moment it sees
+ * that, so every refresh flashed the whole workstation to loading text. A key
+ * that is loading but already has data reads as `ready` here: the old rows
+ * stay up until the new ones land. A key with no data yet still reads
+ * `loading`, because then there is nothing to show instead. The header keeps
+ * the real status and its "loading context" chip is the refresh indicator.
+ *
+ * Returns `status` itself when nothing changes, so a `useMemo` over it keeps
+ * its identity.
+ */
+export function deriveDisplayContextStatus(
+  status: LogInkContextStatus,
+  context: Partial<Record<LogInkContextKey, unknown>>
+): LogInkContextStatus {
+  let display: LogInkContextStatus | undefined
+  for (const key of LOG_INK_CONTEXT_KEYS) {
+    if (status[key] === 'loading' && context[key] !== undefined) {
+      display ??= { ...status }
+      display[key] = 'ready'
+    }
+  }
+  return display ?? status
+}
+
 export function isLogInkContextKeyLoading(
   status: LogInkContextStatus,
   key: LogInkContextKey

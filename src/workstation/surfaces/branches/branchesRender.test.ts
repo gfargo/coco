@@ -10,6 +10,7 @@ import { createLogInkState, type LogInkState } from '../../../workstation/runtim
 import { createLogInkTheme } from '../../chrome/theme'
 import {
   createLogInkContextStatus,
+  deriveDisplayContextStatus,
   updateLogInkContextStatus,
 } from '../../chrome/context'
 import type { BranchOverview, BranchRef } from '../../../git/branchData'
@@ -59,13 +60,17 @@ function makeBranches(overrides: Partial<BranchOverview> = {}): BranchOverview {
 
 function render(
   state: LogInkState,
-  options: { branches?: BranchOverview; loading?: boolean } = {}
+  options: { branches?: BranchOverview; loading?: boolean; refreshing?: boolean } = {}
 ): ReactElement {
   const theme = createLogInkTheme({})
   const context: LogInkContext = options.branches ? { branches: options.branches } : {}
-  const contextStatus = options.loading
-    ? updateLogInkContextStatus(createLogInkContextStatus('idle'), 'branches', 'loading')
-    : createLogInkContextStatus('ready')
+  const loadingStatus = updateLogInkContextStatus(createLogInkContextStatus('idle'), 'branches', 'loading')
+  const contextStatus = options.refreshing
+    // What app.ts hands the surface during a refresh (#2166).
+    ? deriveDisplayContextStatus(loadingStatus, context)
+    : options.loading
+      ? loadingStatus
+      : createLogInkContextStatus('ready')
   return renderBranchesSurface({
     h: createElement,
     components,
@@ -88,6 +93,22 @@ describe('renderBranchesSurface', () => {
   it('renders a loading placeholder while branches hydrate', () => {
     const tree = render(makeState(), { loading: true })
     expect(tree).toBeDefined()
+  })
+
+  // #2166: an explicit refresh marked branches loading while the rows were on
+  // screen, and the list was replaced by "Loading branches…" until it finished.
+  it('keeps its rows during a refresh instead of dropping to "Loading branches…"', () => {
+    const branches = makeBranches({
+      localBranches: [makeRef({ shortName: 'main', name: 'main', current: true }), makeRef({ shortName: 'feature/x', name: 'feature/x' })],
+    })
+    const text = renderToLines(render(makeState(), { branches, refreshing: true }), Text, Box).join('\n')
+    expect(text).toContain('feature/x')
+    expect(text).not.toContain('Loading branches')
+  })
+
+  it('still says "Loading branches…" on a first load, when there is nothing to show', () => {
+    const text = renderToLines(render(makeState(), { refreshing: true }), Text, Box).join('\n')
+    expect(text).toContain('Loading branches…')
   })
 
   // #2166: the header and the body both said "Loading branches…".

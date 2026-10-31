@@ -57,6 +57,7 @@
 
 import type * as ReactTypes from 'react'
 import { saveThemePreset } from '../chrome/themePersistence'
+import { deriveDisplayContextStatus } from '../chrome/context'
 import { LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout } from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
 import { LogInkFocus, LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit } from '../../workstation/runtime/inkViewModel'
@@ -1275,13 +1276,20 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // A Context.Provider renders its children transparently (no host
   // output), so wrapping the tree is behavior-preserving.
   const RuntimeContext = getLogInkRuntimeContext(React)
+  // What the surfaces render from: a refresh keeps the rows on screen instead
+  // of blanking them to "Loading …" (#2166). The header and the hooks keep the
+  // real `contextStatus`.
+  const displayContextStatus = React.useMemo(
+    () => deriveDisplayContextStatus(contextStatus, context),
+    [contextStatus, context]
+  )
   const runtimeContextValue: LogInkRuntimeContextValue = {
     state,
     dispatch,
     theme,
     layout,
     context,
-    contextStatus,
+    contextStatus: displayContextStatus,
     h,
     components: { Box, Text },
   }
@@ -1309,13 +1317,13 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // visible pane — the main-panel render in particular is expensive, so
   // we don't want to invoke the two hidden ones just to drop them.
   const sidebarPanel = () =>
-    renderSidebar(h, { Box, Text }, state, context, contextStatus, layout.sidebarWidth, layout.bodyRows, theme, spinnerFrame)
+    renderSidebar(h, { Box, Text }, state, context, displayContextStatus, layout.sidebarWidth, layout.bodyRows, theme, spinnerFrame)
   const mainSurface: SurfaceRenderContext = {
     h,
     components: { Box, Text },
     state,
     context,
-    contextStatus,
+    contextStatus: displayContextStatus,
     bodyRows: layout.bodyRows,
     width: layout.mainPanelWidth,
     theme,
@@ -1369,7 +1377,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
         components: { Box, Text },
         state,
         context,
-        contextStatus,
+        contextStatus: displayContextStatus,
         bodyRows: layout.bodyRows,
         width: layout.detailWidth,
         theme,
