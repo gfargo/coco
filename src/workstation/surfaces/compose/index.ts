@@ -64,7 +64,7 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
     ? 'Status loading'
     : worktree
       ? `${worktree.stagedCount} staged | ${worktree.unstagedCount} unstaged | ${worktree.untrackedCount} untracked`
-      : 'No worktree info yet'
+      : 'No worktree info yet. Press r to refresh.'
   const summaryCursor = compose.editing && compose.field === 'summary' ? '_' : ''
   const bodyCursor = compose.editing && compose.field === 'body' ? '_' : ''
   // Wrap each source line of the body to the panel width so long messages

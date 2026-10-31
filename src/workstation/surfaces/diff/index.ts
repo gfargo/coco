@@ -168,7 +168,7 @@ export function renderDiffSurface(
           `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
           '',
         ]
-        : ['No diff to display for this stash.']
+        : ['No diff to display for this stash. Press esc to go back.']
     const headerLines = splitRequestedButTooNarrow
       ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
       : baseHeaderLines
@@ -378,7 +378,7 @@ export function renderDiffSurface(
           `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
           '',
         ]
-        : ['No diff to display — refs may resolve to the same tree.']
+        : ['No diff to display — refs may resolve to the same tree. Press esc to go back.']
     const headerLines = splitRequestedButTooNarrow
       ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
       : baseHeaderLines
@@ -440,10 +440,10 @@ export function renderDiffSurface(
       : 0
     const currentHunkLabel = hunkCount > 0
       ? `Hunk ${currentHunkIndex + 1}/${hunkCount}`
-      : 'No hunks for this file.'
+      : 'No hunks for this file. Press esc to go back.'
 
     const baseHeaderLines: string[] = filePreviewLoading
-      ? [`Loading diff for ${selectedDetailFile?.path || 'selected file'}...`]
+      ? [`Loading diff for ${selectedDetailFile?.path || 'selected file'}…`]
       : previewHunks.length
         ? [
           // File path is already shown in the panel title bar (right) —
@@ -452,7 +452,7 @@ export function renderDiffSurface(
           `Lines ${Math.min(state.diffPreviewOffset + 1, previewHunks.length || 1)}-${Math.min(state.diffPreviewOffset + visiblePreviewHunks.length, previewHunks.length)}/${previewHunks.length}`,
           '',
         ]
-        : ['No diff preview available for this file.']
+        : ['No diff preview available for this file. Press esc to go back.']
     const headerLines = splitRequestedButTooNarrow
       ? [...baseHeaderLines.slice(0, -1), 'Terminal too narrow for side-by-side; showing unified.', '']
       : baseHeaderLines
@@ -524,11 +524,11 @@ export function renderDiffSurface(
       ? (theme.ascii ? 'New file — press space to stage it whole.' : '✚ New file — press space to stage it whole.')
       : totalHunks
         ? `Hunk ${currentHunkIndex + 1}/${totalHunks}  ${hunkRail}  ${stagedHunks}/${totalHunks} staged`
-        : 'No stageable hunks for this file.'
+        : 'No stageable hunks for this file. Press esc to go back.'
   const headerLines: string[] = isLogInkContextKeyLoading(contextStatus, 'worktree')
-    ? ['Loading file context...']
+    ? ['Loading file context…']
     : worktreeDiffLoading
-      ? [`Loading diff for ${worktreeFile?.path || 'selected file'}...`]
+      ? [`Loading diff for ${worktreeFile?.path || 'selected file'}…`]
       : worktreeFile
       ? [
         // File path is already shown in the panel title bar (right) —
@@ -537,7 +537,7 @@ export function renderDiffSurface(
         `Lines ${Math.min(state.worktreeDiffOffset + 1, diffLines.length || 1)}-${Math.min(state.worktreeDiffOffset + visibleDiffLines.length, diffLines.length)}/${diffLines.length}`,
         '',
       ]
-      : ['No changed file selected.']
+      : ['No changed file selected. Press esc to go back.']
 
   const showDiffLines = Boolean(worktreeFile) &&
     !worktreeDiffLoading &&
