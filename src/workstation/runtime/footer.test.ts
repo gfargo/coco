@@ -301,11 +301,20 @@ describe('renderFooter', () => {
     })
 
     // #1135 v2 — peek discoverability + the in-peek snap-back affordance.
-    it('surfaces "v peek" from the main / inspector pane', () => {
-      expect(contextualText(renderSinglePane(makeState()))).toContain('v peek')
+    it('surfaces "v peek" from the inspector pane and from main panes where v is free', () => {
       expect(contextualText(renderSinglePane(makeState({ focus: 'detail' })))).toContain('v peek')
+      expect(contextualText(renderSinglePane(makeState({ activeView: 'tags' })))).toContain('v peek')
       // Not from the sidebar itself — you're already there.
       expect(contextualText(renderSinglePane(makeState({ focus: 'sidebar' })))).not.toContain('v peek')
+    })
+
+    // #1361: `v` is the range / mark anchor on these main panes and the input
+    // layer skips the peek there, so advertising it promised a peek that
+    // never came (the narrow-screenshot recipe pressed v and got a range).
+    it.each(['history', 'branches', 'stash'] as const)('does not advertise "v peek" on the %s main pane', (activeView) => {
+      expect(contextualText(renderSinglePane(makeState({ activeView, focus: 'commits' })))).not.toContain('v peek')
+      // The inspector pane of the same view still peeks.
+      expect(contextualText(renderSinglePane(makeState({ activeView, focus: 'detail' })))).toContain('v peek')
     })
 
     it('swaps the switcher for the snap-back hint while peeking', () => {
