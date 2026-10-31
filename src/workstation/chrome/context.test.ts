@@ -1,6 +1,7 @@
 import {
   LOG_INK_CONTEXT_KEYS,
   createLogInkContextStatus,
+  STALE_WHILE_REFRESHING_KEYS,
   deriveDisplayContextStatus,
   isLogInkContextKeyLoading,
   isLogInkContextLoading,
@@ -63,10 +64,26 @@ describe('deriveDisplayContextStatus', () => {
     expect(status.branches).toBe('loading')
   })
 
-  it('covers every context key', () => {
-    const data = Object.fromEntries(LOG_INK_CONTEXT_KEYS.map((key) => [key, {}]))
+  // After a checkout the previous branch's pull request is still in the context
+  // while the new one loads; "ready" would show it as current. These keep the
+  // real status however much data they have.
+  it.each(['pullRequest', 'pullRequestChecks', 'pullRequestList', 'issueList', 'provider'] as const)(
+    'never reads the forge key %s as ready while it loads, even with old data',
+    (key) => {
+      const display = deriveDisplayContextStatus(createLogInkContextStatus('loading'), { [key]: { stale: true } })
+      expect(display[key]).toBe('loading')
+      expect(STALE_WHILE_REFRESHING_KEYS.has(key)).toBe(false)
+    }
+  )
+
+  it.each(['bisect', 'operation', 'lfs', 'sparse'] as const)('leaves the state-flag key %s loading', (key) => {
+    expect(deriveDisplayContextStatus(createLogInkContextStatus('loading'), { [key]: {} })[key]).toBe('loading')
+  })
+
+  it('keeps the rows of every repository-local list', () => {
+    const data = Object.fromEntries([...STALE_WHILE_REFRESHING_KEYS].map((key) => [key, {}]))
     const display = deriveDisplayContextStatus(createLogInkContextStatus('loading'), data)
-    expect(LOG_INK_CONTEXT_KEYS.every((key) => display[key] === 'ready')).toBe(true)
+    expect([...STALE_WHILE_REFRESHING_KEYS].every((key) => display[key] === 'ready')).toBe(true)
   })
 })
 
