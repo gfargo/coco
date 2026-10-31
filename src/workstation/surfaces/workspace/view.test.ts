@@ -102,9 +102,10 @@ function render(
     cloning?: boolean
     columns?: number
     rows?: number
+    theme?: ReturnType<typeof createLogInkTheme>
   } = {}
 ): ReactElement {
-  const theme = createLogInkTheme({ ascii: true })
+  const theme = options.theme ?? createLogInkTheme({ ascii: true })
   return renderWorkspaceApp({
     React: { createElement } as unknown as RenderWorkspaceAppDeps['React'],
     ink: components,
@@ -346,5 +347,46 @@ describe('renderWorkspaceApp', () => {
     // values are checked via the snapshot.
     expect(list.type).toBe(Box)
     expect(filter.type).toBe(Box)
+  })
+})
+
+// #2162: the cursor row takes the same treatment as every other list surface.
+describe('workspace cursor row', () => {
+  type Node = { props?: StubProps } | string | null | undefined
+  const collect = (node: unknown, predicate: (props: StubProps) => boolean, out: StubProps[] = []): StubProps[] => {
+    if (Array.isArray(node)) {
+      node.forEach((child) => collect(child, predicate, out))
+      return out
+    }
+    if (!node || typeof node !== 'object' || !('props' in (node as Node as object))) return out
+    const props = (node as { props: StubProps }).props
+    if (predicate(props)) out.push(props)
+    collect(props.children, predicate, out)
+    return out
+  }
+
+  it('sits on the selection bar, with the cells yielding their colours to it', () => {
+    const theme = createLogInkTheme({})
+    const bars = collect(render(baseState(), { theme }), (props) => props.backgroundColor === theme.colors.selection)
+    expect(bars).toHaveLength(1)
+    expect(bars[0]).toMatchObject({ bold: true, color: theme.colors.selectionForeground })
+    // The row is one line of text, so the bar runs through the column gaps,
+    // and no cell paints its own colour over it.
+    const cellColours = collect(bars[0].children, (props) => props.color !== undefined || props.dimColor !== undefined)
+    expect(cellColours).toEqual([])
+  })
+
+  it('is reverse video under NO_COLOR', () => {
+    const theme = createLogInkTheme({ noColor: true })
+    const rows = collect(render(baseState(), { theme }), (props) => props.inverse === true)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].backgroundColor).toBeUndefined()
+  })
+
+  it('is underlined, not barred, while the list is not the focused input', () => {
+    const theme = createLogInkTheme({})
+    const tree = render(applyWorkspaceAction(baseState(), { type: 'set-focus', focus: 'filter' }), { theme })
+    expect(collect(tree, (props) => props.backgroundColor === theme.colors.selection)).toHaveLength(0)
+    expect(collect(tree, (props) => props.underline === true)).toHaveLength(1)
   })
 })

@@ -29,6 +29,7 @@ import { applyStatusFilterMask, groupWorktreeFiles } from '../../../git/statusDa
 import type { LogInkStatusFilterMask } from '../../../workstation/runtime/inkViewModel'
 import type { SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+import { selectionRowProps } from '../../chrome/selection'
 
 // Each rendered row is either a group header (e.g. "▾ Unstaged (3)") or a
 // file under that group; both are first-class cursor targets.
@@ -132,15 +133,16 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
           selectedIndex >= row.group.startIndex &&
           selectedIndex < row.group.startIndex + row.group.files.length
         const headerSelected = focused && headerFocused && groupContainsCursor
-        const arrow = theme.ascii ? '>' : '▾'
+        // `v`, not `>`: in ASCII mode `>` is the file-row cursor, so a group
+        // header read as the cursor row (#2162).
+        const arrow = theme.ascii ? 'v' : '▾'
         const groupLabel = capitalizeGroupName(row.group.state)
         const text = `  ${arrow} ${groupLabel} (${row.group.files.length})`
         return h(Text, {
           key: `status-group-${row.group.state}-${rowIndex}`,
           bold: true,
           dimColor: !headerSelected,
-          backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
-          color: headerSelected && !theme.noColor ? theme.colors.selectionForeground : undefined,
+          ...selectionRowProps(theme, headerSelected, true),
         }, truncateCells(text, rowBudget))
       }
       const isSelected = !headerFocused && row.flatIndex === selectedIndex
@@ -159,8 +161,7 @@ export function renderStatusSurface(ctx: SurfaceRenderContext): ReactTypes.React
       return h(Text, {
         key: `status-file-${row.flatIndex}-${rowIndex}`,
         dimColor: !isSelected,
-        backgroundColor: isSelected && focused && !theme.noColor ? theme.colors.selection : undefined,
-        color: isSelected && focused && !theme.noColor ? theme.colors.selectionForeground : undefined,
+        ...selectionRowProps(theme, isSelected, focused),
       },
       `  ${cursorPart}`,
       // Suppress the dot's own color on selected rows so it inherits the

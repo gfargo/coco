@@ -299,233 +299,119 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1 #4
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          *2 ^1 #4 
+        </Text>
+        <Text>
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text>
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -874,80 +760,34 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="gray"
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text
-            color="gray"
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          lib                
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          .        
+        </Text>
+        <Text>
+          -          
+        </Text>
+        <Text>
+          -                   
+        </Text>
+        <Text>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -1289,233 +1129,119 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          *2 ^1    
+        </Text>
+        <Text>
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text>
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -1762,201 +1488,104 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={16}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco            
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          *2 ^1    
+        </Text>
+        <Text>
+          4w         
+        </Text>
+        <Text>
+          feat: thing       
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={16}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          wip               
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={16}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib             
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-      </Box>
+          -                 
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -2294,233 +1923,119 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          *2 ^1    
+        </Text>
+        <Text>
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text>
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -2757,172 +2272,90 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={15}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={10}
-        >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco           
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          *2 ^1    
+        </Text>
+        <Text>
+          4w        
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={15}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs           
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={10}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          6w        
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={15}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={10}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-      </Box>
+          -         
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -3260,233 +2693,119 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={37}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={29}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={17}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            2026-05-01
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={51}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={25}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco                                 
+        </Text>
+        <Text>
+          main                         
+        </Text>
+        <Text>
+          *2 ^1            
+        </Text>
+        <Text>
+          2026-05-01 
+        </Text>
+        <Text>
+          feat: thing                                        
+        </Text>
+        <Text>
+          /tmp/coco                
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={37}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={29}
+          docs                                 
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/landing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={17}
+          feature/landing              
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3               
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            2026-04-15
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={51}
+          2026-04-15 
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={25}
+          wip                                                
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs                
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={37}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={29}
+          lib                                  
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={17}
+          main                         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .                
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={51}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={25}
+          -                                                  
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib                 
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -4179,233 +3498,130 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        bold={true}
+        underline={true}
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &gt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+          &gt; 
+        </Text>
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text
+          color="yellow"
         >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          *2 ^1    
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -4741,233 +3957,130 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        bold={true}
+        underline={true}
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &gt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+          &gt; 
+        </Text>
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text
+          color="yellow"
         >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          *2 ^1    
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -5325,78 +4438,34 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          docs               
+        </Text>
+        <Text>
+          feature/lan… 
+        </Text>
+        <Text>
+          v3       
+        </Text>
+        <Text>
+          6w         
+        </Text>
+        <Text>
+          wip                 
+        </Text>
+        <Text>
+          /tmp/docs         
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -5734,233 +4803,130 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the URL field 1`] = `
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        bold={true}
+        underline={true}
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &gt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+          &gt; 
+        </Text>
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text
+          color="yellow"
         >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          *2 ^1    
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -6321,233 +5287,130 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the destination field 
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        bold={true}
+        underline={true}
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &gt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+          &gt; 
+        </Text>
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text
+          color="yellow"
         >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          *2 ^1    
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -6913,233 +5776,130 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        bold={true}
+        underline={true}
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &gt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+          &gt; 
+        </Text>
+        <Text
+          bold={true}
+          color="cyan"
         >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text
+          color="yellow"
         >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          *2 ^1    
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text
+          color="gray"
         >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -7497,78 +6257,34 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          *2 ^1    
+        </Text>
+        <Text>
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text>
+          /tmp/coco         
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -7906,233 +6622,119 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          *2 ^1    
+        </Text>
+        <Text>
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text>
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >
@@ -9548,233 +8150,119 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
       >
          
       </Text>
-      <Box
-        flexDirection="row"
+      <Text
+        backgroundColor="#1a3a4a"
+        bold={true}
+        color="#ffffff"
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            &lt; 
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
-        >
-          <Text
-            bold={true}
-            color="cyan"
-          >
-            coco
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
-        >
-          <Text>
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
-        >
-          <Text
-            color="yellow"
-          >
-            *2 ^1
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
-        >
-          <Text
-            color="gray"
-          >
-            4w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
-        >
-          <Text>
-            feat: thing
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
-        >
-          <Text
-            color="gray"
-          >
-            /tmp/coco
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+        <Text>
+          &lt; 
+        </Text>
+        <Text>
+          coco               
+        </Text>
+        <Text>
+          main         
+        </Text>
+        <Text>
+          *2 ^1    
+        </Text>
+        <Text>
+          4w         
+        </Text>
+        <Text>
+          feat: thing         
+        </Text>
+        <Text>
+          /tmp/coco         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            docs
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          docs               
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            feature/lan…
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          feature/lan… 
+        </Text>
+        <Text
+          color="yellow"
+          dimColor={false}
         >
-          <Text
-            color="yellow"
-            dimColor={false}
-          >
-            v3
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          v3       
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            6w
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          6w         
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            wip
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          wip                 
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/docs
-          </Text>
-        </Box>
-      </Box>
-      <Box
-        flexDirection="row"
+          /tmp/docs         
+        </Text>
+      </Text>
+      <Text
+        wrap="truncate"
       >
-        <Box
-          flexShrink={0}
-          width={2}
+        <Text
+          bold={false}
         >
-          <Text
-            bold={false}
-          >
-              
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={19}
+            
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            lib
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={13}
+          lib                
+        </Text>
+        <Text
+          dimColor={false}
         >
-          <Text
-            dimColor={false}
-          >
-            main
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={9}
+          main         
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            .
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={11}
+          .        
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={20}
+          -          
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            -
-          </Text>
-        </Box>
-        <Box
-          flexShrink={0}
-          width={18}
+          -                   
+        </Text>
+        <Text
+          color="gray"
+          dimColor={true}
         >
-          <Text
-            color="gray"
-            dimColor={true}
-          >
-            /tmp/lib
-          </Text>
-        </Box>
-      </Box>
+          /tmp/lib          
+        </Text>
+      </Text>
       <Text
         dimColor={true}
       >

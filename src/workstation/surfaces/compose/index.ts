@@ -20,6 +20,7 @@ import { truncateCells, wrapCells } from '../../chrome/text'
 import type { LogInkTheme } from '../../chrome/theme'
 import type { LogInkComponents, SurfaceRenderContext } from '../../runtime/types'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
+import { selectionRowProps } from '../../chrome/selection'
 
 /**
  * Render the streaming-preview block — the trailing lines of the
@@ -184,7 +185,6 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
     count?: number,
   ): ReactTypes.ReactElement => {
     const active = compose.field === field
-    const highlight = active && focused && !theme.noColor
     const marker = active ? (theme.ascii ? '> ' : '▸ ') : '  '
     const badge = active && compose.editing ? '  EDITING' : ''
     const children: ReactTypes.ReactElement[] = [
@@ -192,8 +192,7 @@ export function renderComposeSurface(ctx: SurfaceRenderContext, spinnerFrame: nu
         key: `compose-${field}-label`,
         bold: active,
         dimColor: !active,
-        backgroundColor: highlight ? theme.colors.selection : undefined,
-        color: highlight ? theme.colors.selectionForeground : undefined,
+        ...selectionRowProps(theme, active, focused),
       }, `${marker}${name}${badge}`),
     ]
     if (count !== undefined) {

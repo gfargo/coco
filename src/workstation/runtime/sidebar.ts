@@ -30,6 +30,7 @@ import { getLogInkSidebarTabs, isMarkedItem, isPendingItemAction } from '../../w
 import { buildFilteredLists, type FilteredLists } from './hooks/buildFilteredLists'
 import type { LogInkComponents, LogInkContext } from './types'
 import { focusBorderColor, panelTitle, sidebarTabLabel } from './utils'
+import { selectionRowProps } from '../chrome/selection'
 
 /**
  * Render a sliding-window list of selectable sidebar rows. The cursor
@@ -76,9 +77,8 @@ function renderSelectableSidebarRows<T>(
     const color = isSelected ? undefined : rowColor?.(items[index], index)
     elements.push(h(Text, {
       key: `${keyPrefix}-row-${index}`,
-      backgroundColor: isSelected && !theme.noColor ? theme.colors.selection : undefined,
-      inverse: isSelected,
       color,
+      ...selectionRowProps(theme, isSelected, true),
     }, truncateCells(`  ${text}`, width - 4)))
   }
 
@@ -357,12 +357,9 @@ export function renderSidebar(
       key: `tab-header-${tab}`,
       bold: isActive,
       dimColor: !isActive,
-      // Selection styling on the header itself when the cursor has
-      // been promoted off the items list. inverse swaps fg/bg so the
-      // highlight reads as "this is the cursor target" identically
-      // to how items render when focused.
-      backgroundColor: headerSelected && !theme.noColor ? theme.colors.selection : undefined,
-      inverse: headerSelected,
+      // Selection styling on the header itself when the cursor has been
+      // promoted off the items list: the same treatment as the items.
+      ...selectionRowProps(theme, headerSelected, true),
     }, headerText))
     if (isActive) {
       blocks.push(...renderActiveSidebarContent(h, Text, tab, state, context, contextStatus, width, bodyRows, theme, spinnerFrame, lists))

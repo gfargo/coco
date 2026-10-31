@@ -63,6 +63,7 @@ import {
   focusBorderColor,
   panelTitle,
 } from '../../runtime/utils'
+import { selectionRowProps } from '../../chrome/selection'
 
 /**
  * The diff surface's own data slices (#1136 polish). Grouped into one
@@ -198,19 +199,14 @@ export function renderDiffSurface(
             // sees at a glance which file the cursor is inside.
             const isActive = absoluteIndex === activeStartLine
             const arrow = theme.ascii ? '> ' : '▾ '
-            const activeHeader = isActive && focused && !theme.noColor
             return h(Text, {
               key: `stash-diff-line-${absoluteIndex}`,
               bold: true,
-              // Active header sits on the selection bar with a
-              // contrast-guaranteed foreground (matches history/status).
-              // The old `inverse` swap turned the accent into the bar and
-              // left the path in the selection color — low-contrast on
-              // light themes (e.g. accent blue bar + light-gray text).
-              color: activeHeader
-                ? theme.colors.selectionForeground
-                : (theme.noColor ? undefined : theme.colors.accent),
-              backgroundColor: activeHeader ? theme.colors.selection : undefined,
+              color: theme.noColor ? undefined : theme.colors.accent,
+              // Active header takes the shared cursor treatment (#2162): the
+              // selection bar with its contrast-checked foreground, reverse
+              // video under NO_COLOR, underlined when the pane is unfocused.
+              ...selectionRowProps(theme, isActive, focused),
             }, (() => {
               // Smart path truncation for the diff file header: keep
               // the leading arrow glyph and elide middle path
@@ -313,14 +309,11 @@ export function renderDiffSurface(
           if (headerFile) {
             const isActive = absoluteIndex === activeStartLine
             const arrow = theme.ascii ? '> ' : '▾ '
-            const activeHeader = isActive && focused && !theme.noColor
             return h(Text, {
               key: `pr-diff-line-${absoluteIndex}`,
               bold: true,
-              color: activeHeader
-                ? theme.colors.selectionForeground
-                : (theme.noColor ? undefined : theme.colors.accent),
-              backgroundColor: activeHeader ? theme.colors.selection : undefined,
+              color: theme.noColor ? undefined : theme.colors.accent,
+              ...selectionRowProps(theme, isActive, focused),
             }, (() => {
               const pathBudget = (width - 4) - cellWidth(arrow)
               return pathBudget >= 8

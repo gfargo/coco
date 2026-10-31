@@ -184,6 +184,26 @@ describe('renderStatusSurface', () => {
     expect(unicode).toBeDefined()
   })
 
+  // #2162: in ASCII mode `>` is the file-row cursor, so a `>` group arrow read
+  // as a second cursor.
+  it('draws the ASCII group arrow as v, never as the > cursor glyph', () => {
+    const text = (tree: ReactElement) => {
+      const parts: string[] = []
+      const walk = (node: unknown): void => {
+        if (typeof node === 'string') parts.push(node)
+        else if (Array.isArray(node)) node.forEach(walk)
+        else if (node && typeof node === 'object' && 'props' in node) walk((node as { props: { children?: unknown } }).props.children)
+      }
+      walk(tree)
+      return parts.join('\n')
+    }
+    const files = [makeFile()]
+    const ascii = text(render(makeState(), { worktree: makeWorktree(files), ascii: true }))
+    expect(ascii).toMatch(/v (Staged|Unstaged|Untracked) \(/)
+    expect(ascii).not.toMatch(/> (Staged|Unstaged|Untracked) \(/)
+    expect(text(render(makeState(), { worktree: makeWorktree(files), ascii: false }))).toContain('▾')
+  })
+
   it('structural snapshot — clean worktree', () => {
     expect(
       render(makeState(), { worktree: makeWorktree([]) })
