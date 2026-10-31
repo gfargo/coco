@@ -67,8 +67,10 @@ export function renderBranchesSurface(ctx: SurfaceRenderContext, spinnerFrame: n
     : branchSelection && branchSelection.ids.size > 0
       ? `${branchSelection.ids.size} marked`
       : undefined
+  // The body already says "Loading branches…"; saying it in the header too
+  // read as two loaders (#2166).
   const headerRight = loading
-    ? 'Loading branches…'
+    ? ''
     : [
       `${localBranches.length}/${sortedAll.length} local`,
       markedLabel,

@@ -105,7 +105,7 @@ function renderActiveStatusTabContent(
   }
   const worktree = context.worktree
   if (!worktree) {
-    return [h(Text, { key: 'tab-status-empty', dimColor: true }, '  Status unavailable')]
+    return [h(Text, { key: 'tab-status-empty', dimColor: true }, '  Status unavailable. Press r to retry.')]
   }
   const colorOf = (state: 'staged' | 'unstaged' | 'untracked'): string | undefined => {
     if (theme.noColor) return undefined
@@ -199,7 +199,7 @@ function renderActiveSidebarContent(
     }
     const branches = context.branches
     if (!branches) {
-      return [h(Text, { key: 'tab-branches-empty', dimColor: true }, '  Branches unavailable')]
+      return [h(Text, { key: 'tab-branches-empty', dimColor: true }, '  Branches unavailable. Press r to retry.')]
     }
     // Render from the SAME sorted+filtered list the input layer clamps
     // against and every branch workflow resolves from (#1341) — the
