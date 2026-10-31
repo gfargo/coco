@@ -396,12 +396,45 @@ function renderInspectorAtRest(
   Text: LogInkComponents['Text'],
   detail: GitCommitDetail,
   width: number,
-  theme: LogInkTheme
+  theme: LogInkTheme,
+  rich?: { selectedFileIndex: number; lfs?: LfsAttributeStatus }
 ): ReactTypes.ReactElement[] {
   const innerWidth = Math.max(1, width - 4)
   const subjectLines = wrapCells(detail.message, innerWidth).slice(0, 2)
   const metaLine = `${compactHash(detail.hash)} · ${detail.date}`
   const statLine = formatCommitStatLine(detail.stats)
+
+  // With room to spare (#2158) the at-rest inspector answers the usual
+  // "what did this commit touch?" without a Tab: the start of the body and
+  // the changed files. It stays four lines where the column is narrow.
+  const bodyLines = rich
+    ? (detail.body ? detail.body.split('\n').map((line) => line.trim()).filter(Boolean).slice(0, AT_REST_BODY_LINES) : [])
+    : []
+  const richNodes: ReactTypes.ReactElement[] = rich
+    ? [
+      ...(bodyLines.length
+        ? [
+          h(Text, { key: 'at-rest-body-spacer' }, ''),
+          ...bodyLines.map((line, index) => h(Text, { key: `at-rest-body-${index}`, dimColor: true },
+            truncateCells(line, innerWidth, { ascii: theme.ascii }))),
+        ]
+        : []),
+      ...(detail.files.length
+        ? [
+          h(Text, { key: 'at-rest-files-spacer' }, ''),
+          h(Text, { key: 'at-rest-files-title' }, 'Changed files:'),
+          ...renderCommitFileList(
+            h, Text, detail.files, rich.selectedFileIndex, false, AT_REST_FILE_ROWS, width, theme, rich.lfs
+          ),
+          ...(detail.files.length > AT_REST_FILE_ROWS
+            ? [h(Text, { key: 'at-rest-files-more', dimColor: true },
+              truncateCells(`  … +${detail.files.length - AT_REST_FILE_ROWS} more`, innerWidth, { ascii: theme.ascii }))]
+            : []),
+          h(Text, { key: 'at-rest-files-end' }, ''),
+        ]
+        : []),
+    ]
+    : []
 
   return [
     ...subjectLines.map((line, index) => h(Text, {
@@ -411,10 +444,18 @@ function renderInspectorAtRest(
       truncateCells(metaLine, innerWidth, { ascii: theme.ascii })),
     h(Text, { key: 'at-rest-stats', dimColor: true },
       truncateCells(statLine, innerWidth, { ascii: theme.ascii })),
+    ...richNodes,
     h(Text, { key: 'at-rest-hint', dimColor: true },
       truncateCells('tab → inspect', innerWidth, { ascii: theme.ascii })),
   ]
 }
+
+/** At-rest inspector width from which the body start and file list are shown (#2158). */
+export const AT_REST_RICH_MIN_WIDTH = 48
+// Sized so the whole at-rest block (about 21 rows with its border) fits the
+// 28-row floor below which the inspector goes tabbed instead.
+const AT_REST_BODY_LINES = 2
+const AT_REST_FILE_ROWS = 6
 
 /**
  * Render the [Notes] tab body (#OSS-2057): the loaded `refs/notes/commits`
@@ -512,7 +553,13 @@ export function renderHistoryInspector(
       paddingX: 1,
     },
     h(Text, { bold: true }, panelTitle('Inspector', focused)),
-    ...renderInspectorAtRest(h, Text, detail, width, theme))
+    ...renderInspectorAtRest(
+      h, Text, detail, width, theme,
+      // `tabbed` is the short-terminal mode: no spare rows for more lines.
+      !tabbed && width >= AT_REST_RICH_MIN_WIDTH
+        ? { selectedFileIndex: state.selectedFileIndex, lfs: context.lfs }
+        : undefined
+    ))
   }
 
   const statLine = formatCommitStatLine(detail.stats)
