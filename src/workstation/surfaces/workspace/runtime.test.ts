@@ -5,7 +5,7 @@
  * that the runtime exports.
  */
 
-import { mergeKnownRepos } from './runtime'
+import { failureStatus, mergeKnownRepos } from './runtime'
 
 describe('mergeKnownRepos', () => {
   it('combines config + cached entries and de-dupes', () => {
@@ -30,5 +30,21 @@ describe('mergeKnownRepos', () => {
 
   it('treats config as the canonical source — its order survives', () => {
     expect(mergeKnownRepos(['/b', '/a'], ['/a', '/b'])).toEqual(['/b', '/a'])
+  })
+})
+
+// #2166: a failed load used to show the raw error and nothing else.
+describe('failureStatus', () => {
+  it('names the way out after the reason', () => {
+    expect(failureStatus(new Error('gh: not found'), 'Refresh failed.')).toBe('gh: not found. Press r to retry.')
+  })
+
+  it('does not double the full stop', () => {
+    expect(failureStatus(new Error('Discovery failed.'), 'x')).toBe('Discovery failed. Press r to retry.')
+  })
+
+  it('falls back for a non-Error or an empty message', () => {
+    expect(failureStatus('boom', 'Refresh failed.')).toBe('Refresh failed. Press r to retry.')
+    expect(failureStatus(new Error(''), 'Row refresh failed.')).toBe('Row refresh failed. Press r to retry.')
   })
 })

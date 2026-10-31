@@ -212,6 +212,8 @@ describe('hydrated triage preview sections (inspector hydration follow-up)', () 
   it('issue preview shows the failure message instead of the loading hint when hydration failed', () => {
     const lines = formatIssueTriagePreview(issue, undefined, 'HTTP 401: Bad credentials').map(stripLine)
     expect(lines.some((l) => l.includes('Failed to load details: HTTP 401: Bad credentials'))).toBe(true)
+    // #2166: a failure names the way out.
+    expect(lines.some((l) => l.includes('Press r to refresh'))).toBe(true)
     expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(false)
   })
 
@@ -225,6 +227,7 @@ describe('hydrated triage preview sections (inspector hydration follow-up)', () 
   it('PR preview shows the failure message instead of the loading hint when hydration failed', () => {
     const lines = formatPullRequestTriagePreview(pr, undefined, 'pull request', 'rate limited').map(stripLine)
     expect(lines.some((l) => l.includes('Failed to load details: rate limited'))).toBe(true)
+    expect(lines.some((l) => l.includes('Press r to refresh'))).toBe(true)
     expect(lines.some((l) => l.toLowerCase().includes('loading'))).toBe(false)
   })
 

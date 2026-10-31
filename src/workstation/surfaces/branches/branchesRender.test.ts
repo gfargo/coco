@@ -90,6 +90,12 @@ describe('renderBranchesSurface', () => {
     expect(tree).toBeDefined()
   })
 
+  // #2166: the header and the body both said "Loading branches…".
+  it('says "Loading branches…" once, not in the header and the body', () => {
+    const text = renderToLines(render(makeState(), { loading: true }), Text, Box).join('\n')
+    expect(text.match(/Loading branches…/g)).toHaveLength(1)
+  })
+
   it('renders rows for populated local + remote branches', () => {
     const tree = render(makeState(), {
       branches: makeBranches({

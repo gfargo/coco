@@ -206,6 +206,12 @@ const EMPTY_OVERVIEW = (roots: ReadonlyArray<string>): WorkspaceOverview => ({
   scannedAt: new Date(0).toISOString(),
 })
 
+/** The status line for a failed load: the reason, then the way out (#2166). */
+export function failureStatus(err: unknown, fallback: string): string {
+  const reason = (err instanceof Error && err.message ? err.message : fallback).replace(/[.\s]+$/, '')
+  return `${reason}. Press r to retry.`
+}
+
 export function mergeKnownRepos(
   configEntries: ReadonlyArray<string>,
   cachedEntries: ReadonlyArray<string>
@@ -671,7 +677,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         dispatch({ type: 'set-loading', loading: false })
         dispatch({
           type: 'set-status',
-          status: err instanceof Error ? err.message : 'Discovery failed.',
+          status: failureStatus(err, 'Discovery failed.'),
         })
       }
     })()
@@ -732,7 +738,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
-        status: err instanceof Error ? err.message : 'Discovery failed.',
+        status: failureStatus(err, 'Discovery failed.'),
       })
     }
   }, [dispatch, props])
@@ -768,7 +774,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-pull-request-fetching', paths: [] })
       dispatch({
         type: 'set-status',
-        status: err instanceof Error ? err.message : 'Row refresh failed.',
+        status: failureStatus(err, 'Row refresh failed.'),
       })
     }
   }, [dispatch, props])
@@ -832,7 +838,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
-        status: err instanceof Error ? err.message : 'Refresh failed.',
+        status: failureStatus(err, 'Refresh failed.'),
       })
     }
   }, [dispatch, props, state.pendingDeletePath])
@@ -879,7 +885,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
-        status: err instanceof Error ? err.message : 'Refresh failed.',
+        status: failureStatus(err, 'Refresh failed.'),
       })
     }
   }, [addRepoDraft, dispatch, props])
@@ -940,7 +946,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-loading', loading: false })
       dispatch({
         type: 'set-status',
-        status: err instanceof Error ? err.message : 'Refresh failed.',
+        status: failureStatus(err, 'Refresh failed.'),
       })
     }
   }, [dispatch, props])
