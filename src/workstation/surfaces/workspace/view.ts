@@ -14,7 +14,8 @@ import type { LogInkTheme } from '../../chrome/theme'
 import { pickWorkstationGlyph } from '../../chrome/glyphs'
 import { renderThemePickerOverlay } from '../../runtime/overlays'
 import { focusBorderColor, panelTitle } from '../../runtime/utils'
-import { truncateCells } from '../../chrome/text'
+import { padCells, truncateCells } from '../../chrome/text'
+import { selectionRowProps } from '../../chrome/selection'
 
 import type { WorkspaceComponents } from './runtime'
 import { type PathCompletionResult } from './pathCompletion'
@@ -300,7 +301,7 @@ function renderListRow(
   key: string
 ): ReactTypes.ReactElement {
   const { React, ink, theme, state } = deps
-  const { Box, Text } = ink
+  const { Text } = ink
   // Single-glyph cursor that doubles as the drill-in hint when
   // appropriate. `↵` reads as "Enter to open this row" inline; `›`
   // is the fallback when Enter is repurposed (filter / add-repo /
@@ -311,56 +312,48 @@ function renderListRow(
       ? pickWorkstationGlyph('enter', theme.ascii)
       : pickWorkstationGlyph('chevron', theme.ascii)
     : ' '
+  // One line of text, like every other list surface, so the cursor row can
+  // carry the shared selection treatment (#2162): the selection background
+  // with its contrast-checked foreground, reverse video under NO_COLOR, and an
+  // underline while the list is not the focused input. Columns are padded to
+  // their width so the bar runs through the gaps.
+  const focused = state.focus === 'list'
+  const onBar = row.cursor && focused && !theme.noColor
+  const lastIndex = row.columns.length - 1
   const cells = row.columns.map((column, index) => {
-    // Cursored rows lean on bold + a richer color treatment rather
-    // than full-row reverse video. The earlier inverse-background
-    // approach made the row's other cells (especially dim tones)
-    // hard to read on most themes.
-    //
-    // Props are built as plain literals (rather than mutated) because
-    // Ink's TextProps fields are `readonly`. The matrix:
-    //   cursored + primary cell: bold + accent color
-    //   cursored + secondary cell: skip dimColor, keep the cell's
-    //     semantic tone so the row reads brighter than its neighbors
-    //     without inverting the background
-    //   uncursored: dim flag + semantic tone if any
     const tonedColor = !theme.noColor ? toneColor(column.tone, theme) : undefined
-    const textProps: TextProps = row.cursor
-      ? {
-        bold: column.primary,
-        color:
-          !theme.noColor && column.primary
-            ? theme.colors.accent
-            : tonedColor,
-      }
-      : {
-        dimColor: column.tone === 'dim',
-        color: tonedColor,
-      }
+    // On the selection bar a cell yields its own colour to the row's
+    // contrast-checked foreground; elsewhere it keeps its semantic tone.
+    const textProps: TextProps = onBar
+      ? {}
+      : row.cursor
+        ? {
+          bold: column.primary,
+          color: !theme.noColor && column.primary ? theme.colors.accent : tonedColor,
+        }
+        : {
+          dimColor: column.tone === 'dim',
+          color: tonedColor,
+        }
+    const cellWidth = column.width + (index < lastIndex ? COLUMN_GAP : 0)
     return React.createElement(
-      Box,
-      {
-        key: column.key,
-        width: column.width + (index < row.columns.length - 1 ? COLUMN_GAP : 0),
-        flexShrink: 0,
-      },
-      React.createElement(Text, textProps, column.text)
+      Text,
+      { key: column.key, ...textProps },
+      padCells(truncateCells(column.text, column.width), cellWidth)
     )
   })
   return React.createElement(
-    Box,
-    { key, flexDirection: 'row' },
+    Text,
+    { key, wrap: 'truncate', ...selectionRowProps(theme, row.cursor, focused) },
     React.createElement(
-      Box,
-      { width: CURSOR_PREFIX_WIDTH, flexShrink: 0 },
-      React.createElement(
-        Text,
-        {
+      Text,
+      onBar
+        ? {}
+        : {
           bold: row.cursor,
           color: row.cursor && !theme.noColor ? theme.colors.accent : undefined,
         },
-        `${cursorGlyph} `
-      )
+      padCells(`${cursorGlyph} `, CURSOR_PREFIX_WIDTH)
     ),
     ...cells
   )
