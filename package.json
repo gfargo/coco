@@ -43,7 +43,7 @@
     "!dist/dts"
   ],
   "types": "dist/index.d.ts",
-  "homepage": "https://github.com/gfargo/coco#readme",
+  "homepage": "https://coco.griffen.codes",
   "bugs": {
     "url": "https://github.com/gfargo/coco/issues"
   },
