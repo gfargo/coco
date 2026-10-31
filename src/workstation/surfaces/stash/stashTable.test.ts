@@ -90,6 +90,18 @@ describe('stash surface — aligned table', () => {
     expect(flat).toContain('message')
   })
 
+  // #2209: a stash's files load lazily. The column shows the count once it is
+  // known and `…` until then, never a misleading 0.
+  it('shows the file count when loaded and … while it is not', () => {
+    const lazy = { stashes: { stashes: [{ ...stashes[0] }, { ...stashes[1], files: undefined }] } } as unknown as LogInkContext
+    const flat = flattenText(renderStashSurface({ ...ctx(100), context: lazy }, 0))
+    const rows = leafRows(renderStashSurface({ ...ctx(100), context: lazy }, 0))
+    expect(flat).toContain('stash@{1}')
+    expect(rows.find((row) => row.includes('stash@{0}'))).toMatch(/\s2\s/)
+    expect(rows.find((row) => row.includes('stash@{1}'))).toContain('…')
+    expect(rows.find((row) => row.includes('stash@{1}'))).not.toMatch(/\s0\s/)
+  })
+
   it('shows each stash with its ref, branch, and message at a wide width', () => {
     const flat = flattenText(renderStashSurface(ctx(100), 0))
     expect(flat).toContain('stash@{0}')

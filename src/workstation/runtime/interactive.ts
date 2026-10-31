@@ -254,7 +254,7 @@ function renderWorkspaceOverview(
   width: number
 ): string[] {
   const stashLines = stashes?.stashes.slice(0, 4).map((stash) => {
-    const files = stash.files.length ? ` ${stash.files.length} file(s)` : ''
+    const files = stash.files?.length ? ` ${stash.files.length} file(s)` : ''
 
     return `  ${stash.ref} ${stash.branch}: ${stash.message}${files}`
   }) || []
@@ -486,7 +486,7 @@ export async function startInteractiveLog(
       getForgePullRequestOverview(git),
       getTagOverview(git),
       getWorktreeOverview(git),
-      getStashOverview(git),
+      getStashOverview(git, { withFiles: true }),
       getWorktreeListOverview(git),
       getGitOperationOverview(git),
       getProviderOverview(git),

@@ -1,3 +1,5 @@
+import type { StashOverview } from '../../git/stashData'
+
 export const LOG_INK_CONTEXT_KEYS = [
   'bisect',
   'branches',
@@ -55,7 +57,28 @@ export function isLogInkContextLoading(status: LogInkContextStatus): boolean {
  * clears them (OSS-452).
  */
 export function mergeRefreshedContext<T extends object>(previous: T, next: Partial<T>): T {
-  return { ...previous, ...next }
+  return carryStashFiles(previous, { ...previous, ...next })
+}
+
+/**
+ * A refresh lists stashes without their files (#2209), so a fresh entry would
+ * blank the files already loaded. A stash commit never changes, so its files
+ * carry over by hash.
+ */
+function carryStashFiles<T extends object>(previous: T, merged: T): T {
+  const before = (previous as { stashes?: StashOverview }).stashes?.stashes
+  const after = (merged as { stashes?: StashOverview }).stashes
+  if (!before?.length || !after?.stashes.length || after === (previous as { stashes?: StashOverview }).stashes) return merged
+  const filesByHash = new Map<string, string[]>()
+  for (const stash of before) if (stash.files) filesByHash.set(stash.hash, stash.files)
+  if (filesByHash.size === 0) return merged
+  return {
+    ...merged,
+    stashes: {
+      ...after,
+      stashes: after.stashes.map((stash) => (stash.files || !filesByHash.has(stash.hash) ? stash : { ...stash, files: filesByHash.get(stash.hash) })),
+    },
+  }
 }
 
 export function isLogInkContextKeyLoading(

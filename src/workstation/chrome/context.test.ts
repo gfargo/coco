@@ -42,6 +42,42 @@ describe('mergeRefreshedContext', () => {
     expect(merged.branches).toEqual(['main', 'dev'])
   })
 
+  // #2209: a refresh lists stashes without their files, so it must not blank
+  // the files the stash view already loaded.
+  describe('stash files', () => {
+    const stash = (hash: string, files?: string[]) => ({
+      ref: 'stash@{0}', hash, baseHash: 'b', date: '', branch: 'main', message: 'm', ...(files ? { files } : {}),
+    })
+
+    it('carries loaded files over to the fresh entry for the same stash', () => {
+      const previous = { stashes: { stashes: [stash('aaa', ['a.ts']), stash('bbb', ['b.ts'])] } }
+      const next = { stashes: { stashes: [stash('aaa'), stash('bbb')] } }
+      const merged = mergeRefreshedContext(previous, next)
+      expect(merged.stashes.stashes.map((entry) => entry.files)).toEqual([['a.ts'], ['b.ts']])
+    })
+
+    it('matches by hash, so a shifted index does not mix files up', () => {
+      const previous = { stashes: { stashes: [stash('aaa', ['a.ts']), stash('bbb', ['b.ts'])] } }
+      // A new stash was pushed on top: the old ones moved down.
+      const next = { stashes: { stashes: [stash('ccc'), stash('aaa'), stash('bbb')] } }
+      const merged = mergeRefreshedContext(previous, next)
+      expect(merged.stashes.stashes.map((entry) => entry.files)).toEqual([undefined, ['a.ts'], ['b.ts']])
+    })
+
+    it('does not overwrite files the fresh entry already has', () => {
+      const previous = { stashes: { stashes: [stash('aaa', ['old.ts'])] } }
+      const next = { stashes: { stashes: [stash('aaa', ['new.ts'])] } }
+      expect(mergeRefreshedContext(previous, next).stashes.stashes[0].files).toEqual(['new.ts'])
+    })
+
+    it('leaves the context alone when no files were loaded or no stashes came back', () => {
+      const previous = { stashes: { stashes: [stash('aaa')] } }
+      const next = { stashes: { stashes: [stash('aaa')] } }
+      expect(mergeRefreshedContext(previous, next).stashes).toBe(next.stashes)
+      expect(mergeRefreshedContext({ stashes: { stashes: [stash('aaa', ['a.ts'])] } }, { stashes: { stashes: [] } }).stashes.stashes).toEqual([])
+    })
+  })
+
   it('overwrites boot-fetched keys even when the fresh value is undefined', () => {
     const previous = { branches: ['main'], pullRequestList: { items: [] } }
     const next = { branches: undefined }

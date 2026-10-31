@@ -130,6 +130,17 @@ describe('log Ink preview pane (P4.1)', () => {
       expect(lines[0].emphasis).toBe('dim')
     })
 
+    // #2209: files load lazily, so "not loaded yet" must not read as "no files".
+    it('says the files are loading while they are not loaded, not that there are none', () => {
+      const out = text(formatStashPreview({ ...baseStash(), files: undefined }))
+      expect(out).toContain('Loading files…')
+      expect(out).not.toContain('No files in stash.')
+    })
+
+    it('still says there are no files for a stash that loaded an empty list', () => {
+      expect(text(formatStashPreview({ ...baseStash(), files: [] }))).toContain('No files in stash.')
+    })
+
     it('returns ref + branch + message + file list', () => {
       const lines = formatStashPreview(baseStash())
       expect(lines[0].text).toBe('stash@{0}')
