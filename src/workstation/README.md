@@ -259,7 +259,7 @@ Scenarios match common workstation states: feature branch ready to PR, dirty wor
 - **Empty / loading copy.** `chrome/surfaceStates.ts` — every surface has a tailored empty-state hint pointing at the next sensible action.
 - **Persistence.** Anything user-facing that survives between runs (sidebar tab, diff view mode, onboarding marker) goes through a `chrome/*Persistence.ts` module. Best-effort, XDG-friendly, no PII in cache filenames.
 - **Refresh.** Don't poll. The runtime owns a `chrome/refreshWatcher.ts` that debounces `.git/` mtime changes and dispatches refresh actions; views just react.
-- **No mouse input.** Every action is reachable from the keymap and the command palette (`:`).
+- **Mouse is opt-in.** `logTui.mouse` turns on click-to-focus, row selection and wheel scrolling (`runtime/mouseInput.ts`); it is off by default because SGR mouse reporting stops the terminal's own text selection. Every action stays reachable from the keymap and the command palette (`:`), so nothing depends on the mouse.
 
 ## Boundaries
 
