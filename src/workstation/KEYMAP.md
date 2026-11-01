@@ -234,6 +234,8 @@ everywhere. "↑/↓ select" is implied in every list view.
 | `L` | File history for the cursored file |
 | `e` / `c` | Compose: inline edit / commit |
 
+In the blame view: `Enter` opens the cursored line's commit; `p` re-blames the file at that commit's parent (`<sha>^`) to see the line before it changed, and `Esc` steps back one revision (then leaves the view). `L` opens file history. Lines not committed yet refuse both.
+
 ### Diff — worktree (staging diff)
 
 The hunk is the unit of action here.

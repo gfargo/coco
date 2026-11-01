@@ -181,6 +181,8 @@ export type LogInkInputContext = {
    * no-op in that case.
    */
   blameLineCount?: number
+  /** Full sha of the commit the cursored blame line is attributed to. */
+  blameSelectedHash?: string
   /**
    * Number of commits in the file-history list for the active path (#COCO-14).
    * Drives j/k navigation on the file-history view. 0 while hydrating
@@ -2130,6 +2132,12 @@ export function getLogInkInputEvents(
     return rebaseEvents
   }
 
+  // Esc in a re-blamed view steps back one revision before leaving the view (#2212).
+  const blameBackEvents = handleBlameInput(state, inputValue, key, context, 'back')
+  if (blameBackEvents) {
+    return blameBackEvents
+  }
+
   if (key.escape && state.viewStack.length > 1) {
     return [action({ type: 'popView' })]
   }
@@ -3903,6 +3911,11 @@ export function getLogInkInputEvents(
   ) {
     return [action({ type: 'navigateOpenFileHistoryForPath', path: context.worktreeSelectedPath })]
   }
+  const blameDrillEvents = handleBlameInput(state, inputValue, key, context, 'drill')
+  if (blameDrillEvents) {
+    return blameDrillEvents
+  }
+
   const blameOpenFileHistoryEvents = handleBlameInput(state, inputValue, key, context, 'open-file-history')
   if (blameOpenFileHistoryEvents) {
     return blameOpenFileHistoryEvents

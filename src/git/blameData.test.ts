@@ -1,4 +1,4 @@
-import { getBlame, parseBlamePorcelain } from './blameData'
+import { blameCacheKey, getBlame, parseBlamePorcelain } from './blameData'
 
 // A minimal `git blame --porcelain` fixture: two commits, three lines.
 // The second line reuses the first commit (so it carries only the sha
@@ -118,5 +118,25 @@ describe('getBlame', () => {
     const git = { raw: jest.fn().mockRejectedValue(new Error('binary file')) }
     const result = await getBlame(git as never, 'logo.png')
     expect(result).toEqual({ ok: false, path: 'logo.png', message: 'binary file' })
+  })
+})
+
+describe('blame at a revision (#2212)', () => {
+  it('passes the revision before the pathspec separator', async () => {
+    const raw = jest.fn().mockResolvedValue('')
+    const result = await getBlame({ raw } as never, 'src/a.ts', 'abc123^')
+    expect(raw).toHaveBeenCalledWith(['blame', '--porcelain', 'abc123^', '--', 'src/a.ts'])
+    expect(result).toMatchObject({ ok: true, rev: 'abc123^' })
+  })
+
+  it('keeps the plain working-copy call when no revision is given', async () => {
+    const raw = jest.fn().mockResolvedValue('')
+    await getBlame({ raw } as never, 'src/a.ts')
+    expect(raw).toHaveBeenCalledWith(['blame', '--porcelain', '--', 'src/a.ts'])
+  })
+
+  it('keys the cache by revision so a re-blame never serves the working copy', () => {
+    expect(blameCacheKey('a.ts')).toBe('a.ts')
+    expect(blameCacheKey('a.ts', 'r1^')).toBe('r1^:a.ts')
   })
 })

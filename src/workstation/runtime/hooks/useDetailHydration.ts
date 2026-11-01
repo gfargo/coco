@@ -58,7 +58,7 @@
 
 import type * as ReactTypes from 'react'
 import type { SimpleGit } from 'simple-git'
-import { getBlame } from '../../../git/blameData'
+import { blameCacheKey, getBlame } from '../../../git/blameData'
 import { getFileHistory } from '../../../git/fileHistoryData'
 import { getCommitNote } from '../../../git/notesData'
 import type { ForgeActions } from '../../../git/forgeActions'
@@ -341,7 +341,9 @@ export function useDetailHydration(
     if (state.activeView !== 'blame') return
     const path = state.blamePath
     if (!path) return
-    if (context.blameByPath?.has(path)) {
+    const rev = state.blameRev
+    const cacheKey = blameCacheKey(path, rev)
+    if (context.blameByPath?.has(cacheKey)) {
       // Cache hit — make sure the loading flag is cleared (it may be set
       // from a previous cold path) so the surface renders the cached
       // blame immediately.
@@ -353,7 +355,7 @@ export function useDetailHydration(
     let active = true
     setBlameLoading(true)
     const timer = setTimeout(async () => {
-      const result = await getBlame(git, path)
+      const result = await getBlame(git, path, rev)
       if (!active) return
       // Only cache a successful result (#OSS-1769) — caching a failure
       // (e.g. transient `index.lock` contention) would permanently
@@ -363,7 +365,7 @@ export function useDetailHydration(
       // (uncached) `blameFailure` state the surface renders instead of
       // spinning forever — see `HydrationFailure` above.
       if (!result.ok) {
-        setBlameFailure({ path: result.path, message: result.message })
+        setBlameFailure({ path: cacheKey, message: result.message })
         setBlameLoading(false)
         return
       }
@@ -371,7 +373,7 @@ export function useDetailHydration(
       setContext(
         (current) => ({
           ...current,
-          blameByPath: new Map(current.blameByPath || []).set(result.path, result),
+          blameByPath: new Map(current.blameByPath || []).set(cacheKey, result),
         }),
         issuedAtDepth,
       )
@@ -387,6 +389,7 @@ export function useDetailHydration(
     git,
     state.activeView,
     state.blamePath,
+    state.blameRev,
     context.blameByPath,
     setContext,
   ])

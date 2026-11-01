@@ -141,7 +141,7 @@ export function renderBlameSurface(
     h(Text, { bold: true }, panelTitle('Blame', focused)),
     h(Text, { dimColor: true }, headerRight),
   ),
-  h(Text, { dimColor: true }, truncateCells(path ? `  ${path}` : '  (no file)', Math.max(10, width - 4))),
+  h(Text, { dimColor: true }, truncateCells(path ? `  ${path}${state.blameRev ? `  @ ${shortRev(state.blameRev)}  (esc: back)` : ''}` : '  (no file)', Math.max(10, width - 4))),
   ...(hasMoreAbove
     ? [h(Text, { key: 'blame-more-above', dimColor: true }, `  ↑ ${windowStart} more above`)]
     : []),
@@ -149,4 +149,9 @@ export function renderBlameSurface(
   ...(hasMoreBelow
     ? [h(Text, { key: 'blame-more-below', dimColor: true }, `  ↓ ${lines.length - (windowStart + listRows)} more below`)]
     : []))
+}
+
+/** `0123456789abcdef^` -> `0123456^`. */
+function shortRev(rev: string): string {
+  return rev.replace(/^([0-9a-f]{7})[0-9a-f]*/, '$1')
 }

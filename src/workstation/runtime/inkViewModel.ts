@@ -535,6 +535,13 @@ export type LogInkState = {
    */
   blamePath?: string
   /**
+   * Revision the blame view is showing (#2212), or undefined for the working
+   * copy. `p` on a line re-blames at that line's `<sha>^`.
+   */
+  blameRev?: string
+  /** Earlier revisions, newest last; Esc pops one (`blameRev` undefined = working copy). */
+  blameRevStack: Array<{ rev?: string; selectedIndex: number }>
+  /**
    * Cursor for the file-history view (#COCO-14). Indexes into the
    * `FileHistoryCommit[]` for the active path; windowed-rendered around
    * this index so long histories stay responsive. Reset to 0 each time a
@@ -1283,6 +1290,8 @@ export type LogInkAction =
   | InputPromptAction
   | { type: 'toggleStatusFilterMask'; kind: keyof LogInkStatusFilterMask }
   | { type: 'setHistoryFetchArgs'; value?: LogInkHistoryFetchArgs }
+  | { type: 'blameReblame'; rev: string }
+  | { type: 'blameBack' }
   | { type: 'toggleDiffViewMode' }
   | { type: 'setDiffViewMode'; value: LogInkDiffViewMode }
   | ChangelogAction
@@ -1628,6 +1637,8 @@ function withPushedRepoFrame(
     // a destructive batch is not).
     selection: undefined,
     blamePath: undefined,
+    blameRev: undefined,
+    blameRevStack: [],
     fileHistoryPath: undefined,
     changelogCache: {},
     selectedWorktreeFileIndex: 0,
@@ -2122,6 +2133,7 @@ export function createLogInkState(
     selectedSubmoduleIndex: 0,
     selectedRemoteIndex: 0,
     selectedBlameIndex: 0,
+    blameRevStack: [],
     selectedFileHistoryIndex: 0,
     selectedIssueIndex: 0,
     selectedPullRequestTriageIndex: 0,
@@ -2769,11 +2781,35 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
       // mid-file; preserve it when re-opening the same path (the cached
       // hydration is still valid and the user's place is worth keeping).
       const next = withPushedView(state, 'blame')
-      const samePath = state.blamePath === action.path
+      const samePath = state.blamePath === action.path && !state.blameRev
       return {
         ...next,
         blamePath: action.path,
+        blameRev: undefined,
+        blameRevStack: [],
         selectedBlameIndex: samePath ? state.selectedBlameIndex : 0,
+      }
+    }
+    case 'blameReblame':
+      // `p` (#2212): blame again at an earlier revision, remembering where
+      // we were so Esc can come back to the same line.
+      return {
+        ...state,
+        blameRev: action.rev,
+        blameRevStack: [
+          ...state.blameRevStack,
+          { rev: state.blameRev, selectedIndex: state.selectedBlameIndex },
+        ],
+        selectedBlameIndex: 0,
+      }
+    case 'blameBack': {
+      const previous = state.blameRevStack[state.blameRevStack.length - 1]
+      if (!previous) return state
+      return {
+        ...state,
+        blameRev: previous.rev,
+        blameRevStack: state.blameRevStack.slice(0, -1),
+        selectedBlameIndex: previous.selectedIndex,
       }
     }
     case 'navigateOpenFileHistoryForPath': {

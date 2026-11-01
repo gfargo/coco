@@ -38,8 +38,17 @@ export type BlameLine = {
 }
 
 export type BlameResult =
-  | { ok: true; path: string; lines: BlameLine[] }
-  | { ok: false; path: string; message: string }
+  | { ok: true; path: string; rev?: string; lines: BlameLine[] }
+  | { ok: false; path: string; rev?: string; message: string }
+
+/**
+ * Cache key for a blame: the path alone for the working copy, or
+ * `<rev>:<path>` for a re-blame at an earlier revision (#2212). A `:` cannot
+ * start a git revision, so the two forms never collide.
+ */
+export function blameCacheKey(path: string, rev?: string): string {
+  return rev ? `${rev}:${path}` : path
+}
 
 /**
  * Uncommitted / not-yet-committed lines blame as the all-zero sha.
@@ -132,14 +141,14 @@ export function parseBlamePorcelain(output: string): BlameLine[] {
  * `git blame --porcelain -- <path>`. Best-effort: failures resolve to a
  * `{ ok: false }` result the surface renders as a placeholder.
  */
-export async function getBlame(git: SimpleGit, path: string): Promise<BlameResult> {
+export async function getBlame(git: SimpleGit, path: string, rev?: string): Promise<BlameResult> {
   let output = ''
   try {
-    output = await git.raw(['blame', '--porcelain', '--', path])
+    output = await git.raw(['blame', '--porcelain', ...(rev ? [rev] : []), '--', path])
   } catch (error) {
     const message = error instanceof Error ? error.message : 'git blame failed'
-    return { ok: false, path, message }
+    return { ok: false, path, rev, message }
   }
   const lines = parseBlamePorcelain(output)
-  return { ok: true, path, lines }
+  return { ok: true, path, rev, lines }
 }
