@@ -73,6 +73,7 @@ import {
   applyWorkspaceAction,
   createWorkspaceState,
   selectFocusedRepo,
+  selectVisibleRepos,
   type WorkspaceAction,
   type WorkspaceState,
 } from './state'
@@ -97,6 +98,12 @@ import {
   writeWorkspacePreferences,
 } from '../../chrome/workspacePreferences'
 import { isGitWorkingTree } from '../../../git/workspaceData'
+import {
+  summarizeWorkspaceSync,
+  syncWorkspaceRepos,
+  type WorkspaceSyncMode,
+  type WorkspaceSyncOutcome,
+} from '../../../git/workspaceSync'
 import { createLatestGate } from './latestGate'
 import { createSummaryBatcher } from './summaryBatcher'
 
@@ -158,6 +165,15 @@ export type WorkspaceResumeState = {
   selectedRepoPath?: string
 }
 
+export type SyncRepos = (
+  repos: ReadonlyArray<WorkspaceRepoSummary>,
+  mode: WorkspaceSyncMode,
+  options: {
+    onRepoDone: (outcome: WorkspaceSyncOutcome, summary?: WorkspaceRepoSummary) => void
+    isCancelled: () => boolean
+  }
+) => Promise<WorkspaceSyncOutcome[]>
+
 export type WorkspaceStartOptions = {
   roots: ReadonlyArray<string>
   knownRepos?: ReadonlyArray<string>
@@ -193,6 +209,8 @@ export type WorkspaceStartOptions = {
     repos: ReadonlyArray<WorkspaceRepoSummary>,
     onRepoComplete?: (path: string, count: number | undefined) => void
   ) => Promise<WorkspacePullRequestCounts>
+  /** Override fetch / pull-all (used by tests). */
+  syncRepos?: SyncRepos
   streams?: {
     input?: NodeJS.ReadStream
     output?: NodeJS.WriteStream
@@ -289,6 +307,7 @@ export async function startWorkspace(
     knownRepos,
     loadOverview,
     loadPullRequestCounts,
+    syncRepos: options.syncRepos ?? syncWorkspaceRepos,
     onAddRepo: options.onAddRepo,
     resume: effectiveResume,
     exitRef,
@@ -475,6 +494,7 @@ type WorkspaceInkAppProps = {
     repos: ReadonlyArray<WorkspaceRepoSummary>,
     onRepoComplete?: (path: string, count: number | undefined) => void
   ) => Promise<WorkspacePullRequestCounts>
+  syncRepos: SyncRepos
   onAddRepo?: () => Promise<string | undefined>
   resume?: WorkspaceResumeState
   exitRef: { current: WorkspaceExitResult }
@@ -779,6 +799,44 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     }
   }, [dispatch, props])
 
+  const syncingRef = React.useRef(false)
+  const syncRepos = React.useCallback(async (mode: WorkspaceSyncMode, scope: 'row' | 'all') => {
+    if (syncingRef.current) {
+      dispatch({ type: 'set-status', status: 'A fetch or pull is already running.' })
+      return
+    }
+    const focused = selectFocusedRepo(stateRef.current)
+    const targets = scope === 'row'
+      ? (focused ? [focused] : [])
+      : selectVisibleRepos(stateRef.current)
+    if (targets.length === 0) return
+    const verb = mode === 'fetch' ? 'Fetching' : 'Pulling'
+    syncingRef.current = true
+    let done = 0
+    dispatch({ type: 'set-status', status: `${verb} ${targets.length} ${targets.length === 1 ? 'repo' : 'repos'}…` })
+    try {
+      const outcomes = await props.syncRepos(targets, mode, {
+        isCancelled: () => unmountedRef.current,
+        onRepoDone: (outcome, summary) => {
+          if (unmountedRef.current) return
+          done += 1
+          if (summary) dispatch({ type: 'merge-repo-summaries', repos: [summary] })
+          dispatch({
+            type: 'set-status',
+            status: `${verb} ${done}/${targets.length} (${outcome.name}${outcome.status === 'failed' ? ' failed' : ''})…`,
+          })
+        },
+      })
+      if (unmountedRef.current) return
+      dispatch({ type: 'set-status', status: summarizeWorkspaceSync(mode, outcomes) })
+    } catch (err) {
+      if (unmountedRef.current) return
+      dispatch({ type: 'set-status', status: failureStatus(err, `${verb} failed.`) })
+    } finally {
+      syncingRef.current = false
+    }
+  }, [dispatch, props])
+
   const drillIn = React.useCallback(() => {
     const focused = selectFocusedRepo(state)
     if (!focused) {
@@ -961,6 +1019,8 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   refreshRef.current = refresh
   const refreshRowRef = React.useRef(refreshRow)
   refreshRowRef.current = refreshRow
+  const syncRef = React.useRef(syncRepos)
+  syncRef.current = syncRepos
   const openAddRepoRef = React.useRef(openAddRepo)
   openAddRepoRef.current = openAddRepo
   const openCloneRef = React.useRef(openClone)
@@ -1176,6 +1236,9 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         break
       case 'refresh-row':
         void refreshRowRef.current()
+        break
+      case 'sync':
+        void syncRef.current(intent.mode, intent.scope)
         break
       case 'add-repo':
         openAddRepoRef.current()

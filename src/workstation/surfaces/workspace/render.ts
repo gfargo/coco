@@ -770,6 +770,8 @@ export function buildWorkspaceHelpSections(): WorkspaceHelpSection[] {
       rows: [
         { glyph: '⟳', keys: 'r', description: 'Refresh all repos (discovery + PR counts)' },
         { glyph: '⟲', keys: 'R', description: 'Refresh just the cursored repo (faster)' },
+        { glyph: '⇣', keys: 'f / F', description: 'Fetch the cursored repo / every visible repo (4 at a time)' },
+        { glyph: '⤓', keys: 'p / P', description: 'Fast-forward pull the cursored repo / every visible repo (clean and behind only)' },
         { glyph: '＋', keys: 'a', description: 'Add a repo via path prompt (tab-completes)' },
         { glyph: '⬇', keys: 'c', description: 'Clone a remote repo (defaults into the launch directory)' },
         { glyph: '✕', keys: 'd', description: 'Remove the cursored repo from the known-repos store' },
