@@ -66,6 +66,8 @@ export const en: Catalog = {
   'keymap.binding.createStash.label': 'stash changes',
   'keymap.binding.stashFile.label': 'stash file',
   'keymap.binding.stashFile.desc': 'Stash only the file under the cursor on the status view (tracked or untracked), with an optional message.',
+  'keymap.binding.addWorktree.label': 'add worktree',
+  'keymap.binding.addWorktree.desc': 'Add a worktree: type a branch (an existing one is checked out, a new one is created from HEAD) and optionally a path. The default path is next to the current worktree.',
   'keymap.binding.createStash.desc': 'Stash all changes (tracked + untracked) with an optional message — works from any view, including status/diff/compose. Empty message creates a quick WIP stash.',
   'keymap.binding.navigateWorktrees.label': 'worktrees',
   'keymap.binding.navigateWorktrees.desc': 'Push the linked worktrees view.',

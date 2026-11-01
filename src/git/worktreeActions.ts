@@ -1,3 +1,4 @@
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import { SimpleGit } from 'simple-git'
 import { BranchActionResult, deleteBranch } from './branchActions'
 import { BranchRef } from './branchData'
@@ -100,4 +101,59 @@ export async function removeWorktreeAndBranch(
     ok: true,
     message: `Removed worktree ${worktree.path} and deleted branch ${branchName}`,
   }
+}
+
+/**
+ * Where a new worktree goes when the user typed only a branch: next to the
+ * current one, named `<dir>-<branch>` with slashes flattened
+ * (`/work/coco` + `feat/x` -> `/work/coco-feat-x`).
+ */
+export function defaultWorktreePath(currentPath: string, branch: string): string {
+  const slug = branch.replace(/[\\/]+/g, '-').replace(/^-+|-+$/g, '')
+  return join(dirname(currentPath), `${basename(currentPath)}-${slug}`)
+}
+
+/**
+ * Parse the add-worktree prompt: `<branch> [path]`. The first word is the
+ * branch; anything after it is the path (relative paths resolve against the
+ * current worktree). Returns undefined for an empty entry.
+ */
+export function parseAddWorktreeInput(
+  input: string,
+  currentPath: string
+): { branch: string; path: string } | undefined {
+  const trimmed = input.trim()
+  if (!trimmed) return undefined
+  const [branch, ...rest] = trimmed.split(/\s+/)
+  const given = rest.join(' ')
+  return {
+    branch,
+    path: given
+      ? (isAbsolute(given) ? given : resolve(currentPath, given))
+      : defaultWorktreePath(currentPath, branch),
+  }
+}
+
+/**
+ * `git worktree add` for a branch. An existing local branch is checked out
+ * in the new worktree; otherwise the branch is created from the current
+ * HEAD. Git refuses a branch that is already checked out elsewhere, and that
+ * message is passed through.
+ */
+export async function addWorktree(
+  git: SimpleGit,
+  branch: string,
+  path: string
+): Promise<BranchActionResult> {
+  const exists = await git
+    .raw(['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`])
+    .then(() => true, () => false)
+  return runAction(
+    () => git.raw(exists
+      ? ['worktree', 'add', path, branch]
+      : ['worktree', 'add', '-b', branch, path]),
+    exists
+      ? `Added worktree ${path} on ${branch}`
+      : `Added worktree ${path} on new branch ${branch}`
+  )
 }
