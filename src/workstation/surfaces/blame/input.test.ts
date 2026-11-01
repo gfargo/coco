@@ -124,3 +124,44 @@ describe('handleBlameInput', () => {
     })
   })
 })
+
+describe('blame drill-down (#2212)', () => {
+  const HASH = 'a'.repeat(40)
+  const drill = (key: object, value: string, context: object, extra: object = {}) => {
+    const { state } = blameState({ blameLineCount: 3, blamePath: 'src/a.ts' })
+    return handleBlameInput({ ...state, ...extra } as typeof state, value, key, context, 'drill')
+  }
+
+  it('Enter opens the cursored line\'s commit', () => {
+    expect(drill({ return: true }, '', { blameSelectedHash: HASH })).toEqual([
+      { type: 'action', action: { type: 'navigateOpenDiffForCommit', sha: HASH, commitIndex: 0 } },
+      { type: 'action', action: { type: 'setStatus', value: `viewing diff for ${HASH.slice(0, 7)}` } },
+    ])
+  })
+
+  it('p re-blames at the commit\'s parent', () => {
+    const events = drill({}, 'p', { blameSelectedHash: HASH })
+    expect(events?.[0]).toEqual({ type: 'action', action: { type: 'blameReblame', rev: `${HASH}^` } })
+  })
+
+  it('refuses uncommitted lines for both keys', () => {
+    const zero = '0'.repeat(40)
+    for (const [key, value] of [[{ return: true }, ''], [{}, 'p']] as const) {
+      expect(drill(key, value, { blameSelectedHash: zero })?.[0]).toMatchObject({
+        action: { type: 'setStatus', kind: 'warning' },
+      })
+    }
+  })
+
+  it('ignores other keys', () => {
+    expect(drill({}, 'x', { blameSelectedHash: HASH })).toBeNull()
+  })
+
+  it('Esc steps back only while there is an earlier revision', () => {
+    const { state } = blameState({ blamePath: 'src/a.ts' })
+    expect(handleBlameInput(state, '', { escape: true }, {}, 'back')).toBeNull()
+    const stacked = { ...state, blameRevStack: [{ selectedIndex: 4 }] }
+    expect(handleBlameInput(stacked, '', { escape: true }, {}, 'back')?.[0])
+      .toEqual({ type: 'action', action: { type: 'blameBack' } })
+  })
+})

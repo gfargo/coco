@@ -39,6 +39,7 @@ import {
     getInspectorActionsForState,
     getLogInkInputEvents,
 } from '../inkInput'
+import { blameCacheKey } from '../../../git/blameData'
 import { resolveQuitEvents } from '../quitGuard'
 import { findStashFileForOffset } from '../../../git/stashData'
 import { getBisectCompletion } from '../../../git/bisectData'
@@ -508,8 +509,15 @@ export function useInputHandler(
       // active path (#0.71); 0 while hydrating or on a failed blame, so
       // the nav handlers no-op until lines exist.
       blameLineCount: (() => {
-        const blame = state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined
+        const blame = state.blamePath ? context.blameByPath?.get(blameCacheKey(state.blamePath, state.blameRev)) : undefined
         return blame && blame.ok ? blame.lines.length : 0
+      })(),
+      // The cursored blame line's commit (#2212), for Enter (open it) and `p`
+      // (re-blame at its parent).
+      blameSelectedHash: (() => {
+        const blame = state.blamePath ? context.blameByPath?.get(blameCacheKey(state.blamePath, state.blameRev)) : undefined
+        if (!blame || !blame.ok || blame.lines.length === 0) return undefined
+        return blame.lines[Math.max(0, Math.min(state.selectedBlameIndex, blame.lines.length - 1))]?.hash
       })(),
       // File-history navigation context (#COCO-14). Commit count drives
       // j/k bounds; selectedHash carries the cursored commit's sha to

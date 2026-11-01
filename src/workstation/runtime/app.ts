@@ -56,6 +56,7 @@
  */
 
 import type * as ReactTypes from 'react'
+import { blameCacheKey } from '../../git/blameData'
 import { saveThemePreset } from '../chrome/themePersistence'
 import { deriveDisplayContextStatus } from '../chrome/context'
 import { LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout } from '../chrome/layout'
@@ -1361,10 +1362,10 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       prDiffError,
       bisectCandidateDetail,
       bisectCandidateLoading,
-      blame: state.blamePath ? context.blameByPath?.get(state.blamePath) : undefined,
+      blame: state.blamePath ? context.blameByPath?.get(blameCacheKey(state.blamePath, state.blameRev)) : undefined,
       blameLoading,
       blameFailure:
-        state.blamePath && blameFailure?.path === state.blamePath
+        state.blamePath && blameFailure?.path === blameCacheKey(state.blamePath, state.blameRev)
           ? blameFailure.message
           : undefined,
       fileHistory: state.fileHistoryPath

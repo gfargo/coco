@@ -1643,6 +1643,42 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('blame drill-down through the router (#2212)', () => {
+    const HASH = 'b'.repeat(40)
+    const blameView = () => applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'blame' })
+
+    it('Enter and p reach the blame handler, and Esc steps back before popping the view', () => {
+      const ctx = { blameLineCount: 5, blameSelectedHash: HASH }
+      expect(getLogInkInputEvents(blameView(), '', { return: true }, ctx)[0])
+        .toMatchObject({ action: { type: 'navigateOpenDiffForCommit', sha: HASH } })
+      expect(getLogInkInputEvents(blameView(), 'p', {}, ctx)[0])
+        .toMatchObject({ action: { type: 'blameReblame', rev: `${HASH}^` } })
+      const reblamed = applyLogInkAction(blameView(), { type: 'blameReblame', rev: `${HASH}^` })
+      expect(getLogInkInputEvents(reblamed, '', { escape: true }, ctx)[0])
+        .toMatchObject({ action: { type: 'blameBack' } })
+      expect(getLogInkInputEvents(blameView(), '', { escape: true }, ctx)[0])
+        .toMatchObject({ action: { type: 'popView' } })
+    })
+
+    it('the reducer keeps a revision stack and restores the cursor on the way back', () => {
+      let state = applyLogInkAction(blameView(), { type: 'moveList', list: 'blame', delta: 7, count: 20 })
+      state = applyLogInkAction(state, { type: 'blameReblame', rev: 'r1^' })
+      expect(state).toMatchObject({ blameRev: 'r1^', selectedBlameIndex: 0 })
+      state = applyLogInkAction(state, { type: 'blameReblame', rev: 'r2^' })
+      state = applyLogInkAction(state, { type: 'blameBack' })
+      expect(state).toMatchObject({ blameRev: 'r1^' })
+      state = applyLogInkAction(state, { type: 'blameBack' })
+      expect(state).toMatchObject({ blameRev: undefined, selectedBlameIndex: 7, blameRevStack: [] })
+    })
+
+    it('opening blame from a file always starts at the working copy', () => {
+      let state = applyLogInkAction(blameView(), { type: 'navigateOpenBlameForPath', path: 'a.ts' })
+      state = applyLogInkAction(state, { type: 'blameReblame', rev: 'r1^' })
+      state = applyLogInkAction(state, { type: 'navigateOpenBlameForPath', path: 'a.ts' })
+      expect(state).toMatchObject({ blameRev: undefined, blameRevStack: [] })
+    })
+  })
+
   it('opens the stash prompt from the createStash palette command', () => {
     const state = createLogInkState(rows)
     const command = getLogInkPaletteCommands().find((c) => c.id === 'createStash')

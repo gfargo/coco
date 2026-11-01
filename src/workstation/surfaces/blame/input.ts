@@ -24,6 +24,8 @@ export type LogInkBlameInputSlot =
   | 'page-up'
   | 'page-down'
   | 'open-file-history'
+  | 'drill'
+  | 'back'
 
 export function handleBlameInput(
   state: LogInkState,
@@ -89,6 +91,43 @@ export function handleBlameInput(
       return inputValue === 'L' && state.blamePath
         ? [action({ type: 'navigateOpenFileHistoryForPath', path: state.blamePath })]
         : null
+
+    // Esc steps back out of a re-blame (#2212); with no earlier revision it
+    // falls through to the generic pop-view.
+    case 'back':
+      return key.escape && state.blameRevStack.length > 0
+        ? [
+          action({ type: 'blameBack' }),
+          action({ type: 'setStatus', value: 'back to the earlier blame', ttl: 'echo' }),
+        ]
+        : null
+
+    // Enter opens the cursored line's commit; `p` re-blames the file at that
+    // commit's parent, to see what the line looked like before it changed.
+    case 'drill': {
+      const isEnter = Boolean(key.return)
+      if (!isEnter && inputValue !== 'p') return null
+      const hash = context.blameSelectedHash
+      if (!hash) return []
+      if (/^0+$/.test(hash)) {
+        return [action({ type: 'setStatus', value: 'this line is not committed yet', kind: 'warning' })]
+      }
+      if (isEnter) {
+        const index = state.commits.findIndex((commit) => commit.hash === hash)
+        return [
+          action({
+            type: 'navigateOpenDiffForCommit',
+            sha: hash,
+            commitIndex: index >= 0 ? index : state.selectedIndex,
+          }),
+          action({ type: 'setStatus', value: `viewing diff for ${hash.slice(0, 7)}` }),
+        ]
+      }
+      return [
+        action({ type: 'blameReblame', rev: `${hash}^` }),
+        action({ type: 'setStatus', value: `blame at ${hash.slice(0, 7)}^ (esc to go back)`, ttl: 'echo' }),
+      ]
+    }
 
     default:
       return null
