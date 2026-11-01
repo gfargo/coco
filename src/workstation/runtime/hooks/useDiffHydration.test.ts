@@ -165,6 +165,7 @@ describe('useCompareDiffState', () => {
     expect(result.compareDiffLoading).toBe(false)
     expect(typeof result.setCompareDiffLines).toBe('function')
     expect(typeof result.setCompareDiffLoading).toBe('function')
+    expect(typeof result.setCompareSummary).toBe('function')
   })
 })
 
@@ -224,6 +225,7 @@ describe('loader bail clears its loading flag', () => {
       compareHeadRef: 'HEAD',
       setCompareDiffLines: jest.fn(),
       setCompareDiffLoading,
+      setCompareSummary: jest.fn(),
     })
     runEffect()
     expect(setCompareDiffLoading).toHaveBeenCalledWith(false)
