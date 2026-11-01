@@ -14,6 +14,7 @@ import type {
   GitCommitDetail,
   GitCommitFilePreview,
 } from '../../git/logData'
+import type { CompareSummary } from '../../git/compareData'
 import type { WorktreeHunkOverview } from '../../git/statusHunks'
 import type { WorktreeFileDiff } from '../../git/worktreeDiffData'
 import type { SyntaxSpan } from '../../lib/syntax/highlightEngine'
@@ -225,6 +226,7 @@ export type MainPanelExtras = {
   stashDiffLoading: boolean
   compareDiffLines: string[] | undefined
   compareDiffLoading: boolean
+  compareSummary: CompareSummary | undefined
   prDiffLines: string[] | undefined
   prDiffLoading: boolean
   prDiffError: string | undefined
@@ -275,6 +277,7 @@ export function renderMainPanel(
     stashDiffLoading,
     compareDiffLines,
     compareDiffLoading,
+    compareSummary,
     prDiffLines,
     prDiffLoading,
     prDiffError,
@@ -329,6 +332,7 @@ export function renderMainPanel(
       stashDiffLoading,
       compareDiffLines,
       compareDiffLoading,
+      compareSummary,
       prDiffLines,
       prDiffLoading,
       prDiffError,

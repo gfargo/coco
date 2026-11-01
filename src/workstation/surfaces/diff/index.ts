@@ -27,6 +27,7 @@
  */
 
 import type * as ReactTypes from 'react'
+import type { CompareSummary } from '../../../git/compareData'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { formatStashHeaderIdentity } from '../../chrome/stashHeader'
 import {
@@ -85,6 +86,7 @@ export type DiffSurfaceData = {
   stashDiffLoading: boolean
   compareDiffLines: string[] | undefined
   compareDiffLoading: boolean
+  compareSummary?: CompareSummary
   prDiffLines: string[] | undefined
   prDiffLoading: boolean
   prDiffError: string | undefined
@@ -109,6 +111,7 @@ export function renderDiffSurface(
     stashDiffLoading,
     compareDiffLines,
     compareDiffLoading,
+    compareSummary,
     prDiffLines,
     prDiffLoading,
     prDiffError,
@@ -349,7 +352,7 @@ export function renderDiffSurface(
   }
 
   // Compare-two-refs branch (#779). Mirrors the stash diff above but
-  // sourced from `git diff <base>..<head>`. No per-file cherry-pick or
+  // sourced from `git diff <base>...<head>` (merge base to head). No per-file cherry-pick or
   // hunk apply — comparing arbitrary refs doesn't have a sensible
   // mutate-from-here flow, so the surface is read-only navigation.
   if (state.diffSource === 'compare') {
@@ -368,6 +371,7 @@ export function renderDiffSurface(
       : lines.length && (lines.length > 1 || lines[0])
         ? [
           compareTitle,
+          ...(compareSummary ? [formatCompareSummary(compareSummary)] : []),
           `Lines ${Math.min(state.diffPreviewOffset + 1, lines.length)}-${Math.min(state.diffPreviewOffset + visibleLines.length, lines.length)}/${lines.length}`,
           '',
         ]
@@ -576,4 +580,15 @@ export function renderDiffSurface(
         : undefined,
     })
     : []))
+}
+
+/** One header line: how far the refs have diverged, and the merge base. */
+export function formatCompareSummary(summary: CompareSummary): string {
+  const parts = [`${summary.ahead} ahead`, `${summary.behind} behind`]
+  if (summary.mergeBase) parts.push(`merge base ${summary.mergeBase}`)
+  const listed = summary.commits.length
+  const commits = listed
+    ? ` · ${summary.commits.slice(0, 3).map((c) => `${c.hash} ${c.subject}`).join(' | ')}${summary.ahead > 3 ? ' …' : ''}`
+    : ''
+  return `${parts.join(' · ')}${commits}`
 }
