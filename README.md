@@ -137,7 +137,11 @@ coco agent schema --task review
 # Run a one-shot structured operation
 coco agent commit-draft --input request.json --repo /work/project
 
-# Expose four local stdio MCP tools, bound to one repository
+# Start the local stdio MCP server; it resolves the repository on each call
+# from the tool input or the client's workspace roots
+coco mcp
+
+# Or pin it to one repository
 coco mcp --repo /work/project
 ```
 
