@@ -1,5 +1,6 @@
 import { SimpleGit } from 'simple-git'
 import { BranchOverview, BranchRef, getBranchOverview } from '../../git/branchData'
+import { describeSignature } from '../../git/commitSignature'
 import { GitCommitDetail, GitLogRow, getCommitDetail } from '../../git/logData'
 import { type PullRequestOverview } from '../../git/pullRequestData'
 import { getForgePullRequestOverview } from '../../git/forgeActions'
@@ -345,7 +346,7 @@ function renderDetail(detail: GitCommitDetail | undefined, width: number): strin
   return [
     truncate(`commit ${detail.hash}${refs}`, width),
     truncate(`Author: ${detail.author}`, width),
-    truncate(`Date:   ${detail.date}`, width),
+    truncate(`Date:   ${detail.date}${detail.signature ? `   ${describeSignature(detail.signature)}` : ''}`, width),
     '',
     truncate(`  ${detail.message}`, width),
     ...body.map((line) => truncate(line, width)),
