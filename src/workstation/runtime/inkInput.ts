@@ -910,6 +910,8 @@ export function getLogInkPaletteExecuteEvents(
         kind: 'create-stash',
         label: 'Stash message (empty = WIP)',
       })]
+    case 'addWorktree':
+      return addWorktreePromptEvents()
     case 'stashFile':
       return stashFilePromptEvents(state, context)
     case 'navigateStatus':
@@ -1221,6 +1223,14 @@ const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '5': 'worktrees',
 }
 
+function addWorktreePromptEvents(): LogInkInputEvent[] {
+  return [action({
+    type: 'openInputPrompt',
+    kind: 'add-worktree',
+    label: 'New worktree: branch [path] (path defaults to beside this one)',
+  })]
+}
+
 /** The message prompt for stashing just the cursored status file. */
 function stashFilePromptEvents(state: LogInkState, context: LogInkInputContext): LogInkInputEvent[] {
   if (state.activeView !== 'status' || !context.worktreeSelectedPath || state.statusGroupHeaderFocused) {
@@ -1265,6 +1275,12 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   if (state.inputPrompt.kind === 'create-stash') {
     return [
       { type: 'runWorkflowAction', id: 'create-stash', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'add-worktree') {
+    return [
+      { type: 'runWorkflowAction', id: 'add-worktree', payload: value },
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -3414,6 +3430,12 @@ export function getLogInkInputEvents(
     state.activeView === 'tags' ||
     (state.focus === 'sidebar' && state.sidebarTab === 'tags')
   )
+  if (inputValue === '+' && (
+    state.activeView === 'worktrees' ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'worktrees')
+  )) {
+    return addWorktreePromptEvents()
+  }
   if (wantsCreateBranch) {
     return [action({
       type: 'openInputPrompt',

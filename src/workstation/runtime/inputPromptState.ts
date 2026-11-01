@@ -17,6 +17,7 @@ export type LogInkInputPromptKind =
   | 'rename-branch'
   | 'set-upstream'
   | 'create-stash'
+  | 'add-worktree'
   | 'stash-file'
   | 'rename-stash'
   | 'stash-branch'

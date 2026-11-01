@@ -1616,6 +1616,33 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('add worktree (#2214)', () => {
+    function worktreesState() {
+      return applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'worktrees' })
+    }
+
+    it('+ on the worktrees view opens the add-worktree prompt', () => {
+      expect(getLogInkInputEvents(worktreesState(), '+')[0]).toMatchObject({
+        type: 'action',
+        action: { type: 'openInputPrompt', kind: 'add-worktree' },
+      })
+    })
+
+    it('submitting the prompt runs add-worktree with the typed `branch [path]`', () => {
+      let state = worktreesState()
+      state = applyLogInkAction(state, { type: 'openInputPrompt', kind: 'add-worktree', label: 'x', initial: 'feat/x ../x' })
+      expect(getLogInkInputEvents(state, '', { return: true })[0])
+        .toEqual({ type: 'runWorkflowAction', id: 'add-worktree', payload: 'feat/x ../x' })
+    })
+
+    it('is in the palette as addWorktree', () => {
+      const command = getLogInkPaletteCommands().find((c) => c.id === 'addWorktree')
+      if (!command) throw new Error('addWorktree palette command missing')
+      expect(getLogInkPaletteExecuteEvents(command, worktreesState())[0])
+        .toMatchObject({ type: 'action', action: { kind: 'add-worktree' } })
+    })
+  })
+
   it('opens the stash prompt from the createStash palette command', () => {
     const state = createLogInkState(rows)
     const command = getLogInkPaletteCommands().find((c) => c.id === 'createStash')
