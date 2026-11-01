@@ -124,7 +124,7 @@ Available in every view (unless an overlay/mode has claimed the keyboard):
 | `Ctrl+C` | Quit (hard) |
 | `?` | Toggle help overlay (full categorized help; "This view" section first, `/` type-to-filter inside, two-stage Esc clears the filter then closes) |
 | `:` | Command palette |
-| `/` | Enter filter mode |
+| `/` | Enter filter mode. On history, a query that starts with `key:value` terms re-runs `git log` with them on Enter, and the terms combine: `author:sam path:src/git msg:"fix race" since:2w`. Keys: `author`, `path`, `msg`, `since`, `until`, `S` (pickaxe), `G` (diff regex). Quote a value to keep spaces; a bare word joins the previous term. |
 | `g` | Chord prefix (see below) |
 | `<` | Pop view / go back |
 | `Esc` | Pop view; pop nested-repo frame; close overlay |

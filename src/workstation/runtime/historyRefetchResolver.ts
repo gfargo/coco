@@ -80,6 +80,9 @@ export function applyHistoryFetchArgsOverlay(
     ...(fetchArgs?.path ? { path: fetchArgs.path } : {}),
     ...(fetchArgs?.pickaxe ? { pickaxe: fetchArgs.pickaxe } : {}),
     ...(fetchArgs?.grep ? { grep: fetchArgs.grep } : {}),
+    ...(fetchArgs?.message ? { message: fetchArgs.message } : {}),
+    ...(fetchArgs?.since ? { since: fetchArgs.since } : {}),
+    ...(fetchArgs?.until ? { until: fetchArgs.until } : {}),
   }
 }
 
@@ -104,11 +107,21 @@ export function buildHistoryRefetchArgv(
  * the original filter effect produced.
  */
 function describeFetchArgs(fetchArgs: LogInkHistoryFetchArgs | undefined): string | undefined {
-  if (fetchArgs?.author) return `author:${fetchArgs.author}`
-  if (fetchArgs?.path) return `path:${fetchArgs.path}`
-  if (fetchArgs?.pickaxe) return `S:${fetchArgs.pickaxe}`
-  if (fetchArgs?.grep) return `G:${fetchArgs.grep}`
-  return undefined
+  if (!fetchArgs) return undefined
+  const quote = (value: string) => (/\s/.test(value) ? `"${value}"` : value)
+  const terms: Array<[string, string | undefined]> = [
+    ['author', fetchArgs.author],
+    ['path', fetchArgs.path],
+    ['msg', fetchArgs.message],
+    ['since', fetchArgs.since],
+    ['until', fetchArgs.until],
+    ['S', fetchArgs.pickaxe],
+    ['G', fetchArgs.grep],
+  ]
+  const described = terms
+    .filter((entry): entry is [string, string] => Boolean(entry[1]))
+    .map(([key, value]) => `${key}:${quote(value)}`)
+  return described.length > 0 ? described.join(' ') : undefined
 }
 
 /**

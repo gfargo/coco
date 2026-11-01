@@ -1334,6 +1334,34 @@ describe('log Ink view model', () => {
         expect(parseLogInkHistoryFetchPrefix('G:\\bclass\\b')).toEqual({ grep: '\\bclass\\b' })
       })
 
+      it('combines terms: author, path, quoted msg, since and S (#2213)', () => {
+        expect(parseLogInkHistoryFetchPrefix('author:sam path:src/git msg:"fix race" since:2w S:foo')).toEqual({
+          author: 'sam',
+          path: 'src/git',
+          message: 'fix race',
+          since: '2w',
+          pickaxe: 'foo',
+        })
+        expect(parseLogInkHistoryFetchPrefix("msg:'a b' until:2026-01-01 message:ignored")).toEqual({
+          message: 'ignored',
+          until: '2026-01-01',
+        })
+      })
+
+      it('lets a bare word extend the previous term, so spaced values still work', () => {
+        expect(parseLogInkHistoryFetchPrefix('author:Griffen Fargo since:1w')).toEqual({
+          author: 'Griffen Fargo',
+          since: '1w',
+        })
+      })
+
+      it('needs a leading key, ignores empty terms, and treats unknown keys as plain text', () => {
+        expect(parseLogInkHistoryFetchPrefix('fix author:sam')).toBeUndefined()
+        expect(parseLogInkHistoryFetchPrefix('author:sam since:')).toEqual({ author: 'sam' })
+        expect(parseLogInkHistoryFetchPrefix('since:')).toBeUndefined()
+        expect(parseLogInkHistoryFetchPrefix('http://x')).toBeUndefined()
+      })
+
       it('returns undefined for S: and G: with no value', () => {
         expect(parseLogInkHistoryFetchPrefix('S:')).toBeUndefined()
         expect(parseLogInkHistoryFetchPrefix('G:   ')).toBeUndefined()

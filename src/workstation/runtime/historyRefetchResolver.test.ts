@@ -56,6 +56,26 @@ describe('buildHistoryRefetchArgv', () => {
   })
 })
 
+describe('combined history filters (#2213)', () => {
+  it('overlays message, since and until alongside the existing fields', () => {
+    const merged = applyHistoryFetchArgsOverlay(argv({}), {
+      author: 'sam', message: 'fix race', since: '2w', until: '2026-01-01',
+    })
+    expect(merged).toMatchObject({ author: 'sam', message: 'fix race', since: '2w', until: '2026-01-01' })
+  })
+
+  it('describes every active term, quoting values with spaces', () => {
+    const plan = resolveHistoryRefetch({
+      logArgv: argv({}),
+      fullGraph: false,
+      fetchArgs: { author: 'sam', message: 'fix race', since: '2w' },
+      fetchArgsChanged: true,
+      fullGraphChanged: false,
+    })
+    expect(plan.pendingStatus).toBe('Refetching with author:sam msg:"fix race" since:2w')
+  })
+})
+
 describe('applyHistoryFetchArgsOverlay', () => {
   // Regression for #1361: useLoadMoreHistory.ts used to hand-roll its
   // own copy of just the author/path overlay and silently dropped
