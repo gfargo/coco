@@ -124,6 +124,7 @@ function renderHeader(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   const chips = buildWorkspaceHeaderChips(state, {
     appLabel,
     focusLabel: focusLabel(state.focus),
+    now: deps.now,
   })
   const separator = ' · '
   // Interleave chips with a dim separator. Each chip gets its own Text

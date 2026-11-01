@@ -126,7 +126,7 @@ describe('workspace state reducer', () => {
 
   it('cycles tabs forward and backward', () => {
     const next = applyWorkspaceAction(baseState, { type: 'cycle-tab', direction: 'next' })
-    expect(next.tab).toBe('dirty')
+    expect(next.tab).toBe('attention')
     const prev = applyWorkspaceAction(baseState, { type: 'cycle-tab', direction: 'previous' })
     expect(prev.tab).toBe('errors')
   })
