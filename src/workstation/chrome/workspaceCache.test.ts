@@ -6,8 +6,10 @@ import { WorkspaceOverview } from '../../git/workspaceData'
 
 import {
   getWorkspaceCachePath,
+  readCachedPullRequestCounts,
   readCachedWorkspace,
   workspaceCacheKey,
+  writeCachedPullRequestCounts,
   writeCachedWorkspace,
 } from './workspaceCache'
 
@@ -112,5 +114,33 @@ describe('workspace cache read/write', () => {
     process.env.XDG_CACHE_HOME = blocker
 
     expect(() => writeCachedWorkspace(['~/code'], baseOverview)).not.toThrow()
+  })
+})
+
+describe('pull-request count cache (#2211)', () => {
+  let tmpHome: string
+  let originalXdg: string | undefined
+
+  beforeEach(() => {
+    tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'coco-workspace-pr-cache-'))
+    originalXdg = process.env.XDG_CACHE_HOME
+    process.env.XDG_CACHE_HOME = tmpHome
+  })
+
+  afterEach(() => {
+    if (originalXdg === undefined) delete process.env.XDG_CACHE_HOME
+    else process.env.XDG_CACHE_HOME = originalXdg
+    fs.rmSync(tmpHome, { recursive: true, force: true })
+  })
+
+  it('round-trips counts with their timestamp, per root set', () => {
+    const now = new Date('2026-11-01T12:00:00Z')
+    writeCachedPullRequestCounts(['/w'], { authenticated: true, counts: { '/w/a': 3 } }, now)
+    expect(readCachedPullRequestCounts(['/w'])).toEqual({
+      authenticated: true,
+      counts: { '/w/a': 3 },
+      fetchedAt: now.toISOString(),
+    })
+    expect(readCachedPullRequestCounts(['/other'])).toBeUndefined()
   })
 })

@@ -1,6 +1,7 @@
 import * as crypto from 'node:crypto'
 
 import { canonicalize, WorkspaceOverview } from '../../git/workspaceData'
+import type { WorkspacePullRequestCounts } from '../../git/workspacePullRequestData'
 
 import { createJsonStore } from './jsonStore'
 
@@ -67,4 +68,42 @@ export function writeCachedWorkspace(
   overview: WorkspaceOverview
 ): void {
   store.write(overview, workspaceCacheKey(roots))
+}
+
+/**
+ * Open-PR counts from the last `gh` pass (#2211). Without this every return
+ * from `coco ui` re-ran one `gh` call per repo. Stored beside the overview and
+ * keyed the same way; `fetchedAt` lets the caller apply a TTL.
+ */
+export type CachedPullRequestCounts = WorkspacePullRequestCounts & { fetchedAt: string }
+
+const prStore = createJsonStore<CachedPullRequestCounts>({
+  subdir: 'workspace',
+  basename: (key) => `pull-requests.${key}.json`,
+  version: CACHE_SCHEMA_VERSION,
+  payloadField: 'pullRequests',
+  format: 'compact',
+  validate: (raw) => {
+    const value = raw as Partial<CachedPullRequestCounts> | undefined
+    return value &&
+      typeof value.fetchedAt === 'string' &&
+      typeof value.authenticated === 'boolean' &&
+      value.counts && typeof value.counts === 'object'
+      ? (value as CachedPullRequestCounts)
+      : undefined
+  },
+})
+
+export function readCachedPullRequestCounts(
+  roots: ReadonlyArray<string>
+): CachedPullRequestCounts | undefined {
+  return prStore.read(workspaceCacheKey(roots))
+}
+
+export function writeCachedPullRequestCounts(
+  roots: ReadonlyArray<string>,
+  counts: WorkspacePullRequestCounts,
+  now: Date = new Date()
+): void {
+  prStore.write({ ...counts, fetchedAt: now.toISOString() }, workspaceCacheKey(roots))
 }

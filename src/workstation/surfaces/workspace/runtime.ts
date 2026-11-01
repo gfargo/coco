@@ -63,7 +63,9 @@ import { saveThemePreset } from '../../chrome/themePersistence'
 import { getCocoCacheDir } from '../../../lib/utils/cocoPaths'
 import { getThemePickerSelectionFor } from '../../../workstation/runtime/inkViewModel'
 import {
+  readCachedPullRequestCounts,
   readCachedWorkspace,
+  writeCachedPullRequestCounts,
   writeCachedWorkspace,
 } from '../../chrome/workspaceCache'
 import { installTerminalLifecycle } from '../../chrome/terminalLifecycle'
@@ -97,7 +99,7 @@ import {
   readWorkspacePreferences,
   writeWorkspacePreferences,
 } from '../../chrome/workspacePreferences'
-import { isGitWorkingTree } from '../../../git/workspaceData'
+import { getRepoSummary, isGitWorkingTree } from '../../../git/workspaceData'
 import {
   summarizeWorkspaceSync,
   syncWorkspaceRepos,
@@ -105,6 +107,7 @@ import {
   type WorkspaceSyncOutcome,
 } from '../../../git/workspaceSync'
 import { createLatestGate } from './latestGate'
+import { planMountScan } from './returnPlan'
 import { createSummaryBatcher } from './summaryBatcher'
 
 type DynamicImport = <T>(specifier: string) => Promise<T>
@@ -211,6 +214,8 @@ export type WorkspaceStartOptions = {
     repos: ReadonlyArray<WorkspaceRepoSummary>,
     onRepoComplete?: (path: string, count: number | undefined) => void
   ) => Promise<WorkspacePullRequestCounts>
+  /** Override the single-repo summary read used on a cheap return (tests). */
+  loadRepoSummary?: (path: string) => Promise<WorkspaceRepoSummary>
   /** Override fetch / pull-all (used by tests). */
   syncRepos?: SyncRepos
   streams?: {
@@ -311,6 +316,7 @@ export async function startWorkspace(
     knownRepos,
     loadOverview,
     loadPullRequestCounts,
+    loadRepoSummary: options.loadRepoSummary ?? ((path) => getRepoSummary(path)),
     syncRepos: options.syncRepos ?? syncWorkspaceRepos,
     onAddRepo: options.onAddRepo,
     resume: effectiveResume,
@@ -526,6 +532,7 @@ type WorkspaceInkAppProps = {
     repos: ReadonlyArray<WorkspaceRepoSummary>,
     onRepoComplete?: (path: string, count: number | undefined) => void
   ) => Promise<WorkspacePullRequestCounts>
+  loadRepoSummary: (path: string) => Promise<WorkspaceRepoSummary>
   syncRepos: SyncRepos
   onAddRepo?: () => Promise<string | undefined>
   resume?: WorkspaceResumeState
@@ -675,6 +682,59 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   // Background discovery + PR-count refresh on mount.
   React.useEffect(() => {
     let cancelled = false
+    // Returning from `coco ui` (#2211): trust a recent cache and re-read only
+    // the repo that was drilled into, instead of rediscovering everything.
+    const plan = planMountScan({
+      returning: Boolean(props.resume),
+      selectedRepoPath: props.resume?.selectedRepoPath,
+      cached: props.initialOverview,
+      cachedPullRequests: readCachedPullRequestCounts(props.roots),
+      now: new Date(),
+    })
+    if (plan.mode === 'cheap') {
+      if (plan.pullRequestCounts) {
+        dispatch({
+          type: 'replace-pull-request-counts',
+          counts: plan.pullRequestCounts.counts,
+          authenticated: plan.pullRequestCounts.authenticated,
+        })
+      }
+      const repoPath = plan.repoPath
+      if (repoPath) {
+        dispatch({ type: 'anchor-cursor-by-path', path: repoPath })
+        void (async () => {
+          try {
+            const summary = await props.loadRepoSummary(repoPath)
+            if (cancelled || unmountedRef.current) return
+            dispatch({ type: 'merge-repo-summaries', repos: [summary] })
+            const known = stateRef.current.overview
+            writeCachedWorkspace(props.roots, {
+              ...known,
+              repos: known.repos.map((repo) => (repo.path === repoPath ? summary : repo)),
+            })
+            // Fresh cached counts need a `gh` call for this repo only; counts
+            // past their TTL were dropped above, so refetch them for every repo
+            // (discovery is still skipped).
+            const targets = plan.pullRequestCounts ? [summary] : stateRef.current.overview.repos
+            const pr = await props.loadPullRequestCounts(targets)
+            if (cancelled || unmountedRef.current) return
+            const merged = plan.pullRequestCounts ? { ...stateRef.current.pullRequestCounts } : {}
+            for (const target of targets) {
+              if (typeof pr.counts[target.path] === 'number') merged[target.path] = pr.counts[target.path]
+              else delete merged[target.path]
+            }
+            dispatch({ type: 'replace-pull-request-counts', counts: merged, authenticated: pr.authenticated })
+            writeCachedPullRequestCounts(props.roots, { counts: merged, authenticated: pr.authenticated })
+          } catch {
+            // Best-effort: the cached rows stay on screen; `r` rescans.
+          }
+        })()
+      }
+      return () => {
+        cancelled = true
+        unmountedRef.current = true
+      }
+    }
     dispatch({ type: 'set-loading', loading: true })
     void (async () => {
       const isCurrent = loadGateRef.current.begin()
@@ -712,6 +772,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
           counts: pr.counts,
           authenticated: pr.authenticated,
         })
+        writeCachedPullRequestCounts(props.roots, pr)
         // Belt-and-suspenders: clear any stragglers in the fetching set
         // (e.g. repos without a GitHub remote that the data layer
         // skipped silently in older versions).
@@ -782,6 +843,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         counts: pr.counts,
         authenticated: pr.authenticated,
       })
+      writeCachedPullRequestCounts(props.roots, pr)
       dispatch({ type: 'set-pull-request-fetching', paths: [] })
     } catch (err) {
       batcher.cancel()
@@ -819,6 +881,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         counts: merged,
         authenticated: pr.authenticated,
       })
+      writeCachedPullRequestCounts(props.roots, { counts: merged, authenticated: pr.authenticated })
       dispatch({ type: 'set-pull-request-fetching', paths: [] })
       dispatch({ type: 'set-status', status: `Refreshed ${focused.name}.` })
     } catch (err) {
