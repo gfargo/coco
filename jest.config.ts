@@ -46,6 +46,9 @@ export default {
   // of those tests while CI stayed green. A passing test costs nothing extra;
   // only a genuine hang waits longer.
   testTimeout: 30000,
+  // Run every suite against a hermetic global git config (no signing, fixed
+  // identity) instead of the developer's own; see the file for why.
+  setupFiles: ['<rootDir>/src/test/setup/hermeticGitConfig.ts'],
   // Coverage configuration — opt-in via `--coverage` so the default
   // `npm run test:jest` stays fast. CI runs `--coverage` to upload
   // lcov output to Codecov.
