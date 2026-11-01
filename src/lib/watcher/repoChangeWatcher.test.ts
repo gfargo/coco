@@ -4,6 +4,15 @@ import { join } from 'node:path'
 import { RepoChangeKind, createRepoChangeDebouncer, createRepoChangeWatcher } from './repoChangeWatcher'
 
 /**
+ * How long a test waits for a real `fs.watch` event before giving up. A passing
+ * test returns the moment the event arrives, so a generous ceiling costs
+ * nothing; it exists because macOS FSEvents can deliver seconds late when the
+ * machine is busy (a release-it run on a loaded laptop failed on 5 s). A
+ * watcher that is genuinely orphaned never fires, so it still fails, just later.
+ */
+const FS_EVENT_WAIT_MS = 20000
+
+/**
  * Synchronous fake scheduler so we can run debounce timing without
  * involving real timers. Tests step the clock by calling `flush(ms)`.
  */
@@ -159,7 +168,7 @@ describe('createRepoChangeWatcher rename survival', () => {
   // replacement makes the sequencing deterministic — and if the
   // watcher genuinely orphans after the first rename (the regression),
   // the wait times out and the count assertion still fails.
-  const waitFor = async (predicate: () => boolean, timeoutMs = 5000): Promise<void> => {
+  const waitFor = async (predicate: () => boolean, timeoutMs = FS_EVENT_WAIT_MS): Promise<void> => {
     const deadline = Date.now() + timeoutMs
     while (!predicate() && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 25))
@@ -197,7 +206,7 @@ describe('createRepoChangeWatcher rename survival', () => {
       for (let attempt = 2; attempt <= 6 && kinds.length < 2; attempt += 1) {
         writeFileSync(join(gitDir, 'index.lock'), `v${attempt}`)
         renameSync(join(gitDir, 'index.lock'), join(gitDir, 'index'))
-        await waitFor(() => kinds.length >= 2, 2000)
+        await waitFor(() => kinds.length >= 2, FS_EVENT_WAIT_MS / 2)
       }
     } finally {
       watcher.close()
@@ -207,7 +216,7 @@ describe('createRepoChangeWatcher rename survival', () => {
     // One settle per replacement — the second rename is the regression.
     expect(kinds.length).toBeGreaterThanOrEqual(2)
     expect(kinds).toContain('worktree')
-  }, 15000)
+  }, 90000)
 })
 
 /**
@@ -219,7 +228,7 @@ describe('createRepoChangeWatcher in a linked worktree (#2205)', () => {
   // Same environment-sensitivity as the rename-survival suite above.
   jest.retryTimes(1, { logErrorsBeforeRetry: true })
 
-  const waitFor = async (predicate: () => boolean, timeoutMs = 5000): Promise<void> => {
+  const waitFor = async (predicate: () => boolean, timeoutMs = FS_EVENT_WAIT_MS): Promise<void> => {
     const deadline = Date.now() + timeoutMs
     while (!predicate() && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 25))
