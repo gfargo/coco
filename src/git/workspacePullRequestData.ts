@@ -8,7 +8,10 @@ import {
   getGhStatus,
   type GhRunner,
 } from './githubCli'
-import { getProviderRepository, type ProviderRepository } from './providerData'
+import { getForgeActions } from './forgeActions'
+import type { PullRequestListOverview } from './pullRequestListData'
+import { getProviderRepository, type GitProviderType, type ProviderRepository } from './providerData'
+import { createHeadlessGit } from '../lib/simple-git/headlessGit'
 
 /**
  * Default per-call timeout for the workspace PR-count fetcher.
@@ -214,12 +217,41 @@ export type GetWorkspacePullRequestCountsOptions = {
   /** Per-call timeout in ms. Default `WORKSPACE_PR_COUNT_TIMEOUT_MS`. */
   timeoutMs?: number
   /**
+   * Open-PR list for a non-GitHub repo, through the `ForgeActions` adapter
+   * (#2211). Defaults to the provider's own `getPullRequestList`; tests
+   * inject a stub.
+   */
+  forgeList?: (provider: GitProviderType, repo: ProviderRepository, repoPath: string) => Promise<PullRequestListOverview>
+  /**
    * Fired as each repo finishes — `count` is undefined when the repo
    * has no GitHub remote or the gh call failed/timed out. Lets the UI
    * surface per-row spinner state and drop the spinner the moment a
    * row's data lands, rather than waiting for the whole batch.
    */
   onRepoComplete?: (repoPath: string, count: number | undefined) => void
+}
+
+/** Most open PRs one repo's count looks at; a repo at the cap shows the cap. */
+export const WORKSPACE_PR_COUNT_LIMIT = 100
+
+const ADAPTER_PROVIDERS: ReadonlyArray<GitProviderType> = ['gitlab', 'bitbucket', 'bitbucket-server', 'gitea']
+
+async function defaultForgeList(
+  provider: GitProviderType,
+  repo: ProviderRepository,
+  repoPath: string
+): Promise<PullRequestListOverview> {
+  const path = repo.owner && repo.name ? `${repo.owner}/${repo.name}` : undefined
+  const forge = getForgeActions(provider, {
+    gitlabPath: path, gitlabHost: repo.host,
+    bitbucketPath: path, bitbucketHost: repo.host,
+    bitbucketServerPath: path, bitbucketServerHost: repo.host,
+    giteaPath: path, giteaHost: repo.host,
+  })
+  return forge.getPullRequestList(createHeadlessGit(repoPath), {
+    state: 'open',
+    limit: WORKSPACE_PR_COUNT_LIMIT,
+  })
 }
 
 export async function getWorkspacePullRequestCounts(
@@ -236,16 +268,50 @@ export async function getWorkspacePullRequestCounts(
   // the GitHub auth probe or fetch batch, so don't make them wait for it.
   type RepoEntry = { repoPath: string; repo: ProviderRepository }
   const fetchable: RepoEntry[] = []
+  // GitLab / Bitbucket / Gitea repos go through the forge adapter (#2211).
+  const adapterRepos: RepoEntry[] = []
 
   for (const repoPath of repoPaths) {
     const url = options.remoteUrls?.get(repoPath) ?? readOriginRemoteUrl(repoPath)
     const repo = url ? getProviderRepository('origin', url) : undefined
     if (repo?.provider === 'github' && repo.owner && repo.name && repo.host) {
       fetchable.push({ repoPath, repo })
+    } else if (repo && ADAPTER_PROVIDERS.includes(repo.provider) && repo.owner && repo.name) {
+      adapterRepos.push({ repoPath, repo })
     } else {
       options.onRepoComplete?.(repoPath, undefined)
     }
   }
+
+  // Non-GitHub forges run alongside the GitHub flow below. `authenticated`
+  // is true when any forge answered as signed in.
+  const counts: Record<string, number> = {}
+  const forgeList = options.forgeList ?? defaultForgeList
+  const adapterAuthenticated = (async () => {
+    let any = false
+    await mapWithConcurrency(adapterRepos, concurrency, async ({ repoPath, repo }) => {
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        const overview = await Promise.race([
+          forgeList(repo.provider, repo, repoPath),
+          new Promise<undefined>((resolve) => {
+            timer = setTimeout(() => resolve(undefined), timeoutMs * 3)
+          }),
+        ])
+        if (overview?.authenticated) any = true
+        const count = overview?.available && overview.authenticated && overview.pullRequests
+          ? overview.pullRequests.length
+          : undefined
+        if (typeof count === 'number') counts[repoPath] = count
+        options.onRepoComplete?.(repoPath, count)
+      } catch {
+        options.onRepoComplete?.(repoPath, undefined)
+      } finally {
+        if (timer) clearTimeout(timer)
+      }
+    })
+    return any
+  })()
 
   // Step 2: Probe auth once per unique GitHub host (memoized), in parallel —
   // one host's slow/hung probe shouldn't delay the others. When the
@@ -253,7 +319,9 @@ export async function getWorkspacePullRequestCounts(
   // so `authenticated` still reflects real gh status (pre-#1609 behavior)
   // rather than unconditionally reporting true.
   const uniqueHosts = [...new Set(fetchable.map((e) => e.repo.host!))]
-  const hostsToProbe = uniqueHosts.length > 0 ? uniqueHosts : ['github.com']
+  // Only a workspace with no recognised forge repo still probes github.com.
+  const hostsToProbe =
+    uniqueHosts.length > 0 ? uniqueHosts : adapterRepos.length > 0 ? [] : ['github.com']
   const hostAuthEntries = await Promise.all(
     hostsToProbe.map(async (host) => {
       const status = await getGhStatus(runner, host)
@@ -270,11 +338,10 @@ export async function getWorkspacePullRequestCounts(
     for (const { repoPath } of fetchable) {
       options.onRepoComplete?.(repoPath, undefined)
     }
-    return { authenticated: false, counts: {} }
+    return { authenticated: await adapterAuthenticated, counts }
   }
 
   // Step 3: Fan out gh pr list calls — only for repos whose host authenticated.
-  const counts: Record<string, number> = {}
 
   await mapWithConcurrency(fetchable, concurrency, async ({ repoPath, repo }) => {
     const hostAuthenticated = hostAuthMap.get(repo.host!) ?? false
@@ -289,5 +356,6 @@ export async function getWorkspacePullRequestCounts(
     options.onRepoComplete?.(repoPath, count)
   })
 
+  await adapterAuthenticated
   return { authenticated: true, counts }
 }
