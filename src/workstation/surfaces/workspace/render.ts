@@ -4,6 +4,7 @@ import { pickThemedSpinnerFrame } from '../../chrome/spinner'
 import { truncateCells, truncatePathCells } from '../../chrome/text'
 import {
     workspaceTabGlyph,
+    workspaceRepoNeedsAttention,
     workspaceTabLabel,
     WORKSPACE_TABS,
     type WorkspaceTab,
@@ -476,8 +477,14 @@ export function buildWorkspaceSidebar(state: WorkspaceState, ascii = false): Wor
     const disabled = tab === 'pull-requests' && state.ghAuthenticated === false
     let count = repos.length
     switch (tab) {
+      case 'attention':
+        count = repos.filter(workspaceRepoNeedsAttention).length
+        break
       case 'dirty':
         count = repos.filter((repo) => repo.dirty > 0).length
+        break
+      case 'ahead':
+        count = repos.filter((repo) => repo.ahead > 0).length
         break
       case 'behind':
         count = repos.filter((repo) => repo.behind > 0).length
@@ -542,6 +549,7 @@ export type WorkspaceHeaderChipId =
   | 'roots'
   | 'repos'
   | 'sort'
+  | 'scanned'
   | 'filter'
   | 'loading'
   | 'focus'
@@ -553,9 +561,25 @@ export type WorkspaceHeaderChip = {
   bold?: boolean
 }
 
+/**
+ * `scanned 3d ago` (#2211): a list restored from the cache looks current
+ * unless it says how old it is. Undefined for the not-yet-scanned
+ * placeholder (epoch 0) or an unparseable timestamp.
+ */
+export function formatWorkspaceScanAge(scannedAt: string | undefined, now: Date): string | undefined {
+  const scanned = scannedAt ? Date.parse(scannedAt) : Number.NaN
+  if (!Number.isFinite(scanned) || scanned <= 0) return undefined
+  const minutes = Math.floor((now.getTime() - scanned) / 60_000)
+  if (minutes < 1) return 'scanned just now'
+  if (minutes < 60) return `scanned ${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `scanned ${hours}h ago`
+  return `scanned ${Math.floor(hours / 24)}d ago`
+}
+
 export function buildWorkspaceHeaderChips(
   state: WorkspaceState,
-  options: { appLabel?: string; focusLabel: string } = { focusLabel: 'List' }
+  options: { appLabel?: string; focusLabel: string; now?: Date } = { focusLabel: 'List' }
 ): WorkspaceHeaderChip[] {
   const chips: WorkspaceHeaderChip[] = []
 
@@ -584,6 +608,13 @@ export function buildWorkspaceHeaderChips(
     label: `sort: ${workspaceSortLabel(state.sortMode)}`,
     tone: 'dim',
   })
+
+  // Scan age — warns once the data is a day old.
+  const scanAge = formatWorkspaceScanAge(state.overview.scannedAt, options.now ?? new Date())
+  if (scanAge) {
+    const stale = /\d+d ago$/.test(scanAge)
+    chips.push({ id: 'scanned', label: scanAge, tone: stale ? 'warn' : 'dim' })
+  }
 
   // Filter — only when active.
   if (state.filter) {

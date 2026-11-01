@@ -7,13 +7,15 @@ import { pickWorkstationGlyph, type WorkstationGlyphKey } from '../../chrome/gly
  * predicate would yield zero rows in absence of PR data are gated so
  * the surface can dim them rather than show empty lists.
  */
-export const WORKSPACE_TABS = ['all', 'dirty', 'behind', 'pull-requests', 'errors'] as const
+export const WORKSPACE_TABS = ['all', 'attention', 'dirty', 'ahead', 'behind', 'pull-requests', 'errors'] as const
 
 export type WorkspaceTab = (typeof WORKSPACE_TABS)[number]
 
 const TAB_LABELS: Record<WorkspaceTab, string> = {
   all: 'All',
+  attention: 'Attention',
   dirty: 'Dirty',
+  ahead: 'Ahead',
   behind: 'Behind',
   'pull-requests': 'PRs',
   errors: 'Errors',
@@ -35,7 +37,9 @@ const TAB_LABELS: Record<WorkspaceTab, string> = {
  */
 const TAB_GLYPHS: Record<WorkspaceTab, WorkstationGlyphKey> = {
   all: 'hollow',
+  attention: 'filled',
   dirty: 'filled',
+  ahead: 'up',
   behind: 'down',
   'pull-requests': 'target',
   errors: 'cross',
@@ -63,6 +67,23 @@ export type WorkspaceTabContext = {
   pullRequestCounts?: Readonly<Record<string, number>>
 }
 
+/**
+ * Anything that wants a look: uncommitted work, unpushed or unpulled commits,
+ * a load error, a detached HEAD, or a branch with no upstream.
+ */
+export function workspaceRepoNeedsAttention(repo: WorkspaceRepoSummary): boolean {
+  return (
+    Boolean(repo.error) ||
+    repo.dirty > 0 ||
+    repo.ahead > 0 ||
+    repo.behind > 0 ||
+    repo.detached === true ||
+    // `null`, not undefined: summaries cached before the field existed say
+    // nothing about the upstream and must not flag every repo.
+    (repo.upstream === null && !repo.detached && Boolean(repo.branch))
+  )
+}
+
 export function matchesWorkspaceTab(
   repo: WorkspaceRepoSummary,
   tab: WorkspaceTab,
@@ -71,8 +92,12 @@ export function matchesWorkspaceTab(
   switch (tab) {
     case 'all':
       return true
+    case 'attention':
+      return workspaceRepoNeedsAttention(repo)
     case 'dirty':
       return repo.dirty > 0
+    case 'ahead':
+      return repo.ahead > 0
     case 'behind':
       return repo.behind > 0
     case 'pull-requests': {

@@ -10,6 +10,7 @@ import {
     buildWorkspaceOnboarding,
     buildWorkspaceSidebar,
     workspaceSpinnerFrame,
+  formatWorkspaceScanAge,
 } from './render'
 import { applyWorkspaceAction, createWorkspaceState } from './state'
 
@@ -413,5 +414,23 @@ describe('workspace render builders', () => {
       const win = buildWorkspaceListWindow(bigState(5), { rows: 0 })
       expect(win.rows.length).toBeGreaterThanOrEqual(1)
     })
+  })
+})
+
+describe('formatWorkspaceScanAge (#2211)', () => {
+  const now = new Date('2026-05-26T12:00:00Z')
+  it.each([
+    ['2026-05-26T11:59:40Z', 'scanned just now'],
+    ['2026-05-26T11:30:00Z', 'scanned 30m ago'],
+    ['2026-05-26T07:00:00Z', 'scanned 5h ago'],
+    ['2026-05-23T12:00:00Z', 'scanned 3d ago'],
+  ])('%s -> %s', (iso, expected) => {
+    expect(formatWorkspaceScanAge(iso, now)).toBe(expected)
+  })
+
+  it('says nothing for the not-yet-scanned placeholder or garbage', () => {
+    expect(formatWorkspaceScanAge(new Date(0).toISOString(), now)).toBeUndefined()
+    expect(formatWorkspaceScanAge('nope', now)).toBeUndefined()
+    expect(formatWorkspaceScanAge(undefined, now)).toBeUndefined()
   })
 })

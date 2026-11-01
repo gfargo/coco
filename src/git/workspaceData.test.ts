@@ -391,6 +391,8 @@ describe('parseStatusV2 (#2210)', () => {
       ahead: 0,
       behind: 0,
       dirty: 0,
+      upstream: null,
+      detached: false,
     })
   })
 

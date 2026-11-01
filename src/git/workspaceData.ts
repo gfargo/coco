@@ -34,6 +34,13 @@ export type WorkspaceRepoSummary = {
   behind: number
   /** Number of porcelain entries (unstaged + staged + untracked). */
   dirty: number
+  /**
+   * Tracking branch, `null` when the checked-out branch has none, undefined
+   * when unknown (a summary cached before this field existed).
+   */
+  upstream?: string | null
+  /** HEAD is detached. Undefined in summaries cached before this field. */
+  detached?: boolean
   /** Last commit; missing on empty repos. */
   lastCommit?: {
     hash: string
@@ -435,6 +442,8 @@ export type ParsedStatusV2 = {
   ahead: number
   behind: number
   dirty: number
+  upstream?: string | null
+  detached?: boolean
 }
 
 /**
@@ -447,7 +456,7 @@ export type ParsedStatusV2 = {
  * followed by one extra NUL field holding the original path.
  */
 export function parseStatusV2(output: string): ParsedStatusV2 {
-  const result: ParsedStatusV2 = { ahead: 0, behind: 0, dirty: 0 }
+  const result: ParsedStatusV2 = { ahead: 0, behind: 0, dirty: 0, upstream: null, detached: false }
   let oid: string | undefined
   let head: string | undefined
   const records = output.split('\0')
@@ -458,6 +467,8 @@ export function parseStatusV2(output: string): ParsedStatusV2 {
       oid = record.slice('# branch.oid '.length)
     } else if (record.startsWith('# branch.head ')) {
       head = record.slice('# branch.head '.length)
+    } else if (record.startsWith('# branch.upstream ')) {
+      result.upstream = record.slice('# branch.upstream '.length)
     } else if (record.startsWith('# branch.ab ')) {
       const match = /\+(\d+) -(\d+)/.exec(record)
       if (match) {
@@ -473,6 +484,7 @@ export function parseStatusV2(output: string): ParsedStatusV2 {
   }
 
   if (head === '(detached)') {
+    result.detached = true
     result.branch = oid && oid !== '(initial)' ? `(${oid.slice(0, 7)})` : undefined
   } else if (head) {
     result.branch = head
@@ -518,6 +530,8 @@ export async function getRepoSummary(
     summary.ahead = status.ahead
     summary.behind = status.behind
     summary.dirty = status.dirty
+    summary.upstream = status.upstream
+    summary.detached = status.detached
     summary.lastCommit = parseLastCommit(lastCommitOutput)
   } catch (err) {
     summary.error = err instanceof Error ? err.message : String(err)

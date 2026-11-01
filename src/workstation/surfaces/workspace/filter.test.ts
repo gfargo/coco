@@ -24,15 +24,15 @@ function repo(overrides: Partial<WorkspaceRepoSummary>): WorkspaceRepoSummary {
 
 describe('workspace filter tabs', () => {
   it('cycles forward and backward stably', () => {
-    expect(nextWorkspaceTab('all')).toBe('dirty')
+    expect(nextWorkspaceTab('all')).toBe('attention')
     expect(nextWorkspaceTab('pull-requests')).toBe('errors')
     expect(nextWorkspaceTab('errors')).toBe('all')
     expect(previousWorkspaceTab('all')).toBe('errors')
-    expect(previousWorkspaceTab('dirty')).toBe('all')
+    expect(previousWorkspaceTab('attention')).toBe('all')
   })
 
   it('labels each tab', () => {
-    expect(WORKSPACE_TABS.map(workspaceTabLabel)).toEqual(['All', 'Dirty', 'Behind', 'PRs', 'Errors'])
+    expect(WORKSPACE_TABS.map(workspaceTabLabel)).toEqual(['All', 'Attention', 'Dirty', 'Ahead', 'Behind', 'PRs', 'Errors'])
   })
 
   it('errors tab matches only repos whose summary failed (#2210)', () => {
@@ -87,5 +87,28 @@ describe('matchesWorkspaceText', () => {
     expect(matchesWorkspaceText(entry, 'feature')).toBe(true)
     expect(matchesWorkspaceText(entry, 'users/me')).toBe(true)
     expect(matchesWorkspaceText(entry, 'zzz')).toBe(false)
+  })
+})
+
+describe('attention and ahead tabs (#2211)', () => {
+  it('ahead matches unpushed work only', () => {
+    expect(matchesWorkspaceTab(repo({ name: 'a', ahead: 2 }), 'ahead')).toBe(true)
+    expect(matchesWorkspaceTab(repo({ name: 'a', behind: 2 }), 'ahead')).toBe(false)
+  })
+
+  it.each([
+    ['dirty', { dirty: 1 }],
+    ['ahead', { ahead: 1 }],
+    ['behind', { behind: 1 }],
+    ['an error', { error: 'boom' }],
+    ['a detached HEAD', { detached: true, branch: '(abc1234)' }],
+    ['no upstream', { upstream: null, branch: 'feat/x' }],
+  ])('attention matches %s', (_label, over) => {
+    expect(matchesWorkspaceTab(repo({ name: 'a', ...over }), 'attention')).toBe(true)
+  })
+
+  it('attention skips a clean tracked repo, and a summary cached before upstream was recorded', () => {
+    expect(matchesWorkspaceTab(repo({ name: 'a', upstream: 'origin/main', branch: 'main' }), 'attention')).toBe(false)
+    expect(matchesWorkspaceTab(repo({ name: 'a', branch: 'main' }), 'attention')).toBe(false)
   })
 })
