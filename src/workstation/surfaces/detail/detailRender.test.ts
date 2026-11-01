@@ -203,6 +203,22 @@ describe('renderHistoryInspector', () => {
       expect(text).not.toContain('index.ts')
     })
 
+    it('focused, shows the signature beside the date for a signed commit and nothing for an unsigned one (#2214)', () => {
+      const render = (signature?: { status: string; signer?: string; key?: string }) => renderToLines(
+        renderHistoryInspector(
+          createElement, components,
+          makeState({ inspectorTab: 'inspector', inspectorActionIndex: 0 }),
+          {}, createLogInkContextStatus('ready'),
+          { ...HISTORY_DETAIL, signature },
+          false, undefined, false, 80, false, theme, true
+        ),
+        Text, Box
+      ).join('\n')
+      expect(render({ status: 'G', signer: 'Alice', key: 'KEY1' })).toContain('✓ signed by Alice (KEY1)')
+      expect(render({ status: 'B' })).toContain('✗ BAD signature')
+      expect(render(undefined)).not.toContain('signed')
+    })
+
     it('focused, reveals refs, the file list, and the actions section', () => {
       const text = renderToLines(renderDetail(true, 50), Text, Box).join('\n')
       expect(text).toContain('Refs:')

@@ -2,6 +2,7 @@ import { SimpleGit } from 'simple-git'
 import { stripDisplayControl, stripDisplayControlMultiline } from './forgeText'
 import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
 import { extractSubmoduleChange, renderSubmoduleSummary, type SubmoduleChange } from './submoduleDiff'
+import { parseCommitSignature, type CommitSignature } from './commitSignature'
 import { LogArgv, LogView } from '../commands/log/config'
 import { isEmptyRepo } from '../lib/simple-git/isEmptyRepo'
 
@@ -10,7 +11,8 @@ export const FIELD_SEPARATOR = '\x1f'
 // merge commits (parents.length > 1) from regular commits without a
 // second round-trip to git. See #791 stage 3 — merge glyph + HEAD ring.
 const LOG_FORMAT = `%x1f%h%x1f%H%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s`
-const DETAIL_FORMAT = `%H%x1f%h%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s%x1f%b`
+// Signature fields trail the body so older fixtures with eight fields still parse.
+const DETAIL_FORMAT = `%H%x1f%h%x1f%P%x1f%ad%x1f%an%x1f%d%x1f%s%x1f%b%x1f%G?%x1f%GS%x1f%GK`
 export const LOG_DEFAULT_LIMIT = 30
 // Bumped from 300 → 1000 in 0.54.2. With the full-graph default
 // (#1034) the workstation surfaces many more refs (all branches, all
@@ -68,6 +70,8 @@ export type GitLogRow = GitLogCommitRow | GitLogGraphRow
 
 export type GitCommitDetail = Omit<GitLogCommitRow, 'type' | 'graph'> & {
   body: string
+  /** Absent for an unsigned commit. */
+  signature?: CommitSignature
   files: Array<{
     additions?: number
     binary?: boolean
@@ -325,7 +329,7 @@ function parseNameStatus(output: string, numstat: ParsedNumstat[] = []): GitComm
 }
 
 export function parseCommitDetail(metadata: string, files: string, numstatOutput = ''): GitCommitDetail {
-  const [hash, shortHash, parentsStr, date, author, refs, message, body = ''] = metadata
+  const [hash, shortHash, parentsStr, date, author, refs, message, body = '', sigStatus, sigSigner, sigKey] = metadata
     .trimEnd()
     .split(FIELD_SEPARATOR)
   const numstat = parseNumstat(numstatOutput)
@@ -339,6 +343,7 @@ export function parseCommitDetail(metadata: string, files: string, numstatOutput
     refs: cleanRefs(refs).map(stripDisplayControl),
     message: stripDisplayControl(message),
     body: stripDisplayControlMultiline(body.trim()),
+    signature: parseCommitSignature(sigStatus, sigSigner ? stripDisplayControl(sigSigner) : sigSigner, sigKey),
     files: parseNameStatus(files, numstat),
     stats: summarizeNumstat(numstat),
   }

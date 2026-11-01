@@ -45,6 +45,7 @@ import {
   formatTagPreview,
 } from '../../chrome/previewPane'
 import { formatLogInkLoading, formatLogInkNotesEmpty } from '../../chrome/surfaceStates'
+import { describeSignature } from '../../../git/commitSignature'
 import type { LfsAttributeStatus } from '../../../git/lfsAttributes'
 import { isPathLfsTracked } from '../../../git/lfsAttributes'
 import type { SubmoduleEntry, SubmoduleOverview } from '../../../git/submoduleData'
@@ -589,7 +590,7 @@ export function renderHistoryInspector(
     h(Text, { key: 'detail-spacer-1' }, ''),
     h(Text, { key: 'detail-commit', dimColor: true }, 'Commit: ', commitLink),
     h(Text, { key: 'detail-author', dimColor: true }, truncateCells(`Author: ${detail.author}`, width - 4, { ascii: theme.ascii })),
-    h(Text, { key: 'detail-date', dimColor: true }, truncateCells(`Date:   ${detail.date}`, width - 4, { ascii: theme.ascii })),
+    h(Text, { key: 'detail-date', dimColor: true }, truncateCells(`Date:   ${detail.date}${signatureSuffix(detail, theme.ascii)}`, width - 4, { ascii: theme.ascii })),
     refNodes
       ? h(Text, { key: 'detail-refs', dimColor: true }, 'Refs:   ', ...refNodes)
       : h(Text, { key: 'detail-refs', dimColor: true }, 'Refs:   none'),
@@ -1227,4 +1228,12 @@ export function renderPullRequestTriagePreviewPanel(
     : undefined
   return renderPreviewPanel(h, { Box, Text }, `${nouns.singular} preview`,
     formatPullRequestTriagePreview(pr, detail, nouns.singularLower, detailError), width, theme, focused)
+}
+
+/**
+ * `   ✓ signed by Alice (KEY)` after the date, so a signed commit costs no
+ * extra row at the 80x24 floor; empty for an unsigned commit.
+ */
+function signatureSuffix(detail: GitCommitDetail, ascii: boolean): string {
+  return detail.signature ? `   ${describeSignature(detail.signature, ascii)}` : ''
 }
