@@ -166,7 +166,7 @@
     "diff": "9.0.0",
     "ini": "7.0.0",
     "ink": "7.1.1",
-    "minimatch": "^10.2.5",
+    "minimatch": "^11.0.1",
     "ora": "5.4.1",
     "p-queue": "5.0.0",
     "performance-now": "2.1.0",
