@@ -2394,3 +2394,28 @@ describe('Esc cancels an in-flight network op (#2199)', () => {
     expect(pullCurrentBranchMock).toHaveBeenCalledWith(git)
   })
 })
+
+describe('stash-file (#2214)', () => {
+  beforeEach(() => createStashMock.mockReset())
+
+  it('stashes only the path the prompt pinned, with the typed message', async () => {
+    createStashMock.mockResolvedValue({ ok: true, message: 'Stashed' })
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({}))
+
+    await runWorkflowAction('stash-file', JSON.stringify({ path: 'src/my file.ts', message: 'wip' }))
+
+    expect(createStashMock).toHaveBeenCalledWith(expect.anything(), 'wip', { paths: ['src/my file.ts'] })
+  })
+
+  it('refuses without a path instead of stashing everything', async () => {
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({}))
+
+    await runWorkflowAction('stash-file', JSON.stringify({ message: 'wip' }))
+
+    expect(createStashMock).not.toHaveBeenCalled()
+  })
+})

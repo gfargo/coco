@@ -20,6 +20,7 @@ export type LogInkCommandId =
   | 'stageAll'
   | 'stagePathspec'
   | 'createStash'
+  | 'stashFile'
   | 'commit'
   | 'cycleSort'
   | 'editCommit'
@@ -341,6 +342,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
     keys: ['gZ'],
     label: t(en, 'keymap.binding.createStash.label'),
     description: t(en, 'keymap.binding.createStash.desc'),
+    contexts: ['normal'],
+  },
+  {
+    id: 'stashFile',
+    keys: ['gS'],
+    label: t(en, 'keymap.binding.stashFile.label'),
+    description: t(en, 'keymap.binding.stashFile.desc'),
     contexts: ['normal'],
   },
   {
@@ -1196,6 +1204,7 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   stageAll: 'mutate',
   stagePathspec: 'mutate',
   createStash: 'mutate',
+  stashFile: 'mutate',
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',

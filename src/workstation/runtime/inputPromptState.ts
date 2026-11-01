@@ -17,6 +17,7 @@ export type LogInkInputPromptKind =
   | 'rename-branch'
   | 'set-upstream'
   | 'create-stash'
+  | 'stash-file'
   | 'rename-stash'
   | 'stash-branch'
   | 'gitignore-pattern'
@@ -73,6 +74,8 @@ export type LogInkInputPromptState = {
    * memory survives.
    */
   multiline?: boolean
+  /** What the prompt acts on, for prompts that need more than the typed text (`stash-file`: the path). */
+  target?: string
 }
 
 export type InputPromptFields = {
@@ -80,7 +83,7 @@ export type InputPromptFields = {
 }
 
 export type InputPromptAction =
-  | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string; multiline?: boolean }
+  | { type: 'openInputPrompt'; kind: LogInkInputPromptKind; label: string; initial?: string; multiline?: boolean; target?: string }
   | { type: 'appendInputPrompt'; value: string }
   | { type: 'backspaceInputPrompt' }
   | { type: 'clearInputPromptText' }
@@ -99,6 +102,7 @@ export function applyInputPromptAction(
           label: action.label,
           value: action.initial || '',
           multiline: action.multiline,
+          target: action.target,
         },
       }
     case 'appendInputPrompt':

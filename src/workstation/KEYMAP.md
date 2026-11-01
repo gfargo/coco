@@ -177,6 +177,7 @@ the which-key overlay lists them live when you press `g`.
 | `g t` | Tags |
 | `g z` | Stashes (the view) |
 | `g Z` | **Stash all changes** (action, not nav) — opens the message prompt; works from *any* view incl. status/diff/compose. Empty message = quick WIP stash. |
+| `g S` | **Stash the cursored file** (action, not nav) — status view only; opens the message prompt and stashes just that file (tracked or untracked). Empty message = WIP. |
 | `g w` | Worktrees |
 | `g p` | Pull request |
 | `g P` | PR triage |
@@ -349,7 +350,7 @@ cursored row there too.
 | `u` | Undo the last drop (re-store by commit hash) |
 | `y` | Yank the stash ref |
 
-Create a stash with `gZ` (any view) or `S` (outside the staging triad). The
+Create a stash with `gZ` (any view) or `S` (outside the staging triad); `gS` on the status view stashes only the cursored file. The
 `:` palette also carries **stash staged only** and **stash keeping index**
 variants.
 

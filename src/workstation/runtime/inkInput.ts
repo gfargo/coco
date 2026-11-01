@@ -910,6 +910,8 @@ export function getLogInkPaletteExecuteEvents(
         kind: 'create-stash',
         label: 'Stash message (empty = WIP)',
       })]
+    case 'stashFile':
+      return stashFilePromptEvents(state, context)
     case 'navigateStatus':
       return [action({ type: 'replaceView', value: 'status' })]
     case 'navigateDiff':
@@ -1219,6 +1221,23 @@ const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '5': 'worktrees',
 }
 
+/** The message prompt for stashing just the cursored status file. */
+function stashFilePromptEvents(state: LogInkState, context: LogInkInputContext): LogInkInputEvent[] {
+  if (state.activeView !== 'status' || !context.worktreeSelectedPath || state.statusGroupHeaderFocused) {
+    return [action({
+      type: 'setStatus',
+      value: 'put the cursor on a file in the status view to stash just that file',
+      kind: 'warning',
+    })]
+  }
+  return [action({
+    type: 'openInputPrompt',
+    kind: 'stash-file',
+    label: `Stash ${context.worktreeSelectedPath} (message, empty = WIP)`,
+    target: context.worktreeSelectedPath,
+  })]
+}
+
 /**
  * Submit the active input prompt — used by Enter on single-line
  * prompts and by Ctrl+D on multi-line prompts (#806). Most prompt
@@ -1246,6 +1265,16 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   if (state.inputPrompt.kind === 'create-stash') {
     return [
       { type: 'runWorkflowAction', id: 'create-stash', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
+  if (state.inputPrompt.kind === 'stash-file') {
+    return [
+      {
+        type: 'runWorkflowAction',
+        id: 'stash-file',
+        payload: JSON.stringify({ path: state.inputPrompt.target, message: value }),
+      },
       action({ type: 'closeInputPrompt' }),
     ]
   }
@@ -2182,6 +2211,12 @@ export function getLogInkInputEvents(
       kind: 'create-stash',
       label: 'Stash message (empty = WIP)',
     })]
+  }
+
+  // `gS` chord: stash only the cursored status file (#2214). The partial
+  // stash `createStash` already supports, finally reachable from the TUI.
+  if (state.pendingKey === 'g' && inputValue === 'S') {
+    return stashFilePromptEvents(state, context)
   }
 
   if (state.pendingKey === 'g' && inputValue === 'w') {
