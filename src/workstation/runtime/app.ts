@@ -79,6 +79,7 @@ import { useCommitDetailHydration, useCommitDetailState } from './hooks/useCommi
 import { useContextHydration } from './hooks/useContextHydration'
 import { useBlameLoadingState, useDetailHydration, useFileHistoryLoadingState } from './hooks/useDetailHydration'
 import { useStashFilesHydration } from './hooks/useStashFilesHydration'
+import { useRecoveryBridges } from './hooks/useRecoveryBridges'
 import { useCommitFilePreviewHydration, useCommitFilePreviewState, useCompareDiffHydration, useCompareDiffState, useStashDiffHydration, useStashDiffState, useWorktreeDiffHydration, useWorktreeDiffState, useWorktreeHunksHydration, useWorktreeHunksState } from './hooks/useDiffHydration'
 import { usePullRequestDiffHydration, usePullRequestDiffState } from './hooks/usePullRequestDiffHydration'
 import { usePullRequestChecksHydration } from './hooks/usePullRequestChecksHydration'
@@ -131,7 +132,7 @@ const PANE_BY_FOCUS: Record<LogInkFocus, LogInkVisiblePane> = {
 }
 
 export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
-  const { appLabel, clipboardRunner, dateBucketingEnabled, focusExpandEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, mouseEnabled, React, resumeRef, rows, syntaxHighlightEnabled, theme: baseTheme, themeConfig } = deps
+  const { appLabel, clipboardRunner, dateBucketingEnabled, focusExpandEnabled, git: rootGit, idleTipsEnabled, ink, initialView, loadRows, logArgv, mouseEnabled, React, recoveryRef, reportErrorRef, resumeRef, rows, syntaxHighlightEnabled, theme: baseTheme, themeConfig } = deps
   const { Box, Text, useApp, useInput, useWindowSize } = ink
   const h = React.createElement
 
@@ -764,6 +765,16 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setFileHistoryLoading,
     setBlameFailure,
     setFileHistoryFailure,
+  })
+
+  // Lets the terminal lifecycle report an unhandled rejection on the status
+  // line, and carries the commit draft out for the error boundary (#2206).
+  useRecoveryBridges(React, {
+    dispatch,
+    reportErrorRef,
+    recoveryRef,
+    composeSummary: state.commitCompose.summary,
+    composeBody: state.commitCompose.body,
   })
 
   // Stash files load only while a stash surface is showing (#2209): listing

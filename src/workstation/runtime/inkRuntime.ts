@@ -22,6 +22,8 @@ import { createLogInkTheme, LogInkThemeConfig } from '../chrome/theme'
 import { setAsciiDialect } from '../chrome/text'
 import { installTerminalLifecycle } from '../chrome/terminalLifecycle'
 import { registerTerminalHandoff } from '../../lib/simple-git/signingHandover'
+import { summarizeError, writeCrashLog } from '../../lib/utils/crashLog'
+import { createErrorBoundary, type RecoveryRef } from './errorBoundary'
 import { runWithTerminalHandedOff } from './editorHandoff'
 import { canStartLogInkTui, getLogInkRenderOptions } from '../chrome/terminal'
 import type { LogInkRuntime } from '../runtime/types'
@@ -137,6 +139,10 @@ export async function startInkInteractiveLog(
   // Forward declared so the lifecycle handler can call back into the React
   // tree on SIGCONT to force a repaint after the user `fg`s.
   const resumeRef: { current: (() => void) | null } = { current: null }
+  // Filled by the app: how to put an error on the status line, and the commit
+  // draft in progress for the error boundary to save (#2206).
+  const reportErrorRef: { current: ((message: string) => void) | null } = { current: null }
+  const recoveryRef: RecoveryRef = { current: {} }
 
   const theme = createLogInkTheme(options.theme)
   // Process-wide default so the ~200 `truncateCells` / `formatLogInkLoading`
@@ -144,7 +150,8 @@ export async function startInkInteractiveLog(
   // right ellipsis/dash dialect (see `chrome/text.ts`'s `setAsciiDialect`).
   setAsciiDialect(theme.ascii)
 
-  const app = React.createElement(LogInkApp, {
+  const { Boundary } = createErrorBoundary(React, ink)
+  const app = React.createElement(Boundary, { recoveryRef }, React.createElement(LogInkApp, {
     appLabel: options.appLabel || 'coco log',
     git,
     // Default-ON (#1355): the tip rotation is activity-suppressed with
@@ -169,7 +176,9 @@ export async function startInkInteractiveLog(
     theme,
     themeConfig: options.theme,
     resumeRef,
-  })
+    reportErrorRef,
+    recoveryRef,
+  }))
   const instance = ink.render(app, getLogInkRenderOptions({ input, output, error, ascii: theme.ascii }))
 
   const lifecycle = installTerminalLifecycle({
@@ -177,6 +186,13 @@ export async function startInkInteractiveLog(
     output,
     instance,
     onResume: () => resumeRef.current?.(),
+    // A rejection nothing caught (a workflow that failed) goes on the status
+    // line with a pointer to the log, instead of ending the session (#2206).
+    onUnhandledRejection: (reason) => {
+      const { logPath } = writeCrashLog({ source: 'unhandledRejection', error: reason })
+      const where = logPath ? ` (details: ${logPath})` : ''
+      reportErrorRef.current?.(`${summarizeError(reason)}${where}`)
+    },
     mouse: options.mouse === true,
   })
 
