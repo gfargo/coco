@@ -22,6 +22,7 @@ export type WorkspaceInputIntent =
   | { kind: 'drill-in' }
   | { kind: 'refresh' }
   | { kind: 'refresh-row' }
+  | { kind: 'sync'; mode: 'fetch' | 'pull'; scope: 'row' | 'all' }
   | { kind: 'add-repo' }
   | { kind: 'clone-repo' }
   | { kind: 'request-delete' }
@@ -47,6 +48,8 @@ export type WorkspaceInputIntent =
  *   esc               clear filter / quit when no filter
  *   q                 quit
  *   r                 refresh (rescan roots)
+ *   f / F             fetch cursored repo / all visible repos
+ *   p / P             fast-forward pull cursored repo / all visible (clean, behind)
  *   a                 add-repo prompt (PR4 wires this up)
  *   enter             drill into the cursored repo (PR3 wires this up)
  *
@@ -242,6 +245,13 @@ export function resolveWorkspaceInput(
   if (input === 'R') {
     return { kind: 'refresh-row' }
   }
+  // f/F fetch the cursored repo / every visible repo; p/P fast-forward pull
+  // (clean repos that are behind only). "Visible" follows the active tab and
+  // filter, so the Behind tab plus P pulls exactly the repos you are looking at.
+  if (input === 'f') return { kind: 'sync', mode: 'fetch', scope: 'row' }
+  if (input === 'F') return { kind: 'sync', mode: 'fetch', scope: 'all' }
+  if (input === 'p') return { kind: 'sync', mode: 'pull', scope: 'row' }
+  if (input === 'P') return { kind: 'sync', mode: 'pull', scope: 'all' }
   if (input === 'a') {
     return { kind: 'add-repo' }
   }

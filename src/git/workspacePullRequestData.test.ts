@@ -239,33 +239,35 @@ describe('getWorkspacePullRequestCounts', () => {
     expect(prCalls[0][0][prCalls[0][0].indexOf('-R') + 1]).toBe('owner/gh-repo')
   })
 
-  it('probes github.com and reports auth status for an all-non-GitHub workspace', async () => {
+  it('an all-GitLab workspace takes `authenticated` from the forge, not from gh', async () => {
     const remoteUrls = new Map<string, string>([['/tmp/gl', 'git@gitlab.com:owner/repo.git']])
-    const authed = jest.fn(async (args: string[]) => (args[0] === 'auth' ? 'ok' : ''))
+    const runner = jest.fn<Promise<string>, [string[]]>(async () => 'ok')
     const onRepoComplete = jest.fn()
 
-    const okResult = await getWorkspacePullRequestCounts(['/tmp/gl'], {
-      ghRunner: authed,
+    const signedIn = await getWorkspacePullRequestCounts(['/tmp/gl'], {
+      ghRunner: runner,
       remoteUrls,
       onRepoComplete,
+      forgeList: async () => ({ available: true, authenticated: true, pullRequests: [] }),
     })
+    expect(signedIn).toEqual({ authenticated: true, counts: { '/tmp/gl': 0 } })
+    // gh is never consulted: no auth probe and no `pr list`.
+    expect(runner).not.toHaveBeenCalled()
+    expect(onRepoComplete).toHaveBeenCalledWith('/tmp/gl', 0)
 
-    expect(okResult).toEqual({ authenticated: true, counts: {} })
-    // No `pr list` — the sole gh call is the github.com auth probe.
-    expect(authed.mock.calls.every((c) => c[0][0] === 'auth')).toBe(true)
-    expect(onRepoComplete).toHaveBeenCalledWith('/tmp/gl', undefined)
-
-    const denied = jest.fn(async (args: string[]) => {
-      if (args[0] === 'auth') throw new Error('not logged in')
-      return ''
-    })
-
-    const failResult = await getWorkspacePullRequestCounts(['/tmp/gl'], {
-      ghRunner: denied,
+    const signedOut = await getWorkspacePullRequestCounts(['/tmp/gl'], {
+      ghRunner: runner,
       remoteUrls,
+      forgeList: async () => ({ available: true, authenticated: false }),
     })
+    expect(signedOut).toEqual({ authenticated: false, counts: {} })
+  })
 
-    expect(failResult).toEqual({ authenticated: false, counts: {} })
+  it('probes github.com for a workspace whose remotes no forge recognises', async () => {
+    const remoteUrls = new Map<string, string>([['/tmp/x', 'git@example.org:owner/repo.git']])
+    const authed = jest.fn(async (args: string[]) => (args[0] === 'auth' ? 'ok' : ''))
+    const result = await getWorkspacePullRequestCounts(['/tmp/x'], { ghRunner: authed, remoteUrls })
+    expect(result).toEqual({ authenticated: true, counts: {} })
   })
 
   it('reports non-GitHub repos before the GitHub fetch batch settles', async () => {
@@ -290,6 +292,7 @@ describe('getWorkspacePullRequestCounts', () => {
     const resultPromise = getWorkspacePullRequestCounts(['/tmp/gl', '/tmp/gh'], {
       ghRunner: runner,
       remoteUrls,
+      forgeList: async () => ({ available: true, authenticated: true, pullRequests: [] }),
       onRepoComplete: (repoPath) => order.push(repoPath),
     })
 
@@ -301,6 +304,75 @@ describe('getWorkspacePullRequestCounts', () => {
     releasePrList('[]')
     await resultPromise
     expect(order).toEqual(['/tmp/gl', '/tmp/gh'])
+  })
+})
+
+describe('non-GitHub forges count through the adapter (#2211)', () => {
+  const pr = (number: number) => ({ number }) as never
+
+  it('counts GitLab, Bitbucket and Gitea repos from their provider list, never calling gh pr list', async () => {
+    const remoteUrls = new Map<string, string>([
+      ['/w/gl', 'git@gitlab.com:team/api.git'],
+      ['/w/bb', 'git@bitbucket.org:team/web.git'],
+      ['/w/gt', 'https://gitea.example.com/team/tool.git'],
+    ])
+    const forgeList = jest.fn(async (provider: string) => ({
+      available: true,
+      authenticated: true,
+      pullRequests: provider === 'gitlab' ? [pr(1), pr(2)] : [pr(7)],
+    }))
+    const runner = jest.fn<Promise<string>, [string[]]>(async () => '')
+    const result = await getWorkspacePullRequestCounts(['/w/gl', '/w/bb', '/w/gt'], {
+      ghRunner: runner,
+      remoteUrls,
+      forgeList,
+    })
+    expect(forgeList.mock.calls.map((call) => call[0]).sort()).toEqual(['bitbucket', 'gitea', 'gitlab'])
+    expect(result).toEqual({
+      authenticated: true,
+      counts: { '/w/gl': 2, '/w/bb': 1, '/w/gt': 1 },
+    })
+    expect(runner.mock.calls.some((call) => call[0][0] === 'pr')).toBe(false)
+  })
+
+  it('leaves a repo without a count when its forge is unavailable, unauthenticated, or throws', async () => {
+    const remoteUrls = new Map<string, string>([
+      ['/w/a', 'git@gitlab.com:team/a.git'],
+      ['/w/b', 'git@gitlab.com:team/b.git'],
+      ['/w/c', 'git@gitlab.com:team/c.git'],
+    ])
+    const forgeList = jest.fn(async (_provider: string, _repo: unknown, repoPath: string) => {
+      if (repoPath === '/w/c') throw new Error('boom')
+      return repoPath === '/w/a'
+        ? { available: true, authenticated: false }
+        : { available: false, authenticated: false }
+    })
+    const onRepoComplete = jest.fn()
+    const result = await getWorkspacePullRequestCounts(['/w/a', '/w/b', '/w/c'], {
+      ghRunner: async () => '',
+      remoteUrls,
+      forgeList,
+      onRepoComplete,
+    })
+    expect(result.counts).toEqual({})
+    expect(onRepoComplete).toHaveBeenCalledTimes(3)
+  })
+
+  it('reports authenticated when only the GitHub side is signed out but a forge answered', async () => {
+    const remoteUrls = new Map<string, string>([
+      ['/w/gh', 'git@github.com:o/r.git'],
+      ['/w/gl', 'git@gitlab.com:team/a.git'],
+    ])
+    const denied = async (args: string[]) => {
+      if (args[0] === 'auth') throw new Error('not logged in')
+      return ''
+    }
+    const result = await getWorkspacePullRequestCounts(['/w/gh', '/w/gl'], {
+      ghRunner: denied,
+      remoteUrls,
+      forgeList: async () => ({ available: true, authenticated: true, pullRequests: [pr(1)] }),
+    })
+    expect(result).toEqual({ authenticated: true, counts: { '/w/gl': 1 } })
   })
 })
 

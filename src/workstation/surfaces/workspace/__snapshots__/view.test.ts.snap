@@ -7662,7 +7662,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
         <Text
           dimColor={true}
         >
-          17 bindings
+          19 bindings
         </Text>
       </Box>
       <Text
@@ -8061,7 +8061,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
         </Text>
       </Box>
       <Text>
-        Cycle sort mode (recency → name → dirty)
+        Cycle sort mode (recency → name → dirty → ahead → behind)
       </Text>
     </Box>
     <Text />
@@ -8134,6 +8134,66 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
       </Box>
       <Text>
         Refresh just the cursored repo (faster)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+      flexShrink={0}
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ⇣ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          f / F
+        </Text>
+      </Box>
+      <Text>
+        Fetch the cursored repo / every visible repo (4 at a time)
+      </Text>
+    </Box>
+    <Box
+      flexDirection="row"
+      flexShrink={0}
+    >
+      <Box
+        flexShrink={0}
+        width={4}
+      >
+        <Text
+          bold={true}
+          color="cyan"
+        >
+           ⤓ 
+        </Text>
+      </Box>
+      <Box
+        flexShrink={0}
+        width={19}
+      >
+        <Text
+          bold={true}
+          color="green"
+        >
+          p / P
+        </Text>
+      </Box>
+      <Text>
+        Fast-forward pull the cursored repo / every visible repo (clean and behind only)
       </Text>
     </Box>
     <Box

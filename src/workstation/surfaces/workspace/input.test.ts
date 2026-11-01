@@ -297,3 +297,19 @@ describe('resolveWorkspaceInput', () => {
     })
   })
 })
+
+describe('fetch / pull intents (#2211)', () => {
+  it.each([
+    ['f', 'fetch', 'row'],
+    ['F', 'fetch', 'all'],
+    ['p', 'pull', 'row'],
+    ['P', 'pull', 'all'],
+  ])('%s -> %s %s', (input, mode, scope) => {
+    expect(resolveWorkspaceInput(input, key(), listState())).toEqual({ kind: 'sync', mode, scope })
+  })
+
+  it('does not fire while a prompt owns the keyboard', () => {
+    expect(resolveWorkspaceInput('f', key(), filterState()).kind).not.toBe('sync')
+    expect(resolveWorkspaceInput('F', key(), addRepoState()).kind).not.toBe('sync')
+  })
+})

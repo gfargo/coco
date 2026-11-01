@@ -75,6 +75,7 @@ import {
   applyWorkspaceAction,
   createWorkspaceState,
   selectFocusedRepo,
+  selectVisibleRepos,
   type WorkspaceAction,
   type WorkspaceState,
 } from './state'
@@ -99,6 +100,12 @@ import {
   writeWorkspacePreferences,
 } from '../../chrome/workspacePreferences'
 import { getRepoSummary, isGitWorkingTree } from '../../../git/workspaceData'
+import {
+  summarizeWorkspaceSync,
+  syncWorkspaceRepos,
+  type WorkspaceSyncMode,
+  type WorkspaceSyncOutcome,
+} from '../../../git/workspaceSync'
 import { createLatestGate } from './latestGate'
 import { planMountScan } from './returnPlan'
 import { createSummaryBatcher } from './summaryBatcher'
@@ -161,8 +168,19 @@ export type WorkspaceResumeState = {
   selectedRepoPath?: string
 }
 
+export type SyncRepos = (
+  repos: ReadonlyArray<WorkspaceRepoSummary>,
+  mode: WorkspaceSyncMode,
+  options: {
+    onRepoDone: (outcome: WorkspaceSyncOutcome, summary?: WorkspaceRepoSummary) => void
+    isCancelled: () => boolean
+  }
+) => Promise<WorkspaceSyncOutcome[]>
+
 export type WorkspaceStartOptions = {
   roots: ReadonlyArray<string>
+  /** Print the overview as JSON and exit instead of opening the TUI (`--json`). */
+  json?: boolean
   knownRepos?: ReadonlyArray<string>
   maxDepth?: number
   /** Follow symlinked directories during discovery (`workspace.followSymlinks`). */
@@ -198,6 +216,8 @@ export type WorkspaceStartOptions = {
   ) => Promise<WorkspacePullRequestCounts>
   /** Override the single-repo summary read used on a cheap return (tests). */
   loadRepoSummary?: (path: string) => Promise<WorkspaceRepoSummary>
+  /** Override fetch / pull-all (used by tests). */
+  syncRepos?: SyncRepos
   streams?: {
     input?: NodeJS.ReadStream
     output?: NodeJS.WriteStream
@@ -270,12 +290,14 @@ export async function startWorkspace(
     selectedRepoPath: options.resume?.selectedRepoPath,
   }
 
-  if (!canStartLogInkTui(input, output)) {
-    // Non-TTY snapshot fallback. Print the visible repo list and
-    // exit. Keeps `coco workspace` usable from a pipe / CI.
+  if (options.json || !canStartLogInkTui(input, output)) {
+    // Non-TTY snapshot fallback (and `--json`, which skips the TUI even on a
+    // terminal). Print the repo list and exit. Keeps `coco workspace` usable
+    // from a pipe / CI.
     const fresh = await loadOverview(options.roots, knownRepos)
     writeCachedWorkspace(options.roots, fresh)
-    renderWorkspaceSnapshot(fresh, output)
+    if (options.json) output.write(formatWorkspaceSnapshotJson(fresh))
+    else renderWorkspaceSnapshot(fresh, output)
     return { kind: 'quit' }
   }
 
@@ -295,6 +317,7 @@ export async function startWorkspace(
     loadOverview,
     loadPullRequestCounts,
     loadRepoSummary: options.loadRepoSummary ?? ((path) => getRepoSummary(path)),
+    syncRepos: options.syncRepos ?? syncWorkspaceRepos,
     onAddRepo: options.onAddRepo,
     resume: effectiveResume,
     exitRef,
@@ -438,6 +461,30 @@ export function workspaceDebug(message: string): void {
   }
 }
 
+/**
+ * The overview as stable JSON for scripts (#2211): every repo with its
+ * divergence, dirty count, upstream state and any load error, so a failing
+ * repo is visible rather than missing.
+ */
+export function formatWorkspaceSnapshotJson(overview: WorkspaceOverview): string {
+  return `${JSON.stringify({
+    roots: overview.roots,
+    scannedAt: overview.scannedAt,
+    repos: overview.repos.map((repo) => ({
+      path: repo.path,
+      name: repo.name,
+      branch: repo.branch ?? null,
+      ahead: repo.ahead,
+      behind: repo.behind,
+      dirty: repo.dirty,
+      upstream: repo.upstream ?? null,
+      detached: repo.detached ?? false,
+      lastCommit: repo.lastCommit ?? null,
+      error: repo.error ?? null,
+    })),
+  }, null, 2)}\n`
+}
+
 function renderWorkspaceSnapshot(
   overview: WorkspaceOverview,
   output: NodeJS.WriteStream
@@ -463,6 +510,10 @@ function renderWorkspaceSnapshot(
     if (repo.lastCommit) {
       tokens.push(repo.lastCommit.date.slice(0, 10))
     }
+    // The snapshot used to drop failures silently (#2211).
+    if (repo.error) {
+      tokens.push(`error: ${repo.error.split('\n')[0]}`)
+    }
     output.write(`${tokens.join('  ')}\n`)
   }
 }
@@ -482,6 +533,7 @@ type WorkspaceInkAppProps = {
     onRepoComplete?: (path: string, count: number | undefined) => void
   ) => Promise<WorkspacePullRequestCounts>
   loadRepoSummary: (path: string) => Promise<WorkspaceRepoSummary>
+  syncRepos: SyncRepos
   onAddRepo?: () => Promise<string | undefined>
   resume?: WorkspaceResumeState
   exitRef: { current: WorkspaceExitResult }
@@ -842,6 +894,44 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
     }
   }, [dispatch, props])
 
+  const syncingRef = React.useRef(false)
+  const syncRepos = React.useCallback(async (mode: WorkspaceSyncMode, scope: 'row' | 'all') => {
+    if (syncingRef.current) {
+      dispatch({ type: 'set-status', status: 'A fetch or pull is already running.' })
+      return
+    }
+    const focused = selectFocusedRepo(stateRef.current)
+    const targets = scope === 'row'
+      ? (focused ? [focused] : [])
+      : selectVisibleRepos(stateRef.current)
+    if (targets.length === 0) return
+    const verb = mode === 'fetch' ? 'Fetching' : 'Pulling'
+    syncingRef.current = true
+    let done = 0
+    dispatch({ type: 'set-status', status: `${verb} ${targets.length} ${targets.length === 1 ? 'repo' : 'repos'}…` })
+    try {
+      const outcomes = await props.syncRepos(targets, mode, {
+        isCancelled: () => unmountedRef.current,
+        onRepoDone: (outcome, summary) => {
+          if (unmountedRef.current) return
+          done += 1
+          if (summary) dispatch({ type: 'merge-repo-summaries', repos: [summary] })
+          dispatch({
+            type: 'set-status',
+            status: `${verb} ${done}/${targets.length} (${outcome.name}${outcome.status === 'failed' ? ' failed' : ''})…`,
+          })
+        },
+      })
+      if (unmountedRef.current) return
+      dispatch({ type: 'set-status', status: summarizeWorkspaceSync(mode, outcomes) })
+    } catch (err) {
+      if (unmountedRef.current) return
+      dispatch({ type: 'set-status', status: failureStatus(err, `${verb} failed.`) })
+    } finally {
+      syncingRef.current = false
+    }
+  }, [dispatch, props])
+
   const drillIn = React.useCallback(() => {
     const focused = selectFocusedRepo(state)
     if (!focused) {
@@ -1024,6 +1114,8 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
   refreshRef.current = refresh
   const refreshRowRef = React.useRef(refreshRow)
   refreshRowRef.current = refreshRow
+  const syncRef = React.useRef(syncRepos)
+  syncRef.current = syncRepos
   const openAddRepoRef = React.useRef(openAddRepo)
   openAddRepoRef.current = openAddRepo
   const openCloneRef = React.useRef(openClone)
@@ -1239,6 +1331,9 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
         break
       case 'refresh-row':
         void refreshRowRef.current()
+        break
+      case 'sync':
+        void syncRef.current(intent.mode, intent.scope)
         break
       case 'add-repo':
         openAddRepoRef.current()

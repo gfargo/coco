@@ -5,7 +5,7 @@
  * that the runtime exports.
  */
 
-import { failureStatus, mergeKnownRepos } from './runtime'
+import { failureStatus, formatWorkspaceSnapshotJson, mergeKnownRepos } from './runtime'
 
 describe('mergeKnownRepos', () => {
   it('combines config + cached entries and de-dupes', () => {
@@ -46,5 +46,21 @@ describe('failureStatus', () => {
   it('falls back for a non-Error or an empty message', () => {
     expect(failureStatus('boom', 'Refresh failed.')).toBe('Refresh failed. Press r to retry.')
     expect(failureStatus(new Error(''), 'Row refresh failed.')).toBe('Row refresh failed. Press r to retry.')
+  })
+})
+
+describe('formatWorkspaceSnapshotJson (#2211)', () => {
+  it('lists every repo with divergence, upstream state and load errors, including the failing ones', () => {
+    const json = JSON.parse(formatWorkspaceSnapshotJson({
+      roots: ['/w'],
+      scannedAt: '2026-11-01T00:00:00.000Z',
+      repos: [
+        { path: '/w/a', name: 'a', branch: 'main', ahead: 1, behind: 2, dirty: 3, upstream: 'origin/main', detached: false },
+        { path: '/w/b', name: 'b', ahead: 0, behind: 0, dirty: 0, error: 'not a git repository' },
+      ],
+    }))
+    expect(json.roots).toEqual(['/w'])
+    expect(json.repos[0]).toMatchObject({ name: 'a', ahead: 1, behind: 2, dirty: 3, upstream: 'origin/main', error: null })
+    expect(json.repos[1]).toMatchObject({ name: 'b', branch: null, upstream: null, error: 'not a git repository' })
   })
 })

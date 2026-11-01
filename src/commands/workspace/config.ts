@@ -13,6 +13,8 @@ export interface WorkspaceOptions extends BaseCommandOptions {
   maxDepth?: number
   /** TUI theme preset. */
   theme?: LogInkThemePreset
+  /** Print the overview as JSON and exit. */
+  json?: boolean
 }
 
 export type WorkspaceArgv = Arguments<WorkspaceOptions>
@@ -29,6 +31,10 @@ export const options = {
   maxDepth: {
     description: 'Maximum recursion depth into each root. Defaults to 3.',
     type: 'number',
+  },
+  json: {
+    description: 'Print the repo overview as JSON and exit (no TUI).',
+    type: 'boolean',
   },
   theme: {
     description: 'TUI theme preset',
