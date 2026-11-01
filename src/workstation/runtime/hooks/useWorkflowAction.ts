@@ -1471,6 +1471,14 @@ export function useWorkflowAction(
         // (git's own `WIP on <branch>` subject). Naming is optional.
         return createStash(git, payload ?? '')
       },
+      // `gS` on the status view: the prompt pins the path, so a refresh while
+      // the message is being typed cannot re-aim the stash at another file.
+      'stash-file': async () => {
+        let parsed: { path?: string; message?: string } = {}
+        try { parsed = JSON.parse(payload ?? '{}') } catch { /* falls through to the guard */ }
+        if (!parsed.path) return { ok: false, message: 'No file selected' }
+        return createStash(git, parsed.message ?? '', { paths: [parsed.path] })
+      },
       'stash-staged': async () => createStash(git, payload ?? '', { stagedOnly: true }),
       'stash-keep-index': async () => createStash(git, payload ?? '', { keepIndex: true }),
       // #783 / #882 — forge PR-action-panel + issue/PR-triage handlers,

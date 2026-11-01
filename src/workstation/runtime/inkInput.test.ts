@@ -1572,6 +1572,50 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('stash one file (#2214)', () => {
+    function statusState() {
+      return applyLogInkAction(createLogInkState(rows), { type: 'pushView', value: 'status' })
+    }
+
+    it('gS on a status file opens a prompt that pins the cursored path', () => {
+      const state = applyInput(statusState(), 'g')
+      const events = getLogInkInputEvents(state, 'S', {}, { worktreeSelectedPath: 'src/a.ts' })
+      expect(events[0]).toMatchObject({
+        type: 'action',
+        action: { type: 'openInputPrompt', kind: 'stash-file', target: 'src/a.ts' },
+      })
+    })
+
+    it('gS off the status view, or without a file, explains instead of stashing everything', () => {
+      const history = applyInput(createLogInkState(rows), 'g')
+      expect(getLogInkInputEvents(history, 'S', {}, { worktreeSelectedPath: 'src/a.ts' })[0])
+        .toMatchObject({ type: 'action', action: { type: 'setStatus', kind: 'warning' } })
+      const noFile = applyInput(statusState(), 'g')
+      expect(getLogInkInputEvents(noFile, 'S', {}, {})[0])
+        .toMatchObject({ type: 'action', action: { type: 'setStatus', kind: 'warning' } })
+    })
+
+    it('submitting an empty message still stashes the file (WIP), carrying the path', () => {
+      let state = statusState()
+      state = applyLogInkAction(state, {
+        type: 'openInputPrompt', kind: 'stash-file', label: 'x', target: 'src/a.ts',
+      })
+      const events = getLogInkInputEvents(state, '', { return: true })
+      expect(events[0]).toEqual({
+        type: 'runWorkflowAction',
+        id: 'stash-file',
+        payload: JSON.stringify({ path: 'src/a.ts', message: '' }),
+      })
+    })
+
+    it('is in the palette as stashFile', () => {
+      const command = getLogInkPaletteCommands().find((c) => c.id === 'stashFile')
+      if (!command) throw new Error('stashFile palette command missing')
+      const events = getLogInkPaletteExecuteEvents(command, statusState(), { worktreeSelectedPath: 'src/a.ts' })
+      expect(events[0]).toMatchObject({ type: 'action', action: { kind: 'stash-file', target: 'src/a.ts' } })
+    })
+  })
+
   it('opens the stash prompt from the createStash palette command', () => {
     const state = createLogInkState(rows)
     const command = getLogInkPaletteCommands().find((c) => c.id === 'createStash')
