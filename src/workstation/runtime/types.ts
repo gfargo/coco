@@ -282,6 +282,17 @@ export type LogInkComponentDeps = LogInkRuntime & {
    */
   resumeRef?: { current: (() => void) | null }
   /**
+   * Mutable ref the app fills with a callback that puts a message on the
+   * status line as an error. The terminal lifecycle uses it to report an
+   * unhandled rejection instead of ending the session (#2206).
+   */
+  reportErrorRef?: { current: ((message: string) => void) | null }
+  /**
+   * Carries the commit draft being composed out of the app so the error
+   * boundary can save it if the app throws (#2206).
+   */
+  recoveryRef?: { current: { draft?: string } }
+  /**
    * Test seam — when set, the yank-to-clipboard handler uses this runner
    * instead of `defaultClipboardRunner`. Lets unit tests assert that the
    * right value reached the clipboard without spawning pbcopy/wl-copy.

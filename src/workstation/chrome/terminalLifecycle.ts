@@ -23,6 +23,8 @@
  * codes into every subsequent program until they run `reset`.
  */
 
+import { writeCrashLog, type CrashSource } from '../../lib/utils/crashLog'
+
 const SHOW_CURSOR = '\x1b[?25h'
 const HIDE_CURSOR = '\x1b[?25l'
 const ENTER_ALT_SCREEN = '\x1b[?1049h'
@@ -46,6 +48,13 @@ export type TerminalLifecycleOptions = {
    * however it sees fit (defaults to printing the stack to stderr).
    */
   onPanic?: (error: unknown) => void
+  /**
+   * Called for an unhandled promise rejection instead of ending the session
+   * (#2206): a workflow that fails with nothing to catch it should say so, not
+   * close the workstation and the commit draft with it. When absent, a
+   * rejection is a panic as before. Uncaught exceptions always are.
+   */
+  onUnhandledRejection?: (reason: unknown) => void
   /**
    * Enable SGR mouse reporting for the lifetime of this instance
    * (OSS-1608, `logTui.mouse`). Off by default — when falsy, no mouse
@@ -101,8 +110,10 @@ export function installTerminalLifecycle(
     tryWrite(output, `${mouse ? DISABLE_MOUSE : ''}${SHOW_CURSOR}${EXIT_ALT_SCREEN}`)
   }
 
-  const handlePanic = (error: unknown): void => {
+  const handlePanic = (error: unknown, source: CrashSource): void => {
     restoreTerminal()
+    // The stack used to need --verbose; keep it where it can be read (#2206).
+    const { logPath } = writeCrashLog({ source, error })
     if (options.onPanic) {
       options.onPanic(error)
     } else if (error instanceof Error) {
@@ -110,12 +121,19 @@ export function installTerminalLifecycle(
     } else {
       process.stderr.write(`\n${String(error)}\n`)
     }
+    if (logPath) process.stderr.write(`\ncoco crashed. Details: ${logPath}\n`)
     // Exit with non-zero so callers (CI, scripts) see the failure.
     process.exit(1)
   }
 
-  const onUncaughtException = (error: Error): void => handlePanic(error)
-  const onUnhandledRejection = (reason: unknown): void => handlePanic(reason)
+  const onUncaughtException = (error: Error): void => handlePanic(error, 'uncaughtException')
+  const onUnhandledRejection = (reason: unknown): void => {
+    if (options.onUnhandledRejection) {
+      options.onUnhandledRejection(reason)
+      return
+    }
+    handlePanic(reason, 'unhandledRejection')
+  }
 
   // Ctrl+Z: leave the alt screen + restore the cursor + drop raw mode
   // BEFORE the kernel actually suspends us. We don't unmount Ink — the
