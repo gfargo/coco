@@ -910,6 +910,8 @@ export function getLogInkPaletteExecuteEvents(
         kind: 'create-stash',
         label: 'Stash message (empty = WIP)',
       })]
+    case 'addWorktree':
+      return addWorktreePromptEvents()
     case 'navigateStatus':
       return [action({ type: 'replaceView', value: 'status' })]
     case 'navigateDiff':
@@ -1219,6 +1221,14 @@ const SIDEBAR_TAB_BY_NUMBER: Record<string, LogInkSidebarTab> = {
   '5': 'worktrees',
 }
 
+function addWorktreePromptEvents(): LogInkInputEvent[] {
+  return [action({
+    type: 'openInputPrompt',
+    kind: 'add-worktree',
+    label: 'New worktree: branch [path] (path defaults to beside this one)',
+  })]
+}
+
 /**
  * Submit the active input prompt — used by Enter on single-line
  * prompts and by Ctrl+D on multi-line prompts (#806). Most prompt
@@ -1251,6 +1261,12 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
   }
   if (!value) {
     return [action({ type: 'setStatus', value: 'enter a value or press esc to cancel', kind: 'warning' })]
+  }
+  if (state.inputPrompt.kind === 'add-worktree') {
+    return [
+      { type: 'runWorkflowAction', id: 'add-worktree', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
   }
   if (state.inputPrompt.kind === 'gitignore-pattern') {
     return [
@@ -3379,6 +3395,12 @@ export function getLogInkInputEvents(
     state.activeView === 'tags' ||
     (state.focus === 'sidebar' && state.sidebarTab === 'tags')
   )
+  if (inputValue === '+' && (
+    state.activeView === 'worktrees' ||
+    (state.focus === 'sidebar' && state.sidebarTab === 'worktrees')
+  )) {
+    return addWorktreePromptEvents()
+  }
   if (wantsCreateBranch) {
     return [action({
       type: 'openInputPrompt',

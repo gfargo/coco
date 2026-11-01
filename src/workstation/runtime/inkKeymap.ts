@@ -20,6 +20,7 @@ export type LogInkCommandId =
   | 'stageAll'
   | 'stagePathspec'
   | 'createStash'
+  | 'addWorktree'
   | 'commit'
   | 'cycleSort'
   | 'editCommit'
@@ -955,6 +956,13 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
   },
   // ── Worktrees view ─────────────────────────────────────────────────
   {
+    id: 'addWorktree',
+    keys: ['+'],
+    label: t(en, 'keymap.binding.addWorktree.label'),
+    description: t(en, 'keymap.binding.addWorktree.desc'),
+    contexts: ['worktrees'],
+  },
+  {
     id: 'workflowRemoveWorktreeAndBranch',
     keys: ['D'],
     label: t(en, 'keymap.binding.workflowRemoveWorktreeAndBranch.label'),
@@ -1196,6 +1204,7 @@ const BINDING_CATEGORY_BY_ID: Partial<Record<LogInkCommandId, LogInkBindingCateg
   stageAll: 'mutate',
   stagePathspec: 'mutate',
   createStash: 'mutate',
+  addWorktree: 'mutate',
   quit: 'essentials',
   refresh: 'essentials',
   navigateBack: 'essentials',

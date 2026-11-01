@@ -429,6 +429,7 @@ While AI proposals are open (after `M`):
 
 | Key | Action |
 |-----|--------|
+| `+` | Add a worktree: prompts for `branch [path]`. An existing local branch is checked out; a new name creates the branch from HEAD. The path defaults to beside the current worktree (`<dir>-<branch>`). |
 | `D` | Remove worktree **and** delete its branch (intercepts the global branch-delete) |
 | `W` | Remove worktree only |
 

@@ -1,5 +1,8 @@
 import { BranchRef } from './branchData'
 import {
+  addWorktree,
+  defaultWorktreePath,
+  parseAddWorktreeInput,
   removeWorktree,
   removeWorktreeAndBranch,
 } from './worktreeActions'
@@ -134,5 +137,52 @@ describe('log worktree actions', () => {
 
       expect(git.raw).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+describe('add worktree (#2214)', () => {
+  it('puts a default worktree beside the current one, flattening slashes', () => {
+    expect(defaultWorktreePath('/work/coco', 'feat/x')).toBe('/work/coco-feat-x')
+  })
+
+  it('parses `<branch> [path]`, resolving a relative path against the current worktree', () => {
+    expect(parseAddWorktreeInput('feat/x', '/work/coco'))
+      .toEqual({ branch: 'feat/x', path: '/work/coco-feat-x' })
+    expect(parseAddWorktreeInput('feat/x ../elsewhere', '/work/coco'))
+      .toEqual({ branch: 'feat/x', path: '/work/elsewhere' })
+    expect(parseAddWorktreeInput('feat/x /abs/dir', '/work/coco'))
+      .toEqual({ branch: 'feat/x', path: '/abs/dir' })
+    expect(parseAddWorktreeInput('   ', '/work/coco')).toBeUndefined()
+  })
+
+  it('checks out an existing local branch', async () => {
+    const raw = jest.fn().mockResolvedValue('')
+    await expect(addWorktree({ raw } as never, 'feat/x', '/work/x')).resolves.toEqual({
+      ok: true,
+      message: 'Added worktree /work/x on feat/x',
+    })
+    expect(raw).toHaveBeenLastCalledWith(['worktree', 'add', '/work/x', 'feat/x'])
+  })
+
+  it('creates the branch when it does not exist yet', async () => {
+    const raw = jest.fn(async (args: string[]) => {
+      if (args[0] === 'rev-parse') throw new Error('exit 1')
+      return ''
+    })
+    await expect(addWorktree({ raw } as never, 'feat/x', '/work/x')).resolves.toEqual({
+      ok: true,
+      message: 'Added worktree /work/x on new branch feat/x',
+    })
+    expect(raw).toHaveBeenLastCalledWith(['worktree', 'add', '-b', 'feat/x', '/work/x'])
+  })
+
+  it('passes git\'s refusal through (branch already checked out elsewhere)', async () => {
+    const raw = jest.fn(async (args: string[]) => {
+      if (args[0] === 'worktree') throw new Error("fatal: 'feat/x' is already used by worktree at '/work/y'")
+      return ''
+    })
+    const result = await addWorktree({ raw } as never, 'feat/x', '/work/x')
+    expect(result.ok).toBe(false)
+    expect(result.message).toContain('already used by worktree')
   })
 })

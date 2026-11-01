@@ -2394,3 +2394,33 @@ describe('Esc cancels an in-flight network op (#2199)', () => {
     expect(pullCurrentBranchMock).toHaveBeenCalledWith(git)
   })
 })
+
+describe('add-worktree (#2214)', () => {
+  it('adds the worktree beside the current one when only a branch is typed', async () => {
+    const raw = jest.fn(async (args: string[]) => {
+      if (args[0] === 'rev-parse') throw new Error('no such branch')
+      return ''
+    })
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({
+      git: { raw } as never,
+      context: { worktreeList: { currentPath: '/work/coco', worktrees: [] } } as never,
+    }))
+
+    await runWorkflowAction('add-worktree', 'feat/x')
+
+    expect(raw).toHaveBeenCalledWith(['worktree', 'add', '-b', 'feat/x', '/work/coco-feat-x'])
+  })
+
+  it('does nothing risky while the worktree list has not loaded', async () => {
+    const raw = jest.fn().mockResolvedValue('')
+    const harness = createHookHarness()
+    harness.beginRender()
+    const { runWorkflowAction } = useWorkflowAction(harness.React, createDeps({ git: { raw } as never, context: {} as never }))
+
+    await runWorkflowAction('add-worktree', 'feat/x')
+
+    expect(raw).not.toHaveBeenCalled()
+  })
+})

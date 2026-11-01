@@ -101,7 +101,7 @@ import {
 import { applyStash, applyStashKeepIndex, checkoutFileFromStash, createStash, dropStashes, popStash, renameStash, restoreStash, stashBranch } from '../../../git/stashActions'
 import { addOrEditCommitNote } from '../../../git/notesActions'
 import { ApplyHunkTarget, applyHunkPatch } from '../../../git/hunkActions'
-import { removeWorktree, removeWorktreeAndBranch } from '../../../git/worktreeActions'
+import { addWorktree, parseAddWorktreeInput, removeWorktree, removeWorktreeAndBranch } from '../../../git/worktreeActions'
 import { rebaseOnto } from '../../../git/rebaseActions'
 import { abortOperation, continueOperation, isOperationConflictError, resolveConflictKeepCurrentBranch, resolveConflictKeepIncoming, stageConflictResolved } from '../../../git/operationActions'
 import { getForgeActions } from '../../../git/forgeActions'
@@ -1209,6 +1209,13 @@ export function useWorkflowAction(
       },
       'apply-hunk-worktree': async () => runApplyHunk('worktree', payload),
       'apply-hunk-index': async () => runApplyHunk('index', payload),
+      'add-worktree': async () => {
+        const currentPath = context.worktreeList?.currentPath
+        if (!currentPath) return { ok: false, message: 'Worktrees are still loading — try again in a moment' }
+        const target = parseAddWorktreeInput(payload ?? '', currentPath)
+        if (!target) return { ok: false, message: 'Enter a branch name' }
+        return addWorktree(git, target.branch, target.path)
+      },
       'remove-worktree': async () => {
         // #1452 — resolves via the selector, which falls back to the
         // cursor against the unfiltered list when the action is invoked
