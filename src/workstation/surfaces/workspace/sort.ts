@@ -4,10 +4,11 @@ import type { WorkspaceRepoSummary } from '../../../git/workspaceData'
  * Sort modes for the workspace surface (#880). Cycle order is
  * intentional: most users want recency first ("which repos have I
  * touched recently"), name second ("alphabetical for memory"),
- * dirty third ("what needs commits before EOD"). Each subsequent tap
+ * dirty third ("what needs commits before EOD"), then ahead (unpushed work)
+ * and behind (needs a pull). Each subsequent tap
  * of the sort key advances along this cycle.
  */
-export const WORKSPACE_SORT_MODES = ['recency', 'name', 'dirty'] as const
+export const WORKSPACE_SORT_MODES = ['recency', 'name', 'dirty', 'ahead', 'behind'] as const
 
 export type WorkspaceSortMode = (typeof WORKSPACE_SORT_MODES)[number]
 
@@ -15,6 +16,8 @@ const SORT_LABELS: Record<WorkspaceSortMode, string> = {
   recency: 'Recent',
   name: 'Name',
   dirty: 'Dirty',
+  ahead: 'Ahead',
+  behind: 'Behind',
 }
 
 export function nextWorkspaceSortMode(current: WorkspaceSortMode): WorkspaceSortMode {
@@ -53,6 +56,12 @@ function dirtyComparator(a: WorkspaceRepoSummary, b: WorkspaceRepoSummary): numb
   return b.dirty - a.dirty
 }
 
+/** Most commits first; ties fall back to recency so the order stays predictable. */
+function countComparator(field: 'ahead' | 'behind') {
+  return (a: WorkspaceRepoSummary, b: WorkspaceRepoSummary): number =>
+    a[field] === b[field] ? recencyComparator(a, b) : b[field] - a[field]
+}
+
 /**
  * Stable sort: never mutates the input. The caller passes the array
  * straight from state, the reducer slices into the result.
@@ -68,6 +77,12 @@ export function sortWorkspaceRepos(
       break
     case 'dirty':
       copy.sort(dirtyComparator)
+      break
+    case 'ahead':
+      copy.sort(countComparator('ahead'))
+      break
+    case 'behind':
+      copy.sort(countComparator('behind'))
       break
     case 'recency':
     default:

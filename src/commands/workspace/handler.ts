@@ -155,6 +155,7 @@ export async function startCocoWorkspace(argv: WorkspaceArgv): Promise<void> {
         knownRepos,
         maxDepth,
         followSymlinks,
+        json: argv.json,
         appLabel: 'coco workspace',
         theme: createUiTheme(config, argv),
         resume,

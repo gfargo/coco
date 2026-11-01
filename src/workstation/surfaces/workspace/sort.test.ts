@@ -28,7 +28,7 @@ describe('workspace sort', () => {
       seen.push(mode)
       mode = nextWorkspaceSortMode(mode)
     }
-    expect(seen).toEqual(['recency', 'name', 'dirty', 'recency'])
+    expect(seen).toEqual(['recency', 'name', 'dirty', 'ahead', 'behind', 'recency'])
   })
 
   it('labels each mode with a one-word display string', () => {
@@ -101,5 +101,26 @@ describe('workspace sort', () => {
     const snapshot = input.map((entry) => entry.name)
     sortWorkspaceRepos(input, 'name')
     expect(input.map((entry) => entry.name)).toEqual(snapshot)
+  })
+})
+
+describe('ahead / behind sort (#2211)', () => {
+  const repos = [
+    repo({ name: 'a', ahead: 1, behind: 5, lastCommit: { hash: 'x', date: '2026-01-01T00:00:00Z', subject: '' } }),
+    repo({ name: 'b', ahead: 4, behind: 0, lastCommit: { hash: 'x', date: '2026-01-02T00:00:00Z', subject: '' } }),
+    repo({ name: 'c', ahead: 4, behind: 5, lastCommit: { hash: 'x', date: '2026-01-03T00:00:00Z', subject: '' } }),
+  ]
+
+  it('puts the most unpushed commits first, newest activity breaking ties', () => {
+    expect(sortWorkspaceRepos(repos, 'ahead').map((r) => r.name)).toEqual(['c', 'b', 'a'])
+  })
+
+  it('puts the most unpulled commits first, newest activity breaking ties', () => {
+    expect(sortWorkspaceRepos(repos, 'behind').map((r) => r.name)).toEqual(['c', 'a', 'b'])
+  })
+
+  it('labels both modes', () => {
+    expect(workspaceSortLabel('ahead')).toBe('Ahead')
+    expect(workspaceSortLabel('behind')).toBe('Behind')
   })
 })

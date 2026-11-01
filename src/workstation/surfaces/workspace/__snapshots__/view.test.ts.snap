@@ -8061,7 +8061,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
         </Text>
       </Box>
       <Text>
-        Cycle sort mode (recency → name → dirty)
+        Cycle sort mode (recency → name → dirty → ahead → behind)
       </Text>
     </Box>
     <Text />

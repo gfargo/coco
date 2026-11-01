@@ -761,7 +761,7 @@ export function buildWorkspaceHelpSections(): WorkspaceHelpSection[] {
       title: 'Filter & sort',
       rows: [
         { glyph: '/', keys: '/', description: 'Filter the list by name or branch' },
-        { glyph: '↑↓', keys: 's', description: 'Cycle sort mode (recency → name → dirty)' },
+        { glyph: '↑↓', keys: 's', description: 'Cycle sort mode (recency → name → dirty → ahead → behind)' },
       ],
     },
     {

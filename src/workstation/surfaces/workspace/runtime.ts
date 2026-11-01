@@ -160,6 +160,8 @@ export type WorkspaceResumeState = {
 
 export type WorkspaceStartOptions = {
   roots: ReadonlyArray<string>
+  /** Print the overview as JSON and exit instead of opening the TUI (`--json`). */
+  json?: boolean
   knownRepos?: ReadonlyArray<string>
   maxDepth?: number
   /** Follow symlinked directories during discovery (`workspace.followSymlinks`). */
@@ -265,12 +267,14 @@ export async function startWorkspace(
     selectedRepoPath: options.resume?.selectedRepoPath,
   }
 
-  if (!canStartLogInkTui(input, output)) {
-    // Non-TTY snapshot fallback. Print the visible repo list and
-    // exit. Keeps `coco workspace` usable from a pipe / CI.
+  if (options.json || !canStartLogInkTui(input, output)) {
+    // Non-TTY snapshot fallback (and `--json`, which skips the TUI even on a
+    // terminal). Print the repo list and exit. Keeps `coco workspace` usable
+    // from a pipe / CI.
     const fresh = await loadOverview(options.roots, knownRepos)
     writeCachedWorkspace(options.roots, fresh)
-    renderWorkspaceSnapshot(fresh, output)
+    if (options.json) output.write(formatWorkspaceSnapshotJson(fresh))
+    else renderWorkspaceSnapshot(fresh, output)
     return { kind: 'quit' }
   }
 
@@ -432,6 +436,30 @@ export function workspaceDebug(message: string): void {
   }
 }
 
+/**
+ * The overview as stable JSON for scripts (#2211): every repo with its
+ * divergence, dirty count, upstream state and any load error, so a failing
+ * repo is visible rather than missing.
+ */
+export function formatWorkspaceSnapshotJson(overview: WorkspaceOverview): string {
+  return `${JSON.stringify({
+    roots: overview.roots,
+    scannedAt: overview.scannedAt,
+    repos: overview.repos.map((repo) => ({
+      path: repo.path,
+      name: repo.name,
+      branch: repo.branch ?? null,
+      ahead: repo.ahead,
+      behind: repo.behind,
+      dirty: repo.dirty,
+      upstream: repo.upstream ?? null,
+      detached: repo.detached ?? false,
+      lastCommit: repo.lastCommit ?? null,
+      error: repo.error ?? null,
+    })),
+  }, null, 2)}\n`
+}
+
 function renderWorkspaceSnapshot(
   overview: WorkspaceOverview,
   output: NodeJS.WriteStream
@@ -456,6 +484,10 @@ function renderWorkspaceSnapshot(
     }
     if (repo.lastCommit) {
       tokens.push(repo.lastCommit.date.slice(0, 10))
+    }
+    // The snapshot used to drop failures silently (#2211).
+    if (repo.error) {
+      tokens.push(`error: ${repo.error.split('\n')[0]}`)
     }
     output.write(`${tokens.join('  ')}\n`)
   }
