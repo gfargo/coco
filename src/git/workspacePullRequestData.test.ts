@@ -241,7 +241,7 @@ describe('getWorkspacePullRequestCounts', () => {
 
   it('an all-GitLab workspace takes `authenticated` from the forge, not from gh', async () => {
     const remoteUrls = new Map<string, string>([['/tmp/gl', 'git@gitlab.com:owner/repo.git']])
-    const runner = jest.fn(async (_args: string[]) => 'ok')
+    const runner = jest.fn<Promise<string>, [string[]]>(async () => 'ok')
     const onRepoComplete = jest.fn()
 
     const signedIn = await getWorkspacePullRequestCounts(['/tmp/gl'], {
@@ -321,7 +321,7 @@ describe('non-GitHub forges count through the adapter (#2211)', () => {
       authenticated: true,
       pullRequests: provider === 'gitlab' ? [pr(1), pr(2)] : [pr(7)],
     }))
-    const runner = jest.fn(async (_args: string[]) => '')
+    const runner = jest.fn<Promise<string>, [string[]]>(async () => '')
     const result = await getWorkspacePullRequestCounts(['/w/gl', '/w/bb', '/w/gt'], {
       ghRunner: runner,
       remoteUrls,
