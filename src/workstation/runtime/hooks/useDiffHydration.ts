@@ -81,7 +81,7 @@ import {
   GitLogCommitRow,
   getCommitFilePreview,
 } from '../../../git/logData'
-import { getCompareDiff } from '../../../git/compareData'
+import { getCompareDiff, getCompareSummary, type CompareSummary } from '../../../git/compareData'
 import { getStashDiff } from '../../../git/stashData'
 import { WorktreeHunkOverview, getWorktreeHunks } from '../../../git/statusHunks'
 import type { WorktreeFile } from '../../../git/statusData'
@@ -225,16 +225,21 @@ export function useCompareDiffState(React: typeof ReactTypes): {
   >
   compareDiffLoading: boolean
   setCompareDiffLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+  compareSummary: CompareSummary | undefined
+  setCompareSummary: ReactTypes.Dispatch<ReactTypes.SetStateAction<CompareSummary | undefined>>
 } {
   const [compareDiffLines, setCompareDiffLines] = React.useState<
     string[] | undefined
   >(undefined)
   const [compareDiffLoading, setCompareDiffLoading] = React.useState(false)
+  const [compareSummary, setCompareSummary] = React.useState<CompareSummary | undefined>(undefined)
   return {
     compareDiffLines,
     setCompareDiffLines,
     compareDiffLoading,
     setCompareDiffLoading,
+    compareSummary,
+    setCompareSummary,
   }
 }
 
@@ -255,10 +260,12 @@ export type UseCompareDiffHydrationDeps = {
   >
   /** Loading-flag setter for the compare diff fetch. */
   setCompareDiffLoading: ReactTypes.Dispatch<ReactTypes.SetStateAction<boolean>>
+  /** Writer for the ahead/behind counts and head-only commit list. */
+  setCompareSummary: ReactTypes.Dispatch<ReactTypes.SetStateAction<CompareSummary | undefined>>
 }
 
 /**
- * #779 — load `git diff <base>..<head>` once the diff view becomes active
+ * #779 — load `git diff <base>...<head>` and its commit summary once the diff view becomes active
  * with diffSource='compare'. Lifted verbatim from `app.ts`.
  */
 export function useCompareDiffHydration(
@@ -273,6 +280,7 @@ export function useCompareDiffHydration(
     compareHeadRef,
     setCompareDiffLines,
     setCompareDiffLoading,
+    setCompareSummary,
   } = deps
 
   React.useEffect(() => {
@@ -291,9 +299,13 @@ export function useCompareDiffHydration(
     let active = true
     setCompareDiffLoading(true)
     void (async () => {
-      const lines = await safe(getCompareDiff(git, compareBaseRef, compareHeadRef))
+      const [lines, summary] = await Promise.all([
+        safe(getCompareDiff(git, compareBaseRef, compareHeadRef)),
+        safe(getCompareSummary(git, compareBaseRef, compareHeadRef)),
+      ])
       if (active) {
         setCompareDiffLines(lines || [])
+        setCompareSummary(summary || undefined)
         setCompareDiffLoading(false)
       }
     })()

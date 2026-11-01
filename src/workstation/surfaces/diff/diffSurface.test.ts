@@ -322,3 +322,49 @@ describe('commit diff — current-hunk header (#1628)', () => {
     expect(text).toContain('Hunk 2/2')
   })
 })
+
+describe('compare diff header (#2214)', () => {
+  function buildCompare(compareSummary?: DiffSurfaceData['compareSummary']): unknown {
+    const base = createLogInkState([])
+    const ctx = {
+      h: createElement,
+      components,
+      state: {
+        ...base,
+        activeView: 'diff',
+        diffSource: 'compare',
+        compareBase: { ref: 'main', label: 'main' },
+        compareHead: { ref: 'feature', label: 'feature' },
+        focus: 'commits',
+        diffPreviewOffset: 0,
+      },
+      context: {} as unknown as LogInkContext,
+      contextStatus: createLogInkContextStatus('ready'),
+      bodyRows: 30,
+      width: 120,
+      theme,
+    } as unknown as SurfaceRenderContext
+    return renderDiffSurface(ctx, {
+      compareDiffLines: ['diff --git a/a.ts b/a.ts', '@@ -1 +1 @@', '-a', '+b'],
+      compareDiffLoading: false,
+      compareSummary,
+    } as unknown as DiffSurfaceData)
+  }
+
+  it('shows ahead/behind, the merge base and the head-only commits', () => {
+    const text = flattenText(buildCompare({
+      ahead: 2,
+      behind: 5,
+      mergeBase: '0123456',
+      commits: [{ hash: 'abc1234', subject: 'feat: thing' }, { hash: 'def5678', subject: 'fix: x' }],
+    }))
+    expect(text).toContain('2 ahead · 5 behind · merge base 0123456')
+    expect(text).toContain('abc1234 feat: thing | def5678 fix: x')
+  })
+
+  it('renders without the summary line until it has loaded', () => {
+    const text = flattenText(buildCompare(undefined))
+    expect(text).toContain('main → feature')
+    expect(text).not.toContain('ahead')
+  })
+})

@@ -257,7 +257,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   const {stashDiffLines, setStashDiffLines, stashDiffLoading, setStashDiffLoading} = useStashDiffState(React)
   // #779 — compare-two-refs diff state. Loaded lazily when the diff
   // view becomes active with `diffSource === 'compare'`.
-  const {compareDiffLines, setCompareDiffLines, compareDiffLoading, setCompareDiffLoading} = useCompareDiffState(React)
+  const {compareDiffLines, setCompareDiffLines, compareDiffLoading, setCompareDiffLoading, compareSummary, setCompareSummary} = useCompareDiffState(React)
   // #1363 — PR-triage diff state (Enter on a triage row). Loaded lazily
   // when the diff view becomes active with `diffSource === 'pr'`; the
   // loader hook below serves repeat opens from a bounded per-number
@@ -608,6 +608,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     compareHeadRef,
     setCompareDiffLines,
     setCompareDiffLoading,
+    setCompareSummary,
   })
 
   // Reset compare-diff state whenever the diff view exits. Without
@@ -617,6 +618,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   React.useEffect(() => {
     if (state.diffSource !== 'compare') {
       setCompareDiffLines(undefined)
+      setCompareSummary(undefined)
       setCompareDiffLoading(false)
     }
   }, [state.diffSource])
@@ -1353,6 +1355,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
       stashDiffLoading,
       compareDiffLines,
       compareDiffLoading,
+      compareSummary,
       prDiffLines,
       prDiffLoading,
       prDiffError,
