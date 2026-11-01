@@ -482,6 +482,13 @@ describe('renderHistoryPanel', () => {
   })
 })
 
+describe('formatHistoryFetchArgs (#2213 terms)', () => {
+  it('lists message, since and until with the other filters', () => {
+    expect(formatHistoryFetchArgs({ author: 'sam', message: 'fix race', since: '2w', until: '3d' }))
+      .toBe('--author=sam --grep=fix race --since=2w --until=3d')
+  })
+})
+
 describe('formatHistoryFetchArgs', () => {
   // Regression for #1361: pickaxe (S:) and grep-diff (G:) filters used
   // to fall through to the 'none' fallback here, so the filter banner

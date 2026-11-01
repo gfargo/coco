@@ -193,6 +193,9 @@ export function formatHistoryFetchArgs(args: LogInkHistoryFetchArgs): string {
   // filter was applied.
   if (args.pickaxe) parts.push(`-S${args.pickaxe}`)
   if (args.grep) parts.push(`-G${args.grep}`)
+  if (args.message) parts.push(`--grep=${args.message}`)
+  if (args.since) parts.push(`--since=${args.since}`)
+  if (args.until) parts.push(`--until=${args.until}`)
   return parts.join(' ') || 'none'
 }
 

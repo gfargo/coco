@@ -1071,6 +1071,12 @@ export type LogInkHistoryFetchArgs = {
   pickaxe?: string
   /** `git log -G <regex>` — find commits whose patch matches the regex. */
   grep?: string
+  /** `git log --grep=<regex>` — commit message search (`msg:`). */
+  message?: string
+  /** `git log --since=<date>` (`since:2w`, `since:2026-01-01`). */
+  since?: string
+  /** `git log --until=<date>`. */
+  until?: string
 }
 
 export const DEFAULT_LOG_INK_STATUS_FILTER_MASK: LogInkStatusFilterMask = {
@@ -1079,33 +1085,73 @@ export const DEFAULT_LOG_INK_STATUS_FILTER_MASK: LogInkStatusFilterMask = {
   untracked: true,
 }
 
+const HISTORY_FILTER_KEYS: Record<string, keyof LogInkHistoryFetchArgs> = {
+  author: 'author',
+  path: 'path',
+  msg: 'message',
+  message: 'message',
+  since: 'since',
+  until: 'until',
+  S: 'pickaxe',
+  G: 'grep',
+}
+
+/** Split on whitespace, keeping `"quoted text"` / `'quoted text'` together (quotes removed). */
+function tokenizeHistoryFilter(input: string): string[] {
+  const tokens: string[] = []
+  let current = ''
+  let quote: string | undefined
+  let started = false
+  for (const char of input) {
+    if (quote) {
+      if (char === quote) quote = undefined
+      else current += char
+    } else if (char === '"' || char === "'") {
+      quote = char
+      started = true
+    } else if (/\s/.test(char)) {
+      if (started || current) tokens.push(current)
+      current = ''
+      started = false
+    } else {
+      current += char
+      started = true
+    }
+  }
+  if (started || current) tokens.push(current)
+  return tokens
+}
+
 /**
- * Detect a history server-side filter prefix (#776, #1361). Returns the
- * parsed `LogInkHistoryFetchArgs` for `path:<value>`, `author:<value>`,
- * `S:<token>` (pickaxe), and `G:<regex>` (grep-diff) prefixes, or
- * `undefined` for a plain (client-side) filter. The whole remainder of
- * the string (post-prefix) becomes the value — paths, author names,
- * and search tokens commonly contain spaces.
+ * Detect history server-side filters (#776, #1361, #2213). The query is a
+ * list of `key:value` terms that combine: `author:sam path:src/git
+ * msg:"fix race" since:2w S:foo`. Keys: `author`, `path`, `msg` (commit
+ * message), `since`, `until`, `S` (pickaxe token), `G` (diff regex). Quote a
+ * value to keep its spaces; a bare word after a term joins that term's value
+ * (so the older `author:Sam Smith` still works). Returns `undefined` for a
+ * plain (client-side) filter: the query must start with a known key, and a
+ * term with an empty value is ignored.
  */
 export function parseLogInkHistoryFetchPrefix(filter: string): LogInkHistoryFetchArgs | undefined {
-  const trimmed = filter.trim()
-  if (trimmed.startsWith('path:')) {
-    const value = trimmed.slice('path:'.length).trim()
-    return value ? { path: value } : undefined
+  const tokens = tokenizeHistoryFilter(filter.trim())
+  const terms: Array<{ field: keyof LogInkHistoryFetchArgs; value: string }> = []
+  for (const token of tokens) {
+    const colon = token.indexOf(':')
+    const field = colon > 0 ? HISTORY_FILTER_KEYS[token.slice(0, colon)] : undefined
+    if (field) {
+      terms.push({ field, value: token.slice(colon + 1) })
+    } else if (terms.length === 0) {
+      return undefined
+    } else {
+      const last = terms[terms.length - 1]
+      last.value = last.value ? `${last.value} ${token}` : token
+    }
   }
-  if (trimmed.startsWith('author:')) {
-    const value = trimmed.slice('author:'.length).trim()
-    return value ? { author: value } : undefined
+  const args: LogInkHistoryFetchArgs = {}
+  for (const { field, value } of terms) {
+    if (value.trim()) args[field] = value.trim()
   }
-  if (trimmed.startsWith('S:')) {
-    const value = trimmed.slice('S:'.length).trim()
-    return value ? { pickaxe: value } : undefined
-  }
-  if (trimmed.startsWith('G:')) {
-    const value = trimmed.slice('G:'.length).trim()
-    return value ? { grep: value } : undefined
-  }
-  return undefined
+  return Object.keys(args).length > 0 ? args : undefined
 }
 
 export type LogInkAction =
