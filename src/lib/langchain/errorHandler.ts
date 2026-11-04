@@ -59,6 +59,9 @@ const TRANSIENT_ERROR_PATTERNS = [
   '429',
   'too many requests',
   'timeout',
+  // The OpenAI / Anthropic SDKs report a client-side timeout as "Request timed out."
+  // (no "timeout" substring, no status), and withCallTimeout says "timed out after".
+  'timed out',
   'temporarily unavailable',
 ]
 

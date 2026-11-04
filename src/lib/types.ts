@@ -69,6 +69,12 @@ export interface BaseParserOptions {
    */
   maxConcurrent?: number
   /**
+   * Per-call timeout (ms) for summarization LLM calls, from
+   * `service.requestOptions.timeout`. When omitted, hosted providers get a
+   * 120s default and Ollama gets none (see `resolveCallTimeoutMs`).
+   */
+  requestTimeoutMs?: number
+  /**
    * Opt-in fast paths that trade summary detail for speed. Mirrors the
    * `service.fastPath` shape. Off by default; lossless optimizations
    * are not configured here.

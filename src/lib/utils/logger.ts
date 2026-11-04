@@ -152,6 +152,17 @@ export class Logger {
     return this
   }
 
+  /**
+   * Updates the text of the active spinner in place (e.g. a progress count).
+   * No-op when there is no spinner or output is muted.
+   */
+  public updateSpinner(message: string, options: Omit<SpinnerOptions, 'mode'> = {}): Logger {
+    if (this.spinner) {
+      this.spinner.text = options.color ? chalk[options.color](message) : message
+    }
+    return this
+  }
+
   public stopSpinner(
     message: string | undefined = '',
     options: SpinnerOptions = { mode: 'succeed', color: 'green' }

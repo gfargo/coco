@@ -399,6 +399,7 @@ export async function summarizeLargeFiles(
     { color: 'blue' }
   )
 
+  let settledFiles = 0
   const processed = await processInWaves(
     filesToSummarize,
     async ({ diff }) => {
@@ -418,6 +419,11 @@ export async function summarizeLargeFiles(
         metadata,
         fastPath,
       })
+      settledFiles++
+      logger.updateSpinner?.(
+        `Pre-processing large files (${settledFiles}/${filesToSummarize.length})`,
+        { color: 'blue' }
+      )
       const delta = diff.tokenCount - summarized.tokenCount
       if (delta > 0) {
         runningTotal -= delta

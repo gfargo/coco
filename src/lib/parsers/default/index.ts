@@ -6,6 +6,7 @@ import { SUMMARIZE_PROMPT } from '../../langchain/chains/summarize/prompt'
 import { getDiff } from '../../simple-git/getDiff'
 import { loadSummarizationChain } from '@langchain/classic/chains'
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
+import { resolveCallTimeoutMs, withCallTimeout } from '../../langchain/utils/withCallTimeout'
 
 export async function fileChangeParser({
   changes,
@@ -19,6 +20,7 @@ export async function fileChangeParser({
     minTokensForSummary,
     maxFileTokens,
     maxConcurrent,
+    requestTimeoutMs,
     fastPath,
     metadata,
   },
@@ -74,7 +76,10 @@ export async function fileChangeParser({
     maxConcurrent,
     fastPath,
     textSplitter,
-    chain: summarizationChain,
+    chain: withCallTimeout(
+      summarizationChain,
+      resolveCallTimeoutMs({ provider: metadata?.provider, configured: requestTimeoutMs })
+    ),
     logger,
     metadata,
   })
