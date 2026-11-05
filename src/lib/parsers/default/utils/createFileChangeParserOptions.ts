@@ -10,6 +10,7 @@ export type FileChangeParserServiceBudget = {
   minTokensForSummary?: number
   maxFileTokens?: number
   maxConcurrent?: number
+  requestOptions?: { timeout?: number }
   fastPath?: {
     markdown?: boolean
     languageAware?: {
@@ -64,6 +65,7 @@ export function createFileChangeParserOptions({
     minTokensForSummary: service?.minTokensForSummary,
     maxFileTokens: service?.maxFileTokens,
     maxConcurrent: service?.maxConcurrent,
+    requestTimeoutMs: service?.requestOptions?.timeout,
     fastPath: service?.fastPath,
     metadata: {
       command,

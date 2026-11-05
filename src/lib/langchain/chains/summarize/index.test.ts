@@ -7,6 +7,7 @@ import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters'
 import { summarize, SummarizeContext } from './index'
 import { Logger } from '../../../utils/logger'
 import { readUsageRecords } from '../../utils/usageLedger'
+import { withCallTimeout } from '../../utils/withCallTimeout'
 
 /**
  * The summarize() helper wraps the chain.invoke() call in a
@@ -39,6 +40,28 @@ describe('summarize() retry behavior', () => {
     const result = await summarize([{ pageContent: 'hello world' }], ctx)
     expect(result).toBe('summary')
     expect(invoke).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries a stalled call: withCallTimeout surfaces a timeout, the backoff re-invokes', async () => {
+    jest.useRealTimers()
+    try {
+      let calls = 0
+      const inner = {
+        invoke: jest.fn((_input: unknown, config?: { signal?: AbortSignal }) => {
+          calls++
+          if (calls > 1) return Promise.resolve({ text: 'recovered' })
+          return new Promise((_resolve, reject) => {
+            config?.signal?.addEventListener('abort', () => reject(config.signal?.reason))
+          })
+        }),
+      }
+      const ctx = makeContext({ invoke: inner.invoke })
+      ctx.chain = withCallTimeout(inner as unknown as SummarizeContext['chain'], 20)
+      await expect(summarize([{ pageContent: 'hello' }], ctx)).resolves.toBe('recovered')
+      expect(inner.invoke).toHaveBeenCalledTimes(2)
+    } finally {
+      jest.useFakeTimers({ doNotFake: ['nextTick', 'queueMicrotask'] })
+    }
   })
 
   it.each([

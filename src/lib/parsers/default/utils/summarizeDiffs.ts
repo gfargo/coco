@@ -306,6 +306,7 @@ async function summarizeInWaves(
     { color: 'blue' }
   )
 
+  let settled = 0
   await Promise.all(
     eligibleIndices.map((idx) =>
       limit(async () => {
@@ -322,6 +323,8 @@ async function summarizeInWaves(
           logger,
           metadata,
         })
+        settled++
+        logger.updateSpinner?.(`Consolidating Diffs (${settled}/${eligibleIndices.length})`, { color: 'blue' })
         const originalTokens = results[idx].tokenCount
         const newTokens = result.tokenCount
         totalTokenCount -= (originalTokens - newTokens)

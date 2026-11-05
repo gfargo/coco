@@ -88,6 +88,8 @@ describe('isRetryableError (#1242 — shared transient predicate)', () => {
     expect(isRetryableError({ message: '429 Too Many Requests' })).toBe(true)
     expect(isRetryableError({ message: 'Service temporarily unavailable' })).toBe(true)
     expect(isRetryableError({ message: 'request timeout' })).toBe(true)
+    // OpenAI / Anthropic SDK client-side timeout wording
+    expect(isRetryableError(new Error('Request timed out.'))).toBe(true)
     expect(isRetryableError({ message: 'Invalid JSON' })).toBe(false)
   })
 
