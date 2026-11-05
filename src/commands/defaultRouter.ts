@@ -41,7 +41,9 @@ import { handler as workspaceHandler } from './workspace/handler'
 import { getConfigSources, loadConfig } from '../lib/config/utils/loadConfig'
 import { applyRepoCwd } from './utils/applyRepoFlag'
 
-import { CommitArgv } from './commit/config'
+import { Options } from 'yargs'
+
+import { CommitArgv, options as commitOptions, validateCommitArgv } from './commit/config'
 import { InitArgv } from './init/config'
 import { UiArgv } from './ui/config'
 import { WorkspaceArgv } from './workspace/config'
@@ -66,6 +68,38 @@ export interface DefaultRouteOptions {
    * interactive users land in the more helpful default.
    */
   commit?: boolean
+  /** Any `coco commit` flag (`--noDiff`, `-c`, `--append`, ...) can ride along; see COMMIT_FLAG_KEYS. */
+  [commitFlag: string]: unknown
+}
+
+/**
+ * `coco commit` options minus `--interactive`, which is already a global
+ * flag. Canonical (long) names only: yargs mirrors aliases onto the same
+ * value, so checking these is enough.
+ */
+export const COMMIT_FLAG_KEYS = Object.keys(commitOptions).filter((key) => key !== 'i')
+
+/**
+ * `coco commit`'s options re-registered on the `$0` router so the legacy
+ * forms (`coco --noDiff`, `coco -c`, `coco --commit --append x`) parse under
+ * strictOptions instead of failing with "Unknown argument". Defaults are
+ * stripped so an absent flag stays `undefined` and an explicit one is
+ * detectable (see {@link hasCommitFlags}); they're hidden to keep `coco
+ * --help` about the router, not a second copy of `coco commit --help`.
+ */
+export function legacyCommitOptions(): Record<string, Options> {
+  return Object.fromEntries(
+    COMMIT_FLAG_KEYS.map((key) => {
+      const option: Options = { ...commitOptions[key], hidden: true }
+      delete option.default
+      return [key, option]
+    })
+  )
+}
+
+/** True when the user explicitly passed at least one `coco commit` flag to bare `coco`. */
+export function hasCommitFlags(argv: Record<string, unknown>): boolean {
+  return COMMIT_FLAG_KEYS.some((key) => argv[key] !== undefined)
 }
 
 export type DefaultRouteArgv = Arguments<DefaultRouteOptions>
@@ -79,7 +113,7 @@ export type DefaultRouteDecision =
   | { kind: 'init'; reason: 'no-config' }
   | { kind: 'ui'; reason: 'config-and-repo' }
   | { kind: 'workspace'; reason: 'config-no-repo' }
-  | { kind: 'commit'; reason: 'explicit-flag' | 'env-override' }
+  | { kind: 'commit'; reason: 'explicit-flag' | 'env-override' | 'commit-flags' }
 
 /**
  * Pure decision function — given probed signals (whether config
@@ -100,12 +134,21 @@ export function decideDefaultRoute(input: {
   isGitRepo: boolean
   explicitCommit: boolean
   envOverride?: string
+  /**
+   * The user passed a commit-only flag (`coco --noDiff`). Those flags only
+   * mean something to `commit`, so they imply it rather than being dropped
+   * on the way to the TUI.
+   */
+  commitFlags?: boolean
 }): DefaultRouteDecision {
   if (input.envOverride === 'commit' || input.explicitCommit) {
     return {
       kind: 'commit',
       reason: input.envOverride === 'commit' ? 'env-override' : 'explicit-flag',
     }
+  }
+  if (input.commitFlags) {
+    return { kind: 'commit', reason: 'commit-flags' }
   }
   if (!input.hasConfigSource) {
     return { kind: 'init', reason: 'no-config' }
@@ -202,6 +245,7 @@ export const defaultRouteHandler: CommandHandler<DefaultRouteArgv> = async (
     hasConfigSource,
     isGitRepo,
     explicitCommit: Boolean(argv.commit),
+    commitFlags: hasCommitFlags(argv),
     envOverride: process.env.COCO_DEFAULT,
   })
 
@@ -226,10 +270,11 @@ export const defaultRouteHandler: CommandHandler<DefaultRouteArgv> = async (
       // promises scripts the same stdout-by-default behavior as
       // `coco commit`, so let commitHandler's own
       // `argv.interactive || isInteractive(config)` resolution decide (#1442).
-      await commitHandler(
-        buildSyntheticArgv<CommitArgv>(argv, { interactive: Boolean(argv.interactive) }),
-        logger
-      )
+      const commitArgv = buildSyntheticArgv<CommitArgv>(argv, { interactive: Boolean(argv.interactive) })
+      // This route skips `coco commit`'s yargs builder, so re-apply its
+      // cross-flag rules (e.g. `--apply` requires `--split`).
+      validateCommitArgv(commitArgv)
+      await commitHandler(commitArgv, logger)
       return
   }
 }
