@@ -373,6 +373,15 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       targets: 'single',
     },
     {
+      id: 'review-outgoing-range',
+      key: '',
+      label: 'Review outgoing commits',
+      description: 'Run an AI review on `<upstream>..<branch>` for the cursored branch and list the findings. Never pushes; press P afterwards to push.',
+      kind: 'normal',
+      requiresConfirmation: false,
+      targets: 'single',
+    },
+    {
       id: 'push-selected-branch',
       key: '',
       label: 'Push selected branch',
