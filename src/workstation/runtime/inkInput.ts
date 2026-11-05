@@ -1185,6 +1185,7 @@ export const PUSH_SUB_CHOICE = {
   title: 'Push branch',
   options: [
     { key: 'p', label: 'Push (normal)', workflowId: 'push-selected-branch' },
+    { key: 'r', label: 'Review outgoing commits first (does not push)', workflowId: 'review-outgoing-range' },
     { key: 'f', label: 'Force push (--force-with-lease)', workflowId: 'force-push-selected-branch', destructive: true },
   ],
 }

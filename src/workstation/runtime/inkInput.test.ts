@@ -1235,6 +1235,14 @@ describe('log Ink input interactions', () => {
   })
 
   describe('P push sub-choice on the branches view', () => {
+    it('offers a review-then-push option that does not push (#2216)', () => {
+      const review = PUSH_SUB_CHOICE.options.find((option) => option.workflowId === 'review-outgoing-range')
+      expect(review).toMatchObject({ key: 'r' })
+      expect(review).not.toHaveProperty('destructive')
+      const keys = PUSH_SUB_CHOICE.options.map((option) => option.key)
+      expect(new Set(keys).size).toBe(keys.length)
+    })
+
     it('dispatches setPendingChoice with PUSH_SUB_CHOICE', () => {
       const state = createLogInkState(rows, { activeView: 'branches' })
       const events = getLogInkInputEvents(state, 'P', {}, {
