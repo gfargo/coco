@@ -10,6 +10,7 @@
  * the answer to "what am I about to act on" without forcing a checkout / show.
  */
 
+import { formatLogInkLoading } from './surfaceStates'
 import { BranchRef } from '../../git/branchData'
 import type { IssueDetail } from '../../git/issueDetailData'
 import type { IssueListItem } from '../../git/issuesListData'
@@ -121,7 +122,7 @@ export function formatStashPreview(
   if (!stash.files) {
     // Still loading (#2209): not "no files".
     out.push(blank())
-    out.push(dim('Loading files…'))
+    out.push(dim(formatLogInkLoading({ resource: 'files' })))
   } else if (files.length > 0) {
     out.push(blank())
     out.push(line(`Files (${files.length}):`))

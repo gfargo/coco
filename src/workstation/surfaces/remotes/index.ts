@@ -46,7 +46,7 @@ export function renderRemotesSurface(ctx: SurfaceRenderContext): ReactTypes.Reac
   const visible = filtered.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading
-    ? 'Loading remotes…'
+    ? formatLogInkLoading({ resource: 'remotes' })
     : `${filtered.length}/${all.length} remotes${filterLabel}`
   const emptyLabel = formatLogInkRemotesEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'remotes' })

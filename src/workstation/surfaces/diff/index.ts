@@ -523,7 +523,7 @@ export function renderDiffSurface(
         ? `Hunk ${currentHunkIndex + 1}/${totalHunks}  ${hunkRail}  ${stagedHunks}/${totalHunks} staged`
         : 'No stageable hunks for this file. Press esc to go back.'
   const headerLines: string[] = isLogInkContextKeyLoading(contextStatus, 'worktree')
-    ? ['Loading file context…']
+    ? [formatLogInkLoading({ resource: 'file context' })]
     : worktreeDiffLoading
       ? [`Loading diff for ${worktreeFile?.path || 'selected file'}…`]
       : worktreeFile

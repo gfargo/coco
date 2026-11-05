@@ -95,7 +95,7 @@ export function renderFileHistorySurface(
   const visible = commits.slice(windowStart, windowStart + listRows)
 
   const headerRight = loading
-    ? 'Loading history…'
+    ? formatLogInkLoading({ resource: 'history' })
     : commits.length
       ? truncated
         ? `first ${commits.length} commits (showing ${selected + 1})`

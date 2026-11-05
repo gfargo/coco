@@ -481,7 +481,7 @@ function renderInspectorNotesSection(
     h(Text, { key: 'notes-title' }, focused ? '[Notes]' : 'Notes:'),
   ]
   if (!noteLoaded) {
-    nodes.push(h(Text, { key: 'notes-loading', dimColor: true }, 'Loading note…'))
+    nodes.push(h(Text, { key: 'notes-loading', dimColor: true }, formatLogInkLoading({ resource: 'note' })))
   } else if (note) {
     const bodyLines = note.split('\n').flatMap((line) => wrapCells(line, innerWidth)).slice(0, 12)
     nodes.push(...bodyLines.map((line, index) => h(Text, {
@@ -517,7 +517,7 @@ export function renderHistoryInspector(
 
   if (!detail) {
     const fallbackLines = selected
-      ? [selected.message, '', loading ? 'Loading commit details…' : 'Commit details unavailable. Press r to refresh.']
+      ? [selected.message, '', loading ? formatLogInkLoading({ resource: 'commit details' }) : 'Commit details unavailable. Press r to refresh.']
       : ['No commit selected — j/k to browse history.']
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
@@ -753,7 +753,7 @@ export function renderCommitDiffDetail(
 
   if (!detail) {
     const fallbackLines = selected
-      ? [selected.message, '', loading ? 'Loading commit details…' : 'Commit details unavailable. Press r to refresh.']
+      ? [selected.message, '', loading ? formatLogInkLoading({ resource: 'commit details' }) : 'Commit details unavailable. Press r to refresh.']
       : ['No commit selected — j/k to browse history.']
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
