@@ -15,7 +15,7 @@ import {
     getLogInkViewKeyBindings,
 } from './inkKeymap'
 import type { LogInkView } from './inkViewModel'
-import { getLogInkWorkflowActions } from './inkWorkflows'
+import { TRIAGE_PR_WORKFLOW_TWINS, getLogInkWorkflowActions } from './inkWorkflows'
 import { en } from '../../lib/i18n/en'
 import { t } from '../../lib/i18n/t'
 
@@ -578,6 +578,45 @@ describe('log Ink keymap', () => {
         const openIssue = getLogInkPaletteCommands().filter((command) => labelKey(command.label) === 'openissueinbrowser')
         expect(openIssue).toHaveLength(1)
         expect(openIssue[0].keys).toBe('O')
+      })
+
+      // Scope-aware palette: only one scope of a pull request action at a time.
+      // On the triage list "Merge pull request" used to resolve to the current
+      // branch's PR, merging a different PR than the one under the cursor.
+      describe('pull request action scopes', () => {
+        const ids = (view?: LogInkView) => new Set(getLogInkPaletteCommands(view).map((command) => command.id))
+        const triageIds = Object.keys(TRIAGE_PR_WORKFLOW_TWINS)
+        const currentBranchIds = Object.values(TRIAGE_PR_WORKFLOW_TWINS)
+
+        it('names only workflows that exist, so a rename cannot silently drop the guard', () => {
+          const registry = new Set(getLogInkWorkflowActions().map((action) => action.id))
+          for (const id of [...triageIds, ...currentBranchIds]) expect(registry.has(id)).toBe(true)
+        })
+
+        it('offers only the cursored-PR variants on the triage list', () => {
+          const shown = ids('pull-request-triage')
+          for (const id of triageIds) expect(shown.has(id)).toBe(true)
+          for (const id of currentBranchIds) expect(shown.has(id)).toBe(false)
+        })
+
+        it('offers only the current-branch variants everywhere else', () => {
+          for (const view of ['history', 'pull-request', 'branches', 'status'] as const) {
+            const shown = ids(view)
+            for (const id of currentBranchIds) expect(shown.has(id)).toBe(true)
+            for (const id of triageIds) expect(shown.has(id)).toBe(false)
+          }
+        })
+
+        it('lists both when no view is given (help, docs)', () => {
+          const shown = ids(undefined)
+          for (const id of [...triageIds, ...currentBranchIds]) expect(shown.has(id)).toBe(true)
+        })
+
+        it('leaves actions that have no second scope alone', () => {
+          for (const view of ['pull-request-triage', 'history'] as const) {
+            expect(ids(view).has('cherry-pick-commit')).toBe(true)
+          }
+        })
       })
 
       it('gives a folded workflow its binding\'s key, so a keyless twin no longer hides the key', () => {

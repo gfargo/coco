@@ -846,6 +846,16 @@ export function getLogInkPaletteExecuteEvents(
   context: LogInkInputContext = {}
 ): LogInkInputEvent[] {
   if (command.kind === 'workflow') {
+    // Merge and auto-merge need a strategy. The keyboard opens the 1-key
+    // picker first; running them from the palette went straight to the y-confirm
+    // with no strategy, so `merge-pr` silently merged with the default and
+    // `triage-pr-merge` failed with "Unknown merge strategy: undefined".
+    if (command.id === 'merge-pr' || command.id === 'triage-pr-merge') {
+      return [action({ type: 'setPendingChoice', value: mergeStrategyChoice(command.id) })]
+    }
+    if (command.id === 'automerge-pr' || command.id === 'triage-pr-automerge') {
+      return [action({ type: 'setPendingChoice', value: autoMergeStrategyChoice(command.id) })]
+    }
     if (command.requiresConfirmation) {
       // #2202 — revert-file pins the cursored path so a background
       // refresh can't re-aim the confirmed revert at another file.

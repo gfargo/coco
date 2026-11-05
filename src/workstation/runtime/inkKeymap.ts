@@ -4,6 +4,7 @@ import { getBisectFooterHints } from '../surfaces/bisect/input'
 import {
     LogInkWorkflowAction,
     LogInkWorkflowActionKind,
+    TRIAGE_PR_WORKFLOW_TWINS,
     getLogInkWorkflowActions,
 } from './inkWorkflows'
 import { en } from '../../lib/i18n/en'
@@ -2199,11 +2200,27 @@ function foldWorkflowTwins<T extends { binding: LogInkKeyBinding; command: LogIn
   }
 }
 
+/**
+ * Whether a command belongs on the palette for `activeView`. Only one scope of
+ * a pull request action is offered at a time (#2161 follow-up): on the triage
+ * list, "Merge pull request" used to resolve to the current branch's PR, so
+ * running it from there merged a different PR than the one under the cursor.
+ * With no view known (help, docs) everything is listed.
+ */
+function appliesToView(id: string, activeView: LogInkView | undefined): boolean {
+  if (!activeView) return true
+  const currentBranchTwins = Object.values(TRIAGE_PR_WORKFLOW_TWINS)
+  if (activeView === 'pull-request-triage') return !currentBranchTwins.includes(id)
+  return !(id in TRIAGE_PR_WORKFLOW_TWINS)
+}
+
 export function getLogInkPaletteCommands(activeView?: LogInkView): LogInkPaletteCommand[] {
-  const { bindings, workflows } = foldWorkflowTwins(
+  const { bindings: allBindings, workflows: allWorkflows } = foldWorkflowTwins(
     LOG_INK_KEY_BINDINGS.map((binding) => ({ binding, command: bindingToPaletteCommand(binding) })),
     getLogInkWorkflowActions().map(workflowToPaletteCommand)
   )
+  const bindings = allBindings.filter((entry) => appliesToView(entry.command.id, activeView))
+  const workflows = allWorkflows.filter((workflow) => appliesToView(workflow.id, activeView))
   if (!activeView) {
     return [...bindings.map((entry) => entry.command), ...workflows]
   }
