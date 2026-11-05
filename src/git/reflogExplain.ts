@@ -1,18 +1,8 @@
-import { PromptTemplate } from '@langchain/core/prompts'
 import { z } from 'zod'
-import { LangChainCancelledError } from '../lib/langchain/errors'
-import { LLMModel } from '../lib/langchain/types'
-import { getApiKeyForModel, getModelAndProviderFromConfig } from '../lib/langchain/utils'
-import { createSchemaParser } from '../lib/langchain/utils/createSchemaParser'
-import { resolveDynamicService } from '../lib/langchain/utils/dynamicModels'
-import { executeChain } from '../lib/langchain/utils/executeChain'
-import { getLlm } from '../lib/langchain/utils/getLlm'
-import { loadConfig } from '../lib/config/utils/loadConfig'
-import type { Config } from '../lib/config/types'
-import { Logger } from '../lib/utils/logger'
 import type { BranchActionResult } from './branchActions'
 import type { ReflogViewEntry } from './reflogData'
 import { planReflogUndo } from './reflogActions'
+import { runWorkstationChain } from './workstationLlm'
 
 /** How many of the newest reflog entries the explainer reads. */
 export const REFLOG_EXPLAIN_LIMIT = 10
@@ -91,16 +81,6 @@ export function formatReflogExplanation(
   }
 }
 
-/** Minimal argv for config loading: this is a workstation call, not a CLI command. */
-const REFLOG_ARGV: Record<string, unknown> = {
-  $0: 'coco',
-  _: ['commit'],
-  interactive: false,
-  verbose: false,
-  version: false,
-  help: false,
-}
-
 /**
  * "What did I just do?" (#2217): a plain-language account of the newest
  * reflog entries with a recommended undo target. Read-only and advisory; the
@@ -115,38 +95,19 @@ export async function explainRecentReflog(
     return { ok: false, message: 'No reflog entries to explain yet.' }
   }
 
-  try {
-    const config = loadConfig<Config, Record<string, unknown>>(REFLOG_ARGV)
-    const key = getApiKeyForModel(config)
-    if (config.service.authentication.type !== 'None' && !key) {
-      return { ok: false, message: 'No API key configured. Set one via env or .coco.config.json first.' }
-    }
-    const { provider } = getModelAndProviderFromConfig(config)
-    const service = resolveDynamicService(config, 'recap')
-    const llm = await getLlm(provider, service.model as LLMModel, { ...config, service })
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const parser: any = createSchemaParser(ExplanationSchema)
-
-    const explanation = await executeChain<ReflogExplanation>({
-      llm,
-      prompt: PromptTemplate.fromTemplate(PROMPT_TEMPLATE),
-      variables: {
-        entries: formatReflogEntries(entries),
-        undo_plan: planReflogUndo(allEntries)?.description ?? 'nothing (no reflog tip)',
-        format_instructions: parser.getFormatInstructions(),
-      },
-      parser,
-      logger: new Logger({ silent: true }),
-      signal,
-      metadata: { task: 'reflog-explain', command: 'workstation', provider, model: String(service.model) },
-    })
-
-    return formatReflogExplanation(explanation, entries, planReflogUndo(allEntries)?.description)
-  } catch (error) {
-    if (error instanceof LangChainCancelledError) {
-      return { ok: false, message: 'Reflog explanation cancelled.' }
-    }
-    const first = (error as Error).message.split('\n').map((line) => line.trim()).find(Boolean)
-    return { ok: false, message: `Explanation unavailable: ${first || 'unknown error'}` }
+  const ran = await runWorkstationChain<ReflogExplanation>({
+    template: PROMPT_TEMPLATE,
+    variables: {
+      entries: formatReflogEntries(entries),
+      undo_plan: planReflogUndo(allEntries)?.description ?? 'nothing (no reflog tip)',
+    },
+    schema: ExplanationSchema,
+    task: 'recap',
+    label: 'reflog-explain',
+    signal,
+  })
+  if (!ran.ok) {
+    return { ok: false, message: ran.cancelled ? 'Reflog explanation cancelled.' : ran.message.startsWith('No API key') ? ran.message : `Explanation unavailable: ${ran.message}` }
   }
+  return formatReflogExplanation(ran.value, entries, planReflogUndo(allEntries)?.description)
 }

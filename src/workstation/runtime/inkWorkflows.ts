@@ -1188,6 +1188,19 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       targets: 'single',
     },
     {
+      // #2217 — palette-only: drafts a branch name from the uncommitted
+      // changes and opens the new-branch prompt seeded with it. The prompt
+      // is the confirmation; nothing is created until enter.
+      id: 'suggest-branch-name',
+      key: '',
+      label: 'AI: suggest a name for a new branch',
+      description: 'Draft a branch name from your uncommitted changes and open the new-branch prompt with it filled in. Edit it, then enter to create.',
+      kind: 'ai',
+      requiresConfirmation: true,
+      estimatedTokens: 600,
+      targets: 'single',
+    },
+    {
       // #2217 — palette-only: a plain-language account of the newest reflog
       // entries with a recommended undo target. Read-only and advisory.
       id: 'explain-reflog',

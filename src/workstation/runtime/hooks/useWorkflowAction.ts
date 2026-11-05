@@ -84,6 +84,7 @@ import { reviewOutgoingRange } from '../../../git/outgoingReview'
 import { planOutgoingSubjectFixes } from '../../../git/outgoingSubjectFix'
 import { summarizeCompareRange } from '../../../git/rangeSummary'
 import { explainRecentReflog } from '../../../git/reflogExplain'
+import { suggestBranchName } from '../../../git/branchNameSuggest'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
 import {
@@ -146,6 +147,7 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'fix-outgoing-subjects': { kind: 'push', label: 'Drafting subject fixes…' },
   'summarize-compare-range': { kind: 'fetch', label: 'Summarizing branch against the marked base…' },
   'explain-reflog': { kind: 'fetch', label: 'Explaining recent reflog entries…' },
+  'suggest-branch-name': { kind: 'fetch', label: 'Suggesting a branch name…' },
   'force-push-current-branch': { kind: 'push', label: 'Force-pushing (with lease)…' },
   'force-push-selected-branch': { kind: 'push', label: 'Force-pushing branch (with lease)…' },
   'pull-rebase-current': { kind: 'pull', label: 'Pulling with rebase…' },
@@ -1396,6 +1398,17 @@ export function useWorkflowAction(
         const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return reviewOutgoingRange(git, branch)
+      },
+      'suggest-branch-name': async () => {
+        const suggestion = await suggestBranchName(git)
+        if (!suggestion.ok) return { ok: false, message: suggestion.message }
+        dispatch({
+          type: 'openInputPrompt',
+          kind: 'create-branch',
+          label: 'New branch name (suggested: edit, then enter)',
+          initial: suggestion.name,
+        })
+        return { ok: true, message: suggestion.message }
       },
       'explain-reflog': async () => explainRecentReflog(context.reflog?.entries ?? []),
       'summarize-compare-range': async () => {
