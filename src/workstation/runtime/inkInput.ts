@@ -3543,7 +3543,7 @@ export function getLogInkInputEvents(
     }
     return [
       action({ type: 'setCompareBase', value: ref }),
-      action({ type: 'setStatus', value: `Compare base: ${ref.label} — press enter on another ref to diff` }),
+      action({ type: 'setStatus', value: `Compare base: ${ref.label} — press enter on another ref to diff, or run the palette's AI branch summary` }),
     ]
   }
 

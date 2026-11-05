@@ -1188,6 +1188,18 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       targets: 'single',
     },
     {
+      // #2217 — palette-only: `m` marks the base, the cursor sits on the
+      // branch to summarize, and this runs the recap on `base...branch`.
+      id: 'summarize-compare-range',
+      key: '',
+      label: 'AI summary of branch vs marked base',
+      description: 'With a base marked by `m`, summarize what the cursored branch adds over it (the same range a pull request shows). Read-only.',
+      kind: 'ai',
+      requiresConfirmation: true,
+      estimatedTokens: 2500,
+      targets: 'single',
+    },
+    {
       // #1369 — upgraded from the explain-only stub: proposes a
       // resolution per conflict region of the cursored file; each
       // proposal lands behind explicit y/e/n on the conflicts surface
