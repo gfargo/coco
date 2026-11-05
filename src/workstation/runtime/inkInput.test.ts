@@ -452,6 +452,32 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('palette merge actions pick a strategy first (#2161 follow-up)', () => {
+    const run = (id: string) => {
+      const command = getLogInkPaletteCommands().find((c) => c.id === id)
+      expect(command).toBeDefined()
+      return getLogInkPaletteExecuteEvents(command!, createLogInkState(rows))
+    }
+
+    it.each(['merge-pr', 'triage-pr-merge'])('%s opens the merge / squash / rebase picker like the keyboard does', (id) => {
+      const events = run(id)
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({ type: 'action', action: { type: 'setPendingChoice', value: { id: 'pr-merge-strategy-choice' } } })
+      const choice = (events[0] as { action: { value: { options: Array<{ workflowId: string; payload: string }> } } }).action.value
+      expect(choice.options.map((option) => option.payload)).toEqual(['merge', 'squash', 'rebase'])
+      expect(choice.options.every((option) => option.workflowId === id)).toBe(true)
+    })
+
+    it.each(['automerge-pr', 'triage-pr-automerge'])('%s opens the auto-merge strategy picker', (id) => {
+      const events = run(id)
+      expect(events[0]).toMatchObject({ type: 'action', action: { type: 'setPendingChoice', value: { id: 'pr-automerge-strategy-choice' } } })
+    })
+
+    it('still sends other confirm-gated PR actions straight to the y-confirm', () => {
+      expect(run('close-pr')).toEqual([{ type: 'action', action: { type: 'setPendingConfirmation', value: 'close-pr' } }])
+    })
+  })
+
   describe('replayable onboarding overlay (OSS-2782)', () => {
     it('replays via the gW chord', () => {
       let state = createLogInkState(rows)

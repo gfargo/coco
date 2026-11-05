@@ -1689,3 +1689,20 @@ export function getLogInkWorkflowActionById(
 
   return getLogInkWorkflowActions().find((action) => action.id === id)
 }
+
+/**
+ * Pull request actions that exist in two scopes: the current branch's pull
+ * request (the single-PR panel) and the cursored pull request on the triage
+ * list. The key is the triage workflow, the value its current-branch twin.
+ */
+export const TRIAGE_PR_WORKFLOW_TWINS: Readonly<Record<string, string>> = {
+  'triage-pr-merge': 'merge-pr',
+  'triage-pr-close': 'close-pr',
+  'triage-pr-approve': 'approve-pr',
+  'triage-pr-request-changes': 'request-changes-pr',
+  'triage-pr-rerun-checks': 'rerun-pr-checks',
+  'triage-pr-automerge': 'automerge-pr',
+  'triage-pr-ready': 'ready-pr',
+  'triage-pr-reopen': 'reopen-pr',
+  'triage-pr-comment': 'comment-pr',
+}

@@ -263,6 +263,25 @@ describe('confirmation target naming', () => {
   })
 })
 
+describe('current-branch pull request confirmation names the PR (#2161 follow-up)', () => {
+  const components: LogInkComponents = { Box, Text }
+  const render = (id: string, context: LogInkContext) =>
+    flattenText(renderConfirmationPanel(createElement, components, { ...createLogInkState([]), pendingConfirmationId: id }, context, 100, theme, false))
+
+  it.each(['merge-pr', 'close-pr', 'approve-pr', 'reopen-pr'])('%s says which pull request it will act on', (id) => {
+    const context = { provider: { currentPullRequest: { number: 42, title: 'Add retry logic', state: 'OPEN', isDraft: false } } } as unknown as LogInkContext
+    expect(render(id, context)).toContain("current branch's pull request #42: Add retry logic")
+  })
+
+  it('says so when the current branch has no pull request', () => {
+    expect(render('merge-pr', {} as LogInkContext)).toContain("current branch's pull request (none found)")
+  })
+
+  it('leaves the cursored-PR variants to the per-item resolver', () => {
+    expect(render('triage-pr-close', {} as LogInkContext)).not.toContain("current branch's pull request")
+  })
+})
+
 describe('rebase-onto-branch confirmation panel (#0.71)', () => {
   const components: LogInkComponents = { Box, Text }
 

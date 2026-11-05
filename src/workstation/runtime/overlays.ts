@@ -35,7 +35,7 @@ import {
 } from '../../workstation/runtime/inkKeymap'
 import type { LogInkChoicePrompt, LogInkState } from '../../workstation/runtime/inkViewModel'
 import { filterThemePresets } from '../../workstation/runtime/inkViewModel'
-import { getLogInkWorkflowActionById } from '../../workstation/runtime/inkWorkflows'
+import { TRIAGE_PR_WORKFLOW_TWINS, getLogInkWorkflowActionById } from '../../workstation/runtime/inkWorkflows'
 import { getSelectedCommitTarget, getSelectedCommitRange } from '../../workstation/runtime/selection'
 import { resolvePendingItemAction } from './hooks/useWorkflowAction'
 import type { LogInkContext } from './types'
@@ -101,6 +101,8 @@ export function renderInputPromptPanel(
  */
 const CONFIRMATION_TARGET_NAME_CAP = 4
 
+const CURRENT_BRANCH_PR_WORKFLOWS = new Set(Object.values(TRIAGE_PR_WORKFLOW_TWINS))
+
 /**
  * Human line naming the item(s) a pending confirmation will act on, or
  * undefined when the workflow has no resolvable target. Shown in the
@@ -126,6 +128,12 @@ export function describeConfirmationTarget(
   // #2202 — revert-file acts on the path pinned when the prompt opened.
   if (id === 'revert-file' && state.pendingConfirmationPayload) {
     return `file: ${state.pendingConfirmationPayload}`
+  }
+  // The current-branch pull request actions have no cursored item, so the
+  // confirm said nothing about which PR they would touch. Name it.
+  if (CURRENT_BRANCH_PR_WORKFLOWS.has(id)) {
+    const pr = context.provider?.currentPullRequest || context.pullRequest?.currentPullRequest
+    return pr ? `current branch's pull request #${pr.number}: ${pr.title}` : "current branch's pull request (none found)"
   }
   const item = resolvePendingItemAction(id, state, context)
   if (item && (action?.targets !== 'multi' || item.ids.length === 1)) {
