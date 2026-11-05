@@ -44,7 +44,7 @@ import { SimpleGit } from 'simple-git'
 import { LogInkContextStatus } from '../../chrome/context'
 import { openProviderUrl } from '../../../git/providerActions'
 import type { GitProviderType } from '../../../git/providerData'
-import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, isContiguousHistoryRange, getSelectedWorktreeId, getSelectedWorktree, getSelectedPullRequestTriageId } from '../selection'
+import { getSelectedBranchId, getSelectedBranch, getSelectedBranchBatch, getSelectedTagId, getSelectedTag, getSelectedStash, getSelectedStashBatch, getSelectedCommitRange, isContiguousHistoryRange, getSelectedWorktreeId, getSelectedWorktree, getSelectedPullRequestTriageId, getSelectedIssue } from '../selection'
 import {
     LogInkPendingItemAction,
     LogInkAction,
@@ -85,6 +85,7 @@ import { planOutgoingSubjectFixes } from '../../../git/outgoingSubjectFix'
 import { summarizeCompareRange } from '../../../git/rangeSummary'
 import { explainRecentReflog } from '../../../git/reflogExplain'
 import { suggestBranchName } from '../../../git/branchNameSuggest'
+import { suggestStashMessage } from '../../../git/stashMessageSuggest'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
 import {
@@ -148,6 +149,8 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'summarize-compare-range': { kind: 'fetch', label: 'Summarizing branch against the marked base…' },
   'explain-reflog': { kind: 'fetch', label: 'Explaining recent reflog entries…' },
   'suggest-branch-name': { kind: 'fetch', label: 'Suggesting a branch name…' },
+  'suggest-stash-message': { kind: 'fetch', label: 'Suggesting a stash message…' },
+  'suggest-worktree-branch': { kind: 'fetch', label: 'Suggesting a branch name…' },
   'force-push-current-branch': { kind: 'push', label: 'Force-pushing (with lease)…' },
   'force-push-selected-branch': { kind: 'push', label: 'Force-pushing branch (with lease)…' },
   'pull-rebase-current': { kind: 'pull', label: 'Pulling with rebase…' },
@@ -510,6 +513,14 @@ export function useWorkflowAction(
     // the op actually succeeded — see the `capturedUndoEntries.length`
     // check below.
     let capturedUndoEntries: UndoEntry[] = []
+
+    // The issue under the cursor, only on the issues view: its title can seed
+    // a branch or worktree name when there is no diff to describe yet (#2217).
+    const getCursoredIssue = () => {
+      if (state.activeView !== 'issues') return undefined
+      const issue = getSelectedIssue(state, context)
+      return issue ? { number: issue.number, title: issue.title } : undefined
+    }
 
     const handlers: Record<string, () => Promise<{ ok: boolean; message: string } | undefined>> = {
       'create-branch': async () => {
@@ -1400,13 +1411,35 @@ export function useWorkflowAction(
         return reviewOutgoingRange(git, branch)
       },
       'suggest-branch-name': async () => {
-        const suggestion = await suggestBranchName(git)
+        const suggestion = await suggestBranchName(git, { issue: getCursoredIssue() })
         if (!suggestion.ok) return { ok: false, message: suggestion.message }
         dispatch({
           type: 'openInputPrompt',
           kind: 'create-branch',
           label: 'New branch name (suggested: edit, then enter)',
           initial: suggestion.name,
+        })
+        return { ok: true, message: suggestion.message }
+      },
+      'suggest-worktree-branch': async () => {
+        const suggestion = await suggestBranchName(git, { issue: getCursoredIssue() })
+        if (!suggestion.ok) return { ok: false, message: suggestion.message }
+        dispatch({
+          type: 'openInputPrompt',
+          kind: 'add-worktree',
+          label: 'New worktree: branch [path] (suggested branch: edit, then enter)',
+          initial: suggestion.name,
+        })
+        return { ok: true, message: `Suggested ${suggestion.name}. Edit it (add a path if you want one), then enter to add the worktree.` }
+      },
+      'suggest-stash-message': async () => {
+        const suggestion = await suggestStashMessage(git)
+        if (!suggestion.ok) return { ok: false, message: suggestion.message }
+        dispatch({
+          type: 'openInputPrompt',
+          kind: 'create-stash',
+          label: 'Stash message (suggested: edit, then enter)',
+          initial: suggestion.text,
         })
         return { ok: true, message: suggestion.message }
       },

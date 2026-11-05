@@ -1188,6 +1188,31 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       targets: 'single',
     },
     {
+      // #2217 — palette-only: drafts a stash message from the pending
+      // changes and opens the stash prompt seeded with it.
+      id: 'suggest-stash-message',
+      key: '',
+      label: 'AI: suggest a stash message',
+      description: 'Draft a stash message from your uncommitted changes and open the stash prompt with it filled in. Edit it, then enter to stash.',
+      kind: 'ai',
+      requiresConfirmation: true,
+      estimatedTokens: 500,
+      targets: 'single',
+    },
+    {
+      // #2217 — palette-only: drafts a branch name for a new worktree, from
+      // the cursored issue (issues view) and/or the pending changes, and
+      // opens the add-worktree prompt seeded with it.
+      id: 'suggest-worktree-branch',
+      key: '',
+      label: 'AI: suggest a branch name for a new worktree',
+      description: 'Draft a branch name from the cursored issue (issues view) or your uncommitted changes and open the add-worktree prompt with it filled in. Edit it, then enter to add.',
+      kind: 'ai',
+      requiresConfirmation: true,
+      estimatedTokens: 600,
+      targets: 'single',
+    },
+    {
       // #2217 — palette-only: drafts a branch name from the uncommitted
       // changes and opens the new-branch prompt seeded with it. The prompt
       // is the confirmation; nothing is created until enter.
