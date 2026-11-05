@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { capDiffLines } from './capDiffLines'
 import { MACHINE_DIFF_ARGS } from './machineDiff'
 
 /**
@@ -25,9 +26,11 @@ export async function getCompareDiff(
   base: string,
   head: string
 ): Promise<string[]> {
-  return (await git.raw(['diff', ...MACHINE_DIFF_ARGS, `${base}...${head}`]))
-    .split('\n')
-    .map((line) => line.replace(/\r$/, ''))
+  return capDiffLines(
+    (await git.raw(['diff', ...MACHINE_DIFF_ARGS, `${base}...${head}`]))
+      .split('\n')
+      .map((line) => line.replace(/\r$/, ''))
+  )
 }
 
 /** Most head-only commits listed in the compare header. */
