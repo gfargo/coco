@@ -856,6 +856,13 @@ export function getLogInkPaletteExecuteEvents(
     if (command.id === 'automerge-pr' || command.id === 'triage-pr-automerge') {
       return [action({ type: 'setPendingChoice', value: autoMergeStrategyChoice(command.id) })]
     }
+    // Stage / unstage the cursored file. `space` emits this event rather than
+    // running a workflow handler (it needs the grouped, filtered file list), so
+    // the palette entry used to answer "Workflow action stage-file not yet
+    // wired". It reports "no worktree file selected" when none is under the cursor.
+    if (command.id === 'stage-file') {
+      return [{ type: 'toggleSelectedFileStage' }]
+    }
     if (command.requiresConfirmation) {
       // #2202 — revert-file pins the cursored path so a background
       // refresh can't re-aim the confirmed revert at another file.

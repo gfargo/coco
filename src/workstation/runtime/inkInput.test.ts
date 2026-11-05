@@ -452,6 +452,14 @@ describe('log Ink input interactions', () => {
     })
   })
 
+  describe('palette stage-file toggles the cursored file like space does (#2221)', () => {
+    it('emits the same event as the keyboard, not an unwired workflow action', () => {
+      const command = getLogInkPaletteCommands('status').find((c) => c.id === 'stage-file')
+      expect(command).toBeDefined()
+      expect(getLogInkPaletteExecuteEvents(command!, createLogInkState(rows))).toEqual([{ type: 'toggleSelectedFileStage' }])
+    })
+  })
+
   describe('palette merge actions pick a strategy first (#2161 follow-up)', () => {
     const run = (id: string) => {
       const command = getLogInkPaletteCommands().find((c) => c.id === id)
