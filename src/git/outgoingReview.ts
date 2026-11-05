@@ -1,7 +1,9 @@
 import { SimpleGit } from 'simple-git'
 import { createAgentOperationContext } from '../operations/agent/context'
-import { generateAgentReview } from '../operations/agent/generate'
-import { AgentTaskInputSchema, type AgentTaskInput, type ReviewData } from '../operations/agent/schemas'
+import { generateAgentReview, runLint } from '../operations/agent/generate'
+import { AgentTaskInputSchema, type AgentTaskInput, type LintCommitResult, type ReviewData } from '../operations/agent/schemas'
+import { loadConfig } from '../lib/config/utils/loadConfig'
+import { commitlintImpliesConventional } from '../lib/utils/hasCommitlintConfig'
 import type { BranchActionResult } from './branchActions'
 import type { BranchRef } from './branchData'
 
@@ -22,37 +24,123 @@ export function sortFindings(findings: ReviewFinding[]): ReviewFinding[] {
   return [...findings].sort((a, b) => b.severity - a.severity || a.title.localeCompare(b.title))
 }
 
-/** Turn review findings into the result-panel lines and a one-line summary. */
+export type ReviewOutcome = { findings: ReviewFinding[] } | { error: string }
+export type LintOutcome = { results: LintCommitResult[] } | { error: string }
+
+/** Subjects that break the Conventional Commits rules, in commit order. */
+function flaggedSubjects(results: LintCommitResult[]): LintCommitResult[] {
+  return results.filter((result) => result.status === 'fail' || result.status === 'warn')
+}
+
+function subjectLine(result: LintCommitResult): string {
+  const problems = [...result.errors, ...result.warnings].map(oneLine).join('; ')
+  return `Subject ${result.shortSha} ${oneLine(result.subject)}: ${problems}`
+}
+
+/**
+ * Compose the result-panel lines and one-line summary from the review and the
+ * subject lint. Either half may be unavailable without hiding the other; the
+ * lint half is `undefined` when the repo doesn't use Conventional Commits.
+ */
 export function formatOutgoingReview(
   branch: string,
   upstream: string,
   commitCount: number,
-  findings: ReviewFinding[],
+  review: ReviewOutcome,
+  lint?: LintOutcome,
 ): BranchActionResult {
   const commits = `${commitCount} outgoing commit${commitCount === 1 ? '' : 's'}`
-  if (findings.length === 0) {
-    return { ok: true, message: `Reviewed ${commits} on ${branch} (${upstream}..${branch}): no findings. Press P to push.` }
+  const parts: string[] = []
+  const details: string[] = []
+  let anyResult = false
+  let allClean = true
+
+  if ('error' in review) {
+    parts.push(`review unavailable (${review.error})`)
+    allClean = false
+  } else {
+    anyResult = true
+    const { findings } = review
+    if (findings.length === 0) {
+      parts.push('no review findings')
+    } else {
+      allClean = false
+      const high = findings.filter((finding) => finding.severity >= OUTGOING_REVIEW_HIGH_SEVERITY).length
+      parts.push(
+        `${findings.length} finding${findings.length === 1 ? '' : 's'}` +
+          `${high ? `, ${high} high severity (${OUTGOING_REVIEW_HIGH_SEVERITY}+)` : ''}`,
+      )
+      for (const finding of sortFindings(findings)) {
+        const where = finding.filePath ? ` (${finding.filePath})` : ''
+        details.push(`[${finding.severity}] ${oneLine(finding.title)}${where}: ${oneLine(finding.summary)}`)
+      }
+    }
   }
-  const high = findings.filter((finding) => finding.severity >= OUTGOING_REVIEW_HIGH_SEVERITY).length
-  const sorted = sortFindings(findings)
+
+  if (lint) {
+    if ('error' in lint) {
+      parts.push(`subject lint unavailable (${lint.error})`)
+      allClean = false
+    } else {
+      anyResult = true
+      const flagged = flaggedSubjects(lint.results)
+      if (flagged.length === 0) {
+        parts.push('all subjects follow Conventional Commits')
+      } else {
+        allClean = false
+        parts.push(`${flagged.length} of ${lint.results.length} subject${lint.results.length === 1 ? '' : 's'} break Conventional Commits`)
+        details.push(...flagged.map(subjectLine))
+      }
+    }
+  }
+
+  const tail = allClean ? 'Press P to push.' : anyResult ? 'Nothing was pushed.' : 'You can still push with P.'
   return {
-    ok: true,
-    message:
-      `Reviewed ${commits} on ${branch}: ${findings.length} finding${findings.length === 1 ? '' : 's'}` +
-      `${high ? `, ${high} high severity (${OUTGOING_REVIEW_HIGH_SEVERITY}+)` : ''}. Nothing was pushed.`,
-    details: sorted.map((finding) => {
-      const where = finding.filePath ? ` (${finding.filePath})` : ''
-      return `[${finding.severity}] ${oneLine(finding.title)}${where}: ${oneLine(finding.summary)}`
-    }),
+    ok: anyResult,
+    message: `Reviewed ${commits} on ${branch} (${upstream}..${branch}): ${parts.join('; ')}. ${tail}`,
+    ...(details.length ? { details } : {}),
+  }
+}
+
+async function runReview(input: AgentTaskInput, context: Awaited<ReturnType<typeof createAgentOperationContext>>): Promise<ReviewOutcome> {
+  try {
+    const result = await generateAgentReview(input, context)
+    if (result.status !== 'completed') {
+      return { error: 'the review was only planned, not run' }
+    }
+    return { findings: result.data.findings }
+  } catch (error) {
+    return { error: (error as Error).message.split('\n')[0] }
+  }
+}
+
+async function runSubjectLint(range: string, context: Awaited<ReturnType<typeof createAgentOperationContext>>): Promise<LintOutcome> {
+  try {
+    const result = await runLint({ version: 1, range, severity: 'error' }, context)
+    return { results: result.data.results }
+  } catch (error) {
+    return { error: (error as Error).message.split('\n')[0] }
   }
 }
 
 /**
- * Review the commits `branch` would push (`<upstream>..<branch>`) and return
- * the findings for the result panel (#2216). Read-only: it never pushes, so
- * the caller decides afterwards. Any failure (no LLM configured, provider
- * unreachable) comes back as a non-ok result rather than a throw, so the
- * push menu stays usable.
+ * Whether outgoing subjects should be linted: only when the repo uses
+ * Conventional Commits (explicit `conventionalCommits`, else a commitlint
+ * config that requires it, #2130). Otherwise the built-in rules would flag
+ * every subject in a repo that never followed that format.
+ */
+async function shouldLintSubjects(repoRoot: string): Promise<boolean> {
+  const config = loadConfig<Record<string, unknown>, Record<string, unknown>>({}, { cwd: repoRoot })
+  const explicit = (config as { conventionalCommits?: boolean }).conventionalCommits
+  return explicit !== undefined ? explicit : commitlintImpliesConventional()
+}
+
+/**
+ * Review the commits `branch` would push (`<upstream>..<branch>`) and lint
+ * their subjects (#2216). Read-only: it never pushes, so the caller decides
+ * afterwards. Any failure (no LLM configured, provider unreachable) comes
+ * back as a non-ok or partial result rather than a throw, and a review
+ * failure never hides the subject lint.
  */
 export async function reviewOutgoingRange(
   git: SimpleGit,
@@ -86,11 +174,11 @@ export async function reviewOutgoingRange(
     }) as AgentTaskInput
     const repoRoot = (await git.revparse(['--show-toplevel'])).trim()
     const context = await createAgentOperationContext({ repoRoot, surface: 'cli', signal })
-    const result = await generateAgentReview(input, context)
-    if (result.status !== 'completed') {
-      return { ok: false, message: 'Review unavailable: the review was only planned, not run.' }
-    }
-    return formatOutgoingReview(branch.shortName, branch.upstream, commitCount, result.data.findings)
+    const [review, lint] = await Promise.all([
+      runReview(input, context),
+      (await shouldLintSubjects(repoRoot)) ? runSubjectLint(range, context) : Promise.resolve(undefined),
+    ])
+    return formatOutgoingReview(branch.shortName, branch.upstream, commitCount, review, lint)
   } catch (error) {
     return {
       ok: false,
