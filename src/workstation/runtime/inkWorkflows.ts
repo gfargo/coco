@@ -1188,6 +1188,18 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       targets: 'single',
     },
     {
+      // #2217 — palette-only: a plain-language account of the newest reflog
+      // entries with a recommended undo target. Read-only and advisory.
+      id: 'explain-reflog',
+      key: '',
+      label: 'AI: what did I just do? (explain the reflog)',
+      description: 'Explain the last 10 reflog entries in plain language and recommend an undo target. Read-only; the undo flow is unchanged.',
+      kind: 'ai',
+      requiresConfirmation: true,
+      estimatedTokens: 900,
+      targets: 'single',
+    },
+    {
       // #2217 — palette-only: `m` marks the base, the cursor sits on the
       // branch to summarize, and this runs the recap on `base...branch`.
       id: 'summarize-compare-range',
