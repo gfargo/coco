@@ -550,6 +550,36 @@ describe('log Ink keymap', () => {
         }
       })
 
+      // #2161 acceptance: "No duplicate label/key pairs." Two scopes of one
+      // action (the current branch's PR vs the cursored PR on the triage
+      // list) used to share a label and both showed no key, so the palette
+      // listed "Merge pull request" twice with nothing to tell them apart.
+      it('never lists two commands with the same label and key, in any view', () => {
+        const views = [undefined, ...new Set(LOG_INK_KEY_BINDINGS.flatMap((binding) => binding.contexts as string[]))] as Array<LogInkView | undefined>
+        for (const view of views) {
+          const seen = new Map<string, string[]>()
+          for (const command of getLogInkPaletteCommands(view)) {
+            const pair = `${command.label.toLowerCase()} | ${command.keys || '(no key)'}`
+            seen.set(pair, [...(seen.get(pair) ?? []), command.id])
+          }
+          const repeated = [...seen.entries()].filter(([, ids]) => ids.length > 1)
+          expect({ view, repeated }).toEqual({ view, repeated: [] })
+        }
+      })
+
+      it('says which scope the triage-list pull request actions act on', () => {
+        const labels = new Map(getLogInkPaletteCommands().map((command) => [command.id, command.label]))
+        expect(labels.get('merge-pr')).toBe('Merge pull request')
+        expect(labels.get('triage-pr-merge')).toBe('Merge pull request (triage list)')
+        expect(labels.get('triage-pr-reopen')).toBe('Reopen pull request (triage list)')
+        expect(labels.get('workflowTriagePrOpen')).toBe('open pull request in browser')
+        // The issue one now has the same name as an existing workflow, so the
+        // twin folding merges them into one entry that keeps the `O` key.
+        const openIssue = getLogInkPaletteCommands().filter((command) => labelKey(command.label) === 'openissueinbrowser')
+        expect(openIssue).toHaveLength(1)
+        expect(openIssue[0].keys).toBe('O')
+      })
+
       it('gives a folded workflow its binding\'s key, so a keyless twin no longer hides the key', () => {
         const byId = new Map(getLogInkPaletteCommands().map((command) => [command.id, command]))
         const deleteBranch = [...byId.values()].find((command) => labelKey(command.label) === 'deletebranch')
@@ -596,10 +626,9 @@ describe('log Ink keymap', () => {
         }
       })
 
-      it('leaves a label shared by several bindings alone', () => {
-        const openInBrowser = getLogInkPaletteCommands().filter((command) => labelKey(command.label) === 'openinbrowser')
-        expect(openInBrowser.length).toBeGreaterThan(1)
-        expect(openInBrowser.every((command) => command.kind === 'binding')).toBe(true)
+      it('no longer shares one label between the pull request and issue "open in browser" bindings (#2161)', () => {
+        const ambiguous = getLogInkPaletteCommands().filter((command) => labelKey(command.label) === 'openinbrowser')
+        expect(ambiguous).toEqual([])
       })
     })
 

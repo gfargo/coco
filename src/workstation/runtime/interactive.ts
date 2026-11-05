@@ -331,7 +331,7 @@ function renderOperationOverview(
 
 function renderDetail(detail: GitCommitDetail | undefined, width: number): string[] {
   if (!detail) {
-    return ['Loading selected commit details...']
+    return ['Loading selected commit details…']
   }
 
   const refs = detail.refs.length ? ` (${detail.refs.join(', ')})` : ''
