@@ -1,4 +1,12 @@
-import { buildSyntheticArgv, decideDefaultRoute, defaultRouteHandler, type DefaultRouteArgv } from './defaultRouter'
+import {
+  buildSyntheticArgv,
+  COMMIT_FLAG_KEYS,
+  decideDefaultRoute,
+  defaultRouteHandler,
+  hasCommitFlags,
+  legacyCommitOptions,
+  type DefaultRouteArgv,
+} from './defaultRouter'
 import { createLogArgvFromUiArgv } from './ui/handler'
 import { UiArgv } from './ui/config'
 import { buildLogArgs, getLogView } from '../git/logData'
@@ -225,5 +233,52 @@ describe('legacy `--commit`/COCO_DEFAULT=commit route does not force interactive
 
     const mockCommitHandler = commitHandler as jest.Mock
     expect(mockCommitHandler.mock.calls[0][0].quiet).toBe(true)
+  })
+})
+
+describe('legacy commit flags on bare `coco`', () => {
+  const originalCocoDefault = process.env.COCO_DEFAULT
+  afterEach(() => {
+    if (originalCocoDefault === undefined) delete process.env.COCO_DEFAULT
+    else process.env.COCO_DEFAULT = originalCocoDefault
+    jest.clearAllMocks()
+  })
+
+  it('routes to commit when a commit-only flag is passed, even for a configured user in a repo', () => {
+    expect(
+      decideDefaultRoute({ hasConfigSource: true, isGitRepo: true, explicitCommit: false, commitFlags: true })
+    ).toEqual({ kind: 'commit', reason: 'commit-flags' })
+  })
+
+  it('leaves normal routing alone when no commit flag is passed', () => {
+    expect(
+      decideDefaultRoute({ hasConfigSource: true, isGitRepo: true, explicitCommit: false, commitFlags: false })
+    ).toEqual({ kind: 'ui', reason: 'config-and-repo' })
+  })
+
+  it('detects an explicitly passed flag, including an explicit false', () => {
+    expect(hasCommitFlags({})).toBe(false)
+    expect(hasCommitFlags({ noDiff: true })).toBe(true)
+    expect(hasCommitFlags({ conventional: false })).toBe(true)
+    expect(hasCommitFlags({ append: 'x' })).toBe(true)
+    expect(hasCommitFlags({ verbose: true, json: true, interactive: true })).toBe(false)
+  })
+
+  it('re-registers every commit option without defaults, hidden, minus --interactive', () => {
+    const options = legacyCommitOptions()
+    expect(Object.keys(options)).toEqual(COMMIT_FLAG_KEYS)
+    expect(options).not.toHaveProperty('i')
+    expect(options.noDiff).toMatchObject({ type: 'boolean', hidden: true })
+    for (const option of Object.values(options)) {
+      expect(option).not.toHaveProperty('default')
+    }
+  })
+
+  it('forwards `coco --noDiff` to commitHandler (screenshot repro)', async () => {
+    delete process.env.COCO_DEFAULT
+    await defaultRouteHandler(routeArgv({ noDiff: true } as never), new Logger({ silent: true }))
+
+    expect(commitHandler).toHaveBeenCalledTimes(1)
+    expect((commitHandler as jest.Mock).mock.calls[0][0].noDiff).toBe(true)
   })
 })

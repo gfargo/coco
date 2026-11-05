@@ -31,7 +31,7 @@ import { CacheOptions } from './commands/cache/config'
 import { ChangelogOptions } from './commands/changelog/config'
 import { CommitOptions } from './commands/commit/config'
 import { ConfigOptions as ConfigCmdOptions } from './commands/config/config'
-import { defaultRouteHandler, type DefaultRouteArgv } from './commands/defaultRouter'
+import { defaultRouteHandler, legacyCommitOptions, type DefaultRouteArgv } from './commands/defaultRouter'
 import { DoctorOptions } from './commands/doctor/config'
 import { HooksOptions } from './commands/hooks/config'
 import { InitOptions } from './commands/init/config'
@@ -129,11 +129,14 @@ y.option('ascii', {
 y.command<DefaultRouteArgv>(
   '$0',
   'Smart entry point — routes to init / ui / workspace / commit based on your environment.',
-  (yargs) => yargs.option('commit', {
-    type: 'boolean',
-    description: 'Force the legacy default — run `coco commit` regardless of routing.',
-    default: false,
-  }),
+  (yargs) => yargs
+    .option('commit', {
+      type: 'boolean',
+      description: 'Force the legacy default — run `coco commit` regardless of routing.',
+      default: false,
+    })
+    // Legacy forms like `coco --noDiff` / `coco -c` still reach `commit`.
+    .options(legacyCommitOptions()),
   // `commandExecutor` wraps every command with config loading, error
   // formatting, and exit-code handling. The router is a regular
   // command so it lights up the same plumbing for free.
