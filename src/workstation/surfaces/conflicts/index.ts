@@ -178,7 +178,7 @@ export function renderConflictsSurface(ctx: SurfaceRenderContext): ReactTypes.Re
   const visible = conflictedFiles.slice(startIndex, startIndex + listRows)
   const remaining = conflictedFiles.length
   const headerRight = loading
-    ? 'Loading conflicts…'
+    ? formatLogInkLoading({ resource: 'conflicts' })
     : `${operationType} — ${remaining} ${remaining === 1 ? 'conflict' : 'conflicts'} remaining`
 
   const statusLabel = (file: { indexStatus: string; worktreeStatus: string }): string => {

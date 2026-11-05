@@ -46,7 +46,7 @@ export function renderWorktreesSurface(ctx: SurfaceRenderContext, spinnerFrame: 
   const visible = worktrees.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading
-    ? 'Loading worktrees…'
+    ? formatLogInkLoading({ resource: 'worktrees' })
     : `${worktrees.length}/${allWorktrees.length} worktrees${filterLabel}`
   // Per-window branch column width (#833). Worktrees often track
   // branches with names varying widely in length (`main` vs.

@@ -7,6 +7,7 @@
  * so a blank list never feels like a dead end.
  */
 
+import { shouldShowLoadingText } from './loadingDelay'
 import { getAsciiDialect } from './text'
 
 export type LogInkSurfaceLoadingArgs = {
@@ -23,6 +24,9 @@ export type LogInkSurfaceLoadingArgs = {
  * flag through.
  */
 export function formatLogInkLoading({ resource }: LogInkSurfaceLoadingArgs): string {
+  // Blank for the first 200ms of a loading episode so a fast load does not
+  // flash text (#2166). Always shown when the delay is off (tests, non-TUI).
+  if (!shouldShowLoadingText()) return ''
   const ellipsis = getAsciiDialect() ? '...' : '…'
   return `Loading ${resource}${ellipsis}`
 }

@@ -66,7 +66,7 @@ export function renderSubmodulesSurface(ctx: SurfaceRenderContext): ReactTypes.R
   const visible = filtered.slice(startIndex, startIndex + listRows)
   const filterLabel = state.filter ? ` | filter: ${state.filter}` : ''
   const headerRight = loading
-    ? 'Loading submodules…'
+    ? formatLogInkLoading({ resource: 'submodules' })
     : `${filtered.length}/${all.length} submodules${filterLabel}`
   const emptyLabel = formatLogInkSubmodulesEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'submodules' })

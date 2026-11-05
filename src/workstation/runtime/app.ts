@@ -89,6 +89,7 @@ import { useIdleTip } from './hooks/useIdleTip'
 import { useRefreshWatcher } from './hooks/useRefreshWatcher'
 import { useActiveRepoRoot, useViewModePersistence } from './hooks/useRepoPersistence'
 import { useSpinnerFrame } from './hooks/useSpinnerFrame'
+import { useLoadingTextDelay } from './hooks/useLoadingTextDelay'
 import { useStatusSurfaceData } from './hooks/buildStatusSurfaceData'
 import { useStatusAutoDismiss } from './hooks/useStatusAutoDismiss'
 import { useHistoryCursorSync } from './hooks/useHistoryCursorSync'
@@ -331,6 +332,9 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
   // interval is the same cost as N. We pause the tick entirely when
   // nothing is loading so an idle workstation doesn't waste cycles
   // re-rendering the same frame.
+  // Hide loading text for the first 200ms of a loading episode (#2166).
+  useLoadingTextDelay(React)
+
   const spinnerFrame = useSpinnerFrame(React, {
     splitPlanStatus: state.splitPlan?.status,
     changelogStatus: state.changelogView.status,

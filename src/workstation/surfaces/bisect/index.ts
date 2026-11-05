@@ -12,6 +12,7 @@
  * of #890. No behavior change.
  */
 
+import { formatLogInkLoading } from '../../chrome/surfaceStates'
 import type * as ReactTypes from 'react'
 import { isLogInkContextKeyLoading } from '../../chrome/context'
 import { truncateCells } from '../../chrome/text'
@@ -41,7 +42,7 @@ export function renderBisectSurface(
 
   if (loading) {
     lines.push(h(Text, { key: 'bisect-loading', dimColor: true },
-      truncateCells('· Loading bisect status…', width - 4)))
+      truncateCells(`· ${formatLogInkLoading({ resource: 'bisect status' })}`, width - 4)))
   } else if (!bisect?.active) {
     // Empty-state explainer (#879). Teaches the bisect workflow in
     // ~30 seconds: what it is, how it works, how to start one (CLI

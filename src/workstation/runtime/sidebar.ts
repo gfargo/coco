@@ -14,6 +14,7 @@
  * of #890. No behavior change.
  */
 
+import { formatLogInkLoading } from '../chrome/surfaceStates'
 import type * as ReactTypes from 'react'
 import type { LogInkContextStatus } from '../chrome/context'
 import { isLogInkContextKeyLoading } from '../chrome/context'
@@ -101,7 +102,7 @@ function renderActiveStatusTabContent(
   theme: LogInkTheme
 ): ReactTypes.ReactElement[] {
   if (isLogInkContextKeyLoading(contextStatus, 'worktree')) {
-    return [h(Text, { key: 'tab-status-loading', dimColor: true }, '  Loading status…')]
+    return [h(Text, { key: 'tab-status-loading', dimColor: true }, `  ${formatLogInkLoading({ resource: 'status' })}`)]
   }
   const worktree = context.worktree
   if (!worktree) {
@@ -195,7 +196,7 @@ function renderActiveSidebarContent(
 
   if (tab === 'branches') {
     if (isLogInkContextKeyLoading(contextStatus, 'branches')) {
-      return [h(Text, { key: 'tab-branches-loading', dimColor: true }, '  Loading branches…')]
+      return [h(Text, { key: 'tab-branches-loading', dimColor: true }, `  ${formatLogInkLoading({ resource: 'branches' })}`)]
     }
     const branches = context.branches
     if (!branches) {
@@ -232,7 +233,7 @@ function renderActiveSidebarContent(
 
   if (tab === 'tags') {
     if (isLogInkContextKeyLoading(contextStatus, 'tags')) {
-      return [h(Text, { key: 'tab-tags-loading', dimColor: true }, '  Loading tags…')]
+      return [h(Text, { key: 'tab-tags-loading', dimColor: true }, `  ${formatLogInkLoading({ resource: 'tags' })}`)]
     }
     const tags = lists.filteredTagList
     if (tags.length === 0) {
@@ -252,7 +253,7 @@ function renderActiveSidebarContent(
 
   if (tab === 'stashes') {
     if (isLogInkContextKeyLoading(contextStatus, 'stashes')) {
-      return [h(Text, { key: 'tab-stashes-loading', dimColor: true }, '  Loading stashes…')]
+      return [h(Text, { key: 'tab-stashes-loading', dimColor: true }, `  ${formatLogInkLoading({ resource: 'stashes' })}`)]
     }
     const stashes = lists.filteredStashList
     if (stashes.length === 0) {
@@ -274,7 +275,7 @@ function renderActiveSidebarContent(
 
   // worktrees
   if (isLogInkContextKeyLoading(contextStatus, 'worktreeList')) {
-    return [h(Text, { key: 'tab-worktrees-loading', dimColor: true }, '  Loading worktrees…')]
+    return [h(Text, { key: 'tab-worktrees-loading', dimColor: true }, `  ${formatLogInkLoading({ resource: 'worktrees' })}`)]
   }
   const worktrees = lists.filteredWorktreeList
   if (worktrees.length === 0) {

@@ -70,7 +70,7 @@ export function renderStashSurface(ctx: SurfaceRenderContext, spinnerFrame: numb
       ? ` | ${stashSelection.ids.size} marked`
       : ''
   const headerRight = loading
-    ? 'Loading stashes…'
+    ? formatLogInkLoading({ resource: 'stashes' })
     : `${stashes.length}/${allStashes.length} stashes${markedLabel}${filterLabel}`
   const emptyLabel = formatLogInkStashEmpty({ filter: state.filter })
   const loadingLabel = formatLogInkLoading({ resource: 'stashes' })
