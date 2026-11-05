@@ -1,4 +1,5 @@
 import { PromptTemplate } from '@langchain/core/prompts'
+import { resolveUseConventional } from './resolveUseConventional'
 import { spawn } from 'child_process'
 import { formatPatch, parsePatch, StructuredPatch, StructuredPatchHunk } from 'diff'
 import { Arguments } from 'yargs'
@@ -982,7 +983,10 @@ export async function prepareCommitSplitPlan({
   // Temperature / model selection are already inherited because
   // `llm` is `getLlm(provider, model, { service: commitService })`
   // — same instance regular `coco commit` uses.
-  const useConventional = Boolean(config.conventionalCommits || argv.conventional)
+  const useConventional = await resolveUseConventional({
+    argvConventional: argv.conventional,
+    configConventional: config.conventionalCommits,
+  })
   const commitMessageRules = useConventional
     ? `\n${CONVENTIONAL_COMMITS_RULES}`
     : ''
