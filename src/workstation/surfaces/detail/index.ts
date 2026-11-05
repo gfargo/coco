@@ -517,7 +517,7 @@ export function renderHistoryInspector(
 
   if (!detail) {
     const fallbackLines = selected
-      ? [selected.message, '', loading ? 'Loading commit details...' : 'Commit details unavailable.']
+      ? [selected.message, '', loading ? 'Loading commit details…' : 'Commit details unavailable. Press r to refresh.']
       : ['No commit selected — j/k to browse history.']
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
@@ -753,7 +753,7 @@ export function renderCommitDiffDetail(
 
   if (!detail) {
     const fallbackLines = selected
-      ? [selected.message, '', loading ? 'Loading commit details...' : 'Commit details unavailable.']
+      ? [selected.message, '', loading ? 'Loading commit details…' : 'Commit details unavailable. Press r to refresh.']
       : ['No commit selected — j/k to browse history.']
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),

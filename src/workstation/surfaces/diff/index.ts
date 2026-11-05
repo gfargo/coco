@@ -162,7 +162,7 @@ export function renderDiffSurface(
     // stays unambiguous.
     const stashIdentity = formatStashHeaderIdentity(state.stashDiffRef, context.stashes?.stashes)
     const baseHeaderLines: string[] = stashDiffLoading
-      ? [`Loading diff for ${stashIdentity.subtitle}...`]
+      ? [`Loading diff for ${stashIdentity.subtitle}…`]
       : lines.length
         ? [
           stashIdentity.bodyLine,
@@ -367,7 +367,7 @@ export function renderDiffSurface(
     const headLabel = state.compareHead?.label || state.compareHead?.ref || '<head>'
     const compareTitle = `${baseLabel} → ${headLabel}`
     const baseHeaderLines: string[] = compareDiffLoading
-      ? [`Loading diff for ${compareTitle}...`]
+      ? [`Loading diff for ${compareTitle}…`]
       : lines.length && (lines.length > 1 || lines[0])
         ? [
           compareTitle,

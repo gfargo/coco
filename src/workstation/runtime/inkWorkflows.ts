@@ -743,7 +743,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     {
       id: 'triage-pr-merge',
       key: '',
-      label: 'Merge pull request',
+      label: 'Merge pull request (triage list)',
       description: 'Merge the cursored pull request on the triage list view (prompts for merge / squash / rebase, then confirms).',
       kind: 'destructive',
       requiresConfirmation: true,
@@ -754,7 +754,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     {
       id: 'triage-pr-close',
       key: '',
-      label: 'Close pull request',
+      label: 'Close pull request (triage list)',
       description: 'Close the cursored pull request on the triage list view without merging.',
       kind: 'destructive',
       requiresConfirmation: true,
@@ -763,7 +763,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     {
       id: 'triage-pr-approve',
       key: '',
-      label: 'Approve pull request',
+      label: 'Approve pull request (triage list)',
       description: 'Submit an approving review on the cursored pull request.',
       kind: 'normal',
       requiresConfirmation: true,
@@ -772,7 +772,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     {
       id: 'triage-pr-request-changes',
       key: '',
-      label: 'Request changes on pull request',
+      label: 'Request changes on pull request (triage list)',
       description: 'Submit a change-request review on the cursored pull request (prompts for body, then confirms).',
       kind: 'normal',
       requiresConfirmation: true,
@@ -783,7 +783,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       // `rerun-pr-checks` / `automerge-pr`.
       id: 'triage-pr-rerun-checks',
       key: '',
-      label: 'Re-run failed checks',
+      label: 'Re-run failed checks (triage list)',
       description: 'Re-run the cursored pull request\'s failed CI checks.',
       kind: 'normal',
       requiresConfirmation: false,
@@ -792,7 +792,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     {
       id: 'triage-pr-automerge',
       key: '',
-      label: 'Enable auto-merge',
+      label: 'Enable auto-merge (triage list)',
       description: 'Merge the cursored pull request automatically once its checks pass (prompts for merge / squash / rebase).',
       kind: 'destructive',
       requiresConfirmation: true,
@@ -802,7 +802,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       // #1933 — triage counterpart of `ready-pr`.
       id: 'triage-pr-ready',
       key: '',
-      label: 'Mark pull request ready for review',
+      label: 'Mark pull request ready for review (triage list)',
       description: 'Promote the cursored draft pull request to ready for review.',
       kind: 'normal',
       requiresConfirmation: true,
@@ -811,7 +811,7 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
     {
       id: 'triage-pr-reopen',
       key: '',
-      label: 'Reopen pull request',
+      label: 'Reopen pull request (triage list)',
       description: 'Reopen the cursored closed pull request on the triage list view.',
       kind: 'normal',
       requiresConfirmation: true,

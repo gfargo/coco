@@ -278,7 +278,7 @@ function renderActiveSidebarContent(
   }
   const worktrees = lists.filteredWorktreeList
   if (worktrees.length === 0) {
-    return [h(Text, { key: 'tab-worktrees-empty', dimColor: true }, '  No linked worktrees')]
+    return [h(Text, { key: 'tab-worktrees-empty', dimColor: true }, '  No linked worktrees. Press + to add one.')]
   }
   return renderSelectableSidebarRows(
     h, Text, worktrees, state.selectedWorktreeListIndex, focused, width, theme,
