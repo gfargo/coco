@@ -1403,6 +1403,15 @@ function submitInputPrompt(state: LogInkState): LogInkInputEvent[] {
       action({ type: 'closeInputPrompt' }),
     ]
   }
+  if (state.inputPrompt.kind === 'bisect-symptom') {
+    // #2217 — the typed symptom is the copilot's payload. The prompt label
+    // says AI is used; the proposed command comes back as prefilled text in
+    // the run prompt, where enter is the confirmation.
+    return [
+      { type: 'runWorkflowAction', id: 'bisect-copilot', payload: value },
+      action({ type: 'closeInputPrompt' }),
+    ]
+  }
   if (state.inputPrompt.kind === 'bisect-run-command') {
     // #879 item 5 — the typed command is the workflow payload. The
     // runtime hands it to `git bisect run sh -c '<command>'` so shell
