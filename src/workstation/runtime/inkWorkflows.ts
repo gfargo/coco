@@ -1188,6 +1188,31 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       targets: 'single',
     },
     {
+      // #2217 — palette-only: asks for a one-line symptom, then (id
+      // `bisect-copilot`) proposes a run command and ranks suspect commits.
+      id: 'bisect-copilot-start',
+      key: '',
+      label: 'AI: bisect copilot (suggest a run command and suspects)',
+      description: 'On an active bisect with a good and a bad commit marked, ask for a one-line symptom, then propose a `bisect run` command (prefilled in the run prompt, never run for you) and rank suspect commits.',
+      kind: 'ai',
+      requiresConfirmation: true,
+      estimatedTokens: 3000,
+      targets: 'single',
+    },
+    {
+      // Internal second step, reached only from the symptom prompt's submit
+      // (the confirm overlay and token estimate already happened on
+      // `bisect-copilot-start`). Kept in the registry so the runtime can
+      // dispatch it by id.
+      id: 'bisect-copilot',
+      key: '',
+      label: 'Run the bisect copilot',
+      description: 'Internal step of the bisect copilot: sends the good..bad range, the symptom and package.json scripts to the model. Use "AI: bisect copilot" instead.',
+      kind: 'normal',
+      requiresConfirmation: false,
+      targets: 'single',
+    },
+    {
       // #2217 — palette-only: drafts a stash message from the pending
       // changes and opens the stash prompt seeded with it.
       id: 'suggest-stash-message',

@@ -28,6 +28,7 @@ export type LogInkInputPromptKind =
   | 'pr-request-changes'
   | 'create-pr'
   | 'bisect-run-command'
+  | 'bisect-symptom'
   | 'rebase-reword'
   // #0.71 — remotes view mutations. `add-remote` collects a single
   // `name url` line (space-separated, parsed in the submit handler);

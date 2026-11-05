@@ -86,6 +86,7 @@ import { summarizeCompareRange } from '../../../git/rangeSummary'
 import { explainRecentReflog } from '../../../git/reflogExplain'
 import { suggestBranchName } from '../../../git/branchNameSuggest'
 import { suggestStashMessage } from '../../../git/stashMessageSuggest'
+import { runBisectCopilot } from '../../../git/bisectCopilot'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
 import {
@@ -150,6 +151,7 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'explain-reflog': { kind: 'fetch', label: 'Explaining recent reflog entries…' },
   'suggest-branch-name': { kind: 'fetch', label: 'Suggesting a branch name…' },
   'suggest-stash-message': { kind: 'fetch', label: 'Suggesting a stash message…' },
+  'bisect-copilot': { kind: 'fetch', label: 'Analyzing the bisect range…' },
   'suggest-worktree-branch': { kind: 'fetch', label: 'Suggesting a branch name…' },
   'force-push-current-branch': { kind: 'push', label: 'Force-pushing (with lease)…' },
   'force-push-selected-branch': { kind: 'push', label: 'Force-pushing branch (with lease)…' },
@@ -1431,6 +1433,30 @@ export function useWorkflowAction(
           initial: suggestion.name,
         })
         return { ok: true, message: `Suggested ${suggestion.name}. Edit it (add a path if you want one), then enter to add the worktree.` }
+      },
+      'bisect-copilot-start': async () => {
+        if (!context.bisect?.active) {
+          return { ok: false, message: 'Start a bisect first (s in the bisect view), then mark a good and a bad commit.' }
+        }
+        dispatch({
+          type: 'openInputPrompt',
+          kind: 'bisect-symptom',
+          label: 'Bisect symptom, one line (sends the good..bad range and package.json scripts to the model)',
+        })
+        return { ok: true, message: 'Describe what goes wrong, then enter. esc cancels; nothing is sent until you submit.' }
+      },
+      'bisect-copilot': async () => {
+        const result = await runBisectCopilot(git, payload ?? '')
+        if (!result.ok) return { ok: false, message: result.message }
+        if (result.command) {
+          dispatch({
+            type: 'openInputPrompt',
+            kind: 'bisect-run-command',
+            label: 'Bisect run command (suggested: review it, edit if needed, enter to RUN on every commit)',
+            initial: result.command,
+          })
+        }
+        return { ok: true, message: result.message, details: result.details } as { ok: boolean; message: string }
       },
       'suggest-stash-message': async () => {
         const suggestion = await suggestStashMessage(git)
