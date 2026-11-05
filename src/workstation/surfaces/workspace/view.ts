@@ -907,6 +907,15 @@ function renderCloneRepoPrompt(deps: RenderWorkspaceAppDeps): ReactTypes.ReactEl
 
 const FOOTER_HEIGHT = 4 // 2 borders + hint row + status row
 
+/**
+ * One line, whatever the message: newlines and runs of whitespace become single
+ * spaces. The footer is a fixed 4 rows (2 borders, hints, status), so a status
+ * that wrapped squeezed the hints row out of the box (#2166).
+ */
+export function flattenStatusText(status: string): string {
+  return status.replace(/\s*[\r\n]+\s*/g, ' ').replace(/[ \t]{2,}/g, ' ').trim()
+}
+
 function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   const { React, ink, state, theme } = deps
   const { Box, Text } = ink
@@ -915,7 +924,7 @@ function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
   // footer height never changes with state. Without this, the body
   // height shifted by a row every time a status banner came and went,
   // forcing the panel chrome to reflow.
-  const statusContent = model.status ?? ''
+  const statusContent = flattenStatusText(model.status ?? '')
   const contextualText = model.contextual.join('   ')
   const globalText = model.global.join(' · ')
   return React.createElement(
@@ -941,6 +950,9 @@ function renderFooter(deps: RenderWorkspaceAppDeps): ReactTypes.ReactElement {
       {
         color: model.status ? toneColor('warn', theme) : undefined,
         dimColor: !model.status,
+        // Always one row. Middle truncation keeps both ends: the cause at the
+        // start and, for failures, "Press r to retry." at the end (#2166).
+        wrap: 'truncate-middle',
       },
       statusContent || ' '
     )

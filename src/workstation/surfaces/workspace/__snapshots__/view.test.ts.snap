@@ -494,6 +494,7 @@ exports[`renderWorkspaceApp snapshots PR counts in the status cell when gh is au
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -921,6 +922,7 @@ exports[`renderWorkspaceApp snapshots a committed filter (focus back to list) 1`
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -1426,6 +1428,7 @@ exports[`renderWorkspaceApp snapshots a gh-unauthenticated state dimming the PRs
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -1791,6 +1794,7 @@ exports[`renderWorkspaceApp snapshots a narrow terminal (80 columns) so column-b
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -2293,6 +2297,7 @@ exports[`renderWorkspaceApp snapshots a status banner from the workflow layer 1`
     <Text
       color="yellow"
       dimColor={false}
+      wrap="truncate-middle"
     >
       Refreshed 3 repos.
     </Text>
@@ -2633,6 +2638,7 @@ exports[`renderWorkspaceApp snapshots a very narrow terminal (60 columns) — pa
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -3134,6 +3140,7 @@ exports[`renderWorkspaceApp snapshots a wide terminal (200 columns) — columns 
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -3540,6 +3547,7 @@ exports[`renderWorkspaceApp snapshots an empty discovery (no repos, loading fals
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -4050,6 +4058,7 @@ exports[`renderWorkspaceApp snapshots filter focus with a draft showing in the h
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -4582,6 +4591,7 @@ exports[`renderWorkspaceApp snapshots the add-repo prompt with completions 1`] =
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -4998,6 +5008,7 @@ exports[`renderWorkspaceApp snapshots the behind tab 1`] = `
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -5533,6 +5544,7 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the URL field 1`] = `
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -6073,6 +6085,7 @@ exports[`renderWorkspaceApp snapshots the clone prompt on the destination field 
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -6605,6 +6618,7 @@ exports[`renderWorkspaceApp snapshots the confirm-delete prompt for a known repo
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -7021,6 +7035,7 @@ exports[`renderWorkspaceApp snapshots the dirty tab 1`] = `
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -7542,6 +7557,7 @@ exports[`renderWorkspaceApp snapshots the first-run onboarding banner 1`] = `
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -8311,6 +8327,7 @@ exports[`renderWorkspaceApp snapshots the keymap help overlay when toggled on 1`
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -8722,6 +8739,7 @@ exports[`renderWorkspaceApp snapshots the loading placeholder when discovery is 
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>
@@ -9223,6 +9241,7 @@ exports[`renderWorkspaceApp snapshots the populated workspace with the default t
     </Box>
     <Text
       dimColor={true}
+      wrap="truncate-middle"
     >
        
     </Text>

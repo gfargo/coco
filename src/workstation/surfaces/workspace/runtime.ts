@@ -16,6 +16,7 @@
  * just show a footer hint.
  */
 
+import { summarizeError } from '../../../lib/utils/summarizeError'
 import * as nodeFs from 'node:fs'
 import * as nodePath from 'node:path'
 import type * as ReactTypes from 'react'
@@ -231,10 +232,19 @@ const EMPTY_OVERVIEW = (roots: ReadonlyArray<string>): WorkspaceOverview => ({
   scannedAt: new Date(0).toISOString(),
 })
 
-/** The status line for a failed load: the reason, then the way out (#2166). */
-export function failureStatus(err: unknown, fallback: string): string {
-  const reason = (err instanceof Error && err.message ? err.message : fallback).replace(/[.\s]+$/, '')
-  return `${reason}. Press r to retry.`
+/** Longest reason shown in a status line, so the way out after it stays on screen. */
+const FAILURE_REASON_LENGTH = 90
+
+/**
+ * The status line for a failed load: the reason, then the way out (#2166).
+ * The reason is one clean, bounded line (see `summarizeError`), because the
+ * footer has a fixed height and a raw multi-line git error pushed "Press r to
+ * retry" out of sight. `subject` names the repo when the failure is about one.
+ */
+export function failureStatus(err: unknown, fallback: string, subject?: string): string {
+  const reason = summarizeError(err, { fallback, maxLength: FAILURE_REASON_LENGTH }).replace(/[.\s]+$/, '')
+  const prefix = subject ? `${subject}: ` : ''
+  return reason.endsWith('…') ? `${prefix}${reason} Press r to retry.` : `${prefix}${reason}. Press r to retry.`
 }
 
 export function mergeKnownRepos(
@@ -512,7 +522,7 @@ function renderWorkspaceSnapshot(
     }
     // The snapshot used to drop failures silently (#2211).
     if (repo.error) {
-      tokens.push(`error: ${repo.error.split('\n')[0]}`)
+      tokens.push(`error: ${summarizeError(repo.error)}`)
     }
     output.write(`${tokens.join('  ')}\n`)
   }
@@ -889,7 +899,7 @@ function WorkspaceInkApp(props: WorkspaceInkAppProps): ReactTypes.ReactElement {
       dispatch({ type: 'set-pull-request-fetching', paths: [] })
       dispatch({
         type: 'set-status',
-        status: failureStatus(err, 'Row refresh failed.'),
+        status: failureStatus(err, 'Row refresh failed.', focused.name),
       })
     }
   }, [dispatch, props])
