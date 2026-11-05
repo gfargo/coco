@@ -1,3 +1,4 @@
+import { summarizeError } from '../lib/utils/summarizeError'
 import type { SimpleGit } from 'simple-git'
 import { fetchRemotes, pullCurrentBranch } from './branchActions'
 import { createHeadlessGit } from '../lib/simple-git/headlessGit'
@@ -44,8 +45,11 @@ export function pullSkipReason(repo: WorkspaceRepoSummary): string | undefined {
   return undefined
 }
 
+/** One clean, short line per failed repo, so the sync summary fits the status bar (#2166). */
+const SYNC_MESSAGE_LENGTH = 60
+
 function firstLine(message: string): string {
-  return message.split('\n').find((line) => line.trim())?.trim() ?? message
+  return summarizeError(message, { fallback: message, maxLength: SYNC_MESSAGE_LENGTH })
 }
 
 async function syncOne(

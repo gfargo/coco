@@ -1,3 +1,4 @@
+import { summarizeError } from '../../../lib/utils/summarizeError'
 import type { WorkspaceRepoSummary } from '../../../git/workspaceData'
 import { pickWorkstationGlyph } from '../../chrome/glyphs'
 import { pickThemedSpinnerFrame } from '../../chrome/spinner'
@@ -348,7 +349,7 @@ export function buildWorkspaceListRows(
     }
     if (widths.subject !== undefined) {
       // For a failed repo the subject column carries git's reason.
-      const errorLine = repo.error?.split('\n').map((line) => line.trim()).find(Boolean)
+      const errorLine = repo.error ? summarizeError(repo.error, { maxLength: 200 }) : undefined
       const subject = errorLine ?? repo.lastCommit?.subject ?? pickWorkstationGlyph('dash', ascii)
       columns.push({
         text: truncateCells(subject, widths.subject),

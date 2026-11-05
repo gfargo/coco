@@ -72,6 +72,30 @@ describe('syncWorkspaceRepos (#2211)', () => {
     expect(outcomes[0].message).not.toContain('more detail')
   })
 
+  // #2166: a raw git error is multi-line, can carry ANSI codes, and can run
+  // long. The sync summary goes into a fixed-height status bar.
+  it('keeps each failure message to one clean, bounded line', async () => {
+    const raw = async () => {
+      throw new Error(`\u001b[31mfatal:\u001b[0m ${'unable to access a very long remote url '.repeat(6)}\r\nhint: check your network`)
+    }
+    const outcomes = await syncWorkspaceRepos(
+      [repo('bad')], 'fetch', {},
+      { makeGit: gitFor(raw), summarize: async () => repo('x') }
+    )
+    const message = outcomes[0].message ?? ''
+    expect(message).not.toMatch(/[\u001b\r\n]/)
+    expect(message).not.toMatch(/^fatal:/)
+    expect(message.length).toBeLessThanOrEqual(60)
+    expect(message.endsWith('…')).toBe(true)
+  })
+
+  it('keeps the whole sync summary short even with several noisy failures', () => {
+    const noisy = 'x'.repeat(300)
+    const summary = summarizeWorkspaceSync('fetch', ['a', 'b', 'c'].map((name) => ({ path: `/${name}`, name, status: 'failed' as const, message: noisy })))
+    expect(summary).toMatch(/^Fetched 0 repos, 3 failed: a \(/)
+    expect(summary.endsWith(', ….')).toBe(true)
+  })
+
   it('pull skips unsafe repos without touching git, and uses --ff-only for the rest', async () => {
     const calls: string[][] = []
     const raw = async (args: string[]) => { calls.push(args); return '' }

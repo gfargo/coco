@@ -44,8 +44,30 @@ describe('failureStatus', () => {
   })
 
   it('falls back for a non-Error or an empty message', () => {
-    expect(failureStatus('boom', 'Refresh failed.')).toBe('Refresh failed. Press r to retry.')
+    expect(failureStatus(undefined, 'Refresh failed.')).toBe('Refresh failed. Press r to retry.')
     expect(failureStatus(new Error(''), 'Row refresh failed.')).toBe('Row refresh failed. Press r to retry.')
+  })
+
+  // The footer has a fixed height: a raw multi-line git error overflowed it
+  // and pushed "Press r to retry" out of view.
+  it('is always one line, and keeps the retry hint at the end however long the error', () => {
+    const fetchError = new Error(
+      'ssh: connect to host 127.0.0.1 port 1: Connection refused\r\nfatal: Could not read from remote repository.\n\nPlease make sure you have the correct access rights\nand the repository exists.',
+    )
+    expect(failureStatus(fetchError, 'Refresh failed.')).toBe('ssh: connect to host 127.0.0.1 port 1: Connection refused. Press r to retry.')
+
+    const long = failureStatus(new Error('x'.repeat(400)), 'Refresh failed.')
+    expect(long).not.toMatch(/[\r\n]/)
+    expect(long.endsWith('… Press r to retry.')).toBe(true)
+    expect(long.length).toBeLessThanOrEqual(90 + ' Press r to retry.'.length)
+  })
+
+  it('strips ANSI and the fatal: prefix', () => {
+    expect(failureStatus(new Error('\u001b[31mfatal:\u001b[0m not a git repository'), 'x')).toBe('not a git repository. Press r to retry.')
+  })
+
+  it('names the repo when the failure is about one', () => {
+    expect(failureStatus(new Error('fatal: bad object HEAD'), 'Row refresh failed.', 'acme-api')).toBe('acme-api: bad object HEAD. Press r to retry.')
   })
 })
 
