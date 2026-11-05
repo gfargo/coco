@@ -1,4 +1,5 @@
 import { SimpleGit } from 'simple-git'
+import { capDiffLines } from './capDiffLines'
 
 export type StashEntry = {
   ref: string
@@ -163,9 +164,11 @@ export async function getStashOverview(
  * back to a "no diff to display" message.
  */
 export async function getStashDiff(git: SimpleGit, stashRef: string): Promise<string[]> {
-  return (await git.raw(['stash', 'show', '-p', stashRef]))
-    .split('\n')
-    .map((line) => line.replace(/\r$/, ''))
+  return capDiffLines(
+    (await git.raw(['stash', 'show', '-p', stashRef]))
+      .split('\n')
+      .map((line) => line.replace(/\r$/, ''))
+  )
 }
 
 export type StashDiffFile = {

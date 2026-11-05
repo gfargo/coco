@@ -2,6 +2,7 @@ import { SimpleGit } from 'simple-git'
 import { extractLfsPatchChange, renderLfsSummary } from './lfsPointer'
 import { extractSubmoduleChange, renderSubmoduleSummary } from './submoduleDiff'
 import { WorktreeFile } from './statusData'
+import { capDiffLines } from './capDiffLines'
 import { MACHINE_DIFF_ARGS } from './machineDiff'
 
 export type WorktreeFileDiff = {
@@ -33,13 +34,6 @@ function sectionLines(title: string, diff: string): string[] {
   return [title, ...body]
 }
 
-/**
- * Maximum diff lines fetched per file (#1365 item 5). Prevents OOM on
- * huge generated files (bundle diffs, lockfiles) — the TUI only renders
- * ~40 lines at a time anyway.
- */
-const MAX_DIFF_LINES = 8000
-
 export async function getWorktreeFileDiff(
   git: SimpleGit,
   file: WorktreeFile | undefined
@@ -69,20 +63,11 @@ export async function getWorktreeFileDiff(
   const unstagedDiff = file.worktreeStatus.trim()
     ? await git.diff([...MACHINE_DIFF_ARGS, '--', file.path])
     : ''
-  let lines = [
+  const lines = capDiffLines([
     ...(stagedDiff ? sectionLines('Staged changes', stagedDiff) : []),
     ...(stagedDiff && unstagedDiff ? [''] : []),
     ...(unstagedDiff ? sectionLines('Unstaged changes', unstagedDiff) : []),
-  ]
-
-  // Cap at MAX_DIFF_LINES to prevent OOM on huge files.
-  if (lines.length > MAX_DIFF_LINES) {
-    lines = [
-      ...lines.slice(0, MAX_DIFF_LINES),
-      '',
-      `… truncated (${lines.length - MAX_DIFF_LINES} more lines — open in $EDITOR for the full diff)`,
-    ]
-  }
+  ])
 
   return {
     filePath: file.path,
