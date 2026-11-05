@@ -915,7 +915,7 @@ export function getLogInkPaletteExecuteEvents(
     case 'toggleGraph':
       return [action({ type: 'toggleGraph' })]
     case 'navigateHome':
-      return [action({ type: 'navigateHome' })]
+      return withJumpEcho([action({ type: 'navigateHome' })], 'history')
     case 'createStash':
       return [action({
         type: 'openInputPrompt',
@@ -927,35 +927,35 @@ export function getLogInkPaletteExecuteEvents(
     case 'stashFile':
       return stashFilePromptEvents(state, context)
     case 'navigateStatus':
-      return [action({ type: 'replaceView', value: 'status' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'status' })], 'status')
     case 'navigateDiff':
-      return [action({ type: 'replaceView', value: 'diff' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'diff' })], 'diff')
     case 'navigateCompose':
-      return [action({ type: 'replaceView', value: 'compose' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'compose' })], 'compose')
     case 'navigateBranches':
-      return [action({ type: 'replaceView', value: 'branches' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'branches' })], 'branches')
     case 'navigateTags':
-      return [action({ type: 'replaceView', value: 'tags' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'tags' })], 'tags')
     case 'navigateStash':
-      return [action({ type: 'replaceView', value: 'stash' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'stash' })], 'stash')
     case 'navigateWorktrees':
-      return [action({ type: 'replaceView', value: 'worktrees' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'worktrees' })], 'worktrees')
     case 'navigatePullRequest':
-      return [action({ type: 'replaceView', value: 'pull-request' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'pull-request' })], 'pull request')
     case 'navigatePullRequestTriage':
-      return [action({ type: 'replaceView', value: 'pull-request-triage' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'pull-request-triage' })], 'PR triage')
     case 'navigateIssues':
-      return [action({ type: 'replaceView', value: 'issues' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'issues' })], 'issues')
     case 'navigateConflicts':
-      return [action({ type: 'replaceView', value: 'conflicts' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'conflicts' })], 'conflicts')
     case 'navigateReflog':
-      return [action({ type: 'replaceView', value: 'reflog' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'reflog' })], 'reflog')
     case 'navigateBisect':
-      return [action({ type: 'replaceView', value: 'bisect' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'bisect' })], 'bisect')
     case 'navigateSubmodules':
-      return [action({ type: 'replaceView', value: 'submodules' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'submodules' })], 'submodules')
     case 'navigateRemotes':
-      return [action({ type: 'replaceView', value: 'remotes' })]
+      return withJumpEcho([action({ type: 'replaceView', value: 'remotes' })], 'remotes')
     case 'markForCompare':
       // Palette context can't reach the cursored ref (filtered branch /
       // tag lists live in runtime state, not the reducer). Surface a
@@ -1089,8 +1089,13 @@ export function getLogInkPaletteExecuteEvents(
     case 'workflowTriagePrOpen':
     case 'workflowTriageIssueOpen':
     case 'workflowRemoveWorktreeAndBranch':
-      // Individual workflow entries; actual dispatch handled by the
-      // workflow action lookup below.
+      // These act on the cursored item of one view, and the same key means a
+      // different thing in another view (`x` is "reset bisect" here and
+      // "remove remote" there), so the palette cannot safely guess. It says
+      // how to run them instead of doing nothing.
+      return paletteNeedsKeystrokeEvents(command)
+    case 'commandPalette':
+      // Already in the palette: nothing to run.
       return []
     case 'quit':
       return resolveQuitEvents(state)
@@ -1115,14 +1120,39 @@ export function getLogInkPaletteExecuteEvents(
       // surfaced by the runtime as a "Nothing to yank" status.
       return [{ type: 'yankFromActiveView' }]
     // `viewMergeIntoCurrent` / `viewResetToBranch` / `viewSyncBranch` /
-    // `viewRebaseOnto` / `viewApplyHunkWorktree` / `viewApplyHunkIndex`
-    // fall through to `default` deliberately: each needs a payload
+    // `viewRebaseOnto` / `viewApplyHunkWorktree` / `viewApplyHunkIndex` and the
+    // rest fall through to `default` deliberately: each needs a payload
     // (cursored branch, extracted hunk patch) the palette has no live
-    // context to resolve, so palette execution is a documented no-op —
-    // the keystroke path (branches view / diff view) is the real entry.
+    // context to resolve. The keystroke path (branches view / diff view) is the
+    // real entry, so the palette says so instead of silently doing nothing.
     default:
-      return []
+      return paletteNeedsKeystrokeEvents(command)
   }
+}
+
+/**
+ * The "jumped to X" echo the `g` chords show after a view change. The palette
+ * runs the same navigation, so it shows the same echo (#2220): before, a view
+ * reached from the palette gave no feedback while the same view reached from
+ * the keyboard did.
+ */
+function withJumpEcho(events: LogInkInputEvent[], label: string): LogInkInputEvent[] {
+  return [...events, action({ type: 'setStatus', value: `jumped to ${label}`, ttl: 'echo' })]
+}
+
+/**
+ * Status line for a palette entry that can only run from its own key, in the
+ * view it belongs to (#2220). Before this, 29 of the binding entries did
+ * nothing when run, with no message, so a user who found "undo" or "blame" in
+ * the palette had no way to tell it was not broken.
+ */
+function paletteNeedsKeystrokeEvents(command: LogInkPaletteCommand): LogInkInputEvent[] {
+  const where = command.context ? ` in the ${command.context} view` : ''
+  return [action({
+    type: 'setStatus',
+    value: `${command.label} needs its own key: press ${command.keys}${where}.`,
+    kind: 'warning',
+  })]
 }
 
 /**
