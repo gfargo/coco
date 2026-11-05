@@ -43,7 +43,7 @@ import { applyRepoCwd } from './utils/applyRepoFlag'
 
 import { Options } from 'yargs'
 
-import { CommitArgv, options as commitOptions } from './commit/config'
+import { CommitArgv, options as commitOptions, validateCommitArgv } from './commit/config'
 import { InitArgv } from './init/config'
 import { UiArgv } from './ui/config'
 import { WorkspaceArgv } from './workspace/config'
@@ -270,10 +270,11 @@ export const defaultRouteHandler: CommandHandler<DefaultRouteArgv> = async (
       // promises scripts the same stdout-by-default behavior as
       // `coco commit`, so let commitHandler's own
       // `argv.interactive || isInteractive(config)` resolution decide (#1442).
-      await commitHandler(
-        buildSyntheticArgv<CommitArgv>(argv, { interactive: Boolean(argv.interactive) }),
-        logger
-      )
+      const commitArgv = buildSyntheticArgv<CommitArgv>(argv, { interactive: Boolean(argv.interactive) })
+      // This route skips `coco commit`'s yargs builder, so re-apply its
+      // cross-flag rules (e.g. `--apply` requires `--split`).
+      validateCommitArgv(commitArgv)
+      await commitHandler(commitArgv, logger)
       return
   }
 }

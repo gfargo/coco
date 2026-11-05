@@ -274,6 +274,19 @@ describe('legacy commit flags on bare `coco`', () => {
     }
   })
 
+  it.each([
+    [{ apply: true }, /--apply requires --split/],
+    [{ strictSplit: true }, /--strict-split requires/],
+    [{ plan: true, apply: true }, /cannot be combined/],
+    [{ withPreviousCommits: NaN }, /non-negative integer/],
+  ])('applies the commit builder validation on the legacy route: %j', async (flags, message) => {
+    delete process.env.COCO_DEFAULT
+    await expect(
+      defaultRouteHandler(routeArgv({ commit: true, ...flags } as never), new Logger({ silent: true }))
+    ).rejects.toThrow(message)
+    expect(commitHandler).not.toHaveBeenCalled()
+  })
+
   it('forwards `coco --noDiff` to commitHandler (screenshot repro)', async () => {
     delete process.env.COCO_DEFAULT
     await defaultRouteHandler(routeArgv({ noDiff: true } as never), new Logger({ silent: true }))
