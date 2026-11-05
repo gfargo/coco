@@ -81,6 +81,7 @@ import {
     canFastForward,
 } from '../../../git/branchActions'
 import { reviewOutgoingRange } from '../../../git/outgoingReview'
+import { planOutgoingSubjectFixes } from '../../../git/outgoingSubjectFix'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
 import {
@@ -140,6 +141,7 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'pull-selected-branch': { kind: 'pull', label: 'Pulling branch from remote…' },
   'push-selected-branch': { kind: 'push', label: 'Pushing branch to remote…' },
   'review-outgoing-range': { kind: 'push', label: 'Reviewing outgoing commits…' },
+  'fix-outgoing-subjects': { kind: 'push', label: 'Drafting subject fixes…' },
   'force-push-current-branch': { kind: 'push', label: 'Force-pushing (with lease)…' },
   'force-push-selected-branch': { kind: 'push', label: 'Force-pushing branch (with lease)…' },
   'pull-rebase-current': { kind: 'pull', label: 'Pulling with rebase…' },
@@ -1390,6 +1392,17 @@ export function useWorkflowAction(
         const branch = getSelectedBranch(state, context)
         if (!branch) return { ok: false, message: 'No branch selected' }
         return reviewOutgoingRange(git, branch)
+      },
+      'fix-outgoing-subjects': async () => {
+        const branch = getSelectedBranch(state, context)
+        if (!branch) return { ok: false, message: 'No branch selected' }
+        const plan = await planOutgoingSubjectFixes(git, branch)
+        // Rows are empty when there is nothing to fix; only open the plan
+        // when there is something to review.
+        if (plan.ok && plan.rows.length > 0) {
+          dispatch({ type: 'openRebasePlan', rows: plan.rows })
+        }
+        return { ok: plan.ok, message: plan.message }
       },
       'force-push-current-branch': async () => forcePushCurrentBranch(git),
       'force-push-selected-branch': async () => {
