@@ -382,6 +382,15 @@ export function getLogInkWorkflowActions(): LogInkWorkflowAction[] {
       targets: 'single',
     },
     {
+      id: 'fix-outgoing-subjects',
+      key: '',
+      label: 'Fix outgoing subjects',
+      description: 'Draft Conventional Commits subjects for the current branch\'s non-conforming outgoing commits and open the rebase plan with them set to reword. Nothing is rewritten until you run the plan.',
+      kind: 'normal',
+      requiresConfirmation: false,
+      targets: 'single',
+    },
+    {
       id: 'push-selected-branch',
       key: '',
       label: 'Push selected branch',

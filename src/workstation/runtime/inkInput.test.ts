@@ -1243,6 +1243,14 @@ describe('log Ink input interactions', () => {
       expect(new Set(keys).size).toBe(keys.length)
     })
 
+    it('offers a fix-subjects option that opens the rebase plan rather than pushing (#2216)', () => {
+      const fix = PUSH_SUB_CHOICE.options.find((option) => option.workflowId === 'fix-outgoing-subjects')
+      expect(fix).toMatchObject({ key: 'w' })
+      expect(fix).not.toHaveProperty('destructive')
+      const keys = PUSH_SUB_CHOICE.options.map((option) => option.key)
+      expect(new Set(keys).size).toBe(keys.length)
+    })
+
     it('dispatches setPendingChoice with PUSH_SUB_CHOICE', () => {
       const state = createLogInkState(rows, { activeView: 'branches' })
       const events = getLogInkInputEvents(state, 'P', {}, {

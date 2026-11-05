@@ -10,6 +10,7 @@ import {
 } from '../commands/commit/split'
 import { DuplicateRescueNote } from '../commands/commit/splitPlanValidation'
 import { LangChainCancelledError } from '../lib/langchain/errors'
+import { getChangesByCommit } from '../lib/simple-git/getChangesByCommit'
 import { LLMModel } from '../lib/langchain/types'
 import {
   getApiKeyForModel,
@@ -413,4 +414,35 @@ export const commitWorkflowTestInternals = {
   createCommitWorkflowArgv,
   formatCommitFailure,
   formatCommitWorkflowMessage,
+}
+
+/**
+ * Draft a conventional commit message for one historical commit from its own
+ * diff, keeping the commit's original body (#2216). `commitRef` is the
+ * `<sha>^..<sha>` range: a bare sha would make the diff parser compare that
+ * commit to the working tree. Returns `undefined` when the commit has no
+ * changes or no usable title was drafted; provider errors propagate.
+ */
+export async function suggestCommitMessageForCommit(
+  git: SimpleGit,
+  sha: string,
+  signal?: AbortSignal,
+): Promise<string | undefined> {
+  const changes = await getChangesByCommit({ commit: sha, options: { git } })
+  if (changes.length === 0) return undefined
+  const argv = {
+    ...createCommitWorkflowArgv('commit'),
+    conventional: true,
+    includeBranchName: false,
+  } as unknown as Arguments<CommitOptions>
+  const result = await generateCommitDraft({
+    git,
+    argv,
+    signal,
+    changeSource: { changes, commitRef: `${sha}^..${sha}` },
+  })
+  const title = result.message?.title?.trim()
+  if (!result.ok || !title) return undefined
+  const body = (await git.raw(['log', '-1', '--format=%b', sha])).trim()
+  return body ? `${title}\n\n${body}` : title
 }

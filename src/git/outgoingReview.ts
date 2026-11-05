@@ -28,7 +28,7 @@ export type ReviewOutcome = { findings: ReviewFinding[] } | { error: string }
 export type LintOutcome = { results: LintCommitResult[] } | { error: string }
 
 /** Subjects that break the Conventional Commits rules, in commit order. */
-function flaggedSubjects(results: LintCommitResult[]): LintCommitResult[] {
+export function flaggedSubjects(results: LintCommitResult[]): LintCommitResult[] {
   return results.filter((result) => result.status === 'fail' || result.status === 'warn')
 }
 
@@ -129,7 +129,7 @@ async function runSubjectLint(range: string, context: Awaited<ReturnType<typeof 
  * config that requires it, #2130). Otherwise the built-in rules would flag
  * every subject in a repo that never followed that format.
  */
-async function shouldLintSubjects(repoRoot: string): Promise<boolean> {
+export async function shouldLintSubjects(repoRoot: string): Promise<boolean> {
   const config = loadConfig<Record<string, unknown>, Record<string, unknown>>({}, { cwd: repoRoot })
   const explicit = (config as { conventionalCommits?: boolean }).conventionalCommits
   return explicit !== undefined ? explicit : commitlintImpliesConventional()
