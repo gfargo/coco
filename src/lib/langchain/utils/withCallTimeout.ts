@@ -47,9 +47,11 @@ type Invocable = {
  *
  * The signal goes into the chain's *input values*, not just the runnable
  * config: LangChain's classic `BaseChain.invoke` only watches `values.signal`
- * and drops `config.signal` before reaching the model. It stops waiting on
- * abort (the underlying request is abandoned rather than cancelled), which is
- * enough to hand control back to the retry loop.
+ * and drops `config.signal`. From the input values, `LLMChain` forwards it to
+ * the model as a call option (`signal` is one of the chat model's `callKeys`),
+ * so the in-flight HTTP request is aborted and the socket closed, not merely
+ * abandoned. `BaseChain.invoke` also stops waiting on it, which hands control
+ * back to the retry loop immediately.
  *
  * A timeout surfaces as a `LangChainTimeoutError` whose message says "timed
  * out", which the shared retry predicate treats as transient. A caller-supplied
