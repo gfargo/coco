@@ -83,6 +83,7 @@ import {
 import { reviewOutgoingRange } from '../../../git/outgoingReview'
 import { planOutgoingSubjectFixes } from '../../../git/outgoingSubjectFix'
 import { summarizeCompareRange } from '../../../git/rangeSummary'
+import { explainRecentReflog } from '../../../git/reflogExplain'
 import { addToGitignore } from '../../../git/gitignore'
 import { createLightweightTag, deleteLocalTag, deleteRemoteTag, pushTag } from '../../../git/tagActions'
 import {
@@ -144,6 +145,7 @@ const REMOTE_OP_LOADERS: Record<string, RemoteOpState> = {
   'review-outgoing-range': { kind: 'push', label: 'Reviewing outgoing commits…' },
   'fix-outgoing-subjects': { kind: 'push', label: 'Drafting subject fixes…' },
   'summarize-compare-range': { kind: 'fetch', label: 'Summarizing branch against the marked base…' },
+  'explain-reflog': { kind: 'fetch', label: 'Explaining recent reflog entries…' },
   'force-push-current-branch': { kind: 'push', label: 'Force-pushing (with lease)…' },
   'force-push-selected-branch': { kind: 'push', label: 'Force-pushing branch (with lease)…' },
   'pull-rebase-current': { kind: 'pull', label: 'Pulling with rebase…' },
@@ -1395,6 +1397,7 @@ export function useWorkflowAction(
         if (!branch) return { ok: false, message: 'No branch selected' }
         return reviewOutgoingRange(git, branch)
       },
+      'explain-reflog': async () => explainRecentReflog(context.reflog?.entries ?? []),
       'summarize-compare-range': async () => {
         const base = state.compareBase
         if (!base) {
