@@ -29,6 +29,7 @@ import { logSuccess } from '../../lib/ui/logSuccess'
 import { commandExit } from '../../lib/utils/commandExit'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
+import { resolveUseConventional } from './resolveUseConventional'
 import { withRetry } from '../../lib/utils/retry'
 import {
     CommitArgv,
@@ -181,7 +182,10 @@ export const handler: CommandHandler<CommitArgv> = async (argv, logger) => {
     return
   }
 
-  const USE_CONVENTIONAL_COMMITS = config.conventionalCommits || argv.conventional
+  const USE_CONVENTIONAL_COMMITS = await resolveUseConventional({
+    argvConventional: argv.conventional,
+    configConventional: config.conventionalCommits,
+  })
 
   async function factory() {
     // noDiff and the regular path both need exactly the staged set — reusing

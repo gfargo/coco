@@ -31,6 +31,7 @@ import { getPreviousCommits } from '../../lib/simple-git/getPreviousCommits'
 import { Logger } from '../../lib/utils/logger'
 import { getTokenCounterForProvider } from '../../lib/utils/tokenizer'
 import { hasCommitlintConfig } from '../../lib/utils/hasCommitlintConfig'
+import { resolveUseConventional } from './resolveUseConventional'
 import {
     CommitArgv,
     CommitMessageResponseSchema,
@@ -335,9 +336,11 @@ export async function generateCommitDraft({
     service: summaryService,
   })
 
-  const useConventional = Boolean(
-    argv.conventional || (trustRepositoryConfig && config.conventionalCommits)
-  )
+  const useConventional = await resolveUseConventional({
+    argvConventional: argv.conventional,
+    configConventional: trustRepositoryConfig ? config.conventionalCommits : undefined,
+    detectCommitlint: trustRepositoryConfig,
+  })
 
   // `coco amend` passes an explicit change set (the last commit's diff). The
   // default path summarizes the staged working tree. Agent callers may pass a
