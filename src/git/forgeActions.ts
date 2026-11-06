@@ -15,6 +15,7 @@ import type {
   PullRequestMergeStrategy,
 } from './pullRequestActions'
 import type { CreateIssueInput, IssueActionResult } from './issueActions'
+import type { ReviewCommentInput, CreateReviewOptions } from './pullRequestReviewComments'
 
 // GitHub implementations.
 import { getPullRequestList } from './pullRequestListData'
@@ -43,6 +44,7 @@ import {
   requestChangesPullRequestByNumber,
   rerunFailedChecks,
 } from './pullRequestActions'
+import { createPullRequestReviewComments } from './pullRequestReviewComments'
 import {
   addIssueAssignee,
   addIssueLabel,
@@ -221,6 +223,18 @@ export type ForgeActions = {
   approvePullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
   requestChangesPullRequestByNumber: (n: number, body: string) => Promise<PullRequestActionResult>
   /**
+   * Post inline PR review comments as a single review (OSS-2406) — the
+   * structured counterpart to `requestChangesPullRequestByNumber`'s
+   * whole-blob body. Only GitHub implements this today; every other
+   * facade returns a graceful `{ ok: false }` so callers (`coco review
+   * --comment`) can fall back to the whole-blob comment.
+   */
+  createPullRequestReviewComments: (
+    n: number,
+    comments: ReviewCommentInput[],
+    options?: CreateReviewOptions
+  ) => Promise<PullRequestActionResult>
+  /**
    * `gh pr checkout <n>` / `glab mr checkout <n>` (#1363) — fetch the
    * PR's head branch and switch onto it. Bitbucket has no CLI
    * counterpart, so its facade returns a graceful `{ ok: false }`.
@@ -284,6 +298,7 @@ const githubActions: ForgeActions = {
   closePullRequestByNumber,
   approvePullRequestByNumber,
   requestChangesPullRequestByNumber,
+  createPullRequestReviewComments,
   checkoutPullRequestByNumber,
   getPullRequestChecks: (n) => getPullRequestChecks(n),
   rerunFailedChecks,
@@ -329,6 +344,8 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
     closePullRequestByNumber: (n) => closeMergeRequestByNumber(n, defaultGlabRunner, host),
     approvePullRequestByNumber: (n) => approveMergeRequestByNumber(n, defaultGlabRunner, host),
     requestChangesPullRequestByNumber: (n, body) => requestChangesMergeRequestByNumber(n, body, defaultGlabRunner, host),
+    createPullRequestReviewComments: () =>
+      Promise.resolve({ ok: false, message: 'Inline review comments are not supported for GitLab yet.' }),
     checkoutPullRequestByNumber: (n) => checkoutMergeRequestByNumber(n, defaultGlabRunner, host),
     getPullRequestChecks: (n) =>
       path
@@ -398,6 +415,8 @@ function bitbucketActions(
     approvePullRequestByNumber: (n) => (path ? approveBitbucketPullRequestByNumber(path, n, runner) : noProject()),
     requestChangesPullRequestByNumber: (n, body) =>
       path ? requestChangesBitbucketPullRequestByNumber(path, n, body, runner) : noProject(),
+    createPullRequestReviewComments: () =>
+      Promise.resolve({ ok: false, message: 'Inline review comments are not supported for Bitbucket yet.' }),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket yet.' }),
     getPullRequestChecks: (n) =>
@@ -461,6 +480,11 @@ function giteaActions(
       path && runner ? approveGiteaPullRequestByNumber(path, n, runner) : noProject(),
     requestChangesPullRequestByNumber: (n, body) =>
       path && runner ? requestChangesGiteaPullRequestByNumber(path, n, body, runner) : noProject(),
+    // Gitea's REST API does expose `POST repos/{path}/pulls/{n}/reviews`
+    // with a `comments[]` array (already used for approve/request-changes
+    // above) — this is a scope boundary for OSS-2406, not a capability gap.
+    createPullRequestReviewComments: () =>
+      Promise.resolve({ ok: false, message: 'Inline review comments are not supported for Gitea yet.' }),
     // Gitea has no CLI/API-friendly single-call checkout — surface the gap as
     // a graceful failure so the diff surface / status line explain it instead
     // of dead-ending (mirrors the Bitbucket facade, #1363).
@@ -534,6 +558,8 @@ function bitbucketServerActions(
     approvePullRequestByNumber: (n) => approveBitbucketServerPullRequestByNumber(path ?? '', n, runner),
     requestChangesPullRequestByNumber: (n, body) =>
       requestChangesBitbucketServerPullRequestByNumber(path ?? '', n, body, runner),
+    createPullRequestReviewComments: () =>
+      Promise.resolve({ ok: false, message: 'Inline review comments are not supported for Bitbucket Server yet.' }),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket Server yet.' }),
     getPullRequestChecks: () =>

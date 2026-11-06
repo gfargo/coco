@@ -31,6 +31,8 @@ import { ReviewArgv, ReviewFeedbackItemArraySchema, ReviewOptions, ReviewFeedbac
 import { noResult } from './noResult'
 import { REVIEW_PROMPT } from './prompt'
 import { createSchemaParser } from '../../lib/langchain/utils/createSchemaParser'
+import type { PullRequestActionResult } from '../../git/pullRequestActions'
+import type { ReviewCommentInput } from '../../git/pullRequestReviewComments'
 
 // Some review prompts still produce a single feedback object. Normalize that shape
 // so the parser always returns an array for the rest of the review flow.
@@ -61,6 +63,35 @@ function formatFindingsMarkdown(findings: ReviewFeedbackItem[]): string {
   return findings
     .map((task) => `- **[${task.severity}] ${task.title}** (${task.category}) — \`${task.filePath}\`\n  ${task.summary}`)
     .join('\n')
+}
+
+// A finding only qualifies for an inline review comment if its `line` is a
+// real, positive line number — it comes straight from an LLM, so this can't
+// be assumed (OSS-2406).
+function usableForInlineComment(finding: ReviewFeedbackItem): boolean {
+  return Number.isInteger(finding.line) && (finding.line as number) > 0 && finding.filePath.trim().length > 0
+}
+
+function splitFindingsForInlineReview(
+  findings: ReviewFeedbackItem[]
+): { inline: ReviewFeedbackItem[]; rest: ReviewFeedbackItem[] } {
+  const inline: ReviewFeedbackItem[] = []
+  const rest: ReviewFeedbackItem[] = []
+  for (const finding of findings) {
+    ;(usableForInlineComment(finding) ? inline : rest).push(finding)
+  }
+  return { inline, rest }
+}
+
+// GitHub rejects absolute / `./`-prefixed paths — normalize instead of
+// trusting LLM output.
+function toReviewComment(finding: ReviewFeedbackItem): ReviewCommentInput {
+  return {
+    path: finding.filePath.replace(/^\.\//, ''),
+    line: finding.line as number,
+    side: finding.side,
+    body: `**[${finding.severity}] ${finding.title}** (${finding.category})\n${finding.summary}`,
+  }
 }
 
 export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
@@ -376,13 +407,49 @@ export const handler: CommandHandler<ReviewArgv> = async (argv, logger) => {
     severityThreshold !== undefined && findings.some((f) => f.severity >= severityThreshold)
 
   // `--comment`: post the findings to the PR/MR (requires `--pr`, enforced by
-  // the builder's `.check()`). Findings meeting `--severity` request changes
-  // instead of a plain comment, mirroring the CI-gating semantics above.
+  // the builder's `.check()`). Findings carrying a structured line/filePath
+  // post as inline review comments (OSS-2406); findings meeting `--severity`
+  // request changes instead of a plain comment, mirroring the CI-gating
+  // semantics above. Any inline-post failure (unsupported provider or API
+  // error, e.g. a line that isn't part of the diff) falls back to today's
+  // whole-blob comment so `--comment` never silently does nothing.
   if (argv.comment && argv.pr !== undefined && forge) {
-    const body = formatFindingsMarkdown(findings)
-    const postResult = exceedsThreshold
-      ? await forge.requestChangesPullRequestByNumber(argv.pr, body)
-      : await forge.commentPullRequestByNumber(argv.pr, body)
+    const { inline, rest } = splitFindingsForInlineReview(findings)
+    let postResult: PullRequestActionResult
+
+    if (inline.length > 0) {
+      const inlineResult = await forge.createPullRequestReviewComments(argv.pr, inline.map(toReviewComment), {
+        event: exceedsThreshold ? 'REQUEST_CHANGES' : 'COMMENT',
+        body: `coco review: ${inline.length} inline finding${inline.length === 1 ? '' : 's'}.`,
+      })
+
+      if (inlineResult.ok) {
+        postResult = inlineResult
+        // The inline review already carried the severity-gated event
+        // (REQUEST_CHANGES above); any lineless leftovers always post as a
+        // plain comment so a change-request is never posted twice.
+        if (rest.length > 0) {
+          const restResult = await forge.commentPullRequestByNumber(argv.pr, formatFindingsMarkdown(rest))
+          if (!restResult.ok) {
+            logger.error(restResult.message, { color: 'red' })
+          }
+        }
+      } else {
+        logger.verbose(
+          `Inline review comments unavailable (${inlineResult.message}); falling back to a whole-blob comment.`,
+          { color: 'yellow' }
+        )
+        const body = formatFindingsMarkdown(findings)
+        postResult = exceedsThreshold
+          ? await forge.requestChangesPullRequestByNumber(argv.pr, body)
+          : await forge.commentPullRequestByNumber(argv.pr, body)
+      }
+    } else {
+      const body = formatFindingsMarkdown(findings)
+      postResult = exceedsThreshold
+        ? await forge.requestChangesPullRequestByNumber(argv.pr, body)
+        : await forge.commentPullRequestByNumber(argv.pr, body)
+    }
 
     if (postResult.ok) {
       logger.log(postResult.message, { color: 'green' })

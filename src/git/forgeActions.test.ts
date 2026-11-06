@@ -12,6 +12,7 @@ const METHOD_KEYS: (keyof ForgeActions)[] = [
   'closePullRequestByNumber',
   'approvePullRequestByNumber',
   'requestChangesPullRequestByNumber',
+  'createPullRequestReviewComments',
   'getPullRequestChecks',
   'rerunFailedChecks',
   'enableAutoMerge',
@@ -104,6 +105,32 @@ describe('getForgeActions (#0.70)', () => {
     } finally {
       delete process.env.BITBUCKET_ACCESS_TOKEN
     }
+  })
+
+  describe('createPullRequestReviewComments facade (OSS-2406)', () => {
+    it('is unsupported for GitLab, Bitbucket, Gitea, and Bitbucket Server', async () => {
+      const cases: [string, ReturnType<typeof getForgeActions>][] = [
+        ['GitLab', getForgeActions('gitlab', { gitlabPath: 'g/p' })],
+        ['Bitbucket', getForgeActions('bitbucket', { bitbucketPath: 'ws/repo' })],
+        ['Gitea', getForgeActions('gitea', { giteaPath: 'o/r', giteaHost: 'codeberg.org' })],
+        [
+          'Bitbucket Server',
+          getForgeActions('bitbucket-server', {
+            bitbucketServerPath: 'PROJ/repo',
+            bitbucketServerHost: 'bitbucket.acme.com',
+          }),
+        ],
+      ]
+
+      for (const [label, forge] of cases) {
+        const result = await forge.createPullRequestReviewComments(1, [
+          { path: 'a.ts', line: 1, body: 'finding' },
+        ])
+        expect(result.ok).toBe(false)
+        expect(result.message).toMatch(/not supported for/)
+        expect(result.message).toContain(label === 'Bitbucket Server' ? 'Bitbucket Server' : label)
+      }
+    })
   })
 
   describe('CI-checks facade (OSS-1615)', () => {
