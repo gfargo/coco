@@ -34,6 +34,7 @@ function cases(): Case[] {
   out.push({ name: 'blame (no failure)', text: states.formatLogInkBlameEmpty({ path: 'a.ts' }) })
   out.push({ name: 'blame (failure)', text: states.formatLogInkBlameEmpty({ path: 'a.ts', failureMessage: 'binary file' }) })
   out.push({ name: 'notes', text: states.formatLogInkNotesEmpty() })
+  out.push({ name: 'review threads', text: states.formatLogInkReviewThreadsEmpty() })
   out.push({ name: 'forge unauthenticated', text: states.formatLogInkForgeUnauthenticated({ resource: 'Pull requests' }) })
   out.push({ name: 'forge unauthenticated (auth hint)', text: states.formatLogInkForgeUnauthenticated({ resource: 'Issues', authHint: 'Run `glab auth login`.' }) })
   out.push({ name: 'forge no remote', text: states.formatLogInkForgeNoRemote({ resource: 'Pull requests' }) })
@@ -53,7 +54,7 @@ describe('surface empty and error states name a key (#2166)', () => {
     const exported = Object.keys(states).filter((name) => /^formatLogInk.*(Empty|Error|Unauthenticated|NoRemote)$/.test(name))
     const covered = [
       'Branches', 'Tags', 'Stash', 'Reflog', 'Submodules', 'Remotes', 'Worktrees', 'Issues', 'PullRequestTriage',
-      'History', 'Blame', 'Notes', 'ForgeUnauthenticated', 'ForgeNoRemote', 'PullRequestDiff',
+      'History', 'Blame', 'Notes', 'ReviewThreads', 'ForgeUnauthenticated', 'ForgeNoRemote', 'PullRequestDiff',
     ]
     const uncovered = exported.filter((name) => !covered.some((fragment) => name.includes(fragment)))
     // Status and compose are checked below because they can return undefined.

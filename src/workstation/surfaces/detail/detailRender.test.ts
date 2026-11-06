@@ -380,6 +380,128 @@ describe('renderHistoryInspector', () => {
       expect(text).toContain('Actions:')
     })
   })
+
+  describe('Threads tab (OSS-2404)', () => {
+    function renderThreads(
+      opts: {
+        tabbed: boolean
+        pullRequestNumber?: number
+        reviewThreadsByNumber?: LogInkContext['reviewThreadsByNumber']
+      } = { tabbed: false }
+    ): ReactElement {
+      return renderHistoryInspector(
+        createElement,
+        components,
+        makeState({ inspectorTab: 'threads', selectedFileIndex: 0 }),
+        {
+          pullRequest: opts.pullRequestNumber
+            ? {
+              available: true,
+              authenticated: true,
+              currentPullRequest: {
+                number: opts.pullRequestNumber,
+                title: 'Add feature',
+                url: 'https://example.test/pr/1',
+                state: 'OPEN',
+                isDraft: false,
+                headRefName: 'feature',
+                baseRefName: 'main',
+              },
+            }
+            : undefined,
+          reviewThreadsByNumber: opts.reviewThreadsByNumber,
+        },
+        createLogInkContextStatus('ready'),
+        HISTORY_DETAIL,
+        false,
+        undefined,
+        false,
+        60,
+        opts.tabbed,
+        theme,
+        true
+      )
+    }
+
+    it('the tab header shows [Threads] alongside the other tabs', () => {
+      const lines = renderToLines(renderThreads({ tabbed: true, pullRequestNumber: 1 }), Text, Box)
+      const header = lines.find((l) => l.includes('[Threads]'))
+      expect(header).toBeDefined()
+      expect(header).toContain('Inspector')
+      expect(header).toContain('Actions')
+      expect(header).toContain('Notes')
+    })
+
+    it('renders a dedicated line when there is no PR for this branch', () => {
+      const text = renderToLines(renderThreads({ tabbed: true }), Text, Box).join('\n')
+      expect(text).toContain('No pull request for this branch')
+    })
+
+    it('shows a loading placeholder before the fetch resolves (key absent from the cache)', () => {
+      const text = renderToLines(renderThreads({ tabbed: true, pullRequestNumber: 1 }), Text, Box).join('\n')
+      expect(text).toContain('Loading review threads')
+    })
+
+    it('renders the forge message (not an error) when review threads are unsupported', () => {
+      const cache = new Map([[1, { ok: false as const, message: 'Pull request review threads are not supported for GitLab yet.' }]])
+      const text = renderToLines(
+        renderThreads({ tabbed: true, pullRequestNumber: 1, reviewThreadsByNumber: cache }),
+        Text, Box
+      ).join('\n')
+      expect(text).toContain('not supported for')
+      expect(text).not.toContain('Error')
+    })
+
+    it('shows the empty-state copy when the PR has no threads', () => {
+      const cache = new Map([[1, { ok: true as const, threads: [] }]])
+      const text = renderToLines(
+        renderThreads({ tabbed: true, pullRequestNumber: 1, reviewThreadsByNumber: cache }),
+        Text, Box
+      ).join('\n')
+      expect(text).toContain('No review threads on this pull request')
+    })
+
+    it('renders a populated thread with its path, line, resolved state, and comment', () => {
+      const cache = new Map([[1, {
+        ok: true as const,
+        threads: [{
+          path: 'src/index.ts',
+          line: 42,
+          isResolved: true,
+          isOutdated: false,
+          comments: [{ author: 'octocat', body: 'nit: rename this', createdAt: '2026-01-01T00:00:00Z' }],
+        }],
+      }]])
+      const text = renderToLines(
+        renderThreads({ tabbed: true, pullRequestNumber: 1, reviewThreadsByNumber: cache }),
+        Text, Box
+      ).join('\n')
+      expect(text).toContain('src/index.ts:42')
+      expect(text).toContain('resolved')
+      expect(text).toContain('@octocat')
+      expect(text).toContain('nit: rename this')
+    })
+
+    it('tall mode stacks the threads section alongside the inspector and actions sections', () => {
+      const cache = new Map([[1, {
+        ok: true as const,
+        threads: [{
+          path: 'src/index.ts',
+          line: 42,
+          isResolved: false,
+          isOutdated: false,
+          comments: [{ author: 'octocat', body: 'nit: rename this', createdAt: '2026-01-01T00:00:00Z' }],
+        }],
+      }]])
+      const text = renderToLines(
+        renderThreads({ tabbed: false, pullRequestNumber: 1, reviewThreadsByNumber: cache }),
+        Text, Box
+      ).join('\n')
+      expect(text).toContain('src/index.ts:42')
+      expect(text).toContain('Changed files:')
+      expect(text).toContain('Actions:')
+    })
+  })
 })
 
 describe('renderCommitDiffDetail', () => {

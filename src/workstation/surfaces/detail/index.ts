@@ -44,7 +44,11 @@ import {
   formatStashPreview,
   formatTagPreview,
 } from '../../chrome/previewPane'
-import { formatLogInkLoading, formatLogInkNotesEmpty } from '../../chrome/surfaceStates'
+import {
+  formatLogInkLoading,
+  formatLogInkNotesEmpty,
+  formatLogInkReviewThreadsEmpty,
+} from '../../chrome/surfaceStates'
 import { describeSignature } from '../../../git/commitSignature'
 import type { LfsAttributeStatus } from '../../../git/lfsAttributes'
 import { isPathLfsTracked } from '../../../git/lfsAttributes'
@@ -56,6 +60,7 @@ import type {
   GitCommitDetail,
   GitCommitFilePreview,
 } from '../../../git/logData'
+import type { PullRequestReviewThreadsResult } from '../../../git/pullRequestReviewThreadsData'
 import type { LogInkInspectorTab, LogInkState } from '../../../workstation/runtime/inkViewModel'
 import { getSelectedInkCommit } from '../../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../../git/providerData'
@@ -497,6 +502,88 @@ function renderInspectorNotesSection(
   return nodes
 }
 
+/** Cap on rendered threads/comments (OSS-2404) — mirrors the at-rest file list's `AT_REST_FILE_ROWS` cap: show a bounded preview plus a `… +N more` trailer rather than silently dropping the rest. */
+const MAX_RENDERED_THREADS = 8
+const MAX_RENDERED_COMMENTS_PER_THREAD = 3
+
+/**
+ * Render the [Threads] tab body (OSS-2404): the hydrated line-anchored
+ * GitHub review threads for the current branch's PR. `prNumber` is
+ * `context.pullRequest?.currentPullRequest?.number` — when it's absent
+ * (no PR for this branch, or the inspector is showing an unrelated
+ * commit) threads never hydrate and this renders a dedicated line
+ * instead of a permanent loading placeholder. `result` is undefined
+ * while `useDetailHydration`'s threads effect is in flight, and
+ * `{ ok: false }` for forges that don't support review threads yet
+ * (GitLab/Bitbucket/Gitea/Bitbucket Server) — rendered as the forge's
+ * own dim message, not an error.
+ */
+function renderInspectorThreadsSection(
+  h: typeof ReactTypes.createElement,
+  Text: LogInkComponents['Text'],
+  width: number,
+  theme: LogInkTheme,
+  result: PullRequestReviewThreadsResult | undefined,
+  prNumber: number | undefined,
+  focused: boolean
+): ReactTypes.ReactElement[] {
+  const innerWidth = Math.max(1, width - 4)
+  const nodes: ReactTypes.ReactElement[] = [
+    h(Text, { key: 'threads-spacer' }, ''),
+    h(Text, { key: 'threads-title' }, focused ? '[Threads]' : 'Threads:'),
+  ]
+
+  if (!prNumber) {
+    nodes.push(h(Text, { key: 'threads-no-pr', dimColor: true },
+      truncateCells('No pull request for this branch.', innerWidth, { ascii: theme.ascii })))
+    return nodes
+  }
+  if (!result) {
+    nodes.push(h(Text, { key: 'threads-loading', dimColor: true },
+      formatLogInkLoading({ resource: 'review threads' })))
+    return nodes
+  }
+  if (!result.ok) {
+    nodes.push(h(Text, { key: 'threads-unsupported', dimColor: true },
+      truncateCells(result.message, innerWidth, { ascii: theme.ascii })))
+    return nodes
+  }
+  if (!result.threads.length) {
+    nodes.push(h(Text, { key: 'threads-empty', dimColor: true },
+      truncateCells(formatLogInkReviewThreadsEmpty(), innerWidth, { ascii: theme.ascii })))
+    return nodes
+  }
+
+  const shown = result.threads.slice(0, MAX_RENDERED_THREADS)
+  shown.forEach((thread, threadIndex) => {
+    const line = thread.line ?? thread.originalLine
+    const state = thread.isResolved ? ' (resolved)' : thread.isOutdated ? ' (outdated)' : ''
+    const location = `${truncatePathCells(thread.path, Math.max(1, innerWidth - state.length))}:${line ?? '?'}${state}`
+    nodes.push(h(Text, { key: `threads-${threadIndex}-spacer` }, ''))
+    nodes.push(h(Text, { key: `threads-${threadIndex}-location` },
+      truncateCells(location, innerWidth, { ascii: theme.ascii })))
+
+    const comments = thread.comments.slice(0, MAX_RENDERED_COMMENTS_PER_THREAD)
+    comments.forEach((comment, commentIndex) => {
+      const commentLines = wrapCells(`@${comment.author ?? 'unknown'}: ${comment.body}`, innerWidth)
+      commentLines.forEach((line, lineIndex) => nodes.push(h(Text, {
+        key: `threads-${threadIndex}-comment-${commentIndex}-${lineIndex}`,
+        dimColor: true,
+      }, truncateCells(line, innerWidth, { ascii: theme.ascii }))))
+    })
+    if (thread.comments.length > comments.length) {
+      nodes.push(h(Text, { key: `threads-${threadIndex}-comments-more`, dimColor: true },
+        truncateCells(`  … +${thread.comments.length - comments.length} more`, innerWidth, { ascii: theme.ascii })))
+    }
+  })
+  if (result.threads.length > shown.length) {
+    nodes.push(h(Text, { key: 'threads-spacer-more' }, ''))
+    nodes.push(h(Text, { key: 'threads-more', dimColor: true },
+      truncateCells(`… +${result.threads.length - shown.length} more`, innerWidth, { ascii: theme.ascii })))
+  }
+  return nodes
+}
+
 export function renderHistoryInspector(
   h: typeof ReactTypes.createElement,
   components: LogInkComponents,
@@ -634,6 +721,18 @@ export function renderHistoryInspector(
     h, Text, width, theme, note, noteLoaded, focused && state.inspectorTab === 'notes'
   )
 
+  // OSS-2404 — [Threads] tab content. Sourced from the current branch's
+  // PR (same resolution as `usePullRequestChecksHydration`), not the
+  // commit this inspector is otherwise showing — see the module's
+  // `renderInspectorThreadsSection` doc for why.
+  const threadsPrNumber = context.pullRequest?.currentPullRequest?.number
+  const threadsResult = threadsPrNumber
+    ? context.reviewThreadsByNumber?.get(threadsPrNumber)
+    : undefined
+  const threadsSectionNodes = renderInspectorThreadsSection(
+    h, Text, width, theme, threadsResult, threadsPrNumber, focused && state.inspectorTab === 'threads'
+  )
+
   // Tab indicator. Renders in BOTH tabbed (short-terminal) mode and
   // tall-stacked mode so the user can always see which tab the cursor
   // owns and learn the `[/]` toggle. Without this on tall terminals,
@@ -661,8 +760,9 @@ export function renderHistoryInspector(
     inspector: { active: '[Inspector]', inactive: ' Inspector ' },
     actions: { active: '[Actions]', inactive: ' Actions ' },
     notes: { active: '[Notes]', inactive: ' Notes ' },
+    threads: { active: '[Threads]', inactive: ' Threads ' },
   }
-  const TAB_ORDER: LogInkInspectorTab[] = ['inspector', 'actions', 'notes']
+  const TAB_ORDER: LogInkInspectorTab[] = ['inspector', 'actions', 'notes', 'threads']
   const tabBudget = Math.max(0, width - 4)
   const includedTabs = new Set<LogInkInspectorTab>([activeTab])
   let tabRowWidth = cellWidth(TAB_LABELS[activeTab].active)
@@ -694,14 +794,16 @@ export function renderHistoryInspector(
   // Tabbed mode (short terminals): render only the active tab's
   // content under the tab header.
   if (tabbed) {
-    const activeTabNodes = activeTab === 'inspector'
-      ? [...headerNodes, ...fileListNodes, ...submoduleBlockNodes]
-      : activeTab === 'actions'
-        ? renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
-            cursorIndex: state.inspectorActionIndex,
-            cursorActive: focused,
-          })
-        : notesSectionNodes
+    const TAB_CONTENT: Record<LogInkInspectorTab, ReactTypes.ReactElement[]> = {
+      inspector: [...headerNodes, ...fileListNodes, ...submoduleBlockNodes],
+      actions: renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
+        cursorIndex: state.inspectorActionIndex,
+        cursorActive: focused,
+      }),
+      notes: notesSectionNodes,
+      threads: threadsSectionNodes,
+    }
+    const activeTabNodes = TAB_CONTENT[activeTab]
     return h(Box, {
       borderColor: focusBorderColor(theme, focused),
       borderStyle: theme.borderStyle,
@@ -732,6 +834,7 @@ export function renderHistoryInspector(
   ...fileListNodes,
   ...submoduleBlockNodes,
   ...notesSectionNodes,
+  ...threadsSectionNodes,
   ...renderInspectorActionsSection(h, Text, 'history-commit', width, theme, {
     cursorIndex: state.inspectorActionIndex,
     cursorActive: focused && state.inspectorTab === 'actions',

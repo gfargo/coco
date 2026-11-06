@@ -186,6 +186,15 @@ export function formatLogInkNotesEmpty(): string {
   return 'No note on this commit. Press enter to add one.'
 }
 
+/**
+ * Empty-state copy for the pull-request detail surface's [Threads] tab
+ * (OSS-2404) — the forge supports review threads but the current PR has
+ * none loaded yet (or none exist).
+ */
+export function formatLogInkReviewThreadsEmpty(): string {
+  return 'No review threads on this pull request. Press r to refresh.'
+}
+
 export type LogInkIssuesEmptyArgs = {
   filter: string
 }

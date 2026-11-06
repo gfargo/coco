@@ -27,6 +27,7 @@ import type { ProviderOverview } from '../../git/providerData'
 import type { IssueDetail } from '../../git/issueDetailData'
 import type { IssueListOverview } from '../../git/issuesListData'
 import type { PullRequestChecksResult, PullRequestDetail } from '../../git/pullRequestDetailData'
+import type { PullRequestReviewThreadsResult } from '../../git/pullRequestReviewThreadsData'
 import type { PullRequestOverview } from '../../git/pullRequestData'
 import type { PullRequestListOverview } from '../../git/pullRequestListData'
 import type { ReflogOverview } from '../../git/reflogData'
@@ -145,6 +146,15 @@ export type LogInkContext = {
    * (OSS-1770). Mirrors `issueDetailErrorByNumber`.
    */
   pullRequestDetailErrorByNumber?: Map<number, string>
+  /**
+   * Per-PR line-anchored review-thread cache keyed by pull-request number
+   * (OSS-2404). Stores the whole `forge.getPullRequestReviewThreads`
+   * result — including `{ ok: false }` — so a forge that doesn't support
+   * threads yet (GitLab, Bitbucket, Gitea, Bitbucket Server) is cached as
+   * unsupported rather than re-fetched on every tab visit, mirroring
+   * `pullRequestChecks`'s single-map success-or-failure shape.
+   */
+  reviewThreadsByNumber?: Map<number, PullRequestReviewThreadsResult>
   reflog?: ReflogOverview
   /**
    * Remote overview (#0.71). Carries every configured remote's name +

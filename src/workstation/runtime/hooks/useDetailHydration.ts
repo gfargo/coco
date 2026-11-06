@@ -482,4 +482,46 @@ export function useDetailHydration(
     context.commitNoteByHash,
     setContext,
   ])
+
+  // Review-threads hydration (OSS-2404). Same debounce / active-flag /
+  // frame-tag / cache-skip shape as the commit-note effect above, keyed
+  // by the current branch's PR number instead of a commit sha. Gated on
+  // the Threads tab actually being open — unlike the eager PR-detail
+  // effect above — so switching to the `pull-request` view never issues
+  // a `gh api graphql` call for users who never open the tab.
+  const threadsPrNumber =
+    state.activeView === 'pull-request' && state.inspectorTab === 'threads'
+      ? context.pullRequest?.currentPullRequest?.number
+      : undefined
+  React.useEffect(() => {
+    if (!threadsPrNumber) return
+    if (context.reviewThreadsByNumber?.has(threadsPrNumber)) return
+
+    const issuedAtDepth = runtimes.length - 1
+    let active = true
+    const timer = setTimeout(async () => {
+      const result = await forge.getPullRequestReviewThreads(threadsPrNumber)
+      if (!active) return
+      setContext(
+        (current) => ({
+          ...current,
+          reviewThreadsByNumber: new Map(current.reviewThreadsByNumber || []).set(
+            threadsPrNumber,
+            result,
+          ),
+        }),
+        issuedAtDepth,
+      )
+    }, DETAIL_HYDRATION_DELAY_MS)
+
+    return () => {
+      active = false
+      clearTimeout(timer)
+    }
+  }, [
+    runtimes.length,
+    threadsPrNumber,
+    context.reviewThreadsByNumber,
+    setContext,
+  ])
 }

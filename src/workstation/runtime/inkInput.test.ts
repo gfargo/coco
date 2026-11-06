@@ -6266,18 +6266,22 @@ describe('log Ink input interactions', () => {
       ])
     })
 
-    it('→ cycles through all three tabs (Inspector → Actions → Notes → Inspector)', () => {
+    it('→ cycles through all four tabs (Inspector → Actions → Notes → Threads → Inspector)', () => {
       let state = actionsFocusState({ inspectorTab: 'inspector' })
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
       expect(state.inspectorTab).toBe('actions')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
       expect(state.inspectorTab).toBe('notes')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('threads')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
       expect(state.inspectorTab).toBe('inspector')
     })
 
-    it('← wraps backward through all three tabs (Inspector → Notes → Actions → Inspector)', () => {
+    it('← wraps backward through all four tabs (Inspector → Threads → Notes → Actions → Inspector)', () => {
       let state = actionsFocusState({ inspectorTab: 'inspector' })
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('threads')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
       expect(state.inspectorTab).toBe('notes')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })

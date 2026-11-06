@@ -1929,14 +1929,18 @@ describe('log Ink view model', () => {
       expect(state.inspectorTab).toBe('inspector')
     })
 
-    it('cycleInspectorTab cycles through inspector, actions, and notes (#OSS-2057)', () => {
+    it('cycleInspectorTab cycles through inspector, actions, notes, and threads (#OSS-2057, #OSS-2404)', () => {
       let state = createLogInkState(rows)
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
       expect(state.inspectorTab).toBe('actions')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
       expect(state.inspectorTab).toBe('notes')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
+      expect(state.inspectorTab).toBe('threads')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: 1 })
       expect(state.inspectorTab).toBe('inspector')
+      state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
+      expect(state.inspectorTab).toBe('threads')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
       expect(state.inspectorTab).toBe('notes')
       state = applyLogInkAction(state, { type: 'cycleInspectorTab', delta: -1 })
@@ -1951,6 +1955,17 @@ describe('log Ink view model', () => {
       expect(state.inspectorActionIndex).toBe(0)
       state = applyLogInkAction(state, { type: 'moveInspectorAction', delta: 4, actionCount: 8 })
       state = applyLogInkAction(state, { type: 'setInspectorTab', value: 'inspector' })
+      expect(state.inspectorActionIndex).toBe(0)
+    })
+
+    it('setInspectorTab accepts threads (#OSS-2404)', () => {
+      let state = applyLogInkAction(createLogInkState(rows), {
+        type: 'moveInspectorAction',
+        delta: 3,
+        actionCount: 8,
+      })
+      state = applyLogInkAction(state, { type: 'setInspectorTab', value: 'threads' })
+      expect(state.inspectorTab).toBe('threads')
       expect(state.inspectorActionIndex).toBe(0)
     })
   })

@@ -370,10 +370,10 @@ export type LogInkDiffViewMode = 'unified' | 'split'
  * preference; the renderer decides whether to honor it (short terminal) or
  * stack both (tall terminal).
  */
-export type LogInkInspectorTab = 'inspector' | 'actions' | 'notes'
+export type LogInkInspectorTab = 'inspector' | 'actions' | 'notes' | 'threads'
 
 /** `LogInkInspectorTab` values in cycle order, shared by `cycleInspectorTab`. */
-const INSPECTOR_TAB_ORDER: LogInkInspectorTab[] = ['inspector', 'actions', 'notes']
+const INSPECTOR_TAB_ORDER: LogInkInspectorTab[] = ['inspector', 'actions', 'notes', 'threads']
 
 export type CreateLogInkStateOptions = {
   activeView?: LogInkView
@@ -2448,7 +2448,7 @@ export function applyLogInkAction(state: LogInkState, action: LogInkAction): Log
         pendingKey: undefined,
       }
     case 'cycleInspectorTab': {
-      // Three-tab cycle (#OSS-2057 — Inspector / Actions / Notes). `delta`
+      // Four-tab cycle (#OSS-2057 — Inspector / Actions / Notes / Threads — OSS-2404). `delta`
       // mirrors the sidebar's `nextSidebarTab` / `previousSidebarTab` shape
       // so callers can dispatch the same way regardless of direction.
       const currentIndex = INSPECTOR_TAB_ORDER.indexOf(state.inspectorTab)

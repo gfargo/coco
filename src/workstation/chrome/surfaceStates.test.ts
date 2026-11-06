@@ -7,6 +7,7 @@ import {
     formatLogInkNotesEmpty,
     formatLogInkPullRequestDiffEmpty,
     formatLogInkPullRequestDiffError,
+    formatLogInkReviewThreadsEmpty,
     formatLogInkStashEmpty,
     formatLogInkStatusEmpty,
     formatLogInkTagsEmpty,
@@ -110,6 +111,14 @@ describe('log Ink surface states', () => {
       const message = formatLogInkNotesEmpty()
       expect(message).toContain('No note on this commit')
       expect(message).toContain('enter')
+    })
+  })
+
+  describe('formatLogInkReviewThreadsEmpty', () => {
+    it('points at the refresh keybinding', () => {
+      const message = formatLogInkReviewThreadsEmpty()
+      expect(message).toContain('No review threads on this pull request')
+      expect(message).toContain('r to refresh')
     })
   })
 
