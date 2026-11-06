@@ -7,6 +7,7 @@ import type {
   PullRequestListOverview,
 } from './pullRequestListData'
 import type { PullRequestChecksResult, PullRequestDetailResult } from './pullRequestDetailData'
+import type { PullRequestReviewThreadsResult } from './pullRequestReviewThreadsData'
 import type { PullRequestDiffResult } from './pullRequestDiffData'
 import type { IssueDetailResult } from './issueDetailData'
 import type {
@@ -20,6 +21,7 @@ import type { CreateIssueInput, IssueActionResult } from './issueActions'
 import { getPullRequestList } from './pullRequestListData'
 import { getIssueList } from './issuesListData'
 import { getPullRequestChecks, getPullRequestDetail } from './pullRequestDetailData'
+import { getPullRequestReviewThreads } from './pullRequestReviewThreadsData'
 import { getIssueDetail } from './issueDetailData'
 import { getPullRequestDiff } from './pullRequestDiffData'
 import {
@@ -240,6 +242,13 @@ export type ForgeActions = {
   rerunFailedChecks: (n: number) => Promise<PullRequestActionResult>
   enableAutoMerge: (n: number, strategy: PullRequestMergeStrategy) => Promise<PullRequestActionResult>
   /**
+   * Line-anchored review threads (OSS-2403) — GitHub's `reviewThreads`
+   * GraphQL connection, distinct from `getPullRequestDetail`'s flat
+   * `reviews` list. GitHub only for now; other facades return a graceful
+   * `{ ok: false }` explaining the gap.
+   */
+  getPullRequestReviewThreads: (n: number) => Promise<PullRequestReviewThreadsResult>
+  /**
    * Promote a draft PR/MR to ready for review (#1933), the counterpart
    * to `pr create -d/--draft`. GitHub/Bitbucket flip a real `draft`
    * flag; GitLab/Gitea's draft state is a title convention, so their
@@ -288,6 +297,7 @@ const githubActions: ForgeActions = {
   getPullRequestChecks: (n) => getPullRequestChecks(n),
   rerunFailedChecks,
   enableAutoMerge,
+  getPullRequestReviewThreads: (n) => getPullRequestReviewThreads(n),
   markPullRequestReadyByNumber,
   reopenPullRequestByNumber,
   mergePullRequest,
@@ -346,6 +356,8 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
       path
         ? markMergeRequestReadyByNumber(path, n, defaultGlabRunner, host)
         : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
+    getPullRequestReviewThreads: () =>
+      Promise.resolve({ ok: false, message: 'Pull request review threads are not supported for GitLab yet.' }),
     reopenPullRequestByNumber: (n) => reopenMergeRequestByNumber(n, defaultGlabRunner, host),
     mergePullRequest: (strategy) => mergeMergeRequest(strategy, defaultGlabRunner, host),
     closePullRequest: () => closeMergeRequest(defaultGlabRunner, host),
@@ -406,6 +418,8 @@ function bitbucketActions(
         : Promise.resolve({ ok: false, message: 'No Bitbucket project resolved' }),
     rerunFailedChecks: () => rerunFailedBitbucketChecks(),
     enableAutoMerge: () => enableBitbucketAutoMerge(),
+    getPullRequestReviewThreads: () =>
+      Promise.resolve({ ok: false, message: 'Pull request review threads are not supported for Bitbucket yet.' }),
     markPullRequestReadyByNumber: (n) => markBitbucketPullRequestReadyByNumber(path ?? '', n, runner),
     reopenPullRequestByNumber: () => reopenBitbucketPullRequestByNumber(),
     mergePullRequest: (strategy) => mergeBitbucketPullRequest(path, currentBranch, strategy, runner),
@@ -475,6 +489,8 @@ function giteaActions(
       path && runner
         ? enableGiteaAutoMerge(path, n, strategy, runner)
         : Promise.resolve({ ok: false, message: 'No Gitea project resolved' }),
+    getPullRequestReviewThreads: () =>
+      Promise.resolve({ ok: false, message: 'Pull request review threads are not supported for Gitea yet.' }),
     markPullRequestReadyByNumber: (n) =>
       path && runner ? markGiteaPullRequestReadyByNumber(path, n, runner) : noProject(),
     reopenPullRequestByNumber: (n) =>
@@ -542,6 +558,11 @@ function bitbucketServerActions(
       Promise.resolve({ ok: false, message: 'Re-running checks is not supported for Bitbucket Server yet.' }),
     enableAutoMerge: () =>
       Promise.resolve({ ok: false, message: 'Auto-merge is not supported for Bitbucket Server yet.' }),
+    getPullRequestReviewThreads: () =>
+      Promise.resolve({
+        ok: false,
+        message: 'Pull request review threads are not supported for Bitbucket Server yet.',
+      }),
     markPullRequestReadyByNumber: () =>
       Promise.resolve({ ok: false, message: 'Marking a pull request ready for review is not supported for Bitbucket Server yet.' }),
     reopenPullRequestByNumber: () =>
