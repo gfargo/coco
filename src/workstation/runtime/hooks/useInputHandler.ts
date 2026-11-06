@@ -39,6 +39,7 @@ import {
     getInspectorActionsForState,
     getLogInkInputEvents,
 } from '../inkInput'
+import { UseInputHandlerRuntime, useCoalescedKeyDispatch } from './useCoalescedKeyDispatch'
 import { blameCacheKey } from '../../../git/blameData'
 import { resolveQuitEvents } from '../quitGuard'
 import { findStashFileForOffset } from '../../../git/stashData'
@@ -236,6 +237,7 @@ export function useInputHandler(
     handler: (inputValue: string, key: LogInkInputKey) => void,
   ) => void,
   deps: UseInputHandlerDeps,
+  runtime?: UseInputHandlerRuntime,
 ): void {
   const {
     state,
@@ -312,7 +314,7 @@ export function useInputHandler(
     enrichFilterActionWithRectification,
   } = deps
 
-  useInput((inputValue: string, key: LogInkInputKey) => {
+  const handleKey = (inputValue: string, key: LogInkInputKey): void => {
     // Ctrl+C quits from ANYWHERE (OSS-2795) — checked before the
     // onboarding dismissal below, which otherwise swallows the very
     // first keystroke and would leave Ctrl+C only dismissing the
@@ -765,5 +767,7 @@ export function useInputHandler(
         dispatch(enriched)
       }
     })
-  })
+  }
+
+  useCoalescedKeyDispatch(useInput, handleKey, runtime)
 }
