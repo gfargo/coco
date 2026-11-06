@@ -94,7 +94,7 @@ export const options = {
   comment: {
     type: 'boolean',
     default: false,
-    description: 'Post the findings to the PR/MR (requires --pr). Findings meeting --severity request changes instead of a plain comment.',
+    description: 'Post the findings to the PR/MR (requires --pr). Findings with a structured line post as inline review comments; the rest post as a summary comment. Findings meeting --severity request changes instead of a plain comment.',
   },
 } as Record<string, Options>
 
