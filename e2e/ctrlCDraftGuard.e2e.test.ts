@@ -36,6 +36,11 @@ describe('Ctrl+C unsaved-draft guard', () => {
       tui.press('e')
       tui.type('feat: wip commit message')
       tui.press('escape')
+      // Leave edit mode and let the screen settle before Ctrl+C. An ESC byte
+      // followed straight away by Ctrl+C reads as one Alt+Ctrl+C chord, not two
+      // keys, so the guard never saw a plain Ctrl+C.
+      await tui.waitForText('[NORMAL]')
+      await tui.waitForIdle()
 
       // The confirm panel truncates its warning line to fit the inspector
       // width (renderConfirmationPanel → truncateCells(warning, width - 4)),

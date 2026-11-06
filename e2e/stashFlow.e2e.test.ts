@@ -31,13 +31,15 @@ describe('stash flow', () => {
 
   it('gz lists all stashes with a preview of the selected one', async () => {
     tui.press('g', 'z')
-    const screen = await tui.waitForText('3/3 stashes')
-    expect(screen).toContain('stash@{0}')
-    expect(screen).toContain('WIP: experiment-c')
-    expect(screen).toContain('WIP: experiment-a')
-    // Preview panel resolves the selected stash's touched files.
+    const listed = await tui.waitForText('3/3 stashes')
+    expect(listed).toContain('stash@{0}')
+    expect(listed).toContain('WIP: experiment-c')
+    expect(listed).toContain('WIP: experiment-a')
+    // Stash files load lazily, only while a stash surface is showing (#2209),
+    // so the preview fills in a moment after the list. Wait for the file
+    // instead of reading the screen the instant the list appears.
+    const screen = await tui.waitForText('src/feature-c.ts')
     expect(screen).toContain('Stash preview')
-    expect(screen).toContain('src/feature-c.ts')
   })
 
   it('enter drills into the stash diff', async () => {
