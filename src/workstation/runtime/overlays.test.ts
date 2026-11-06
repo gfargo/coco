@@ -10,8 +10,9 @@ import * as React from 'react'
 import { createLogInkContextStatus } from '../chrome/context'
 import { createLogInkTheme, getLogInkThemePresets } from '../chrome/theme'
 import { createLogInkState } from '../../workstation/runtime/inkViewModel'
-import { getLogInkPaletteCommands } from './inkKeymap'
+import { LOG_INK_KEY_BINDINGS, getLogInkPaletteCommands } from './inkKeymap'
 import { renderDetailPanel } from './detailPanel'
+import { cellWidth } from '../chrome/text'
 import {
   renderChoicePanel,
   renderCommandPalette,
@@ -19,6 +20,7 @@ import {
   renderHelpPanel,
   renderSplitPlanOverlay,
   renderThemePickerOverlay,
+  renderViewKeysOverlay,
 } from './overlays'
 import type { LogInkComponents, LogInkContext } from './types'
 
@@ -678,6 +680,79 @@ describe('command palette ordering and layout (#2161)', () => {
     const fromRender = paletteLines('history')[0]
     const [first] = getLogInkPaletteCommands('history')
     expect(fromRender).toContain(first.label)
+  })
+})
+
+// OSS-2221 — the view-keys label column used to pad to a fixed English-
+// tuned width (`.padEnd(14)`); a longer-than-English label would overflow
+// that column and visibly misalign every other row's description. Mutates
+// one real binding's label to simulate a longer-than-English locale —
+// `LOG_INK_KEY_BINDINGS` is the same mutable array `getLogInkViewKeyBindings`
+// reads from, so the fixture flows through the real lookup/filter path.
+describe('view-keys overlay label column survives a longer-than-English label (OSS-2221)', () => {
+  const components: LogInkComponents = { Box, Text }
+  const mutatedId = 'viewCherryPick'
+  const longLabel = 'ワークツリーを同期する'
+  let originalLabel: string
+
+  beforeEach(() => {
+    const binding = LOG_INK_KEY_BINDINGS.find((candidate) => candidate.id === mutatedId)
+    if (!binding) throw new Error(`fixture binding "${mutatedId}" not found`)
+    originalLabel = binding.label
+    binding.label = longLabel
+  })
+
+  afterEach(() => {
+    const binding = LOG_INK_KEY_BINDINGS.find((candidate) => candidate.id === mutatedId)
+    if (binding) binding.label = originalLabel
+  })
+
+  type ViewKeysRow = { key?: string | null; props: { children: [unknown, { props: { children: string } }] } }
+
+  function viewKeysRows(element: { props: { children: unknown } }): ViewKeysRow[] {
+    const children = element.props.children
+    const array = Array.isArray(children) ? children : [children]
+    return array.filter(
+      (child): child is ViewKeysRow =>
+        typeof (child as { key?: string } | null)?.key === 'string' &&
+        (child as { key: string }).key.startsWith('view-keys-')
+    )
+  }
+
+  it('widens the label column to fit the CJK label, keeping every row aligned', () => {
+    const state = {
+      ...createLogInkState([]),
+      activeView: 'history' as never,
+      focus: 'commits' as never,
+    }
+    // Wide enough that `truncateCells` never clips even the longest
+    // history-view description (~193 cells) — isolates the column-width
+    // math from the separate truncation budget.
+    const element = renderViewKeysOverlay(createElement, components, state, 400, theme, false)
+    const bindingRows = viewKeysRows(element as unknown as { props: { children: unknown } })
+      .map((row) => ({ row, binding: LOG_INK_KEY_BINDINGS.find((candidate) => `view-keys-${candidate.id}` === row.key) }))
+      .filter((entry): entry is { row: ViewKeysRow; binding: (typeof LOG_INK_KEY_BINDINGS)[number] } => entry.binding !== undefined)
+      // Belt-and-suspenders: only rows whose description rendered in full
+      // (not truncated) support the slice-off-the-known-suffix math below.
+      .filter(({ row, binding }) => row.props.children[1].props.children.endsWith(binding.description))
+    expect(bindingRows.length).toBeGreaterThan(1)
+
+    const labelBlockWidths = bindingRows.map(({ row, binding }) => {
+      const restText = row.props.children[1].props.children
+      // The rest segment is `${paddedLabel} ${description}` — strip the
+      // known description suffix to isolate the padded label block.
+      const labelBlock = restText.slice(0, restText.length - binding.description.length - 1)
+      return cellWidth(labelBlock)
+    })
+
+    // Every row's label block occupies the same number of cells. The CJK
+    // label (now the widest) defines the column; every other row's
+    // (narrower, ASCII) label pads out to match it.
+    expect(new Set(labelBlockWidths).size).toBe(1)
+
+    const mutatedEntry = bindingRows.find(({ row }) => row.key === `view-keys-${mutatedId}`)
+    expect(mutatedEntry).toBeDefined()
+    expect(mutatedEntry!.row.props.children[1].props.children).toContain(longLabel)
   })
 })
 

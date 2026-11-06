@@ -1,3 +1,5 @@
+import { cellWidth } from './text'
+
 export type LogInkLayoutInput = {
   columns: number
   rows: number
@@ -38,6 +40,22 @@ export type LogInkLayoutInput = {
    * at or above `LAYOUT_SINGLE_PANE_BELOW` (every pane is visible there).
    */
   forcedPane?: LogInkVisiblePane
+  /**
+   * Catalog-driven floor for the help overlay's detail width (OSS-2221),
+   * computed by the caller from the resolved key/description strings via
+   * `measureHelpOverlayMinWidth` — e.g. a longer-than-English locale needs
+   * more room for its hotkey descriptions. Omitted means today's behavior:
+   * only the hardcoded `LAYOUT_HELP_OVERLAY_MIN_WIDTH` floor applies.
+   */
+  helpOverlayMinWidth?: number
+  /**
+   * Catalog-driven floor for the sidebar's at-rest width (OSS-2221),
+   * computed by the caller from the resolved tab-label strings via
+   * `measureSidebarMinWidth` — a longer-than-English locale's tab labels
+   * need more room than `SIDEBAR_AT_REST_BY_TIER`'s English-tuned floor.
+   * Omitted means today's behavior: only the tier floor applies.
+   */
+  sidebarMinWidth?: number
 }
 
 /**
@@ -218,6 +236,81 @@ export const LAYOUT_DETAIL_MIN_WIDTH = 20
  * (`clamp(32, 50, 36% × cols)`) — deliberate user intent to read the
  * sidebar deserves the extra width regardless of tier.
  */
+/**
+ * Cells consumed by a panel's own chrome (border + horizontal padding) on
+ * top of its content — every overlay in `runtime/overlays.ts` and every
+ * pane in `getLogInkLayout` renders inside `borderStyle` + `paddingX: 1`,
+ * which costs 1 cell per side for each (OSS-2221).
+ */
+export const LAYOUT_PANEL_CHROME_CELLS = 4
+
+/**
+ * Help overlay detail-width floor/ceiling (#832). The floor used to be a
+ * bare `60` sized by eye against the English `keymap.binding.*.desc`
+ * strings; `measureHelpOverlayMinWidth` below derives a catalog-driven
+ * floor from the actual resolved strings so a longer locale still gets
+ * room to read its hotkey descriptions instead of silently truncating.
+ */
+export const LAYOUT_HELP_OVERLAY_MIN_WIDTH = 60
+export const LAYOUT_HELP_OVERLAY_MAX_WIDTH = 100
+
+/**
+ * Minimum cells reserved for the description text in the help overlay,
+ * on top of the measured key (and, where supplied, label) column. Not an
+ * attempt to fit every description in full — some run to 100+ characters
+ * and truncate even at the max overlay width — just enough that a
+ * representative description reads as more than `Move focus…`.
+ */
+export const LAYOUT_HELP_DESCRIPTION_MIN_CELLS = 40
+
+/**
+ * Extra cells the sidebar's accordion header spends decorating a tab
+ * label beyond the label text itself — the active tab wraps in
+ * `[…]` and an item count renders as ` (N)` (see `sidebar.ts`'s
+ * `labelWithCount`/`headerText`). Catalog strings only ever vary the
+ * label; the brackets/parens/digits are fixed, so a small constant
+ * budget (rather than measuring live counts) is enough.
+ */
+export const LAYOUT_SIDEBAR_DECORATION_CELLS = 6
+
+/**
+ * Widest cell-width among `values`, clamped to `[min, max]`. The shared
+ * primitive behind `measureHelpOverlayMinWidth` / `measureSidebarMinWidth`
+ * — uses `cellWidth` (not `.length`) so CJK/emoji catalog strings budget
+ * correctly (OSS-2221).
+ */
+export function measureColumnWidth(values: readonly string[], min = 0, max = Infinity): number {
+  const widest = values.reduce((widthSoFar, value) => Math.max(widthSoFar, cellWidth(value)), 0)
+  return Math.max(min, Math.min(max, widest))
+}
+
+/**
+ * Catalog-driven floor for the help overlay's detail width (OSS-2221).
+ * Measures the actual resolved key strings (and, if supplied, label
+ * strings) rather than assuming English lengths, so a locale with longer
+ * key names or labels still fits. `labels` is optional — the full help
+ * panel (`renderHelpPanel`) renders keys + description only, no label
+ * column.
+ */
+export function measureHelpOverlayMinWidth(input: {
+  keyLabels: readonly string[]
+  labels?: readonly string[]
+}): number {
+  const keyColumn = measureColumnWidth(input.keyLabels)
+  const labelColumn = input.labels ? measureColumnWidth(input.labels) : 0
+  return keyColumn + labelColumn + LAYOUT_HELP_DESCRIPTION_MIN_CELLS + LAYOUT_PANEL_CHROME_CELLS
+}
+
+/**
+ * Catalog-driven floor for the sidebar's at-rest width (OSS-2221).
+ * Measures the actual resolved tab-label strings rather than assuming
+ * English lengths, so a locale whose labels run longer than `Worktrees`
+ * still fits on one line (see the `SIDEBAR_AT_REST_BY_TIER` comment).
+ */
+export function measureSidebarMinWidth(labels: readonly string[]): number {
+  return measureColumnWidth(labels) + LAYOUT_SIDEBAR_DECORATION_CELLS + LAYOUT_PANEL_CHROME_CELLS
+}
+
 type SidebarAtRestConfig = { min: number; max: number; fraction: number }
 const SIDEBAR_AT_REST_BY_TIER: Record<LogInkLayoutDensity, SidebarAtRestConfig> = {
   rail: { min: 22, max: 28, fraction: 0.24 }, // unused at rest — single-pane mode overrides the width
@@ -244,9 +337,14 @@ function calcDetailAtRestWidth(columns: number, density: LogInkLayoutDensity): n
   return Math.max(base, Math.min(grown, spare))
 }
 
-function calcSidebarAtRestWidth(columns: number, density: LogInkLayoutDensity): number {
+function calcSidebarAtRestWidth(
+  columns: number,
+  density: LogInkLayoutDensity,
+  sidebarMinWidth = 0,
+): number {
   const config = SIDEBAR_AT_REST_BY_TIER[density]
-  return Math.max(config.min, Math.min(config.max, Math.floor(columns * config.fraction)))
+  const tierWidth = Math.max(config.min, Math.min(config.max, Math.floor(columns * config.fraction)))
+  return Math.max(tierWidth, sidebarMinWidth)
 }
 
 // Budgets detail + sidebar against `columns` so the main panel keeps its
@@ -317,7 +415,11 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   // (In single-pane mode these three-panel widths are recomputed below
   // so the visible pane gets the full terminal.)
   const detailWidth = input.helpOverlayActive
-    ? Math.max(60, Math.min(100, Math.floor(columns * 0.50)))
+    ? Math.max(
+        LAYOUT_HELP_OVERLAY_MIN_WIDTH,
+        input.helpOverlayMinWidth ?? 0,
+        Math.min(LAYOUT_HELP_OVERLAY_MAX_WIDTH, Math.floor(columns * 0.50)),
+      )
     : input.zoomedPane === 'inspector'
       // Zoom must be wider than at rest, which reaches 60 on wide
       // terminals (#2158 review): 40% of the width, capped at 90 cells.
@@ -336,8 +438,8 @@ export function getLogInkLayout(input: LogInkLayoutInput): LogInkLayout {
   const sidebarWidth = input.zoomedPane === 'sidebar'
     ? Math.max(32, Math.min(50, Math.floor(columns * 0.36)))
     : input.zoomedPane === 'main'
-      ? SIDEBAR_AT_REST_BY_TIER[density].min
-      : calcSidebarAtRestWidth(columns, density)
+      ? Math.max(SIDEBAR_AT_REST_BY_TIER[density].min, input.sidebarMinWidth ?? 0)
+      : calcSidebarAtRestWidth(columns, density, input.sidebarMinWidth ?? 0)
 
   // Single-pane mode: exactly one pane renders, full-width; the other
   // two are hidden (width 0), not railed. Above the breakpoint the

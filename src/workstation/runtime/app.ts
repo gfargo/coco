@@ -59,11 +59,30 @@ import type * as ReactTypes from 'react'
 import { blameCacheKey } from '../../git/blameData'
 import { saveThemePreset } from '../chrome/themePersistence'
 import { deriveDisplayContextStatus } from '../chrome/context'
-import { LOG_INK_DEFAULT_COLUMNS, LOG_INK_DEFAULT_ROWS, LOG_INK_MIN_COLUMNS, LOG_INK_MIN_ROWS, getLogInkLayout } from '../chrome/layout'
+import {
+  LOG_INK_DEFAULT_COLUMNS,
+  LOG_INK_DEFAULT_ROWS,
+  LOG_INK_MIN_COLUMNS,
+  LOG_INK_MIN_ROWS,
+  getLogInkLayout,
+  measureHelpOverlayMinWidth,
+  measureSidebarMinWidth,
+} from '../chrome/layout'
 import type { LogInkVisiblePane } from '../chrome/layout'
-import { LogInkFocus, LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit } from '../../workstation/runtime/inkViewModel'
+import { LOG_INK_KEY_BINDINGS, formatBindingKeys } from './inkKeymap'
+import { LogInkFocus, LogInkState, applyLogInkAction, createLogInkState, getSelectedInkCommit, getLogInkSidebarTabs } from '../../workstation/runtime/inkViewModel'
 import { resolveForcedPane } from './forcedPane'
 import { parseStashDiffFiles } from '../../git/stashData'
+import { sidebarTabLabel } from './utils'
+
+// Catalog-driven layout floors (OSS-2221) — computed once from the
+// resolved i18n strings rather than assumed at English lengths, so a
+// longer locale widens the help overlay / sidebar instead of overflowing
+// them. See `measureHelpOverlayMinWidth` / `measureSidebarMinWidth`.
+const HELP_OVERLAY_MIN_WIDTH = measureHelpOverlayMinWidth({
+  keyLabels: LOG_INK_KEY_BINDINGS.map(formatBindingKeys),
+})
+const SIDEBAR_MIN_WIDTH = measureSidebarMinWidth(getLogInkSidebarTabs().map(sidebarTabLabel))
 
 
 import type { LogInkComponentDeps, SurfaceRenderContext } from './types'
@@ -1199,6 +1218,8 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     helpOverlayActive: state.showHelp,
     zoomedPane,
     forcedPane,
+    helpOverlayMinWidth: HELP_OVERLAY_MIN_WIDTH,
+    sidebarMinWidth: SIDEBAR_MIN_WIDTH,
   })
 
   // Lifted verbatim into `useInputHandler` (0.72 app.ts decomposition, the
