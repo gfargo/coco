@@ -46,25 +46,43 @@ describe('reset + undo', () => {
     expect(screen).toContain('Mixed')
   })
 
-  it('h resets --hard to the cursored commit, dropping the two above it', async () => {
+  it('h then y resets --hard to the cursored commit, dropping the two above it', async () => {
     tui.press('h')
-    // Gate on the header count, not the status toast — the toast paints a
-    // beat before the header/reflog-undo-description refresh lands, and
-    // the next test's `z` needs that refresh to have already happened.
-    const screen = await tui.waitForText('8 commits')
-    expect(screen).toContain('Reset current branch to')
+    // A destructive choice option no longer runs on one keypress (#2169): the
+    // picker hands off to a y/n confirm that names the commit and the command.
+    const confirm = await tui.waitForText('Press y to confirm')
+    expect(confirm).toContain('git reset --hard')
+    tui.press('y')
+    // Wait for the header count AND the status toast together. Their order
+    // depends on how long the refresh takes (about 1.5 s on a busy machine),
+    // so waiting on either alone and then reading the other is a race. The
+    // header count is the gate for the next test: it needs that refresh to
+    // have landed. (The undo description is re-asked there regardless.)
+    const screen = await tui.waitFor(
+      (text) => text.includes('8 commits') && text.includes('Reset current branch to'),
+      'the header to show 8 commits and the reset toast'
+    )
     expect(screen).toContain('--hard')
     expect(screen).not.toContain('feat: add dashboard export-to-csv')
   })
 
   it('z surfaces the global reflog undo for the reset it just did', async () => {
-    // The reflog context refetches off a debounced fs.watch (250ms) on
-    // .git/logs/HEAD, independent of the header count's own refresh —
-    // give it room to land before z reads context.reflogUndoDescription,
-    // or it can still describe the entry from before this reset.
-    await delay(800)
-    tui.press('z')
-    const screen = await tui.waitForText('Undo last operation')
+    // The undo description comes from the reflog context, which is reloaded by
+    // the refresh that follows the reset. That reload runs about 14 git
+    // loaders in parallel and took 1.5 s on a busy machine, so for a moment
+    // after the header shows 8 commits `z` still describes the previous
+    // operation (the last commit). A fixed delay is either too long or too
+    // short, so ask until the panel names the reset, cancelling the stale ones.
+    let screen = ''
+    const deadline = Date.now() + 20_000
+    while (Date.now() < deadline) {
+      tui.press('z')
+      screen = await tui.waitForText('Undo last operation')
+      if (screen.includes('Undo reset')) break
+      tui.press('n')
+      await tui.waitForIdle()
+      await delay(400)
+    }
     expect(screen).toContain('Undo reset')
     expect(screen).toContain('Press y to confirm')
   })

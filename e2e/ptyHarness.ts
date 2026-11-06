@@ -112,6 +112,15 @@ const DEFAULT_WAIT: Required<WaitOptions> = { timeoutMs: 45_000, intervalMs: 50 
 const STDIN_LISTENER_GRACE_MS = 750
 
 /**
+ * Gap between two writes to the PTY. Writes issued back to back can arrive as
+ * ONE stdin chunk, which the TUI sees as a single multi-character input
+ * (`gz` instead of `g` then `z`) and ignores, so a chord passed or failed by
+ * luck of the kernel's buffering. A person types one key at a time; the
+ * harness now does too.
+ */
+const KEY_GAP_MS = 30
+
+/**
  * One live TUI process in a PTY plus the emulated screen it draws on.
  * Construct via {@link launchTui}; always `close()` in `finally`/afterEach.
  */
@@ -120,6 +129,8 @@ export class TuiSession {
   private readonly term: Terminal
   private readonly tempHome: string
   private pendingWrites = 0
+  /** Ordered tail of queued keystroke writes (see {@link KEY_GAP_MS}). */
+  private writeChain: Promise<void> = Promise.resolve()
   private exitResult: { exitCode: number } | null = null
   private exitWaiters: Array<(code: number) => void> = []
 
@@ -223,7 +234,21 @@ export class TuiSession {
 
   /** Type literal text (each character as-is, no key translation). */
   type(text: string): void {
-    this.pty.write(text)
+    this.enqueueWrite(text)
+  }
+
+  /**
+   * Queue bytes for the PTY. Each write waits for the previous one plus
+   * {@link KEY_GAP_MS}, so keys stay in order across `press` and `type` calls
+   * and never merge into one stdin chunk. `type` still writes its text as one
+   * chunk on purpose: that is how typing into a prompt looks to the TUI.
+   */
+  private enqueueWrite(bytes: string): void {
+    this.writeChain = this.writeChain.then(async () => {
+      if (this.exitResult) return
+      this.pty.write(bytes)
+      await delay(KEY_GAP_MS)
+    })
   }
 
   /**
@@ -234,9 +259,9 @@ export class TuiSession {
     for (const key of keys) {
       const bytes = KEY_BYTES[key.toLowerCase()]
       if (bytes !== undefined) {
-        this.pty.write(bytes)
+        this.enqueueWrite(bytes)
       } else if (key.length === 1) {
-        this.pty.write(key)
+        this.enqueueWrite(key)
       } else {
         throw new Error(`Unknown key name: ${JSON.stringify(key)}`)
       }
@@ -266,6 +291,8 @@ export class TuiSession {
     const { timeoutMs, intervalMs } = { ...DEFAULT_WAIT, ...options }
     const deadline = Date.now() + timeoutMs
     let screen = ''
+    // Keys queued by `press` / `type` must reach the PTY before the screen is judged.
+    await this.writeChain
     while (Date.now() < deadline) {
       screen = this.snapshot()
       if (this.pendingWrites === 0 && predicate(screen)) return screen
@@ -315,6 +342,7 @@ export class TuiSession {
   async waitForIdle(settleMs = 300, options?: WaitOptions): Promise<string> {
     const { timeoutMs } = { ...DEFAULT_WAIT, ...options }
     const deadline = Date.now() + timeoutMs
+    await this.writeChain
     let previous = this.snapshot()
     let stableSince = Date.now()
     while (Date.now() < deadline) {
