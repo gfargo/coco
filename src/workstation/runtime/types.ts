@@ -188,6 +188,8 @@ export type LogInkRuntime = {
       exit: () => void
     }
     useInput: (handler: (input: string, key: LogInkInputKey) => void) => void
+    /** Optional: older/mocked runtimes may not provide it. */
+    usePaste?: (handler: (text: string) => void) => void
     useWindowSize: () => {
       columns: number
       rows: number

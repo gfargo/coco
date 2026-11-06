@@ -1285,7 +1285,7 @@ export function LogInkApp(deps: LogInkComponentDeps): ReactTypes.ReactElement {
     setThemeSessionPreset,
     saveThemePreset,
     enrichFilterActionWithRectification,
-  })
+  }, { React, usePaste: ink.usePaste })
 
   // Runtime Context provider (#1136). Bundles the five most-drilled
   // values so surfaces can read them from context instead of receiving
