@@ -12,6 +12,8 @@ import type { LogInkSidebarTab } from '../../workstation/runtime/inkViewModel'
 import type { ProviderRepository } from '../../git/providerData'
 import { buildProviderUrl } from '../../git/providerData'
 import type { LogInkTheme } from '../chrome/theme'
+import { en } from '../../lib/i18n/en'
+import { t } from '../../lib/i18n/t'
 
 /**
  * Short-form commit hash for one-line displays. Returns `<none>` when
@@ -159,15 +161,15 @@ export function buildRefUrl(
 export function sidebarTabLabel(tab: LogInkSidebarTab): string {
   switch (tab) {
     case 'status':
-      return 'Status'
+      return t(en, 'sidebar.tab.status')
     case 'branches':
-      return 'Branches'
+      return t(en, 'sidebar.tab.branches')
     case 'tags':
-      return 'Tags'
+      return t(en, 'sidebar.tab.tags')
     case 'stashes':
-      return 'Stashes'
+      return t(en, 'sidebar.tab.stashes')
     case 'worktrees':
-      return 'Worktrees'
+      return t(en, 'sidebar.tab.worktrees')
     default:
       return tab
   }
