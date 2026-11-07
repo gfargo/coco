@@ -496,8 +496,14 @@ describe('workspaceData overview', () => {
         onRepoSummary: (summary) => seen.push(summary.name),
       })
 
-      // The fast repo is reported while the slow one is still hanging.
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      // The fast repo is reported while the slow one is still hanging. Poll
+      // rather than sleep a fixed time: discovery scans the filesystem first,
+      // which can outlast any short delay on a loaded machine. The slow repo
+      // stays gated, so `seen` can only ever hold the fast one at this point.
+      const deadline = Date.now() + 10_000
+      while (!seen.includes('fast') && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 10))
+      }
       expect(seen).toEqual(['fast'])
 
       releaseSlow()
