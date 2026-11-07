@@ -5932,10 +5932,10 @@ rollup-plugin-typescript2@^0.37.0:
     semver "^7.5.4"
     tslib "^2.6.2"
 
-rollup-plugin-visualizer@^7.0.1:
-  version "7.1.1"
-  resolved "https://registry.yarnpkg.com/rollup-plugin-visualizer/-/rollup-plugin-visualizer-7.1.1.tgz#92b5ca95ab882e1ac200dedc2a22b5c85bc31f4c"
-  integrity sha512-ThaGiHTU8XW02OkK80TrTHATraJmM9OAduU4otal+7gyXLpYEtmGBLfx5kW+EHvvLwn03YGW2NnwKUIqsYlJAA==
+rollup-plugin-visualizer@^7.1.2:
+  version "7.1.2"
+  resolved "https://registry.yarnpkg.com/rollup-plugin-visualizer/-/rollup-plugin-visualizer-7.1.2.tgz#e52a0c459a59a0782c561d59dfef472c4b9777c6"
+  integrity sha512-+yrEz9LJ7fxd7T0yj4GPvcKHKfJNzTzKT7FHiF3f/US+7EaWlgB8PoGbUOlobD4Al8v6TeCCl/Fgbov5FV/DaA==
   dependencies:
     open "^11.0.0"
     picomatch "^4.0.5"
