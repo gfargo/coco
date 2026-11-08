@@ -526,6 +526,7 @@ describe('review command', () => {
     const mockGetPullRequestDiffByNumber = jest.fn()
     const mockCommentPullRequestByNumber = jest.fn()
     const mockRequestChangesPullRequestByNumber = jest.fn()
+    const mockCreatePullRequestReviewComments = jest.fn()
 
     beforeEach(() => {
       argv.json = true
@@ -539,6 +540,7 @@ describe('review command', () => {
         getPullRequestDiffByNumber: mockGetPullRequestDiffByNumber,
         commentPullRequestByNumber: mockCommentPullRequestByNumber,
         requestChangesPullRequestByNumber: mockRequestChangesPullRequestByNumber,
+        createPullRequestReviewComments: mockCreatePullRequestReviewComments,
       } as unknown as ReturnType<typeof getForgeActions>)
 
       mockGetPullRequestDiffByNumber.mockResolvedValue({
@@ -547,6 +549,7 @@ describe('review command', () => {
       })
       mockCommentPullRequestByNumber.mockResolvedValue({ ok: true, message: 'Comment posted.' })
       mockRequestChangesPullRequestByNumber.mockResolvedValue({ ok: true, message: 'Changes requested.' })
+      mockCreatePullRequestReviewComments.mockResolvedValue({ ok: true, message: 'Inline comments posted.' })
     })
 
     it('sources the review context from the PR diff instead of local changes', async () => {
@@ -671,10 +674,10 @@ describe('review command', () => {
       expect(parsed.findings[0]).toMatchObject({ title: 'Review finding' })
     })
 
-    it('keeps the posted markdown unchanged when a finding carries line/side data (OSS-2405)', async () => {
+    it('posts a lined finding as an inline review comment instead of a blob comment (OSS-2406)', async () => {
       argv.pr = 42
       argv.comment = true
-      argv.severity = 8 // below threshold → plain comment path
+      argv.severity = 8 // below threshold → COMMENT event
 
       mockExecuteChain.mockResolvedValue([
         {
@@ -690,10 +693,151 @@ describe('review command', () => {
 
       await handler(argv, logger)
 
-      expect(mockCommentPullRequestByNumber).toHaveBeenCalledWith(
+      expect(mockCreatePullRequestReviewComments).toHaveBeenCalledWith(
         42,
-        '- **[5] Review finding** (maintainability) — `src/file.ts`\n  A review finding.'
+        [
+          {
+            path: 'src/file.ts',
+            line: 42,
+            side: 'LEFT',
+            body: '**[5] Review finding** (maintainability)\nA review finding.',
+          },
+        ],
+        expect.objectContaining({ event: 'COMMENT' })
       )
+      expect(mockCommentPullRequestByNumber).not.toHaveBeenCalled()
+    })
+
+    it('requests changes on the inline review when findings meet --severity', async () => {
+      argv.pr = 42
+      argv.comment = true
+      argv.severity = 4 // finding severity is 5 → meets threshold
+
+      mockExecuteChain.mockResolvedValue([
+        {
+          title: 'Review finding',
+          summary: 'A review finding.',
+          severity: 5,
+          category: 'maintainability',
+          filePath: 'src/file.ts',
+          line: 42,
+          side: 'RIGHT',
+        },
+      ])
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: SEVERITY_GATE_EXIT_CODE })
+
+      expect(mockCreatePullRequestReviewComments).toHaveBeenCalledWith(
+        42,
+        expect.anything(),
+        expect.objectContaining({ event: 'REQUEST_CHANGES' })
+      )
+      expect(mockRequestChangesPullRequestByNumber).not.toHaveBeenCalled()
+    })
+
+    it('splits mixed findings: lined ones go inline, lineless ones go to the blob comment', async () => {
+      argv.pr = 42
+      argv.comment = true
+
+      mockExecuteChain.mockResolvedValue([
+        {
+          title: 'Lined finding',
+          summary: 'Has a line.',
+          severity: 5,
+          category: 'maintainability',
+          filePath: 'src/file.ts',
+          line: 42,
+          side: 'RIGHT',
+        },
+        {
+          title: 'Lineless finding',
+          summary: 'No line.',
+          severity: 3,
+          category: 'style',
+          filePath: 'src/other.ts',
+        },
+      ])
+
+      await handler(argv, logger)
+
+      expect(mockCreatePullRequestReviewComments).toHaveBeenCalledWith(
+        42,
+        [expect.objectContaining({ path: 'src/file.ts', line: 42 })],
+        expect.anything()
+      )
+      expect(mockCommentPullRequestByNumber).toHaveBeenCalledWith(42, expect.stringContaining('Lineless finding'))
+      expect(mockCommentPullRequestByNumber).not.toHaveBeenCalledWith(42, expect.stringContaining('Lined finding'))
+    })
+
+    it('falls back to the whole-blob comment when the provider does not support inline comments', async () => {
+      argv.pr = 42
+      argv.comment = true
+      argv.severity = 8 // below threshold → plain comment path on fallback
+
+      mockExecuteChain.mockResolvedValue([
+        {
+          title: 'Review finding',
+          summary: 'A review finding.',
+          severity: 5,
+          category: 'maintainability',
+          filePath: 'src/file.ts',
+          line: 42,
+        },
+      ])
+      mockCreatePullRequestReviewComments.mockResolvedValue({
+        ok: false,
+        message: 'Inline review comments are not supported for GitLab yet.',
+      })
+
+      await handler(argv, logger)
+
+      expect(mockCommentPullRequestByNumber).toHaveBeenCalledWith(42, expect.stringContaining('Review finding'))
+    })
+
+    it('falls back to the whole-blob comment when the inline API call fails', async () => {
+      argv.pr = 42
+      argv.comment = true
+      argv.severity = 8
+
+      mockExecuteChain.mockResolvedValue([
+        {
+          title: 'Review finding',
+          summary: 'A review finding.',
+          severity: 5,
+          category: 'maintainability',
+          filePath: 'src/file.ts',
+          line: 42,
+        },
+      ])
+      mockCreatePullRequestReviewComments.mockResolvedValue({
+        ok: false,
+        message: 'Validation failed: line must be part of the diff',
+      })
+
+      await handler(argv, logger)
+
+      expect(mockCommentPullRequestByNumber).toHaveBeenCalledWith(42, expect.stringContaining('Review finding'))
+    })
+
+    it('exits 1 when both the inline post and the fallback blob post fail', async () => {
+      argv.pr = 42
+      argv.comment = true
+
+      mockExecuteChain.mockResolvedValue([
+        {
+          title: 'Review finding',
+          summary: 'A review finding.',
+          severity: 5,
+          category: 'maintainability',
+          filePath: 'src/file.ts',
+          line: 42,
+        },
+      ])
+      mockCreatePullRequestReviewComments.mockResolvedValue({ ok: false, message: 'API error.' })
+      mockCommentPullRequestByNumber.mockResolvedValue({ ok: false, message: 'Permission denied.' })
+
+      await expect(handler(argv, logger)).rejects.toMatchObject({ code: 1 })
+      expect(logger.error).toHaveBeenCalledWith('Permission denied.', { color: 'red' })
     })
   })
 })
