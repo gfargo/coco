@@ -18,7 +18,7 @@
 
 import type * as ReactTypes from 'react'
 import { deriveGitignoreOptions } from '../chrome/gitignore'
-import { clampListWindowStart } from '../chrome/layout'
+import { clampListWindowStart, measureColumnWidth } from '../chrome/layout'
 import { pickThemedSpinnerFrame } from '../chrome/spinner'
 import { cellWidth, padCells, truncateCells } from '../chrome/text'
 import type { LogInkTheme } from '../chrome/theme'
@@ -323,10 +323,14 @@ export function renderChordOverlay(
       dimColor: true,
     }, truncateCells(`No bindings registered for the ${prefix} prefix.`, width - 4)))
   } else {
+    // Measured, not the old fixed 10 (OSS-2221): `cellWidth` keeps a
+    // CJK/emoji label from mis-padding, and the 10-cell min keeps
+    // today's English output byte-identical.
+    const labelColumn = measureColumnWidth(continuations.map((entry) => entry.label), 10, 24)
     for (const entry of continuations) {
       lines.push(h(Text, { key: `chord-${entry.key}` },
         h(Text, { color: accent, bold: true }, `  ${entry.key}  `),
-        h(Text, undefined, truncateCells(`${entry.label.padEnd(10)} ${entry.description}`, width - 9))
+        h(Text, undefined, truncateCells(`${padCells(entry.label, labelColumn)} ${entry.description}`, width - 9))
       ))
     }
   }
@@ -383,15 +387,16 @@ export function renderViewKeysOverlay(
     }, truncateCells('No single-key actions in this view — use ? for the full help.', width - 4)))
   } else {
     // Pad keys to the widest entry so labels align into a scannable column.
-    const keyColumn = bindings.reduce(
-      (max, binding) => Math.max(max, formatBindingBareKeys(binding).length),
-      0
-    )
+    // `cellWidth`-measured (OSS-2221), not `.length` — a wide/CJK key name
+    // would otherwise mis-pad. The label column keeps its old 14-cell
+    // floor so English output stays byte-identical.
+    const keyColumn = measureColumnWidth(bindings.map(formatBindingBareKeys))
+    const labelColumn = measureColumnWidth(bindings.map((binding) => binding.label), 14, 28)
     for (const binding of bindings) {
       const keys = formatBindingBareKeys(binding)
       lines.push(h(Text, { key: `view-keys-${binding.id}` },
-        h(Text, { color: accent, bold: true }, `  ${keys.padEnd(keyColumn)}  `),
-        h(Text, undefined, truncateCells(`${binding.label.padEnd(14)} ${binding.description}`, width - keyColumn - 7))
+        h(Text, { color: accent, bold: true }, `  ${padCells(keys, keyColumn)}  `),
+        h(Text, undefined, truncateCells(`${padCells(binding.label, labelColumn)} ${binding.description}`, width - keyColumn - 7))
       ))
     }
   }
@@ -430,6 +435,16 @@ export function renderHelpPanel(
     activeView: state.activeView,
     focus: state.focus,
   })
+  // Measured over every binding that could render (OSS-2221), not the old
+  // fixed 12 — `cellWidth` keeps a wide/CJK key name from mis-padding, and
+  // the 12-cell min keeps today's English output byte-identical. Measured
+  // across the unfiltered set so the column doesn't jump as the type-to-
+  // filter narrows which rows are visible.
+  const helpKeyColumn = measureColumnWidth(
+    sections.flatMap((section) => section.bindings).map(formatBindingKeys),
+    12,
+    20
+  )
 
   // Type-to-filter (#1355): narrow rows by key / label / description,
   // case-insensitive substring. Subgroups and sections that filter to
@@ -468,7 +483,7 @@ export function renderHelpPanel(
       }, `  ${subgroup.title}`))
       subgroup.bindings.forEach((binding) => {
         body.push(h(Text, { key: `${section.title}:${subgroup.category}:${binding.id}` },
-          truncateCells(`  ${formatBindingKeys(binding).padEnd(12)} ${binding.description}`, width - 4)
+          truncateCells(`  ${padCells(formatBindingKeys(binding), helpKeyColumn)} ${binding.description}`, width - 4)
         ))
       })
     })
@@ -590,6 +605,10 @@ export function renderCommandPalette(
     command.context && tokensOf(command).some((token) => (keyCounts.get(token) ?? 0) > 1)
       ? `${command.label} (${command.context})`
       : command.label
+  // Measured over the visible rows (OSS-2221), not the old fixed 24 —
+  // the 24-cell min keeps today's English output byte-identical, the cap
+  // keeps one long label from starving the description.
+  const labelWidth = measureColumnWidth(visible.map(labelFor), 24, 40)
 
   const itemLines = filtered.length === 0
     ? [h(Text, { key: 'palette-empty', dimColor: true }, 'No commands match the current filter.')]
@@ -605,7 +624,7 @@ export function renderCommandPalette(
             ? '[confirm]'
             : '[action]'
         : ''
-      const line = `${cursor} ${recentMarker} ${padCells(command.keys, keyWidth)} ${padCells(labelFor(command), 24)} ${kindMarker ? `${kindMarker} ` : ''}${command.description}`
+      const line = `${cursor} ${recentMarker} ${padCells(command.keys, keyWidth)} ${padCells(labelFor(command), labelWidth)} ${kindMarker ? `${kindMarker} ` : ''}${command.description}`
       return h(Text, {
         key: `palette-${command.kind}-${command.id}`,
         bold: isSelected,

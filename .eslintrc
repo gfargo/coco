@@ -172,6 +172,38 @@
       "rules": {
         "no-restricted-imports": "off"
       }
+    },
+    // i18n migration guard (OSS-2221): block new inline user-facing
+    // literals from creeping back into the files migrated to the
+    // `src/lib/i18n/en.ts` catalog by OSS-2219/OSS-2220. Scoped to those
+    // files only — `chrome/surfaceStates.ts` still has un-migrated
+    // literals (a later sub-item), so a directory-wide glob would fail
+    // on current code. New user-facing copy belongs in the catalog via
+    // `t(en, '<key>')`.
+    {
+      "files": [
+        "src/workstation/chrome/layout.ts",
+        "src/workstation/chrome/aiErrors.ts",
+        "src/workstation/runtime/inkKeymap.ts",
+        "src/workstation/runtime/helpOverlayState.ts",
+        "src/workstation/runtime/footer.ts"
+      ],
+      "excludedFiles": [
+        "**/*.test.ts"
+      ],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Property[key.name=/^(label|description|title|hint|message|warning|placeholder|summary)$/] > Literal[value=/[A-Za-z]{2,}/]",
+            "message": "User-facing copy belongs in src/lib/i18n/en.ts — use t(en, '<key>') instead of an inline literal (OSS-2221)."
+          },
+          {
+            "selector": "CallExpression[callee.name='h'] > Literal[value=/[A-Za-z]{2,}/]",
+            "message": "User-facing copy belongs in src/lib/i18n/en.ts — use t(en, '<key>') instead of an inline literal (OSS-2221)."
+          }
+        ]
+      }
     }
   ]
 }

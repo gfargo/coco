@@ -5,6 +5,9 @@ import {
   LOG_INK_MIN_COLUMNS,
   LOG_INK_MIN_ROWS,
   getLogInkLayout,
+  measureColumnWidth,
+  measureHelpOverlayMinWidth,
+  measureSidebarMinWidth,
 } from './layout'
 
 describe('log Ink layout', () => {
@@ -578,6 +581,109 @@ describe('log Ink layout', () => {
       expect(layout.visiblePane).toBe('main')
       expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(140)
     })
+  })
+})
+
+// Catalog-driven width budgeting (OSS-2221) — `layout.ts` used to assume
+// English string lengths for the sidebar and help-overlay floors. Once
+// non-English catalog entries land, a longer resolved string must widen
+// these panes instead of overflowing them.
+describe('catalog-driven width budgeting (OSS-2221)', () => {
+  it('measureColumnWidth uses cell width, not .length, for wide/CJK strings', () => {
+    expect(measureColumnWidth(['abc', 'de'])).toBe(3)
+    // Each of the 6 CJK characters in 'ワークツリー' (a plausible
+    // Japanese rendering of "Worktrees") is 2 cells wide.
+    expect(measureColumnWidth(['ワークツリー'])).toBe(12)
+    expect(measureColumnWidth(['ワークツリー'])).not.toBe('ワークツリー'.length)
+    // A single emoji grapheme cluster is 2 cells but more than 2 UTF-16
+    // code units, so `.length` would both over- and under-count it.
+    expect(measureColumnWidth(['😀'])).toBe(2)
+  })
+
+  it('measureColumnWidth clamps to the given min/max', () => {
+    expect(measureColumnWidth(['a'], 10)).toBe(10)
+    expect(measureColumnWidth(['a very long label'], 0, 5)).toBe(5)
+  })
+
+  it('omitting the new inputs reproduces today\'s exact widths (no-op proof)', () => {
+    const withoutInputs = getLogInkLayout({ columns: 120, rows: 40, helpOverlayActive: true })
+    const withUndefinedInputs = getLogInkLayout({
+      columns: 120,
+      rows: 40,
+      helpOverlayActive: true,
+      helpOverlayMinWidth: undefined,
+      sidebarMinWidth: undefined,
+    })
+    expect(withUndefinedInputs).toEqual(withoutInputs)
+  })
+
+  it('the real English catalog measures at or below the existing hardcoded floors', () => {
+    // Guards the premise the implementation relies on: if a future
+    // catalog edit grows these past the floor, every exact-width
+    // assertion elsewhere in this file would need re-tuning — better to
+    // catch that here with a direct, labeled assertion.
+    const keyLabels = ['up', 'down', 'page up', 'page down', 'home', 'end']
+    expect(measureHelpOverlayMinWidth({ keyLabels })).toBeLessThanOrEqual(60)
+    expect(measureSidebarMinWidth(['Status', 'Branches', 'Tags', 'Stashes', 'Worktrees'])).toBeLessThanOrEqual(22)
+  })
+
+  it('widens the sidebar for a longer-than-English locale instead of overflowing', () => {
+    // Simulates a locale whose longest tab label measures 44 cells —
+    // well past the English-tuned 22-30 floor for the normal tier.
+    const layout = getLogInkLayout({ columns: 120, rows: 40, sidebarMinWidth: 44 })
+    expect(layout.sidebarWidth).toBeGreaterThanOrEqual(44)
+    expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(120)
+    expect(layout.mainPanelWidth).toBeGreaterThanOrEqual(20)
+  })
+
+  it('widens the help overlay for a longer-than-English locale instead of truncating harder', () => {
+    const layout = getLogInkLayout({
+      columns: 120,
+      rows: 40,
+      helpOverlayActive: true,
+      helpOverlayMinWidth: 95,
+    })
+    expect(layout.detailWidth).toBeGreaterThanOrEqual(95)
+    expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(120)
+    expect(layout.mainPanelWidth).toBeGreaterThanOrEqual(20)
+  })
+
+  it('degrades gracefully — never overflows — even for an absurdly large measured width', () => {
+    const layout = getLogInkLayout({
+      columns: 100,
+      rows: 40,
+      helpOverlayActive: true,
+      helpOverlayMinWidth: 500,
+    })
+    expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(100)
+    expect(layout.mainPanelWidth).toBeGreaterThanOrEqual(20)
+  })
+
+  it('never lets the three panes exceed the terminal width for a long-locale sidebar + help overlay, across every column/focus combination', () => {
+    const LONG_LOCALE_COMBOS: Array<Pick<Parameters<typeof getLogInkLayout>[0], 'sidebarFocused' | 'inspectorFocused' | 'helpOverlayActive' | 'zoomedPane'>> = [
+      {},
+      { sidebarFocused: true },
+      { inspectorFocused: true },
+      { helpOverlayActive: true },
+      { helpOverlayActive: true, sidebarFocused: true },
+      { zoomedPane: 'sidebar' },
+      { zoomedPane: 'main', helpOverlayActive: true },
+    ]
+    for (let columns = 80; columns <= 240; columns += 4) {
+      for (const combo of LONG_LOCALE_COMBOS) {
+        const layout = getLogInkLayout({
+          columns,
+          rows: 40,
+          sidebarMinWidth: 44,
+          helpOverlayMinWidth: 95,
+          ...combo,
+        })
+        expect(layout.sidebarWidth + layout.mainPanelWidth + layout.detailWidth).toBe(columns)
+        if (!layout.singlePane) {
+          expect(layout.mainPanelWidth).toBeGreaterThanOrEqual(20)
+        }
+      }
+    }
   })
 })
 

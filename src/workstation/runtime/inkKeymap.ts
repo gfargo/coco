@@ -641,22 +641,22 @@ export const LOG_INK_KEY_BINDINGS: LogInkKeyBinding[] = [
   {
     id: 'viewMergeIntoCurrent',
     keys: ['M'],
-    label: 'merge',
-    description: 'Merge the cursored branch into the current branch after confirmation.',
+    label: t(en, 'keymap.binding.viewMergeIntoCurrent.label'),
+    description: t(en, 'keymap.binding.viewMergeIntoCurrent.desc'),
     contexts: ['branches'],
   },
   {
     id: 'viewResetToBranch',
     keys: ['Z'],
-    label: 'reset',
-    description: 'Reset the current branch to the cursored ref (prompts for soft/mixed/hard).',
+    label: t(en, 'keymap.binding.viewResetToBranch.label'),
+    description: t(en, 'keymap.binding.viewResetToBranch.desc'),
     contexts: ['branches'],
   },
   {
     id: 'viewSyncBranch',
     keys: ['S'],
-    label: 'sync',
-    description: 'Pull from remote then push local commits (compound pull + push).',
+    label: t(en, 'keymap.binding.viewSyncBranch.label'),
+    description: t(en, 'keymap.binding.viewSyncBranch.desc'),
     contexts: ['branches'],
   },
   {
