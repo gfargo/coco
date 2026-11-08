@@ -10,6 +10,13 @@ export type ReviewCommentInput = {
   /** 1-based line number; must land inside the PR's diff or GitHub 422s the whole review. */
   line: number
   side?: 'LEFT' | 'RIGHT'
+  /**
+   * Start of a multi-line range, when a finding spans more than one line.
+   * GitHub's payload builder ignores this today; Bitbucket's single-line
+   * `inline` model can't express a range at all, so its adapter (OSS-2407)
+   * treats `startLine !== line` as unsupported rather than guessing an anchor.
+   */
+  startLine?: number
   body: string
 }
 
@@ -70,5 +77,77 @@ export async function createPullRequestReviewComments(
     )
   } finally {
     rmSync(bodyDir, { recursive: true, force: true })
+  }
+}
+
+/**
+ * True when a thrown forge error looks like a rejected inline anchor (the
+ * line/position isn't part of the diff) rather than some other failure
+ * (auth, network, rate limit). Shared by every non-GitHub provider (OSS-2407)
+ * so each can fall back to a plain PR/MR-level note per-comment instead of
+ * aborting the whole review post.
+ *
+ * Checks both a `.status` property (Gitea/Bitbucket/Bitbucket Server fetch
+ * errors carry one; Bitbucket Cloud returns 400, not 422, for a bad anchor)
+ * and the error text (glab's `execFile` errors carry only `stderr`, no
+ * status), and matches broadly on 4xx rather than literal 422 since GitLab's
+ * "position is invalid" wording varies by version.
+ */
+export function isAnchorRejection(error: unknown): boolean {
+  const err = error as { status?: number; stderr?: unknown; message?: string }
+  if (err?.status === 400 || err?.status === 409 || err?.status === 422) return true
+  const text = (typeof err?.stderr === 'string' && err.stderr) || err?.message || ''
+  return /\b(400|409|422)\b|position is invalid|not part of the diff|must be part of/i.test(text)
+}
+
+/** Per-comment outcome of an inline review post, folded into one result by `summarizeReviewCommentPosts`. */
+export type ReviewCommentPostOutcome = {
+  comment: ReviewCommentInput
+  status: 'posted' | 'fallback' | 'unsupported' | 'failed'
+  /** Present for 'fallback' (why the anchor was rejected), 'unsupported', and 'failed'. */
+  error?: string
+}
+
+/**
+ * Fold per-comment outcomes into one `PullRequestActionResult`. `ok: true` as
+ * soon as at least one comment landed — inline or as a fallback note — since
+ * a partial post is still progress; `ok: false` only when nothing landed, so
+ * the caller's whole-blob-comment fallback (`handler.ts`) engages. Mirrors
+ * `handler.ts`'s existing "any inline-post failure falls back to the
+ * whole-blob comment" semantics, but at the per-comment grain the other
+ * forges need (OSS-2407).
+ */
+export function summarizeReviewCommentPosts(
+  outcomes: ReviewCommentPostOutcome[],
+  label: string
+): PullRequestActionResult {
+  const posted = outcomes.filter((outcome) => outcome.status === 'posted').length
+  const fallback = outcomes.filter((outcome) => outcome.status === 'fallback').length
+  const unsupported = outcomes.filter((outcome) => outcome.status === 'unsupported').length
+  const failed = outcomes.filter((outcome) => outcome.status === 'failed').length
+  const landed = posted + fallback
+
+  const nonPosted = outcomes.filter((outcome) => outcome.status !== 'posted')
+  const details = nonPosted
+    .map((outcome) => `${outcome.comment.path}:${outcome.comment.line} — ${outcome.status}${outcome.error ? `: ${outcome.error}` : ''}`)
+    .slice(0, 8)
+
+  if (landed === 0) {
+    return {
+      ok: false,
+      message: `Could not post any inline review comments on ${label}.`,
+      ...(details.length ? { details } : {}),
+    }
+  }
+
+  const parts: string[] = [`${posted} inline`]
+  if (fallback > 0) parts.push(`${fallback} as a plain note (anchor rejected)`)
+  if (unsupported > 0) parts.push(`${unsupported} unsupported`)
+  if (failed > 0) parts.push(`${failed} failed`)
+
+  return {
+    ok: true,
+    message: `Posted ${parts.join(', ')} on ${label}.`,
+    ...(details.length ? { details } : {}),
   }
 }

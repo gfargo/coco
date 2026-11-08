@@ -89,6 +89,7 @@ import {
   reopenGitLabIssue,
 } from './gitlabIssueActions'
 import { defaultGlabRunner } from './glabCli'
+import { createMergeRequestReviewComments } from './mergeRequestReviewComments'
 
 // Bitbucket implementations.
 import { getBitbucketPullRequestList, getBitbucketIssueList, getBitbucketPullRequestOverview } from './bitbucketListData'
@@ -127,6 +128,7 @@ import {
   reopenBitbucketIssue,
 } from './bitbucketIssueActions'
 import { makeBitbucketRunner } from './bitbucketCli'
+import { createBitbucketReviewComments } from './bitbucketReviewComments'
 
 // Gitea / Forgejo implementations.
 import { getGiteaPullRequestList, getGiteaIssueList, getGiteaPullRequestOverview } from './giteaListData'
@@ -160,6 +162,7 @@ import {
   reopenGiteaIssue,
 } from './giteaIssueActions'
 import { makeGiteaRunner } from './giteaCli'
+import { createGiteaReviewComments } from './giteaReviewComments'
 
 // Bitbucket Server / Data Center implementations.
 import {
@@ -193,6 +196,7 @@ import {
   reopenBitbucketServerIssue,
 } from './bitbucketServerIssueActions'
 import { makeBitbucketServerRunner } from './bitbucketServerCli'
+import { createBitbucketServerReviewComments } from './bitbucketServerReviewComments'
 
 /**
  * Provider-agnostic forge facade. The workstation runtime dispatches every
@@ -223,11 +227,15 @@ export type ForgeActions = {
   approvePullRequestByNumber: (n: number) => Promise<PullRequestActionResult>
   requestChangesPullRequestByNumber: (n: number, body: string) => Promise<PullRequestActionResult>
   /**
-   * Post inline PR review comments as a single review (OSS-2406) — the
+   * Post inline PR review comments as a single review (OSS-2406), the
    * structured counterpart to `requestChangesPullRequestByNumber`'s
-   * whole-blob body. Only GitHub implements this today; every other
-   * facade returns a graceful `{ ok: false }` so callers (`coco review
-   * --comment`) can fall back to the whole-blob comment.
+   * whole-blob body. Every forge implements this via its own native
+   * line-anchoring model (OSS-2407: GitLab discussions, Gitea's batch
+   * review endpoint, Bitbucket Cloud's `inline` object, Bitbucket Server's
+   * `anchor` object); an anchor the forge rejects falls back per-comment to
+   * a plain PR/MR-level note rather than aborting the whole post, so callers
+   * (`coco review --comment`) only need their own whole-blob-comment
+   * fallback for the "no project resolved" case.
    */
   createPullRequestReviewComments: (
     n: number,
@@ -344,8 +352,10 @@ function gitlabActions(path: string | undefined, host?: string): ForgeActions {
     closePullRequestByNumber: (n) => closeMergeRequestByNumber(n, defaultGlabRunner, host),
     approvePullRequestByNumber: (n) => approveMergeRequestByNumber(n, defaultGlabRunner, host),
     requestChangesPullRequestByNumber: (n, body) => requestChangesMergeRequestByNumber(n, body, defaultGlabRunner, host),
-    createPullRequestReviewComments: () =>
-      Promise.resolve({ ok: false, message: 'Inline review comments are not supported for GitLab yet.' }),
+    createPullRequestReviewComments: (n, comments, options) =>
+      path
+        ? createMergeRequestReviewComments(path, n, comments, options, defaultGlabRunner)
+        : Promise.resolve({ ok: false, message: 'No GitLab project resolved' }),
     checkoutPullRequestByNumber: (n) => checkoutMergeRequestByNumber(n, defaultGlabRunner, host),
     getPullRequestChecks: (n) =>
       path
@@ -415,8 +425,8 @@ function bitbucketActions(
     approvePullRequestByNumber: (n) => (path ? approveBitbucketPullRequestByNumber(path, n, runner) : noProject()),
     requestChangesPullRequestByNumber: (n, body) =>
       path ? requestChangesBitbucketPullRequestByNumber(path, n, body, runner) : noProject(),
-    createPullRequestReviewComments: () =>
-      Promise.resolve({ ok: false, message: 'Inline review comments are not supported for Bitbucket yet.' }),
+    createPullRequestReviewComments: (n, comments, options) =>
+      path ? createBitbucketReviewComments(path, n, comments, options, runner) : noProject(),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket yet.' }),
     getPullRequestChecks: (n) =>
@@ -480,11 +490,8 @@ function giteaActions(
       path && runner ? approveGiteaPullRequestByNumber(path, n, runner) : noProject(),
     requestChangesPullRequestByNumber: (n, body) =>
       path && runner ? requestChangesGiteaPullRequestByNumber(path, n, body, runner) : noProject(),
-    // Gitea's REST API does expose `POST repos/{path}/pulls/{n}/reviews`
-    // with a `comments[]` array (already used for approve/request-changes
-    // above) — this is a scope boundary for OSS-2406, not a capability gap.
-    createPullRequestReviewComments: () =>
-      Promise.resolve({ ok: false, message: 'Inline review comments are not supported for Gitea yet.' }),
+    createPullRequestReviewComments: (n, comments, options) =>
+      path && runner ? createGiteaReviewComments(path, n, comments, options, runner) : noProject(),
     // Gitea has no CLI/API-friendly single-call checkout — surface the gap as
     // a graceful failure so the diff surface / status line explain it instead
     // of dead-ending (mirrors the Bitbucket facade, #1363).
@@ -558,8 +565,8 @@ function bitbucketServerActions(
     approvePullRequestByNumber: (n) => approveBitbucketServerPullRequestByNumber(path ?? '', n, runner),
     requestChangesPullRequestByNumber: (n, body) =>
       requestChangesBitbucketServerPullRequestByNumber(path ?? '', n, body, runner),
-    createPullRequestReviewComments: () =>
-      Promise.resolve({ ok: false, message: 'Inline review comments are not supported for Bitbucket Server yet.' }),
+    createPullRequestReviewComments: (n, comments, options) =>
+      createBitbucketServerReviewComments(path ?? '', n, comments, options, runner),
     checkoutPullRequestByNumber: () =>
       Promise.resolve({ ok: false, message: 'Pull request checkout is not supported for Bitbucket Server yet.' }),
     getPullRequestChecks: () =>
