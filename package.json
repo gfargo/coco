@@ -139,7 +139,7 @@
     "rollup-plugin-peer-deps-external": "^2.2.4",
     "rollup-plugin-preserve-shebangs": "^0.2.0",
     "rollup-plugin-typescript2": "^0.37.0",
-    "rollup-plugin-visualizer": "^7.0.1",
+    "rollup-plugin-visualizer": "^7.1.2",
     "string-width": "8.2.1",
     "tree-sitter-typescript": "^0.23.2",
     "ts-jest": "^29.1.0",
