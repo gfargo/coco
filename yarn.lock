@@ -10,7 +10,7 @@
     ansi-styles "^6.2.1"
     is-fullwidth-code-point "^5.0.0"
 
-"@anthropic-ai/sdk@^0.115.0", "@anthropic-ai/sdk@^0.91.1":
+"@anthropic-ai/sdk@^0.122.0", "@anthropic-ai/sdk@^0.91.1":
   version "0.91.1"
   resolved "https://registry.yarnpkg.com/@anthropic-ai/sdk/-/sdk-0.91.1.tgz#09eeee4b12b91ba6d827ca249c2ede61e521aa00"
   integrity sha512-LAmu761tSN9r66ixvmciswUj/ZC+1Q4iAfpedTfSVLeswRwnY3n2Nb6Tsk+cLPP28aLOPWeMgIuTuCcMC6W/iw==
@@ -1512,12 +1512,12 @@
   resolved "https://registry.npmjs.org/@kwsites/promise-deferred/-/promise-deferred-1.1.1.tgz"
   integrity sha512-GaHYm+c0O9MjZRu0ongGBRbinu8gVAMd2UZjji6jVmqKtZluZnptXGWhz1E8j8D2HJ3f/yMxKAUC0b+57wncIw==
 
-"@langchain/anthropic@^1.0.0":
-  version "1.5.5"
-  resolved "https://registry.yarnpkg.com/@langchain/anthropic/-/anthropic-1.5.5.tgz#7e32bf6fd59c5889649fd93addc4885bf9f66056"
-  integrity sha512-OeWrKNqx4kgJBfpFAbT/wVzeGibAwVdmI9+DifkI/U3ejpVuUpISdSEVvnRIT0aqlk+sf2EI362Rt8FiJwxIDg==
+"@langchain/anthropic@^1.5.11":
+  version "1.5.11"
+  resolved "https://registry.yarnpkg.com/@langchain/anthropic/-/anthropic-1.5.11.tgz#f5801e15ee20b445e979633f7f45efbd9eb3e7b0"
+  integrity sha512-NunWC6u8A/h5VnRk/WvyFkvN3RtdONUWV16u2i/EcEvhtjL2ZhJBPjjSFhm/7vyjtwdTyDhp7Uny75FHB7JXEQ==
   dependencies:
-    "@anthropic-ai/sdk" "^0.115.0"
+    "@anthropic-ai/sdk" "^0.122.0"
     zod "^3.25.76 || ^4"
 
 "@langchain/aws@^1.3.9":
