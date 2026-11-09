@@ -107,28 +107,59 @@ describe('getForgeActions (#0.70)', () => {
     }
   })
 
-  describe('createPullRequestReviewComments facade (OSS-2406)', () => {
-    it('is unsupported for GitLab, Bitbucket, Gitea, and Bitbucket Server', async () => {
-      const cases: [string, ReturnType<typeof getForgeActions>][] = [
-        ['GitLab', getForgeActions('gitlab', { gitlabPath: 'g/p' })],
-        ['Bitbucket', getForgeActions('bitbucket', { bitbucketPath: 'ws/repo' })],
-        ['Gitea', getForgeActions('gitea', { giteaPath: 'o/r', giteaHost: 'codeberg.org' })],
-        [
-          'Bitbucket Server',
-          getForgeActions('bitbucket-server', {
-            bitbucketServerPath: 'PROJ/repo',
-            bitbucketServerHost: 'bitbucket.acme.com',
-          }),
-        ],
+  describe('createPullRequestReviewComments facade (OSS-2407)', () => {
+    it('fails gracefully when no project path is resolved (GitLab, Bitbucket, Gitea)', async () => {
+      const cases: ReturnType<typeof getForgeActions>[] = [
+        getForgeActions('gitlab', {}),
+        getForgeActions('bitbucket', {}),
+        getForgeActions('gitea', {}),
       ]
 
-      for (const [label, forge] of cases) {
+      for (const forge of cases) {
         const result = await forge.createPullRequestReviewComments(1, [
           { path: 'a.ts', line: 1, body: 'finding' },
         ])
         expect(result.ok).toBe(false)
-        expect(result.message).toMatch(/not supported for/)
-        expect(result.message).toContain(label === 'Bitbucket Server' ? 'Bitbucket Server' : label)
+        expect(result.message).toMatch(/No .* project resolved/)
+      }
+    })
+
+    it('fails gracefully for Bitbucket Server without a resolved project path', async () => {
+      const forge = getForgeActions('bitbucket-server', { bitbucketServerHost: 'bitbucket.acme.com' })
+      const result = await forge.createPullRequestReviewComments(1, [{ path: 'a.ts', line: 1, body: 'finding' }])
+      expect(result.ok).toBe(false)
+      expect(result.message).toBe('No Bitbucket Server project resolved')
+    })
+
+    it('dispatches a Gitea review POST to the right endpoint', async () => {
+      const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, text: async () => '{}' } as Response)
+      try {
+        const forge = getForgeActions('gitea', { giteaPath: 'o/r', giteaHost: 'codeberg.org' })
+        const result = await forge.createPullRequestReviewComments(4, [{ path: 'a.ts', line: 2, body: 'finding' }])
+        expect(result.ok).toBe(true)
+        expect(fetchSpy).toHaveBeenCalledWith(
+          'https://codeberg.org/api/v1/repos/o/r/pulls/4/reviews',
+          expect.objectContaining({ method: 'POST' })
+        )
+      } finally {
+        fetchSpy.mockRestore()
+      }
+    })
+
+    it('dispatches a Bitbucket Cloud inline comment POST to the right endpoint', async () => {
+      process.env.BITBUCKET_ACCESS_TOKEN = 'test-token'
+      const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({ ok: true, text: async () => '{}' } as Response)
+      try {
+        const forge = getForgeActions('bitbucket', { bitbucketPath: 'ws/repo' })
+        const result = await forge.createPullRequestReviewComments(4, [{ path: 'a.ts', line: 2, body: 'finding' }])
+        expect(result.ok).toBe(true)
+        expect(fetchSpy).toHaveBeenCalledWith(
+          'https://api.bitbucket.org/2.0/repositories/ws/repo/pullrequests/4/comments',
+          expect.objectContaining({ method: 'POST' })
+        )
+      } finally {
+        delete process.env.BITBUCKET_ACCESS_TOKEN
+        fetchSpy.mockRestore()
       }
     })
   })
